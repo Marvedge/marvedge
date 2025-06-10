@@ -1,4 +1,3 @@
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 export const useScreenRecorder = () => {
@@ -6,42 +5,74 @@ export const useScreenRecorder = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const [recording, setRecording] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const router = useRouter();
+  const [micEnabled, setMicEnabled] = useState(false); // 🆕
+
+  const toggleMic = () => setMicEnabled((prev) => !prev); // 🆕
 
   const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: true,
-      video: true,
-    });
-    streamRef.current = stream;
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      });
 
-    const recorder = new MediaRecorder(stream);
-    mediaRecorder.current = recorder;
+      let micStream: MediaStream | null = null;
 
-    const chunks: Blob[] = [];
+      if (micEnabled) {
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+        } catch (err) {
+          console.warn("Mic not accessible or permission denied:", err);
+        }
+      }
 
-    recorder.ondataavailable = (e) => {
-      console.log("Data avbl", e.data);
-      chunks.push(e.data);
-    };
+      const combinedStream = new MediaStream([
+        ...screenStream.getVideoTracks(),
+        ...screenStream.getAudioTracks(),
+        ...(micStream ? micStream.getAudioTracks() : []),
+      ]);
 
-    recorder.onstop = () => {
-      const finalBlob = new Blob(chunks, { type: "video/webm" });
-      const url = URL.createObjectURL(finalBlob);
-      setVideoUrl(url);
-      router.push(`/editor?video=${encodeURIComponent(url)}`);
-    };
+      streamRef.current = combinedStream;
 
-    recorder.start();
-    setRecording(true);
+      const chunks: Blob[] = [];
+
+      mediaRecorder.current = new MediaRecorder(combinedStream, {
+        mimeType: "video/webm; codecs=vp8,opus",
+      });
+
+      mediaRecorder.current.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      mediaRecorder.current.onstop = () => {
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setVideoUrl(url);
+        combinedStream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.current.start();
+      setRecording(true);
+    } catch (err) {
+      console.error("Error starting screen recorder:", err);
+    }
   };
 
   const stopRecording = () => {
     mediaRecorder.current?.stop();
-    streamRef.current?.getTracks().forEach((track) => track.stop()); // ✅ closes screen share
     setRecording(false);
-    console.log("video url", videoUrl);
   };
 
-  return { startRecording, stopRecording, recording, videoUrl };
+  return {
+    startRecording,
+    stopRecording,
+    toggleMic, // new
+    micEnabled, // new
+    recording,
+    videoUrl,
+  };
 };
