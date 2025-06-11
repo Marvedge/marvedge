@@ -1,5 +1,7 @@
 "use client";
+import React from "react";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
+import { useRouter } from "next/navigation";
 
 const RecorderPage = () => {
   const {
@@ -10,6 +12,15 @@ const RecorderPage = () => {
     recording,
     videoUrl,
   } = useScreenRecorder();
+
+  const router = useRouter();
+
+  // Redirect to /editor when videoUrl is set
+  React.useEffect(() => {
+    if (videoUrl) {
+      router.push(`/editor?video=${encodeURIComponent(videoUrl)}`); // Redirected the preview to editor page
+    }
+  }, [videoUrl, router]);
 
   return (
     <div className="p-8">
@@ -41,19 +52,6 @@ const RecorderPage = () => {
         >
           Stop Recording
         </button>
-      )}
-
-      {/* Video Preview */}
-      {videoUrl && (
-        <div className="mt-4">
-          <h2 className="text-lg">Preview:</h2>
-          <video src={videoUrl} controls className="mt-2" width={600} />
-          <a href={videoUrl} download="recording.webm">
-            <button className="btn mt-2 bg-blue-500 text-white px-4 py-2 rounded">
-              Download Recording
-            </button>
-          </a>
-        </div>
       )}
     </div>
   );
