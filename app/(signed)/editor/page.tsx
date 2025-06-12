@@ -16,7 +16,14 @@ const EditorPage = () => {
       Editor Page
       <div className="col-span-2">
         {initialUrl && (
-          <video src={initialUrl} controls className="w-full rounded" />
+          <>
+            <video src={initialUrl} controls className="w-full rounded" />
+            <a href={initialUrl} download="recording.webm">
+              <button className="btn mt-2 bg-blue-500 text-white px-4 py-2 rounded">
+                Download Recording
+              </button>
+            </a>
+          </>
         )}
       </div>
       <div>
