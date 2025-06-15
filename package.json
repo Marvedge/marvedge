@@ -14,16 +14,21 @@
     "@prisma/client": "^6.7.0",
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.2",
     "next": "15.3.1",
     "next-auth": "^4.24.11",
+    "postcss": "^8.5.4",
     "prisma": "^6.7.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-hot-toast": "^2.5.2",
+    "zod": "^3.25.62"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.1.8",
     "@types/bcrypt": "^5.0.2",
+    "@types/bcryptjs": "^3.0.0",
     "@types/ffmpeg": "^1.0.7",
     "@types/node": "^20",
     "@types/react": "^19",

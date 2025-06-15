@@ -1,5 +1,5 @@
 "use client";
-import { useSession, signIn } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -24,7 +24,7 @@ export default function Home() {
   return (
     <div>
       Not signed in
-      <button onClick={() => signIn()}>Sign in</button>
+      <button onClick={() => router.push("/auth/signin")}>Sign in</button>
     </div>
   );
 }
