@@ -85,7 +85,7 @@ const SignUp = () => {
         style: {
           background: "linear-gradient(135deg, #f87171, #ef4444)",
           color: "#fff",
-          fontSize: "14px",
+          fontSize: "13px",
           fontWeight: "500",
           marginTop: "18px",
         },
@@ -117,7 +117,7 @@ const SignUp = () => {
                 style: {
                   background: "linear-gradient(135deg, #34d399, #10b981)",
                   color: "#fff",
-                  fontSize: "14px",
+                  fontSize: "13px",
                   marginTop: "18px",
                   fontWeight: "500",
                 },
@@ -153,7 +153,7 @@ const SignUp = () => {
           style: {
             background: "linear-gradient(135deg, #f87171, #ef4444)",
             color: "#fff",
-            fontSize: "14px",
+            fontSize: "13px",
             fontWeight: "500",
             marginTop: "18px",
           },
@@ -169,7 +169,7 @@ const SignUp = () => {
             style: {
               background: "linear-gradient(135deg, #f87171, #ef4444)",
               color: "#fff",
-              fontSize: "14px",
+              fontSize: "13px",
               fontWeight: "500",
               marginTop: "18px",
             },
@@ -180,7 +180,7 @@ const SignUp = () => {
           style: {
             background: "linear-gradient(135deg, #f87171, #ef4444)",
             color: "#fff",
-            fontSize: "14px",
+            fontSize: "13px",
             fontWeight: "500",
             marginTop: "18px",
           },
@@ -202,12 +202,12 @@ const SignUp = () => {
           style: {
             display: "flex",
             justifyContent: "center",
-            minWidth: "250px",
-            maxWidth: "350px",
-            padding: "12px 16px",
+            minWidth: "200px",
+            maxWidth: "300px",
+            padding: "10px 14px",
             borderRadius: "8px",
             boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-            fontSize: "14px",
+            fontSize: "13px",
             fontWeight: "500",
             color: "#fff",
           },
@@ -231,24 +231,24 @@ const SignUp = () => {
           alt="Logo"
           width={80}
           height={120}
-          className="w-16 md:w-20"
+          className="w-14 md:w-18"
           priority
         />
       </div>
       <div
-        className="container relative bg-white rounded-3xl shadow-lg overflow-hidden w-full md:w-[1000px] lg:w-[1200px] flex flex-col md:flex-row"
-        style={{ minHeight: "700px" }}
+        className="container relative bg-white rounded-3xl shadow-lg overflow-hidden w-full md:w-[800px] lg:w-[960px] flex flex-col md:flex-row"
+        style={{ minHeight: "600px" }}
       >
         <div
-          className="hidden md:block w-full md:w-1/2 h-[700px] bg-[#313053] text-white flex relative z-[1000]"
+          className="hidden md:block w-full md:w-1/2 h-[600px] bg-[#313053] text-white flex relative z-[1000]"
           style={{ borderRadius: "0 150px 100px 0" }}
         >
           <div className="toggle-panel toggle-left w-full h-full flex flex-col justify-center items-center p-6 text-center">
-            <div className="text-4xl font-semibold mb-4 flex items-center justify-center">
+            <div className="text-3xl font-semibold mb-4 flex items-center justify-center">
               <AnimatedText text="Welcome Back!" />
               <span className="animate-wave ml-2">👋</span>
             </div>
-            <p className="text-base mb-6 leading-relaxed">
+            <p className="text-sm mb-6 leading-relaxed">
               Enter your personal details to use all of our site features
             </p>
             <button
@@ -260,6 +260,7 @@ const SignUp = () => {
             </button>
           </div>
         </div>
+
         <div
           className="md:hidden flex justify-center items-center absolute top-0 left-0 w-full h-16 bg-[#313053] z-[1003]"
           style={{
@@ -284,15 +285,15 @@ const SignUp = () => {
             </button>
           </div>
         </div>
-        <div className="form-container w-full md:w-1/2 md:ml-auto h-full flex flex-col justify-center items-center bg-white p-4 md:p-8 pt-24 md:pt-8 z-[1001]">
+        <div className="form-container w-full md:w-1/2 md:ml-auto h-full flex flex-col justify-center items-center bg-white p-4 md:p-6 pt-20 md:pt-6 z-[1001]">
           <form
             className="w-full flex flex-col items-center"
             onSubmit={handleSignUp}
           >
-            <h1 className="text-5xl font-semibold mb-6 text-center">
+            <h1 className="text-4xl font-semibold mb-5 text-center">
               Create Account
             </h1>
-            <div className="social-icons flex justify-center mb-6">
+            <div className="social-icons flex justify-center mb-5">
               <a
                 href="#"
                 className="icon border border-[#004754] rounded-full flex justify-center items-center w-10 h-10 mr-2 hover:bg-[#615fa1] transition-all duration-200"
@@ -313,7 +314,7 @@ const SignUp = () => {
               >
                 <Image
                   src="/icons/github.png"
-                  alt="Google Login"
+                  alt="GitHub Login"
                   width={20}
                   height={20}
                   className="w-5 h-5"
@@ -326,30 +327,30 @@ const SignUp = () => {
               >
                 <Image
                   src="/icons/LinkedIn.png"
-                  alt="Google Login"
+                  alt="LinkedIn Login"
                   width={20}
                   height={20}
                   className="w-5 h-5"
                 />
               </a>
             </div>
-            <span className="text-xl mb-6 block text-center font-medium text-gray-500">
+            <span className="text-lg mb-5 block text-center font-medium text-gray-500">
               OR
             </span>
-            <span className="text-lg mb-6 block text-center font-medium">
+            <span className="text-base mb-5 block text-center font-medium">
               Fill Out The Following Info For Registration
             </span>
             <input
               type="text"
               placeholder="Name"
-              className="w-full p-2 mb-3 bg-gray-300 border-none outline-none rounded-md text-center text-base placeholder-center"
+              className="w-full p-2 mb-3 bg-gray-300 border-none outline-none rounded-md text-center text-sm placeholder-center"
               required
               ref={signUpNameRef}
             />
             <input
               type="email"
               placeholder="Email"
-              className="w-full p-2 mb-3 bg-gray-300 border-none outline-none rounded-md text-center text-base placeholder-center"
+              className="w-full p-2 mb-3 bg-gray-300 border-none outline-none rounded-md text-center text-sm placeholder-center"
               required
               ref={signUpEmailRef}
             />
@@ -357,7 +358,7 @@ const SignUp = () => {
               <input
                 type={showSignUpPassword ? "text" : "password"}
                 placeholder="Password"
-                className="w-full p-2 bg-gray-300 border-none outline-none rounded-md text-center text-base pr-10 placeholder-center"
+                className="w-full p-2 bg-gray-300 border-none outline-none rounded-md text-center text-sm pr-10 placeholder-center"
                 required
                 ref={signUpPasswordRef}
               />
@@ -389,7 +390,7 @@ const SignUp = () => {
               <input
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm Password"
-                className="w-full p-2 bg-gray-300 border-none outline-none rounded-md text-center text-base pr-10 placeholder-center"
+                className="w-full p-2 bg-gray-300 border-none outline-none rounded-md text-center text-sm pr-10 placeholder-center"
                 required
                 ref={confirmPasswordRef}
               />
@@ -401,7 +402,7 @@ const SignUp = () => {
                 {showConfirmPassword ? (
                   <Image
                     src="/icons/eyeclosed.png"
-                    alt="Show Password"
+                    alt="Hide Password"
                     width={20}
                     height={20}
                     className="h-5 w-5"
@@ -419,14 +420,14 @@ const SignUp = () => {
             </div>
             <button
               type="submit"
-              className="w-[65%] md:w-1/2 mx-auto bg-[#313053] hover:bg-[#615fa1] rounded-md text-white px-4 py-2 border-none font-semibold uppercase mt-2 cursor-pointer transition-colors duration-300"
+              className="w-[60%] md:w-[45%] mx-auto bg-[#313053] hover:bg-[#615fa1] rounded-md text-white px-4 py-2 border-none font-semibold uppercase mt-2 cursor-pointer transition-colors duration-300"
               disabled={isLoading}
             >
               {isLoading ? "Signing Up..." : "Sign Up"}
             </button>
             <button
               type="button"
-              className="w-[65%] md:w-1/2 mx-auto bg-[#313053] hover:bg-[#615fa1] rounded-md text-white px-4 py-2 border-none font-semibold uppercase mt-2 cursor-pointer transition-colors duration-300 whitespace-nowrap"
+              className="w-[60%] md:w-[45%] mx-auto bg-[#313053] hover:bg-[#615fa1] rounded-md text-white px-4 py-2 border-none font-semibold uppercase mt-2 cursor-pointer transition-colors duration-300 whitespace-nowrap"
               disabled={isLoading}
               onClick={() => router.push("/auth/forgot-password")}
             >
@@ -486,7 +487,7 @@ const SignUp = () => {
         .animate-wave {
           animation: wave 1.5s ease-in-out infinite;
           display: inline-block;
-          font-size: 1.5rem;
+          font-size: 1.25rem;
           line-height: 1;
         }
         .animate-char {
@@ -495,6 +496,11 @@ const SignUp = () => {
         }
         .placeholder-center::placeholder {
           text-align: center;
+        }
+        @media (min-width: 1280px) {
+          .container {
+            max-width: 960px;
+          }
         }
       `}</style>
     </div>
