@@ -241,6 +241,7 @@ const SignUp = () => {
       >
         <div
           className="hidden md:block w-full md:w-1/2 h-[600px] bg-[#313053] text-white flex relative z-[1000]"
+
           style={{ borderRadius: "0 150px 100px 0" }}
         >
           <div className="toggle-panel toggle-left w-full h-full flex flex-col justify-center items-center p-6 text-center">
