@@ -228,7 +228,7 @@ const SignUp = () => {
       <div className="absolute top-2 left-4 md:left-8 z-[999]">
         <Image
           src="/images/Transparent logo.png"
-          alt="Logo"
+          alt="logo"
           width={80}
           height={120}
           className="w-14 md:w-18"

@@ -2,12 +2,11 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import Navbar from "../app/components/Navbar";
 
 export default function Home() {
   const { status } = useSession();
   const router = useRouter();
-
-  //Do redirect from here if user tries manually going to this page through URL after signing in
 
   useEffect(() => {
     console.log("current status", status);
@@ -23,8 +22,7 @@ export default function Home() {
 
   return (
     <div>
-      Not signed in
-      <button onClick={() => router.push("/auth/signin")}>Sign in</button>
+      <Navbar />
     </div>
   );
 }

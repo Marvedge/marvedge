@@ -116,7 +116,7 @@ const SignIn = () => {
       <div className="absolute top-2 left-4 md:left-8 z-[1001]">
         <Image
           src="/icons/Transparent logo.png"
-          alt="Logo"
+          alt="logo"
           width={80}
           height={120}
           className="w-14 md:w-18"
