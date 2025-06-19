@@ -34,3 +34,30 @@
 //   );
 //   return { videoUrl, processing, trimApplier };
 // };
+
+import { useCallback, useState } from "react";
+import { videoTrimmer } from "../lib/ffmpeg";
+
+export const useEditor = (initialUrl: string) => {
+  const [videoUrl, setVideoUrl] = useState(initialUrl);
+  const [originalUrl] = useState(initialUrl);
+  const [processing, setProcessing] = useState(false);
+
+  const trimApplier = useCallback(
+    async (start: string, end: string) => {
+      setProcessing(true);
+
+      const blob = await fetch(videoUrl).then((res) => res.blob());
+      const trimmedBlob = await videoTrimmer(blob, start, end);
+      const newUrl = URL.createObjectURL(trimmedBlob);
+
+      setVideoUrl(newUrl);
+      setProcessing(false);
+    },
+    [videoUrl]
+  );
+
+  const resetVideo = () => setVideoUrl(originalUrl);
+
+  return { videoUrl, processing, trimApplier, resetVideo };
+};
