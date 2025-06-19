@@ -11,29 +11,33 @@ export const useEditor = () => {
   const [clipName, setClipName] = useState("clip");
   const [clipNote, setClipNote] = useState("");
 
-  const trimApplier = useCallback(async (start: string, end: string) => {
-    if (!blob) return;
-    setProcessing(true);
-    const trimmedBlob = await videoTrimmer(blob, start, end);
-    const newUrl = URL.createObjectURL(trimmedBlob);
-    setVideoUrl(newUrl);
+  const trimApplier = useCallback(
+    async (start: string, end: string) => {
+      if (!blob) return;
+      setProcessing(true);
 
-    const mp4Blob = await videoToMP4(trimmedBlob);
-    setMp4Url(URL.createObjectURL(mp4Blob));
+      const trimmedBlob = await videoTrimmer(blob, start, end);
+      const newUrl = URL.createObjectURL(trimmedBlob);
+      setVideoUrl(newUrl);
 
-    const thumbBlob = await videoToThumbnail(trimmedBlob);
-    setThumbnailUrl(URL.createObjectURL(thumbBlob));
+      const mp4Blob = await videoToMP4(trimmedBlob);
+      setMp4Url(URL.createObjectURL(mp4Blob));
 
-    setProcessing(false);
-  }, [blob]);
+      const thumbBlob = await videoToThumbnail(trimmedBlob);
+      setThumbnailUrl(URL.createObjectURL(thumbBlob));
+
+      setProcessing(false);
+    },
+    [blob]
+  );
 
   const resetVideo = () => {
     if (blob) setVideoUrl(URL.createObjectURL(blob));
   };
 
-  const downloadBlob = (blob: Blob, filename: string) => {
+  const downloadBlob = (url: string, filename: string) => {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = filename;
     a.click();
   };
