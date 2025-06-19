@@ -1,9 +1,9 @@
 "use client";
-import React from "react";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-const RecorderPage = () => {
+export default function RecorderPage() {
   const {
     startRecording,
     stopRecording,
@@ -15,46 +15,41 @@ const RecorderPage = () => {
 
   const router = useRouter();
 
-  // Redirect to /editor when videoUrl is set
-  React.useEffect(() => {
-    if (videoUrl) {
-      router.push(`/editor?video=${encodeURIComponent(videoUrl)}`); // Redirected the preview to editor page
-    }
+  useEffect(() => {
+    if (videoUrl) router.push("/editor");
   }, [videoUrl, router]);
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Screen Recorder</h1>
+    <main className="p-8 min-h-screen bg-white">
+      <h1 className="text-2xl font-bold mb-6">📹 Screen Recorder</h1>
 
-      {/* Microphone Toggle */}
+      {/* Mic Toggle */}
       <button
         onClick={toggleMic}
         disabled={recording}
-        className={`btn mr-4 px-4 py-2 rounded ${
-          micEnabled ? "bg-green-600 text-white" : "bg-gray-400 text-black"
+        className={`mr-4 px-4 py-2 rounded font-medium transition ${
+          micEnabled ? "bg-green-600 text-white" : "bg-gray-300 text-gray-800"
         }`}
       >
-        Microphone: {micEnabled ? "On" : "Off"}
+        🎙️ Microphone: {micEnabled ? "On" : "Off"}
       </button>
 
-      {/* Start/Stop Button */}
+      {/* Record Controls */}
       {!recording ? (
         <button
           onClick={startRecording}
-          className="btn bg-blue-600 text-white px-4 py-2 rounded"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
         >
-          Start Recording
+          ⏺ Start Recording
         </button>
       ) : (
         <button
           onClick={stopRecording}
-          className="btn bg-yellow-500 text-black px-4 py-2 rounded"
+          className="bg-yellow-500 hover:bg-yellow-600 text-black px-4 py-2 rounded transition"
         >
-          Stop Recording
+          ⏹ Stop Recording
         </button>
       )}
-    </div>
+    </main>
   );
-};
-
-export default RecorderPage;
+}
