@@ -7,10 +7,7 @@ import { z } from "zod";
 import toast, { Toaster } from "react-hot-toast";
 
 const signInSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Please enter your email")
-    .email("Invalid email address"),
+  email: z.string().min(1, "Please enter your email").email("Invalid email address"),
   password: z.string().min(1, "Please enter your password"),
 });
 
@@ -64,6 +61,7 @@ const SignIn = () => {
   };
 
   return (
+
     <div className="flex flex-col md:flex-row min-h-screen w-full font-sans bg-[#F1ECFF]">
       <Toaster position="top-center" />
       <div
@@ -205,7 +203,6 @@ const SignIn = () => {
           </div>
         </form>
       </div>
-
       <div className="hidden md:flex md:w-1/2 relative justify-center items-center overflow-hidden rounded-l-[75px] bg-[#B09EE4]">
         <div
           className={`absolute inset-0 bg-[#261753] rounded-l-[75px] z-0 transition-all duration-700 ease-out ${
@@ -223,9 +220,11 @@ const SignIn = () => {
         </div>
         <div className="absolute top-4 sm:top-6 right-6 sm:right-10 flex items-center gap-2 sm:gap-3 z-10">
           <Image src="/icons/logo.png" alt="Logo" width={28} height={28} />
+
           <span className="text-base sm:text-lg font-extrabold tracking-wider text-[#B09EE4]">
             MARVEDGE
           </span>
+
         </div>
         {/* Pulse elements */}
         <div className="absolute top-1/4 right-1/4 w-3 h-3 bg-white/20 rounded-full animate-pulse hover:scale-150 transition-transform duration-300"></div>
@@ -239,3 +238,4 @@ const SignIn = () => {
 };
 
 export default SignIn;
+

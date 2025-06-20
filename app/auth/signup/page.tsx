@@ -14,6 +14,7 @@ const signUpSchema = z
       .string()
       .min(1, "Please enter your email")
       .email("Invalid email address"),
+
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
   })
@@ -34,6 +35,10 @@ const SignUp = () => {
   const router = useRouter();
   const pathname = usePathname();
 
+  useEffect(() => {
+    const timer = setTimeout(() => setAnimatePanel(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     const timer = setTimeout(() => setAnimatePanel(true), 100);
     return () => clearTimeout(timer);
@@ -68,6 +73,7 @@ const SignUp = () => {
   };
 
   return (
+
     <div className="flex flex-col md:flex-row h-full min-h-screen font-sans bg-[#F1ECFF]">
       <Toaster position="top-center" />
 
@@ -101,6 +107,7 @@ const SignUp = () => {
           </button>
         </div>
       </div>
+
 
       <div className="hidden md:flex md:w-1/2 relative justify-center items-center overflow-hidden rounded-r-[75px] bg-[#B09EE4]">
         <div
@@ -167,6 +174,7 @@ const SignUp = () => {
             required
             className="w-full p-3 border-2 border-gray-500 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
           />
+
           <input
             type="email"
             name="email"
@@ -176,6 +184,7 @@ const SignUp = () => {
             required
             className="w-full p-3 border-2 border-gray-500 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
           />
+
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -185,6 +194,7 @@ const SignUp = () => {
               ref={passwordRef}
               required
               className="w-full p-3 border-2 border-gray-500 rounded-md text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
+
             />
             <button
               type="button"
@@ -195,12 +205,14 @@ const SignUp = () => {
                 src={
                   showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"
                 }
+
                 alt="Toggle Password"
                 width={20}
                 height={20}
               />
             </button>
           </div>
+
           <div className="relative">
             <input
               type={showConfirmPassword ? "text" : "password"}
@@ -210,6 +222,7 @@ const SignUp = () => {
               ref={confirmPasswordRef}
               required
               className="w-full p-3 border-2 border-gray-500 rounded-md text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
+
             />
             <button
               type="button"
@@ -232,6 +245,7 @@ const SignUp = () => {
             <input type="checkbox" className="accent-[#6356D7]" />
             <span className="font-semibold">Remember Me</span>
           </label>
+
           <button
             type="submit"
             disabled={isLoading}
@@ -239,11 +253,13 @@ const SignUp = () => {
           >
             {isLoading ? "Creating Account..." : "Sign Up"}
           </button>
+
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <div className="flex-grow border-t" />
             <span className="font-semibold">or sign up with</span>
             <div className="flex-grow border-t" />
           </div>
+
           <div className="flex justify-center">
             <button
               type="button"
@@ -257,6 +273,7 @@ const SignUp = () => {
                 width={25}
                 height={25}
               />
+
             </button>
           </div>
         </form>
