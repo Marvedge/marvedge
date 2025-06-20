@@ -14,7 +14,11 @@ const formatTime = (seconds: number) => {
   return [hrs, mins, secs].map((v) => String(v).padStart(2, "0")).join(":");
 };
 
-const EditorControls = ({ onTrim, processing, videoRef }: EditorControlsProps) => {
+const EditorControls = ({
+  onTrim,
+  processing,
+  videoRef,
+}: EditorControlsProps) => {
   const [duration, setDuration] = useState(0);
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
@@ -60,6 +64,9 @@ const EditorControls = ({ onTrim, processing, videoRef }: EditorControlsProps) =
         case "]":
           setEnd((prev) => Math.min(duration, prev + 1));
           break;
+        case "Enter":
+          handleTrim();
+          break;
       }
     };
 
@@ -103,7 +110,9 @@ const EditorControls = ({ onTrim, processing, videoRef }: EditorControlsProps) =
       </button>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">Start Time: {formatTime(start)}</label>
+        <label className="text-sm font-medium">
+          Start Time: {formatTime(start)}
+        </label>
         <input
           type="range"
           min={0}
@@ -116,7 +125,9 @@ const EditorControls = ({ onTrim, processing, videoRef }: EditorControlsProps) =
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">End Time: {formatTime(end)}</label>
+        <label className="text-sm font-medium">
+          End Time: {formatTime(end)}
+        </label>
         <input
           type="range"
           min={start + 1}
@@ -137,7 +148,9 @@ const EditorControls = ({ onTrim, processing, videoRef }: EditorControlsProps) =
       </button>
 
       <p className="text-xs text-gray-500">
-        ⌨️ Use <kbd>←</kbd>/<kbd>→</kbd> to seek, <kbd>[</kbd>/<kbd>]</kbd> to adjust trim<br />
+        ⌨️ Use <kbd>←</kbd>/<kbd>→</kbd> to seek, <kbd>[</kbd>/<kbd>]</kbd> to
+        adjust trim
+        <br />
         🖱️ Click on the video to toggle zoom
       </p>
     </div>
