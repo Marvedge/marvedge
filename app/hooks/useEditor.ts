@@ -1,6 +1,16 @@
 import { useCallback, useState } from "react";
 import { useBlobStore } from "../lib/blobStore";
-import { videoTrimmer, videoToMP4, videoToThumbnail } from "../lib/ffmpeg";
+import {
+  videoTrimmer,
+  videoToMP4WithOverlays,
+  videoToThumbnail,
+} from "../lib/ffmpeg";
+
+// Reuse this type from your overlay-enabled editor
+type Overlay =
+  | { type: "blur" | "rect"; x: number; y: number; w: number; h: number }
+  | { type: "arrow"; x: number; y: number; x2: number; y2: number }
+  | { type: "text"; x: number; y: number; text: string };
 
 export const useEditor = () => {
   const { blob } = useBlobStore();
@@ -12,15 +22,23 @@ export const useEditor = () => {
   const [clipNote, setClipNote] = useState("");
 
   const trimApplier = useCallback(
-    async (start: string, end: string) => {
+    async (start: string, end: string, overlays?: Overlay[]) => {
       if (!blob) return;
       setProcessing(true);
 
       const trimmedBlob = await videoTrimmer(blob, start, end);
-      const newUrl = URL.createObjectURL(trimmedBlob);
-      setVideoUrl(newUrl);
+      const trimmedUrl = URL.createObjectURL(trimmedBlob);
+      setVideoUrl(trimmedUrl);
 
-      const mp4Blob = await videoToMP4(trimmedBlob);
+      let mp4Blob: Blob;
+
+      if (overlays && overlays.length > 0) {
+        mp4Blob = await videoToMP4WithOverlays(trimmedBlob, overlays);
+      } else {
+        const { videoToMP4 } = await import("../lib/ffmpeg");
+        mp4Blob = await videoToMP4(trimmedBlob);
+      }
+
       setMp4Url(URL.createObjectURL(mp4Blob));
 
       const thumbBlob = await videoToThumbnail(trimmedBlob);
