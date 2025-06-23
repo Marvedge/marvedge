@@ -23,7 +23,6 @@ export default function RecorderPage() {
     <main className="p-8 min-h-screen bg-white">
       <h1 className="text-2xl font-bold mb-6">📹 Screen Recorder</h1>
 
-      {/* Mic Toggle */}
       <button
         onClick={toggleMic}
         disabled={recording}
@@ -34,7 +33,6 @@ export default function RecorderPage() {
         🎙️ Microphone: {micEnabled ? "On" : "Off"}
       </button>
 
-      {/* Record Controls */}
       {!recording ? (
         <button
           onClick={startRecording}

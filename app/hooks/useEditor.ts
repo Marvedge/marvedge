@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useBlobStore } from "../lib/blobStore";
 import {
   videoTrimmer,
@@ -6,7 +6,6 @@ import {
   videoToThumbnail,
 } from "../lib/ffmpeg";
 
-// Reuse this type from your overlay-enabled editor
 type Overlay =
   | { type: "blur" | "rect"; x: number; y: number; w: number; h: number }
   | { type: "arrow"; x: number; y: number; x2: number; y2: number }
@@ -21,8 +20,21 @@ export const useEditor = () => {
   const [clipName, setClipName] = useState("clip");
   const [clipNote, setClipNote] = useState("");
 
+  const thumbnailGenerated = useRef(false);
+
+  const currentOverlays = useRef<Overlay[]>([]);
+  const setOverlays = (list: Overlay[]) => {
+    currentOverlays.current = list;
+    localStorage.setItem("videoOverlays", JSON.stringify(list));
+  };
+
+  const loadOverlays = (): Overlay[] => {
+    const stored = localStorage.getItem("videoOverlays");
+    return stored ? JSON.parse(stored) : [];
+  };
+
   const trimApplier = useCallback(
-    async (start: string, end: string, overlays?: Overlay[]) => {
+    async (start: string, end: string) => {
       if (!blob) return;
       setProcessing(true);
 
@@ -32,8 +44,8 @@ export const useEditor = () => {
 
       let mp4Blob: Blob;
 
-      if (overlays && overlays.length > 0) {
-        mp4Blob = await videoToMP4WithOverlays(trimmedBlob, overlays);
+      if (currentOverlays.current.length > 0) {
+        mp4Blob = await videoToMP4WithOverlays(trimmedBlob, currentOverlays.current);
       } else {
         const { videoToMP4 } = await import("../lib/ffmpeg");
         mp4Blob = await videoToMP4(trimmedBlob);
@@ -41,8 +53,11 @@ export const useEditor = () => {
 
       setMp4Url(URL.createObjectURL(mp4Blob));
 
-      const thumbBlob = await videoToThumbnail(trimmedBlob);
-      setThumbnailUrl(URL.createObjectURL(thumbBlob));
+      if (!thumbnailGenerated.current) {
+        const thumbBlob = await videoToThumbnail(trimmedBlob);
+        setThumbnailUrl(URL.createObjectURL(thumbBlob));
+        thumbnailGenerated.current = true;
+      }
 
       setProcessing(false);
     },
@@ -72,5 +87,7 @@ export const useEditor = () => {
     clipNote,
     setClipNote,
     downloadBlob,
+    setOverlays,
+    loadOverlays,
   };
 };
