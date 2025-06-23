@@ -50,7 +50,9 @@ export default function EditorPage() {
 
   const [tool, setTool] = useState<"blur" | "rect" | "arrow" | "text">("blur");
   const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
@@ -149,7 +151,8 @@ export default function EditorPage() {
 
   const handleUndo = () => setOverlays((prev) => prev.slice(0, -1));
   const handleClear = () => setOverlays([]);
-  const handleSaveOverlays = () => localStorage.setItem("videoOverlays", JSON.stringify(overlays));
+  const handleSaveOverlays = () =>
+    localStorage.setItem("videoOverlays", JSON.stringify(overlays));
   const handleLoadOverlays = () => {
     const saved = localStorage.getItem("videoOverlays");
     if (saved) setOverlays(JSON.parse(saved));
@@ -162,7 +165,9 @@ export default function EditorPage() {
         <div className="md:col-span-2 space-y-4">
           {processing ? (
             <div className="flex flex-col items-center justify-center py-16">
-              <p className="text-sm text-gray-600">⏳ Trimming video, please wait...</p>
+              <p className="text-sm text-gray-600">
+                ⏳ Trimming video, please wait...
+              </p>
             </div>
           ) : videoUrl ? (
             <>
@@ -217,25 +222,54 @@ export default function EditorPage() {
                     {t.toUpperCase()}
                   </button>
                 ))}
-                <button onClick={handleUndo} className="bg-gray-600 text-white px-3 py-1 rounded">↩️ Undo</button>
-                <button onClick={handleClear} className="bg-red-600 text-white px-3 py-1 rounded">❌ Clear</button>
-                <button onClick={handleSaveOverlays} className="bg-yellow-600 text-white px-3 py-1 rounded">💾 Save</button>
-                <button onClick={handleLoadOverlays} className="bg-green-600 text-white px-3 py-1 rounded">📂 Load</button>
+                <button
+                  onClick={handleUndo}
+                  className="bg-gray-600 text-white px-3 py-1 rounded"
+                >
+                  ↩️ Undo
+                </button>
+                <button
+                  onClick={handleClear}
+                  className="bg-red-600 text-white px-3 py-1 rounded"
+                >
+                  ❌ Clear
+                </button>
+                <button
+                  onClick={handleSaveOverlays}
+                  className="bg-yellow-600 text-white px-3 py-1 rounded"
+                >
+                  💾 Save
+                </button>
+                <button
+                  onClick={handleLoadOverlays}
+                  className="bg-green-600 text-white px-3 py-1 rounded"
+                >
+                  📂 Load
+                </button>
               </div>
 
               <div className="flex gap-4 flex-wrap items-center">
                 <a href={videoUrl} download={`${clipName || "clip"}.webm`}>
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded">⬇️ Download WebM</button>
+                  <button className="bg-blue-600 text-white px-4 py-2 rounded">
+                    ⬇️ Download WebM
+                  </button>
                 </a>
                 {mp4Url && (
                   <button
-                    onClick={() => downloadBlob(mp4Url, `${clipName || "clip"}.mp4`)}
+                    onClick={() =>
+                      downloadBlob(mp4Url, `${clipName || "clip"}.mp4`)
+                    }
                     className="bg-purple-600 text-white px-4 py-2 rounded"
                   >
                     💾 Save MP4
                   </button>
                 )}
-                <button onClick={resetVideo} className="bg-gray-500 text-white px-4 py-2 rounded">🔁 Reset</button>
+                <button
+                  onClick={resetVideo}
+                  className="bg-gray-500 text-white px-4 py-2 rounded"
+                >
+                  🔁 Reset
+                </button>
               </div>
 
               {thumbnailUrl && (
@@ -270,10 +304,12 @@ export default function EditorPage() {
           )}
         </div>
 
-        {/* Controls */}
         <div>
           <EditorControls
-            onTrim={trimApplier}
+            onTrim={(start, end) => {
+              setOverlays(overlays); 
+              trimApplier(start, end);
+            }}
             processing={processing}
             videoRef={videoRef}
           />
