@@ -307,7 +307,7 @@ export default function EditorPage() {
         <div>
           <EditorControls
             onTrim={(start, end) => {
-              setOverlays(overlays); 
+              setOverlays(overlays);
               trimApplier(start, end);
             }}
             processing={processing}
