@@ -7,7 +7,10 @@ import { z } from "zod";
 import toast, { Toaster } from "react-hot-toast";
 
 const signInSchema = z.object({
-  email: z.string().min(1, "Please enter your email").email("Invalid email address"),
+  email: z
+    .string()
+    .min(1, "Please enter your email")
+    .email("Invalid email address"),
   password: z.string().min(1, "Please enter your password"),
 });
 
@@ -61,7 +64,6 @@ const SignIn = () => {
   };
 
   return (
-
     <div className="flex flex-col md:flex-row min-h-screen w-full font-sans bg-[#F1ECFF]">
       <Toaster position="top-center" />
       <div
@@ -112,7 +114,7 @@ const SignIn = () => {
               Sign In to your Account
             </h1>
             <p className="text-xs sm:text-sm text-gray-600 font-semibold">
-              Don’t have an account?{" "}
+              Don&apos;t have an account?{" "}
               <button
                 type="button"
                 onClick={() => router.push("/auth/signup")}
@@ -224,9 +226,8 @@ const SignIn = () => {
           <span className="text-base sm:text-lg font-extrabold tracking-wider text-[#B09EE4]">
             MARVEDGE
           </span>
-
         </div>
-        {/* Pulse elements */}
+
         <div className="absolute top-1/4 right-1/4 w-3 h-3 bg-white/20 rounded-full animate-pulse hover:scale-150 transition-transform duration-300"></div>
         <div className="absolute bottom-1/3 left-1/4 w-4 h-4 bg-white/15 rounded-full animate-pulse delay-1000 hover:scale-150 transition-transform duration-300"></div>
         <div className="absolute top-1/2 left-1/3 w-2 h-2 bg-white/25 rounded-full animate-pulse delay-500 hover:scale-150 transition-transform duration-300"></div>
@@ -238,4 +239,3 @@ const SignIn = () => {
 };
 
 export default SignIn;
-

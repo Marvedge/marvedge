@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import Hero from "./Hero";
+import { useSession } from "next-auth/react";
 
 const NavButton: React.FC<{
   children: React.ReactNode;
@@ -22,10 +23,21 @@ const NavButton: React.FC<{
 const Navbar: React.FC = () => {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { status } = useSession();
 
   const toggleMenu = () => {
     setIsMenuOpen((prev) => !prev);
   };
+
+  const handleActionButtonClick = () => {
+    if (status === "authenticated") {
+      router.push("/dashboard");
+    } else {
+      router.push("/auth/signup");
+    }
+  };
+
+  const actionButtonText = status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
 
   return (
     <>
@@ -65,10 +77,10 @@ const Navbar: React.FC = () => {
               Reviews
             </NavButton>
             <NavButton
-              onClick={() => router.push("/auth/signup")}
+              onClick={handleActionButtonClick}
               className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors"
             >
-              Start Free Trial
+              {actionButtonText}
             </NavButton>
           </div>
         </div>
@@ -101,12 +113,12 @@ const Navbar: React.FC = () => {
             </NavButton>
             <NavButton
               onClick={() => {
-                router.push("/auth/signup");
+                handleActionButtonClick();
                 toggleMenu();
               }}
               className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors"
             >
-              Start Free Trial
+              {actionButtonText}
             </NavButton>
           </div>
         )}

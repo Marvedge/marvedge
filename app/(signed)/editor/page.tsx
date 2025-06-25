@@ -2,6 +2,7 @@
 import { useRef, useState, useEffect, MouseEvent } from "react";
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorControls from "@/app/components/EditorControls";
+import Image from "next/image";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -275,10 +276,12 @@ export default function EditorPage() {
               {thumbnailUrl && (
                 <div>
                   <p className="text-sm text-gray-500 mt-2">📸 Thumbnail:</p>
-                  <img
+                  <Image
                     src={thumbnailUrl}
-                    alt="thumbnail"
-                    className="w-32 mt-2 rounded border"
+                    alt="Google"
+                    width={20}
+                    height={20}
+                    className="sm:w-[25px] sm:h-[25px]"
                   />
                 </div>
               )}
