@@ -9,6 +9,7 @@ import {
   useTransform,
 } from "framer-motion";
 import Hero4 from "./Hero4";
+import { Play } from "lucide-react";
 
 const Hero3: React.FC = () => {
   const sectionRef = useRef(null);
@@ -112,9 +113,9 @@ const Hero3: React.FC = () => {
             }}
           >
             {[
-              "✔️ Automatic feature detection and highlighting",
-              "📻 Professional voiceover and background music",
-              "🎧 Compelling call-to-action integration",
+              { label: "Product Onboarding" },
+              { label: "Feature Walkthrough" },
+              { label: "Sales Demo" },
             ].map((item, index) => (
               <motion.li
                 key={index}
@@ -131,7 +132,10 @@ const Hero3: React.FC = () => {
                 }}
                 whileHover={{ x: 5, scale: 1.02 }}
               >
-                {item}
+                <span className="mr-2">
+                  <Play color="#fff" size={20} />
+                </span>
+                {item.label}
               </motion.li>
             ))}
           </motion.ul>

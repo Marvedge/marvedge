@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, RefObject } from "react";
+import { useEffect, useState, RefObject, useCallback } from "react";
 
 type EditorControlsProps = {
   onTrim: (start: string, end: string) => void;
@@ -24,6 +24,30 @@ const EditorControls = ({
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
 
+  const handleTrim = useCallback(() => {
+    if (start >= end || duration === 0) {
+      alert("Invalid trim range.");
+      return;
+    }
+    onTrim(formatTime(start), formatTime(end));
+  }, [start, end, duration, onTrim]);
+
+  const toggleZoom = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!zoomed) {
+      video.style.transform = "scale(1.5)";
+      video.style.transformOrigin = "center";
+      video.style.transition = "transform 0.3s ease";
+    } else {
+      video.style.transform = "scale(1)";
+      video.style.transformOrigin = "initial";
+      video.style.transition = "transform 0.3s ease";
+    }
+    setZoomed((z) => !z);
+  }, [videoRef, zoomed]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -43,7 +67,7 @@ const EditorControls = ({
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
       video.removeEventListener("click", handleClickZoom);
     };
-  }, [videoRef, zoomed]);
+  }, [videoRef, zoomed, toggleZoom]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -72,31 +96,7 @@ const EditorControls = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [duration, processing, videoRef]);
-
-  const handleTrim = () => {
-    if (start >= end || duration === 0) {
-      alert("Invalid trim range.");
-      return;
-    }
-    onTrim(formatTime(start), formatTime(end));
-  };
-
-  const toggleZoom = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (!zoomed) {
-      video.style.transform = "scale(1.5)";
-      video.style.transformOrigin = "center";
-      video.style.transition = "transform 0.3s ease";
-    } else {
-      video.style.transform = "scale(1)";
-      video.style.transformOrigin = "initial";
-      video.style.transition = "transform 0.3s ease";
-    }
-    setZoomed(!zoomed);
-  };
+  }, [duration, processing, videoRef, handleTrim]);
 
   return (
     <div className="space-y-6 bg-white border border-gray-200 rounded-2xl shadow-md p-6">
