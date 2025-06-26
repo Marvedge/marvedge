@@ -1,7 +1,9 @@
 "use client";
 import { useRef, useState, useEffect, MouseEvent } from "react";
+import { useBlobStore } from "@/app/lib/blobStore";
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorControls from "@/app/components/EditorControls";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 interface RectOverlay {
@@ -32,8 +34,10 @@ interface TextOverlay {
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
 
 export default function EditorPage() {
+  const router = useRouter();
+  const blob = useBlobStore((state) => state.blob);
   const {
-    videoUrl,
+    videoUrl: recordedVideoUrl,
     mp4Url,
     thumbnailUrl,
     clipName,
@@ -45,6 +49,9 @@ export default function EditorPage() {
     resetVideo,
     downloadBlob,
   } = useEditor();
+
+  const [duration, setDuration] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -59,6 +66,32 @@ export default function EditorPage() {
   const [textFont, setTextFont] = useState("16px sans-serif");
 
   useEffect(() => {
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      setVideoUrl(url);
+    } else {
+      setVideoUrl(recordedVideoUrl);
+    }
+  }, [blob, recordedVideoUrl]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      if (
+        video &&
+        !isNaN(video.duration) &&
+        video.duration > 0 &&
+        duration === 0
+      ) {
+        setDuration(Math.floor(video.duration));
+        clearInterval(interval);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [videoUrl, duration]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
@@ -67,8 +100,14 @@ export default function EditorPage() {
     if (!ctx) return;
 
     const draw = () => {
-      canvas.width = video.clientWidth;
-      canvas.height = video.clientHeight;
+      const width = video.clientWidth;
+      const height = video.clientHeight;
+
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       for (const item of overlays) {
@@ -161,6 +200,13 @@ export default function EditorPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
+      <button
+        onClick={() => router.push("/recorder")}
+        className="mb-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+      >
+        🔙 Back to Recorder
+      </button>
+
       <h1 className="text-2xl font-bold mb-6 text-gray-800">🎬 Video Editor</h1>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-4">
@@ -177,6 +223,12 @@ export default function EditorPage() {
                   ref={videoRef}
                   src={videoUrl}
                   controls
+                  onLoadedMetadata={() => {
+                    const video = videoRef.current;
+                    if (video && !isNaN(video.duration)) {
+                      setDuration(Math.floor(video.duration));
+                    }
+                  }}
                   className="w-full transition-transform duration-300 ease-in-out"
                 />
                 <canvas
@@ -278,10 +330,11 @@ export default function EditorPage() {
                   <p className="text-sm text-gray-500 mt-2">📸 Thumbnail:</p>
                   <Image
                     src={thumbnailUrl}
-                    alt="Google"
-                    width={20}
-                    height={20}
-                    className="sm:w-[25px] sm:h-[25px]"
+                    alt="thumbnail"
+                    width={128}
+                    height={72}
+                    className="w-32 mt-2 rounded border"
+                    unoptimized
                   />
                 </div>
               )}
@@ -309,8 +362,9 @@ export default function EditorPage() {
 
         <div>
           <EditorControls
+            duration={duration}
             onTrim={(start, end) => {
-              setOverlays(overlays); 
+              setOverlays(overlays);
               trimApplier(start, end);
             }}
             processing={processing}
