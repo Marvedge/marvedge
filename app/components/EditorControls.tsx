@@ -1,17 +1,20 @@
 "use client";
 import { useEffect, useState, RefObject, useCallback } from "react";
+
 type EditorControlsProps = {
   onTrim: (start: string, end: string) => void;
   processing: boolean;
   videoRef: RefObject<HTMLVideoElement | null>;
   duration: number;
 };
+
 const formatTime = (seconds: number) => {
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
   return [hrs, mins, secs].map((v) => String(v).padStart(2, "0")).join(":");
 };
+
 const EditorControls = ({
   onTrim,
   processing,
@@ -21,9 +24,11 @@ const EditorControls = ({
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
+
   const toggleZoom = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
+
     if (!zoomed) {
       video.style.transform = "scale(1.5)";
       video.style.transformOrigin = "center";
@@ -35,22 +40,27 @@ const EditorControls = ({
     }
     setZoomed((z) => !z);
   }, [videoRef, zoomed]);
+
   const handleTrim = useCallback(() => {
     if (isNaN(duration) || duration === 0) {
       alert("Video duration not loaded yet.");
       return;
     }
+
     if (start >= end) {
       alert("Invalid trim range: Start must be less than End.");
       return;
     }
+
     onTrim(formatTime(start), formatTime(end));
   }, [start, end, duration, onTrim]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (processing) return;
       const video = videoRef.current;
       if (!video) return;
+
       switch (e.key) {
         case "ArrowLeft":
           video.currentTime = Math.max(0, video.currentTime - 1);
@@ -69,22 +79,26 @@ const EditorControls = ({
           break;
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [duration, processing, videoRef, handleTrim]);
+
   return (
     <div className="space-y-6 bg-white border border-gray-200 rounded-2xl shadow-md p-6">
-      <h2 className="font-semibold text-xl text-gray-800">:control_knobs: Trim Controls</h2>
+      <h2 className="font-semibold text-xl text-gray-800">🎛️ Trim Controls</h2>
+
       <div className="space-y-2">
         <button
           onClick={toggleZoom}
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg transition"
         >
-          {zoomed ? ":mag: Zoom Out" : ":mag_right: Zoom In"}
+          {zoomed ? "🔍 Zoom Out" : "🔎 Zoom In"}
         </button>
+
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            :stopwatch: Start Time: <span className="font-mono">{formatTime(start)}</span>
+            ⏱ Start Time: <span className="font-mono">{formatTime(start)}</span>
           </label>
           <input
             type="range"
@@ -100,9 +114,10 @@ const EditorControls = ({
             className="w-full accent-blue-500 cursor-pointer"
           />
         </div>
+
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            :timer_clock: End Time: <span className="font-mono">{formatTime(end)}</span>
+            ⏲ End Time: <span className="font-mono">{formatTime(end)}</span>
           </label>
           <input
             type="range"
@@ -118,6 +133,7 @@ const EditorControls = ({
             className="w-full accent-blue-500 cursor-pointer"
           />
         </div>
+
         <button
           onClick={handleTrim}
           disabled={processing || start >= end}
@@ -127,11 +143,12 @@ const EditorControls = ({
               : "bg-blue-600 hover:bg-blue-700"
           }`}
         >
-          {processing ? ":hourglass_flowing_sand: Trimming..." : ":scissors: Trim Video"}
+          {processing ? "⏳ Trimming..." : "✂️ Trim Video"}
         </button>
       </div>
+
       <div className="text-xs text-gray-500 mt-6 border-t pt-4">
-        <p className="mb-1 font-semibold">:keyboard: Keyboard Shortcuts:</p>
+        <p className="mb-1 font-semibold">⌨️ Keyboard Shortcuts:</p>
         <ul className="list-disc list-inside leading-5">
           <li>
             <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek video
@@ -142,10 +159,11 @@ const EditorControls = ({
           <li>
             <kbd className="kbd">Enter</kbd> — Apply trim
           </li>
-          <li>:three_button_mouse: Click on video to toggle zoom</li>
+          <li>🖱️ Click on video to toggle zoom</li>
         </ul>
       </div>
     </div>
   );
 };
+
 export default EditorControls;
