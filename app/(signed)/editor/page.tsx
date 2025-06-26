@@ -1,7 +1,9 @@
 "use client";
 import { useRef, useState, useEffect, MouseEvent } from "react";
+import { useBlobStore } from "@/app/lib/blobStore";
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorControls from "@/app/components/EditorControls";
+import { useRouter } from "next/navigation";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -31,8 +33,10 @@ interface TextOverlay {
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
 
 export default function EditorPage() {
+  const router = useRouter();
+  const blob = useBlobStore((state) => state.blob);
   const {
-    videoUrl,
+    videoUrl: recordedVideoUrl,
     mp4Url,
     thumbnailUrl,
     clipName,
@@ -44,6 +48,8 @@ export default function EditorPage() {
     resetVideo,
     downloadBlob,
   } = useEditor();
+
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -58,6 +64,15 @@ export default function EditorPage() {
   const [textFont, setTextFont] = useState("16px sans-serif");
 
   useEffect(() => {
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      setVideoUrl(url);
+    } else {
+      setVideoUrl(recordedVideoUrl);
+    }
+  }, [blob, recordedVideoUrl]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
@@ -66,8 +81,14 @@ export default function EditorPage() {
     if (!ctx) return;
 
     const draw = () => {
-      canvas.width = video.clientWidth;
-      canvas.height = video.clientHeight;
+      const width = video.clientWidth;
+      const height = video.clientHeight;
+
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       for (const item of overlays) {
@@ -160,6 +181,13 @@ export default function EditorPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
+      <button
+        onClick={() => router.push("/recorder")}
+        className="mb-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+      >
+        🔙 Back to Recorder
+      </button>
+
       <h1 className="text-2xl font-bold mb-6 text-gray-800">🎬 Video Editor</h1>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-4">
