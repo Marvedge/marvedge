@@ -4,6 +4,7 @@ import { useBlobStore } from "@/app/lib/blobStore";
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorControls from "@/app/components/EditorControls";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -49,6 +50,7 @@ export default function EditorPage() {
     downloadBlob,
   } = useEditor();
 
+  const [duration, setDuration] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -71,6 +73,23 @@ export default function EditorPage() {
       setVideoUrl(recordedVideoUrl);
     }
   }, [blob, recordedVideoUrl]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      if (
+        video &&
+        !isNaN(video.duration) &&
+        video.duration > 0 &&
+        duration === 0
+      ) {
+        setDuration(Math.floor(video.duration));
+        clearInterval(interval);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [videoUrl, duration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -204,6 +223,12 @@ export default function EditorPage() {
                   ref={videoRef}
                   src={videoUrl}
                   controls
+                  onLoadedMetadata={() => {
+                    const video = videoRef.current;
+                    if (video && !isNaN(video.duration)) {
+                      setDuration(Math.floor(video.duration));
+                    }
+                  }}
                   className="w-full transition-transform duration-300 ease-in-out"
                 />
                 <canvas
@@ -303,10 +328,13 @@ export default function EditorPage() {
               {thumbnailUrl && (
                 <div>
                   <p className="text-sm text-gray-500 mt-2">📸 Thumbnail:</p>
-                  <img
+                  <Image
                     src={thumbnailUrl}
                     alt="thumbnail"
+                    width={128}
+                    height={72}
                     className="w-32 mt-2 rounded border"
+                    unoptimized
                   />
                 </div>
               )}
@@ -334,6 +362,7 @@ export default function EditorPage() {
 
         <div>
           <EditorControls
+            duration={duration}
             onTrim={(start, end) => {
               setOverlays(overlays);
               trimApplier(start, end);

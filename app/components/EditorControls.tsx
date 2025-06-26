@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState, RefObject } from "react";
+import { useEffect, useState, RefObject, useCallback } from "react";
 
 type EditorControlsProps = {
   onTrim: (start: string, end: string) => void;
   processing: boolean;
   videoRef: RefObject<HTMLVideoElement | null>;
+  duration: number;
 };
 
 const formatTime = (seconds: number) => {
@@ -18,32 +19,41 @@ const EditorControls = ({
   onTrim,
   processing,
   videoRef,
+  duration,
 }: EditorControlsProps) => {
-  const [duration, setDuration] = useState(0);
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
 
-  useEffect(() => {
+  const toggleZoom = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleLoadedMetadata = () => {
-      const d = Math.floor(video.duration);
-      setDuration(d);
-      setEnd(d > 10 ? 10 : d);
-    };
-
-    const handleClickZoom = () => toggleZoom();
-
-    video.addEventListener("loadedmetadata", handleLoadedMetadata);
-    video.addEventListener("click", handleClickZoom);
-
-    return () => {
-      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      video.removeEventListener("click", handleClickZoom);
-    };
+    if (!zoomed) {
+      video.style.transform = "scale(1.5)";
+      video.style.transformOrigin = "center";
+      video.style.transition = "transform 0.3s ease";
+    } else {
+      video.style.transform = "scale(1)";
+      video.style.transformOrigin = "initial";
+      video.style.transition = "transform 0.3s ease";
+    }
+    setZoomed((z) => !z);
   }, [videoRef, zoomed]);
+
+  const handleTrim = useCallback(() => {
+    if (isNaN(duration) || duration === 0) {
+      alert("Video duration not loaded yet.");
+      return;
+    }
+
+    if (start >= end) {
+      alert("Invalid trim range: Start must be less than End.");
+      return;
+    }
+
+    onTrim(formatTime(start), formatTime(end));
+  }, [start, end, duration, onTrim]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -72,31 +82,7 @@ const EditorControls = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [duration, processing, videoRef]);
-
-  const handleTrim = () => {
-    if (start >= end || duration === 0) {
-      alert("Invalid trim range.");
-      return;
-    }
-    onTrim(formatTime(start), formatTime(end));
-  };
-
-  const toggleZoom = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (!zoomed) {
-      video.style.transform = "scale(1.5)";
-      video.style.transformOrigin = "center";
-      video.style.transition = "transform 0.3s ease";
-    } else {
-      video.style.transform = "scale(1)";
-      video.style.transformOrigin = "initial";
-      video.style.transition = "transform 0.3s ease";
-    }
-    setZoomed(!zoomed);
-  };
+  }, [duration, processing, videoRef, handleTrim]);
 
   return (
     <div className="space-y-6 bg-white border border-gray-200 rounded-2xl shadow-md p-6">
@@ -117,9 +103,13 @@ const EditorControls = ({
           <input
             type="range"
             min={0}
-            max={end - 1}
+            max={Math.max(0, end - 1)}
             value={start}
-            onChange={(e) => setStart(Number(e.target.value))}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setStart(val);
+              if (val >= end) setEnd(val + 1 <= duration ? val + 1 : duration);
+            }}
             disabled={processing}
             className="w-full accent-blue-500 cursor-pointer"
           />
@@ -134,7 +124,11 @@ const EditorControls = ({
             min={start + 1}
             max={duration}
             value={end}
-            onChange={(e) => setEnd(Number(e.target.value))}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setEnd(val);
+              if (val <= start) setStart(val - 1 >= 0 ? val - 1 : 0);
+            }}
             disabled={processing}
             className="w-full accent-blue-500 cursor-pointer"
           />
@@ -157,12 +151,10 @@ const EditorControls = ({
         <p className="mb-1 font-semibold">⌨️ Keyboard Shortcuts:</p>
         <ul className="list-disc list-inside leading-5">
           <li>
-            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek
-            video
+            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek video
           </li>
           <li>
-            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust
-            trim range
+            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust trim range
           </li>
           <li>
             <kbd className="kbd">Enter</kbd> — Apply trim
