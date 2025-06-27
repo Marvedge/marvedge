@@ -53,6 +53,7 @@ const SignIn = () => {
       if (res?.ok) {
         toast.success("Signed in successfully!");
         router.push("/dashboard");
+        setTimeout(() => window.location.reload(), 500);
       } else {
         toast.error(res?.error || "Invalid credentials.");
       }
