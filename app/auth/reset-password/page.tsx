@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { z } from "zod";
@@ -69,7 +69,7 @@ const ResetPassword = () => {
       const message =
         err instanceof z.ZodError
           ? err.errors[0].message
-          : err?.response?.data?.error || "Reset failed.";
+          : (axios.isAxiosError(err) && err.response?.data?.error) || "Reset failed.";
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -226,4 +226,10 @@ const ResetPassword = () => {
   );
 };
 
-export default ResetPassword;
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ResetPassword />
+    </Suspense>
+  );
+}

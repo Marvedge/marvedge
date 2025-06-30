@@ -49,6 +49,7 @@ export async function POST(req: Request) {
       text: `Your OTP for password reset is: ${otp}`,
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Failed to send OTP email" },
       { status: 500 }

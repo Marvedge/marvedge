@@ -45,7 +45,7 @@ const ForgotPassword = () => {
       const message =
         err instanceof z.ZodError
           ? err.errors[0].message
-          : (err as any)?.response?.data?.error || "Request failed.";
+          : (axios.isAxiosError(err) && err.response?.data?.error) || "Request failed.";
       toast.error(message);
     } finally {
       setIsLoading(false);
