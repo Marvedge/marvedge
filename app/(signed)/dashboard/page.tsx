@@ -19,7 +19,7 @@ const DashboardPage = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [displayedText, setDisplayedText] = useState("");
   const intervalMs = 150;
-  const welcomeText = "Welcome , ";
+  const welcomeText = "Welcome ";
   useEffect(() => {
     let currentIndex = 0;
     const interval = setInterval(() => {
@@ -71,14 +71,14 @@ const DashboardPage = () => {
             <div className="flex flex-col md:flex-row items-start md:items-center ml-4 md:ml-8 w-full md:w-[200px] overflow-hidden">
               <div className="relative w-full md:w-[200px] overflow-hidden">
                 <motion.span
-                  className="text-gray-500 text-base mr-2"
+                  className="text-gray-500 text-base sm:text-lg mr-2"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                 >
                   {displayedText}
                 </motion.span>
                 <motion.span
-                  className="text-[#6356D7] font-semibold text-base"
+                  className="text-[#6356D7] font-semibold text-lg sm:text-xl"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
