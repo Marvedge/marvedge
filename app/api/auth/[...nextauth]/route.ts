@@ -19,20 +19,31 @@ const handler = NextAuth({
         password: { label: "password", type: "password", placeholder: "" },
       },
       async authorize(credentials) {
-        console.log("authorizing");
+        console.log("NextAuth authorize called with email:", credentials?.email);
 
         const user = await prisma.user.findUnique({
           where: { email: credentials?.email },
         });
 
-        if (!user || !user.password) throw new Error("No user found");
+        console.log("User found:", !!user, "User has password:", !!user?.password);
+
+        if (!user || !user.password) {
+          console.log("No user found or no password");
+          throw new Error("No user found");
+        }
 
         const valid = await bcrypt.compare(
           credentials!.password,
           user.password
         );
-        if (!valid) throw new Error("Invalid password");
+        console.log("Password validation result:", valid);
+        
+        if (!valid) {
+          console.log("Invalid password");
+          throw new Error("Invalid password");
+        }
 
+        console.log("Authentication successful for user:", user.id);
         return user;
       },
     }),
@@ -44,7 +55,15 @@ const handler = NextAuth({
   pages: {
     signIn: "/auth/signin",
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  callbacks: {
+    async redirect({ url, baseUrl }) {
+      if (url === baseUrl || url === "/") return "/";
+      if (url === `${baseUrl}/dashboard` || url === "/dashboard")
+        return "/dashboard";
+      if (url.includes("signout") || url.includes("signin")) return "/";
+      return "/dashboard";
+    },
+  },
 });
 
 export { handler as GET, handler as POST };

@@ -53,6 +53,7 @@ const SignIn = () => {
       if (res?.ok) {
         toast.success("Signed in successfully!");
         router.push("/dashboard");
+        setTimeout(() => window.location.reload(), 500);
       } else {
         toast.error(res?.error || "Invalid credentials.");
       }
@@ -190,7 +191,7 @@ const SignIn = () => {
           <div className="flex justify-center">
             <button
               type="button"
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
               className="h-10 sm:h-[45px] w-[100px] sm:w-[120px] rounded-md border border-[#D5C9FF] bg-[#F1ECFF] shadow-md hover:shadow-lg transition-all duration-300 active:scale-95 hover:scale-105 flex items-center justify-center"
               title="Sign in with Google"
             >
