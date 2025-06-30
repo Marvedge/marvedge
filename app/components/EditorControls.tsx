@@ -5,6 +5,7 @@ type EditorControlsProps = {
   onTrim: (start: string, end: string) => void;
   processing: boolean;
   videoRef: RefObject<HTMLVideoElement | null>;
+  duration: number;
 };
 
 const formatTime = (seconds: number) => {
@@ -18,19 +19,11 @@ const EditorControls = ({
   onTrim,
   processing,
   videoRef,
+  duration,
 }: EditorControlsProps) => {
-  const [duration, setDuration] = useState(0);
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
-
-  const handleTrim = useCallback(() => {
-    if (start >= end || duration === 0) {
-      alert("Invalid trim range.");
-      return;
-    }
-    onTrim(formatTime(start), formatTime(end));
-  }, [start, end, duration, onTrim]);
 
   const toggleZoom = useCallback(() => {
     const video = videoRef.current;
@@ -48,26 +41,19 @@ const EditorControls = ({
     setZoomed((z) => !z);
   }, [videoRef, zoomed]);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+  const handleTrim = useCallback(() => {
+    if (isNaN(duration) || duration === 0) {
+      alert("Video duration not loaded yet.");
+      return;
+    }
 
-    const handleLoadedMetadata = () => {
-      const d = Math.floor(video.duration);
-      setDuration(d);
-      setEnd(d > 10 ? 10 : d);
-    };
+    if (start >= end) {
+      alert("Invalid trim range: Start must be less than End.");
+      return;
+    }
 
-    const handleClickZoom = () => toggleZoom();
-
-    video.addEventListener("loadedmetadata", handleLoadedMetadata);
-    video.addEventListener("click", handleClickZoom);
-
-    return () => {
-      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      video.removeEventListener("click", handleClickZoom);
-    };
-  }, [videoRef, zoomed, toggleZoom]);
+    onTrim(formatTime(start), formatTime(end));
+  }, [start, end, duration, onTrim]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -117,9 +103,13 @@ const EditorControls = ({
           <input
             type="range"
             min={0}
-            max={end - 1}
+            max={Math.max(0, end - 1)}
             value={start}
-            onChange={(e) => setStart(Number(e.target.value))}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setStart(val);
+              if (val >= end) setEnd(val + 1 <= duration ? val + 1 : duration);
+            }}
             disabled={processing}
             className="w-full accent-blue-500 cursor-pointer"
           />
@@ -134,7 +124,11 @@ const EditorControls = ({
             min={start + 1}
             max={duration}
             value={end}
-            onChange={(e) => setEnd(Number(e.target.value))}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setEnd(val);
+              if (val <= start) setStart(val - 1 >= 0 ? val - 1 : 0);
+            }}
             disabled={processing}
             className="w-full accent-blue-500 cursor-pointer"
           />
@@ -157,12 +151,10 @@ const EditorControls = ({
         <p className="mb-1 font-semibold">⌨️ Keyboard Shortcuts:</p>
         <ul className="list-disc list-inside leading-5">
           <li>
-            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek
-            video
+            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek video
           </li>
           <li>
-            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust
-            trim range
+            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust trim range
           </li>
           <li>
             <kbd className="kbd">Enter</kbd> — Apply trim
