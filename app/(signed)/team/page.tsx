@@ -31,7 +31,11 @@ const TeamPage = () => {
       description: "Write your team description here to view.",
     },
   ]);
-  const [newTeam, setNewTeam] = useState<Team>({ name: "", plan: "", description: "" });
+  const [newTeam, setNewTeam] = useState<Team>({
+    name: "",
+    plan: "",
+    description: "",
+  });
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [displayedText, setDisplayedText] = useState("");
@@ -53,7 +57,10 @@ const TeamPage = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setShowDropdown(false);
       }
     };
@@ -61,7 +68,9 @@ const TeamPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const initials = getInitials(session?.user?.name ?? session?.user?.email ?? undefined);
+  const initials = getInitials(
+    session?.user?.name ?? session?.user?.email ?? undefined
+  );
 
   const addTeam = () => {
     if (!newTeam.name || !newTeam.plan) return;
@@ -80,7 +89,9 @@ const TeamPage = () => {
       >
         <div className="flex items-center gap-2 ml-4 mr-6">
           <Users color="#6356D7" size={24} />
-          <span className="text-base sm:text-lg text-gray-400 font-medium">Team</span>
+          <span className="text-base sm:text-lg text-gray-400 font-medium">
+            Team
+          </span>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between w-full px-4 gap-2 md:gap-3">
@@ -94,14 +105,20 @@ const TeamPage = () => {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="relative overflow-hidden">
-              <motion.span className="text-gray-500 text-base sm:text-lg mr-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <motion.span
+                className="text-gray-500 text-base sm:text-lg mr-1"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
                 {displayedText}
               </motion.span>
               <motion.span
                 className="text-[#6356D7] font-semibold text-lg sm:text-xl"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: ((welcomeText.length + 1) * intervalMs) / 1000 }}
+                transition={{
+                  delay: ((welcomeText.length + 1) * intervalMs) / 1000,
+                }}
               >
                 {session?.user?.name
                   ? session.user.name.split(" ")[0]
@@ -109,7 +126,11 @@ const TeamPage = () => {
                 <motion.span
                   role="img"
                   aria-label="waving hand"
-                  style={{ display: "inline-block", originX: 0.7, originY: 0.7 }}
+                  style={{
+                    display: "inline-block",
+                    originX: 0.7,
+                    originY: 0.7,
+                  }}
                   animate={{ rotate: [0, 20, -10, 20, 0] }}
                   transition={{
                     duration: 1.5,
@@ -128,7 +149,13 @@ const TeamPage = () => {
               className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
               title="Notifications"
             >
-              <Image src="/icons/bell.png" alt="Notifications" width={20} height={20} className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Image
+                src="/icons/bell.png"
+                alt="Notifications"
+                width={20}
+                height={20}
+                className="w-5 h-5 sm:w-6 sm:h-6"
+              />
             </button>
 
             <div className="relative" ref={dropdownRef}>
@@ -149,7 +176,9 @@ const TeamPage = () => {
                   <div className="mb-2 text-base md:text-lg font-bold text-[#6356D7]">
                     {session?.user?.name || "User"}
                   </div>
-                  <div className="mb-1 text-gray-700 text-xs md:text-sm font-semibold">{session?.user?.email}</div>
+                  <div className="mb-1 text-gray-700 text-xs md:text-sm font-semibold">
+                    {session?.user?.email}
+                  </div>
                   <button
                     onClick={() => signOut({ callbackUrl: "/" })}
                     className="mt-3 w-full px-4 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm md:text-base"
@@ -177,32 +206,43 @@ const TeamPage = () => {
             transition={{ duration: 0.3 }}
             className="bg-white p-6 sm:p-10 rounded-xl w-full max-w-2xl shadow-xl"
           >
-            <h2 className="text-xl font-semibold text-[#2D1E6B] mb-6">Create new team</h2>
+            <h2 className="text-xl font-semibold text-[#2D1E6B] mb-6">
+              Create new team
+            </h2>
             <form className="flex flex-col gap-4">
               <input
                 type="text"
                 placeholder="Enter your team name"
                 value={newTeam.name}
-                onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                onChange={(e) =>
+                  setNewTeam({ ...newTeam, name: e.target.value })
+                }
                 className="border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] placeholder-[#B8AEE4] focus:ring-2 focus:ring-[#A99AF5] outline-none"
               />
               <textarea
                 placeholder="Enter team description"
                 value={newTeam.description}
-                onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
+                onChange={(e) =>
+                  setNewTeam({ ...newTeam, description: e.target.value })
+                }
                 className="border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] placeholder-[#B8AEE4] h-24 resize-none focus:ring-2 focus:ring-[#A99AF5] outline-none"
               />
               <div className="relative">
                 <select
                   value={newTeam.plan}
-                  onChange={(e) => setNewTeam({ ...newTeam, plan: e.target.value })}
+                  onChange={(e) =>
+                    setNewTeam({ ...newTeam, plan: e.target.value })
+                  }
                   className="appearance-none w-full border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] bg-white focus:ring-2 focus:ring-[#A99AF5] outline-none"
                 >
                   <option value="">Plan Type</option>
                   <option value="Free">Free</option>
                   <option value="Pro">Pro</option>
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#A99AF5]" size={18} />
+                <ChevronDown
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#A99AF5]"
+                  size={18}
+                />
               </div>
             </form>
             <div className="flex justify-between gap-4 mt-6">

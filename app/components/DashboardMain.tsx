@@ -1,62 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 
 const DashboardMain = () => {
-  const [isVisible, setIsVisible] = useState(false);
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-  const [animationTimeout, setAnimationTimeout] =
-    useState<NodeJS.Timeout | null>(null);
-  const [aiAssistantHovered, setAiAssistantHovered] = useState(false);
-  const [aiAssistantTimeout, setAiAssistantTimeout] =
-    useState<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    setIsVisible(true);
-  }, []);
-
-  const handleCardHover = (cardId: string) => {
-    if (animationTimeout) {
-      clearTimeout(animationTimeout);
-    }
-
-    setHoveredCard(cardId);
-
-    const timeout = setTimeout(() => {
-      setHoveredCard(null);
-    }, 3500);
-
-    setAnimationTimeout(timeout);
-  };
-
-  const handleCardLeave = () => {
-    if (animationTimeout) {
-      clearTimeout(animationTimeout);
-    }
-    setHoveredCard(null);
-  };
-
-  const handleAiAssistantHover = () => {
-    if (aiAssistantTimeout) {
-      clearTimeout(aiAssistantTimeout);
-    }
-
-    setAiAssistantHovered(true);
-
-    const timeout = setTimeout(() => {
-      setAiAssistantHovered(false);
-    }, 4000);
-
-    setAiAssistantTimeout(timeout);
-  };
-
-  const handleAiAssistantLeave = () => {
-    if (aiAssistantTimeout) {
-      clearTimeout(aiAssistantTimeout);
-    }
-    setAiAssistantHovered(false);
-  };
-
   return (
     <div className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen">
       <style jsx>{`
@@ -206,370 +152,158 @@ const DashboardMain = () => {
         }
         @keyframes sparkle-orbit3 {
           0% {
-            transform: rotate(120deg) translate(20px) scale(1);
+            transform: rotate(120deg) translate(28px) scale(1);
             opacity: 0.6;
           }
           50% {
             opacity: 1;
           }
           100% {
-            transform: rotate(480deg) translate(20px) scale(1.1);
+            transform: rotate(480deg) translate(28px) scale(1.1);
             opacity: 0.6;
           }
         }
         @keyframes sparkle-orbit4 {
           0% {
-            transform: rotate(180deg) translate(25px) scale(1);
-            opacity: 0.7;
+            transform: rotate(180deg) translate(32px) scale(1);
+            opacity: 0.5;
           }
           50% {
             opacity: 1;
           }
           100% {
-            transform: rotate(540deg) translate(25px) scale(1.1);
-            opacity: 0.7;
+            transform: rotate(540deg) translate(32px) scale(1.1);
+            opacity: 0.5;
           }
         }
         @keyframes sparkle-orbit5 {
           0% {
-            transform: rotate(240deg) translate(20px) scale(1);
-            opacity: 0.6;
+            transform: rotate(240deg) translate(26px) scale(1);
+            opacity: 0.7;
           }
           50% {
             opacity: 1;
           }
           100% {
-            transform: rotate(600deg) translate(20px) scale(1.1);
-            opacity: 0.6;
+            transform: rotate(600deg) translate(26px) scale(1.1);
+            opacity: 0.7;
           }
         }
         @keyframes sparkle-orbit6 {
           0% {
-            transform: rotate(300deg) translate(25px) scale(1);
-            opacity: 0.7;
+            transform: rotate(300deg) translate(29px) scale(1);
+            opacity: 0.6;
           }
           50% {
             opacity: 1;
           }
           100% {
-            transform: rotate(660deg) translate(25px) scale(1.1);
-            opacity: 0.7;
-          }
-        }
-        .ai-orb-ring {
-          transform-box: fill-box;
-          transform-origin: 50% 50%;
-          filter: blur(0.2px);
-        }
-        .ring1 {
-          animation: ring-rotate1 7s linear infinite;
-        }
-        .ring2 {
-          animation: ring-rotate2 9s linear infinite reverse;
-        }
-        @keyframes ring-rotate1 {
-          0% {
-            transform: rotateZ(0deg);
-            opacity: 0.35;
-          }
-          50% {
-            opacity: 0.18;
-          }
-          100% {
-            transform: rotateZ(360deg);
-            opacity: 0.35;
-          }
-        }
-        @keyframes ring-rotate2 {
-          0% {
-            transform: rotateZ(0deg);
-            opacity: 0.22;
-          }
-          50% {
-            opacity: 0.12;
-          }
-          100% {
-            transform: rotateZ(360deg);
-            opacity: 0.22;
+            transform: rotate(660deg) translate(29px) scale(1.1);
+            opacity: 0.6;
           }
         }
       `}</style>
 
       <div className="mb-6 md:mb-8">
-        <h2
-          className={`text-base md:text-lg font-light text-gray-400 mb-4 transition-all duration-700 ${
-            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-          }`}
-        >
+        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#2D2154] mb-2">
+          Dashboard
+        </h1>
+        <h2 className="text-base md:text-lg font-light text-gray-400 mb-4">
           Here&apos;s what happening with your demos today
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-          <div
-            className={`bg-[#E6E1FA] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] transition-all duration-700 delay-100 cursor-pointer ${
-              isVisible
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-8 scale-95"
-            } transition-all duration-300 ease-out ${
-              hoveredCard === "demos"
-                ? "scale-110 shadow-2xl shadow-purple-500/50 rotate-2 bg-gradient-to-br from-[#E6E1FA] to-[#D4C7F7]"
-                : "hover:scale-105 hover:shadow-lg"
-            }`}
-            onMouseEnter={() => handleCardHover("demos")}
-            onMouseLeave={handleCardLeave}
-          >
-            <div
-              className={`mb-2 transition-all duration-300 ${
-                hoveredCard === "demos" ? "animate-bounce" : ""
-              }`}
-            >
-              <span
-                className={`inline-block bg-[#B8AAFF] p-2 rounded-lg transition-all duration-300 ${
-                  hoveredCard === "demos" ? "bg-[#9B8AFF] scale-110" : ""
-                }`}
-              >
+          <div className="bg-[#E6E1FA] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+            <div className="mb-2">
+              <span className="inline-block bg-[#B8AAFF] p-2 rounded-lg">
                 <Image
                   src="/icons/play.png"
                   alt="Play"
                   width={24}
                   height={24}
-                  className={`md:w-7 md:h-7 transition-transform duration-300 ${
-                    hoveredCard === "demos" ? "rotate-12" : ""
-                  }`}
+                  className="md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div
-              className={`text-sm md:text-lg font-medium text-black transition-colors duration-300 ${
-                hoveredCard === "demos" ? "text-purple-800" : ""
-              }`}
-            >
+            <div className="text-sm md:text-lg font-medium text-black">
               Total Demos
             </div>
-            <div
-              className={`text-2xl md:text-3xl font-bold text-black transition-all duration-300 ${
-                hoveredCard === "demos" ? "text-purple-900 scale-110" : ""
-              }`}
-            >
-              0
-            </div>
-            <div
-              className={`text-xs text-green-600 font-semibold mt-1 transition-colors duration-300 ${
-                hoveredCard === "demos" ? "text-green-700" : ""
-              }`}
-            >
+            <div className="text-2xl md:text-3xl font-bold text-black">0</div>
+            <div className="text-xs text-green-600 font-semibold mt-1">
               +12%{" "}
-              <span
-                className={`text-gray-500 font-normal transition-colors duration-300 ${
-                  hoveredCard === "demos" ? "text-gray-600" : ""
-                }`}
-              >
-                vs last month
-              </span>
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
 
-          <div
-            className={`bg-[#E6F0FF] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] transition-all duration-700 delay-200 cursor-pointer ${
-              isVisible
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-8 scale-95"
-            } transition-all duration-300 ease-out ${
-              hoveredCard === "views"
-                ? "scale-110 shadow-2xl shadow-blue-500/50 -rotate-2 bg-gradient-to-br from-[#E6F0FF] to-[#D1E8FF]"
-                : "hover:scale-105 hover:shadow-lg"
-            }`}
-            onMouseEnter={() => handleCardHover("views")}
-            onMouseLeave={handleCardLeave}
-          >
-            <div
-              className={`mb-2 transition-all duration-300 ${
-                hoveredCard === "views" ? "animate-pulse" : ""
-              }`}
-            >
-              <span
-                className={`inline-block bg-[#B8E0FF] p-2 rounded-lg transition-all duration-300 ${
-                  hoveredCard === "views" ? "bg-[#9BCFFF] scale-110" : ""
-                }`}
-              >
+          <div className="bg-[#E6F0FF] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+            <div className="mb-2">
+              <span className="inline-block bg-[#B8E0FF] p-2 rounded-lg">
                 <Image
                   src="/icons/eye.png"
                   alt="Views"
                   width={24}
                   height={24}
-                  className={`md:w-7 md:h-7 transition-transform duration-300 ${
-                    hoveredCard === "views" ? "-rotate-12" : ""
-                  }`}
+                  className="md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div
-              className={`text-sm md:text-lg font-medium text-black transition-colors duration-300 ${
-                hoveredCard === "views" ? "text-blue-800" : ""
-              }`}
-            >
+            <div className="text-sm md:text-lg font-medium text-black">
               Total Views
             </div>
-            <div
-              className={`text-2xl md:text-3xl font-bold text-black transition-all duration-300 ${
-                hoveredCard === "views" ? "text-blue-900 scale-110" : ""
-              }`}
-            >
-              0
-            </div>
-            <div
-              className={`text-xs text-green-600 font-semibold mt-1 transition-colors duration-300 ${
-                hoveredCard === "views" ? "text-green-700" : ""
-              }`}
-            >
+            <div className="text-2xl md:text-3xl font-bold text-black">0</div>
+            <div className="text-xs text-green-600 font-semibold mt-1">
               +23%{" "}
-              <span
-                className={`text-gray-500 font-normal transition-colors duration-300 ${
-                  hoveredCard === "views" ? "text-gray-600" : ""
-                }`}
-              >
-                vs last month
-              </span>
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
 
-          <div
-            className={`bg-[#E6E1FA] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] transition-all duration-700 delay-300 cursor-pointer ${
-              isVisible
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-8 scale-95"
-            } transition-all duration-300 ease-out ${
-              hoveredCard === "completion"
-                ? "scale-110 shadow-2xl shadow-purple-500/50 rotate-3 bg-gradient-to-br from-[#E6E1FA] to-[#D4C7F7]"
-                : "hover:scale-105 hover:shadow-lg"
-            }`}
-            onMouseEnter={() => handleCardHover("completion")}
-            onMouseLeave={handleCardLeave}
-          >
-            <div
-              className={`mb-2 transition-all duration-300 ${
-                hoveredCard === "completion" ? "animate-bounce" : ""
-              }`}
-            >
-              <span
-                className={`inline-block bg-[#B8AAFF] p-2 rounded-lg transition-all duration-300 ${
-                  hoveredCard === "completion" ? "bg-[#9B8AFF] scale-110" : ""
-                }`}
-              >
+          <div className="bg-[#E6E1FA] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+            <div className="mb-2">
+              <span className="inline-block bg-[#B8AAFF] p-2 rounded-lg">
                 <Image
                   src="/icons/top arrow.png"
                   alt="Completion Rate"
                   width={24}
                   height={24}
-                  className={`md:w-7 md:h-7 transition-transform duration-300 ${
-                    hoveredCard === "completion" ? "scale-125" : ""
-                  }`}
+                  className="md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div
-              className={`text-sm md:text-lg font-medium text-black transition-colors duration-300 ${
-                hoveredCard === "completion" ? "text-purple-800" : ""
-              }`}
-            >
+            <div className="text-sm md:text-lg font-medium text-black">
               Completion Rate
             </div>
-            <div
-              className={`text-2xl md:text-3xl font-bold text-black transition-all duration-300 ${
-                hoveredCard === "completion" ? "text-purple-900 scale-110" : ""
-              }`}
-            >
-              0%
-            </div>
-            <div
-              className={`text-xs text-green-600 font-semibold mt-1 transition-colors duration-300 ${
-                hoveredCard === "completion" ? "text-green-700" : ""
-              }`}
-            >
+            <div className="text-2xl md:text-3xl font-bold text-black">0%</div>
+            <div className="text-xs text-green-600 font-semibold mt-1">
               +5%{" "}
-              <span
-                className={`text-gray-500 font-normal transition-colors duration-300 ${
-                  hoveredCard === "completion" ? "text-gray-600" : ""
-                }`}
-              >
-                vs last month
-              </span>
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
 
-          <div
-            className={`bg-[#F9E6E6] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] transition-all duration-700 delay-400 cursor-pointer ${
-              isVisible
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-8 scale-95"
-            } transition-all duration-300 ease-out ${
-              hoveredCard === "shares"
-                ? "scale-110 shadow-2xl shadow-red-500/50 -rotate-3 bg-gradient-to-br from-[#F9E6E6] to-[#F5D4D4]"
-                : "hover:scale-105 hover:shadow-lg"
-            }`}
-            onMouseEnter={() => handleCardHover("shares")}
-            onMouseLeave={handleCardLeave}
-          >
-            <div
-              className={`mb-2 transition-all duration-300 ${
-                hoveredCard === "shares" ? "animate-bounce" : ""
-              }`}
-            >
-              <span
-                className={`inline-block bg-[#FFB8B8] p-2 rounded-lg transition-all duration-300 ${
-                  hoveredCard === "shares" ? "bg-[#FF9B9B] scale-110" : ""
-                }`}
-              >
+          <div className="bg-[#F9E6E6] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+            <div className="mb-2">
+              <span className="inline-block bg-[#FFB8B8] p-2 rounded-lg">
                 <Image
                   src="/icons/share.png"
                   alt="Shares"
                   width={24}
                   height={24}
-                  className={`md:w-7 md:h-7 transition-transform duration-300 ${
-                    hoveredCard === "shares" ? "scale-125" : ""
-                  }`}
+                  className="md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div
-              className={`text-sm md:text-lg font-medium text-black transition-colors duration-300 ${
-                hoveredCard === "shares" ? "text-red-800" : ""
-              }`}
-            >
+            <div className="text-sm md:text-lg font-medium text-black">
               Active shares
             </div>
-            <div
-              className={`text-2xl md:text-3xl font-bold text-black transition-all duration-300 ${
-                hoveredCard === "shares" ? "text-red-900 scale-110" : ""
-              }`}
-            >
-              0
-            </div>
-            <div
-              className={`text-xs text-green-600 font-semibold mt-1 transition-colors duration-300 ${
-                hoveredCard === "shares" ? "text-green-700" : ""
-              }`}
-            >
+            <div className="text-2xl md:text-3xl font-bold text-black">0</div>
+            <div className="text-xs text-green-600 font-semibold mt-1">
               +8%{" "}
-              <span
-                className={`text-gray-500 font-normal transition-colors duration-300 ${
-                  hoveredCard === "shares" ? "text-gray-600" : ""
-                }`}
-              >
-                vs last month
-              </span>
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
-        <div
-          className={`lg:col-span-2 bg-white lg:h-100 lg:w-180 rounded-xl p-1 md:p-2 shadow-sm transition-all duration-700 delay-500 ${
-            isVisible
-              ? "opacity-100 translate-y-0 scale-100"
-              : "opacity-0 translate-y-8 scale-95"
-          } hover:shadow-lg transform`}
-        >
+        <div className="lg:col-span-2 bg-white lg:h-100 lg:w-180 rounded-xl p-1 md:p-2 shadow-sm hover:shadow-lg transform">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
             <Link href="/recorder">
               <h3 className="text-xl lg:ml-5 lg:mt-3 md:text-2xl font-semibold text-[#7569A5] cursor-pointer transition">
@@ -595,7 +329,7 @@ const DashboardMain = () => {
               Create your first demo to get started
             </div>
             <Link href={"/recorder"}>
-              <button className="mt-4 md:mt-6 px-4 md:px-6 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform flex items-center gap-2">
+              <button className="mt-4 md:mt-6 px-4 md:px-6 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform items-center gap-2">
                 <Image
                   src="/icons/play fill.png"
                   alt="Play"
@@ -610,30 +344,10 @@ const DashboardMain = () => {
         </div>
 
         <div className="flex flex-col gap-4 md:gap-8">
-          <div
-            className={`bg-[#C6B8F7] rounded-xl p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-[180px] md:min-h-[200px] transition-all duration-700 delay-600 cursor-pointer ${
-              isVisible
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-8 scale-95"
-            } transition-all duration-300 ease-out ${
-              aiAssistantHovered
-                ? "scale-110 shadow-2xl shadow-purple-500/50 rotate-3 bg-gradient-to-br from-[#C6B8F7] to-[#B4A6F5]"
-                : "hover:scale-105 hover:shadow-lg"
-            }`}
-            onMouseEnter={handleAiAssistantHover}
-            onMouseLeave={handleAiAssistantLeave}
-          >
+          <div className="bg-[#C6B8F7] rounded-xl p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
             <div>
-              <div
-                className={`flex items-center mb-3 md:mb-4 transition-all duration-300 ${
-                  aiAssistantHovered ? "animate-pulse" : ""
-                }`}
-              >
-                <span
-                  className={`inline-block p-2 rounded-lg mr-3 transition-all duration-300 ${
-                    aiAssistantHovered ? "scale-110" : "star-blink"
-                  } ai-orb-container`}
-                >
+              <div className="flex items-center mb-3 md:mb-4">
+                <span className="inline-block p-2 rounded-lg mr-3 star-blink">
                   <Image
                     src="/icons/ai-orb-icon.png"
                     alt="Google"
@@ -642,41 +356,21 @@ const DashboardMain = () => {
                     className="sm:w-[25px] sm:h-[25px]"
                   />
                 </span>
-                <span
-                  className={`text-lg md:text-xl font-bold text-white transition-all duration-300 ${
-                    aiAssistantHovered ? "text-yellow-200 scale-110" : ""
-                  }`}
-                >
+                <span className="text-lg md:text-xl font-bold text-white">
                   AI Assistant
                 </span>
               </div>
-              <div
-                className={`text-white text-sm md:text-base mb-4 md:mb-6 transition-all duration-300 ${
-                  aiAssistantHovered ? "text-yellow-100 scale-105" : ""
-                }`}
-              >
+              <div className="text-white text-sm md:text-base mb-4 md:mb-6">
                 Ready to help you create better demos with smart suggestions and
                 auto generated content.
               </div>
             </div>
-            <button
-              className={`w-full py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-sm md:text-base transform ${
-                aiAssistantHovered
-                  ? "bg-white/60 hover:bg-white/80 scale-110 animate-bounce"
-                  : "hover:bg-white/60 hover:scale-105"
-              }`}
-            >
+            <button className="w-full py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
               Get AI Help
             </button>
           </div>
 
-          <div
-            className={`bg-white rounded-xl p-4 md:p-6 shadow-sm transition-all duration-700 delay-700 ${
-              isVisible
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-8 scale-95"
-            } hover:shadow-lg transform`}
-          >
+          <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm hover:shadow-lg transform">
             <h3 className="text-xl md:text-2xl font-bold text-[#2D2154] mb-4 md:mb-6">
               Popular Templates
             </h3>
