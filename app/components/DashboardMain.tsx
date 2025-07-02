@@ -205,9 +205,6 @@ const DashboardMain = () => {
       `}</style>
 
       <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#2D2154] mb-2">
-          Dashboard
-        </h1>
         <h2 className="text-base md:text-lg font-light text-gray-400 mb-4">
           Here&apos;s what happening with your demos today
         </h2>
