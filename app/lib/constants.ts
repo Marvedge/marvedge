@@ -67,3 +67,30 @@ export const PRIVACY_SETTINGS = [
     default: false,
   },
 ]; 
+
+export const PREFERENCES_SETTINGS = [
+  {
+    label: "Auto Save",
+    desc: "Automatically save your work.",
+    key: "autoSave",
+    default: true,
+  },
+  {
+    label: "Show Tutorials",
+    desc: "Display helpful tips and tutorials.",
+    key: "showTutorials",
+    default: false,
+  },
+  {
+    label: "Compact mode",
+    desc: "Use smaller interface elements.",
+    key: "compactMode",
+    default: false,
+  },
+  {
+    label: "Animations",
+    desc: "Enable smooth transitions and animations.",
+    key: "animations",
+    default: false,
+  },
+]; 

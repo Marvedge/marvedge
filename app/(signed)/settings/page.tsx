@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { FaPlayCircle } from "react-icons/fa";
 import Image from "next/image";
@@ -7,6 +7,7 @@ import {
   TABS,
   NOTIFICATION_SETTINGS,
   PRIVACY_SETTINGS,
+  PREFERENCES_SETTINGS,
 } from "../../lib/constants";
 
 const SettingsPage = () => {
@@ -48,11 +49,11 @@ const SettingsPage = () => {
     }));
   }, [session]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const imageUrl = URL.createObjectURL(file);
@@ -62,7 +63,7 @@ const SettingsPage = () => {
 
   const handleEdit = () => {};
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
   };
 
@@ -577,32 +578,7 @@ const SettingsPage = () => {
                   />
                 </button>
               </div>
-              {[
-                {
-                  label: "Auto Save",
-                  desc: "Automatically save your work.",
-                  key: "autoSave",
-                  default: true,
-                },
-                {
-                  label: "Show Tutorials",
-                  desc: "Display helpful tips and tutorials.",
-                  key: "showTutorials",
-                  default: false,
-                },
-                {
-                  label: "Compact mode",
-                  desc: "Use smaller interface elements.",
-                  key: "compactMode",
-                  default: false,
-                },
-                {
-                  label: "Animations",
-                  desc: "Enable smooth transitions and animations.",
-                  key: "animations",
-                  default: false,
-                },
-              ].map((item) => (
+              {PREFERENCES_SETTINGS.map((item) => (
                 <div
                   key={item.key}
                   className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4"
