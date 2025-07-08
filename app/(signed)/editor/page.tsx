@@ -5,6 +5,7 @@ import { useEditor } from "@/app/hooks/useEditor";
 import EditorControls from "@/app/components/EditorControls";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { sanitizeFilename } from "@/app/lib/constants";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -221,15 +222,18 @@ export default function EditorPage() {
               <div className="relative overflow-auto max-h-[70vh] rounded-lg border border-gray-300 shadow-sm">
                 <video
                   ref={videoRef}
-                  src={videoUrl}
                   controls
-                  onLoadedMetadata={() => {
-                    const video = videoRef.current;
-                    if (video && !isNaN(video.duration)) {
-                      setDuration(Math.floor(video.duration));
-                    }
+                  autoPlay
+                  muted
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    background: "#000",
+                    maxHeight: "70vh",
+                    zIndex: 1,
+                    position: "relative"
                   }}
-                  className="w-full transition-transform duration-300 ease-in-out"
+                  className="w-full object-contain"
                 />
                 <canvas
                   ref={canvasRef}
@@ -302,7 +306,10 @@ export default function EditorPage() {
               </div>
 
               <div className="flex gap-4 flex-wrap items-center">
-                <a href={videoUrl} download={`${clipName || "clip"}.webm`}>
+                <a
+                  href={videoUrl}
+                  download={`${sanitizeFilename(clipName) || "clip"}.webm`}
+                >
                   <button className="bg-blue-600 text-white px-4 py-2 rounded">
                     ⬇️ Download WebM
                   </button>
@@ -310,7 +317,10 @@ export default function EditorPage() {
                 {mp4Url && (
                   <button
                     onClick={() =>
-                      downloadBlob(mp4Url, `${clipName || "clip"}.mp4`)
+                      downloadBlob(
+                        mp4Url,
+                        `${sanitizeFilename(clipName) || "clip"}.mp4`
+                      )
                     }
                     className="bg-purple-600 text-white px-4 py-2 rounded"
                   >
@@ -340,12 +350,14 @@ export default function EditorPage() {
               )}
 
               <div className="mt-4 space-y-2">
-                <input
-                  value={clipName}
-                  onChange={(e) => setClipName(e.target.value)}
-                  className="w-full border border-gray-300 p-2 rounded"
-                  placeholder="📎 Clip Name"
-                />
+                <div>
+                  <input
+                    value={clipName}
+                    onChange={(e) => setClipName(e.target.value)}
+                    className="w-full border border-gray-300 p-2 rounded"
+                    placeholder="📎 Clip Name (optional)"
+                  />
+                </div>
                 <textarea
                   value={clipNote}
                   onChange={(e) => setClipNote(e.target.value)}

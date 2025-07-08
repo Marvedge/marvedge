@@ -1,6 +1,12 @@
 // Store shared arrays and constants here
 
-export const TABS = ["Profile", "Notification", "Privacy", "Preferences", "Account"]; 
+export const TABS = [
+  "Profile",
+  "Notification",
+  "Privacy",
+  "Preferences",
+  "Account",
+];
 
 export const NOTIFICATION_SETTINGS = [
   {
@@ -39,7 +45,7 @@ export const NOTIFICATION_SETTINGS = [
     key: "securityAlerts",
     default: false,
   },
-]; 
+];
 
 export const PRIVACY_SETTINGS = [
   {
@@ -66,7 +72,7 @@ export const PRIVACY_SETTINGS = [
     key: "analyticsUsageData",
     default: false,
   },
-]; 
+];
 
 export const PREFERENCES_SETTINGS = [
   {
@@ -93,4 +99,16 @@ export const PREFERENCES_SETTINGS = [
     key: "animations",
     default: false,
   },
-]; 
+];
+
+export const sanitizeFilename = (title: string): string => {
+  if (!title) return "recording";
+
+  // Remove or replace invalid filename characters
+  return title
+    .replace(/[<>:"/\\|?*]/g, "") // Remove invalid characters
+    .replace(/\s+/g, "_") // Replace spaces with underscores
+    .replace(/[^\w\-_.]/g, "") // Keep only alphanumeric, hyphens, underscores, and dots
+    .substring(0, 100) // Limit length
+    .trim();
+};

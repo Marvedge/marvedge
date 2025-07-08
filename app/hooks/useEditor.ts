@@ -12,13 +12,15 @@ type Overlay =
   | { type: "text"; x: number; y: number; text: string };
 
 export const useEditor = () => {
-  const { blob } = useBlobStore();
-  const [videoUrl, setVideoUrl] = useState(blob ? URL.createObjectURL(blob) : "");
+  const { blob, title, description } = useBlobStore();
+  const [videoUrl, setVideoUrl] = useState(
+    blob ? URL.createObjectURL(blob) : ""
+  );
   const [processing, setProcessing] = useState(false);
   const [mp4Url, setMp4Url] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [clipName, setClipName] = useState("clip");
-  const [clipNote, setClipNote] = useState("");
+  const [clipName, setClipName] = useState(title || "clip");
+  const [clipNote, setClipNote] = useState(description || "");
 
   const thumbnailGenerated = useRef(false);
 
@@ -45,7 +47,10 @@ export const useEditor = () => {
       let mp4Blob: Blob;
 
       if (currentOverlays.current.length > 0) {
-        mp4Blob = await videoToMP4WithOverlays(trimmedBlob, currentOverlays.current);
+        mp4Blob = await videoToMP4WithOverlays(
+          trimmedBlob,
+          currentOverlays.current
+        );
       } else {
         const { videoToMP4 } = await import("../lib/ffmpeg");
         mp4Blob = await videoToMP4(trimmedBlob);
@@ -75,6 +80,16 @@ export const useEditor = () => {
     a.click();
   };
 
+  const setClipNameWithStore = (name: string) => {
+    setClipName(name);
+    useBlobStore.getState().setTitle(name);
+  };
+
+  const setClipNoteWithStore = (note: string) => {
+    setClipNote(note);
+    useBlobStore.getState().setDescription(note);
+  };
+
   return {
     videoUrl,
     mp4Url,
@@ -83,9 +98,9 @@ export const useEditor = () => {
     trimApplier,
     resetVideo,
     clipName,
-    setClipName,
+    setClipName: setClipNameWithStore,
     clipNote,
-    setClipNote,
+    setClipNote: setClipNoteWithStore,
     downloadBlob,
     setOverlays,
     loadOverlays,
