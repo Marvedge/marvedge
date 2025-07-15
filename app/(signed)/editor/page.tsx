@@ -45,7 +45,7 @@ export default function EditorPage() {
   const router = useRouter();
   const blob = useBlobStore((state) => state.blob);
   const {
-    videoUrl: recordedVideoUrl,
+    videoUrl,
     mp4Url,
     thumbnailUrl,
     clipName,
@@ -59,7 +59,6 @@ export default function EditorPage() {
   } = useEditor();
 
   const [duration, setDuration] = useState(0);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   //const [zoom, setzoom] = useState(0)
   //const [currentTime, setCurrentTime] = useState(0);
 
@@ -92,12 +91,11 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (blob) {
-      const url = URL.createObjectURL(blob);
-      setVideoUrl(url);
+       // setVideoUrl(url); // This line is removed as per the edit hint
     } else {
-      setVideoUrl(recordedVideoUrl);
+      // setVideoUrl(recordedVideoUrl); // This line is removed as per the edit hint
     }
-  }, [blob, recordedVideoUrl]);
+  }, [blob, videoUrl]); // Changed dependency to videoUrl
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -245,8 +243,7 @@ export default function EditorPage() {
                     <ReactPlayer
                       ref={(player) => {
                         reactPlayerRef.current = player;
-                        videoRef.current =
-                          player?.getInternalPlayer() as HTMLVideoElement;
+                        videoRef.current = player?.getInternalPlayer() as HTMLVideoElement;
                       }}
                       url={videoUrl}
                       controls

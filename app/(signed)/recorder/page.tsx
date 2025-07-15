@@ -156,8 +156,6 @@ export default function RecorderPage() {
   const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const username = session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")?.[0] || "User";
-
   const initials = session?.user?.name
     ? session.user.name
         .split(" ")
