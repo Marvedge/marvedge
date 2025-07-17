@@ -1,16 +1,18 @@
 "use client";
 import { useRef, useState, useEffect, MouseEvent } from "react";
-import { useBlobStore } from "@/app/lib/blobStore";
 import { useEditor } from "@/app/hooks/useEditor";
-//import EditorControls from "@/app/components/EditorControls";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { sanitizeFilename } from "@/app/lib/constants";
-import ReactPlayer from "react-player";
-import { Button } from "@/components/ui/button";
-//import dynamic from "next/dynamic";
+import EditorSidebar from "@/app/components/EditorSidebar";
+import EditorTopbar from "@/app/components/EditorTopbar";
+import { useSession } from "next-auth/react";
 import { TimelineSlider } from "@/app/components/MytimeLine";
-//import KonvaTimeLineCmp from '../../components/KonvaTimeline'
+import { FaExpand } from "react-icons/fa";
+import { useCallback } from "react";
+import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
+import { X } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
+import ReactPlayer from "react-player";
+import { useRouter } from "next/navigation";
+import { sanitizeFilename } from "@/app/lib/constants";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -40,46 +42,25 @@ interface TextOverlay {
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
 
 export default function EditorPage() {
-  // const TimelineCanvas = dynamic(() => import("../../components/TimeLine"), { ssr: false });
-  // const KonvaTimeLineCmp = dynamic(() => import("../../components/KonvaTimeline"), { ssr: false })
   const router = useRouter();
-  const blob = useBlobStore((state) => state.blob);
   const {
-    videoUrl,
+    videoUrl: recordedVideoUrl,
     mp4Url,
     thumbnailUrl,
-    clipName,
-    setClipName,
-    clipNote,
-    setClipNote,
     processing,
     trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
 
-  const [duration, setDuration] = useState(0);
-  //const [zoom, setzoom] = useState(0)
-  //const [currentTime, setCurrentTime] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
-  const videoPanelRef = useRef<HTMLDivElement>(null);
-  //const [timelineWidth, setTimelineWidth] = useState(800);
-
-  // useLayoutEffect(() => {
-  //   function updateWidth() {
-  //     if (videoPanelRef.current) setTimelineWidth(videoPanelRef.current.offsetWidth);
-  //   }
-  //   updateWidth();
-  //   window.addEventListener("resize", updateWidth);
-  //   return () => window.removeEventListener("resize", updateWidth);
-  // }, []);
-
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const reactPlayerRef = useRef<ReactPlayer | null>(null);
+  const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [tool, setTool] = useState<"blur" | "rect" | "arrow" | "text" | null>(
-    null
+  // Update tool state to include 'none' and set as default
+  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
+    "none"
   );
   const [drawing, setDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
@@ -89,17 +70,103 @@ export default function EditorPage() {
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
 
-  useEffect(() => {
-    if (blob) {
-       // setVideoUrl(url); // This line is removed as per the edit hint
-    } else {
-      // setVideoUrl(recordedVideoUrl); // This line is removed as per the edit hint
+  // Sidebar state
+  const [sidebarTitle, setSidebarTitle] = useState("");
+  const [sidebarDescription, setSidebarDescription] = useState("");
+
+  // Hamburger sidebar state for mobile
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // User initials logic (copied from recorder page)
+  const { data: session } = useSession();
+  const initials = session?.user?.name
+    ? session.user.name
+        .split(" ")
+        .map((part: string) => part[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : session?.user?.email?.[0]?.toUpperCase() || "U";
+
+  // State for browser bar controls
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // --- Add currentTime and duration state for syncing ---
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  // Fullscreen logic
+  const handleFullscreen = useCallback(() => {
+    const el = videoContainerRef.current;
+    console.log("Fullscreen button clicked", { el });
+    if (!el) {
+      alert("Video container not found.");
+      return;
     }
-  }, [blob, videoUrl]); // Changed dependency to videoUrl
+    // Enter fullscreen
+    if (
+      !document.fullscreenElement &&
+      !("webkitFullscreenElement" in document && (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement) &&
+      !("msFullscreenElement" in document && (document as Document & { msFullscreenElement?: Element }).msFullscreenElement)
+    ) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch((err) => {
+          alert("Failed to enter fullscreen: " + err.message);
+          console.error("Fullscreen error:", err);
+        });
+      } else if ("webkitRequestFullscreen" in el) {
+        (el as HTMLElement & { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.();
+      } else if ("msRequestFullscreen" in el) {
+        (el as HTMLElement & { msRequestFullscreen?: () => void }).msRequestFullscreen?.();
+      } else {
+        alert("Fullscreen API is not supported in this browser.");
+        console.error("Fullscreen API not supported");
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if ("webkitExitFullscreen" in document) {
+        (document as Document & { webkitExitFullscreen?: () => void }).webkitExitFullscreen?.();
+      } else if ("msExitFullscreen" in document) {
+        (document as Document & { msExitFullscreen?: () => void }).msExitFullscreen?.();
+      } else {
+        alert("Cannot exit fullscreen: API not supported.");
+        console.error("Exit Fullscreen API not supported");
+      }
+    }
+  }, []);
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  useEffect(() => {
+    setVideoUrl(recordedVideoUrl);
+  }, [recordedVideoUrl]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const video = playerRef.current?.getInternalPlayer();
+      if (
+        video &&
+        !isNaN(video.duration) &&
+        video.duration > 0 &&
+        duration === 0
+      ) {
+        setDuration(Math.floor(video.duration));
+        clearInterval(interval);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [videoUrl, duration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const video = videoRef.current;
+    const video = playerRef.current?.getInternalPlayer();
     if (!canvas || !video) return;
 
     const ctx = canvas.getContext("2d");
@@ -160,12 +227,6 @@ export default function EditorPage() {
     const endX = e.clientX - rect.left;
     const endY = e.clientY - rect.top;
 
-    if (!tool) {
-      setDrawing(false);
-      setStartPos(null);
-      return;
-    }
-
     let newOverlay: Overlay;
 
     if (tool === "arrow") {
@@ -186,14 +247,18 @@ export default function EditorPage() {
         color: textColor,
         font: textFont,
       };
-    } else {
+    } else if (tool === "blur" || tool === "rect") {
       newOverlay = {
         type: tool,
         x: Math.min(startPos.x, endX),
         y: Math.min(startPos.y, endY),
         w: Math.abs(endX - startPos.x),
         h: Math.abs(endY - startPos.y),
-      } as RectOverlay;
+      };
+    } else {
+      setDrawing(false);
+      setStartPos(null);
+      return;
     }
 
     setOverlays((prev) => [...prev, newOverlay]);
@@ -203,273 +268,484 @@ export default function EditorPage() {
 
   const handleUndo = () => setOverlays((prev) => prev.slice(0, -1));
   const handleClear = () => setOverlays([]);
-  const handleSaveOverlays = () => {
+  const handleSaveOverlays = () =>
     localStorage.setItem("videoOverlays", JSON.stringify(overlays));
-    alert("overLays saved");
-  };
   const handleLoadOverlays = () => {
     const saved = localStorage.getItem("videoOverlays");
     if (saved) setOverlays(JSON.parse(saved));
-    alert("Overlay loaded");
   };
 
+  const [volume, setVolume] = useState(1); // 1 = 100%, 0 = mute
+
   return (
-    <main className="min-h-screen bg-gray-50 mt-2 ml-0">
-      <button
-        onClick={() => router.push("/recorder")}
-        className="mb-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded"
-      >
-        🔙 Back to Recorder
-      </button>
-
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">🎬 Video Editor</h1>
-
-      <div className="flex flex-col lg:flex-row">
-        <div className="md:col-span-2 space-y-4">
-          {processing ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <p className="text-sm text-gray-600">
-                ⏳ Trimming video, please wait...
-              </p>
+    <main className="flex flex-col h-screen w-full bg-gray-50">
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: '#2D2A3A',
+            color: '#fff',
+            fontWeight: 'bold',
+            fontSize: '1.1rem',
+            boxShadow: '0 4px 24px 0 #0008',
+            borderRadius: '10px',
+            zIndex: 99999,
+          },
+          success: { iconTheme: { primary: '#7C5CFC', secondary: '#fff' } },
+          error: { iconTheme: { primary: '#f87171', secondary: '#fff' } },
+        }}
+      />
+      <EditorTopbar
+        onBack={() => router.back()}
+        userInitials={initials}
+      />
+      <div className="flex flex-1 min-h-0">
+        {/* Desktop Sidebar */}
+        <EditorSidebar
+          title={sidebarTitle}
+          setTitle={setSidebarTitle}
+          description={sidebarDescription}
+          setDescription={setSidebarDescription}
+          onDownloadWebM={() => {
+            const filename = sanitizeFilename(sidebarTitle) || "clip";
+            if (videoUrl) {
+              const a = document.createElement("a");
+              a.href = videoUrl;
+              a.download = `${filename}.webm`;
+              a.click();
+            }
+          }}
+          onDownloadMP4={() => {
+            const filename = sanitizeFilename(sidebarTitle) || "clip";
+            if (mp4Url) {
+              downloadBlob(mp4Url, `${filename}.mp4`);
+            }
+          }}
+          tool={tool}
+          setTool={(t: string) =>
+            setTool(t as "none" | "blur" | "rect" | "arrow" | "text")
+          }
+          handleUndo={handleUndo}
+          handleClear={handleClear}
+          handleSaveOverlays={handleSaveOverlays}
+          handleLoadOverlays={handleLoadOverlays}
+          thumbnailUrl={thumbnailUrl || undefined}
+        />
+        {/* Mobile Sidebar Drawer */}
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            {/* Overlay */}
+            <div
+              className="fixed inset-0 bg-black bg-opacity-40"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+            {/* Sidebar Drawer */}
+            <div className="relative w-4/5 max-w-xs h-full bg-white shadow-lg z-50 animate-slide-in-left">
+              <button
+                className="absolute top-4 right-4 text-[#7C5CFC]"
+                onClick={() => setIsSidebarOpen(false)}
+                aria-label="Close sidebar"
+              >
+                <X size={28} />
+              </button>
+              <EditorSidebar
+                title={sidebarTitle}
+                setTitle={setSidebarTitle}
+                description={sidebarDescription}
+                setDescription={setSidebarDescription}
+                onDownloadWebM={() => {
+                  const filename = sanitizeFilename(sidebarTitle) || "clip";
+                  if (videoUrl) {
+                    const a = document.createElement("a");
+                    a.href = videoUrl;
+                    a.download = `${filename}.webm`;
+                    a.click();
+                  }
+                }}
+                onDownloadMP4={() => {
+                  const filename = sanitizeFilename(sidebarTitle) || "clip";
+                  if (mp4Url) {
+                    downloadBlob(mp4Url, `${filename}.mp4`);
+                  }
+                }}
+                tool={tool}
+                setTool={(t: string) =>
+                  setTool(t as "none" | "blur" | "rect" | "arrow" | "text")
+                }
+                handleUndo={handleUndo}
+                handleClear={handleClear}
+                handleSaveOverlays={handleSaveOverlays}
+                handleLoadOverlays={handleLoadOverlays}
+                forceShowMobile={true}
+                thumbnailUrl={thumbnailUrl || undefined}
+              />
             </div>
-          ) : videoUrl ? (
-            <>
-              <div className="grid grid-cols-1 lg:grid-cols-[75%_25%] gap-5">
-                <div>
-                  <div
-                    ref={videoPanelRef}
-                    className="relative rounded-lg border border-gray-300 shadow-sm bg-black overflow-hidden"
-                  >
-                    <ReactPlayer
-                      ref={(player) => {
-                        reactPlayerRef.current = player;
-                        videoRef.current = player?.getInternalPlayer() as HTMLVideoElement;
-                      }}
-                      url={videoUrl}
-                      controls
-                      playing={false}
-                      muted={false}
-                      width="100%"
-                      height="250px"
-                      style={{ maxHeight: "360px" }}
-                      playsinline
-                      onReady={() => {
-                        const vid = videoRef.current;
-                        if (vid && !isNaN(vid.duration)) {
-                          setDuration(Math.floor(vid.duration));
-                          console.log(vid.duration);
-                        }
-                      }}
-                      onDuration={(dur) => setDuration(Math.floor(dur))}
-                      //onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
-                    />
-                    <canvas
-                      ref={canvasRef}
-                      className={`absolute top-0 left-0 w-full h-full z-10 ${tool ? "cursor-crosshair" : "pointer-events-none cursor-default"}`}
-                      onMouseDown={handleMouseDown}
-                      onMouseUp={handleMouseUp}
-                    />
-                    <div className="mt-4">
-                      {/* <TimelineCanvas
-                        width={timelineWidth}
-                        currentTime={currentTime}
-                        duration={duration}
-                        zoom={zoom}
-                        setCurrentTime={(t) => {
-                          setCurrentTime(t);
-                          if (reactPlayerRef.current) {
-                            reactPlayerRef.current.seekTo(t, "seconds");
-                          } else if (videoRef.current) {
-                            videoRef.current.currentTime = t;
-                          }
-                        }}
-                        setZoom={setzoom}
-                      /> */}
-                      {/* <KonvaTimeLineCmp start={0} end={duration}/> */}
-                      {duration != 0 && (
-                        <TimelineSlider
-                          duration={duration}
-                          ontrim={(start, end) => {
-                            setOverlays(overlays);
-                            trimApplier(start, end);
-                          }}
-                          processing={processing}
-                          videoRef={videoRef}
-                        />
-                      )}
-                    </div>
-                    {/* <div className="mt-2">
-                      <label className="mr-2">Zoom:</label>
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={5}
-                        step={0.1}
-                        value={zoom}
-                        onChange={(e) => setzoom(parseFloat(e.target.value))}
-                      />
-                    </div> */}
-                  </div>
-                  {/* <EditorControls
-                    duration={duration}
-                    onTrim={(start, end) => {
-                      setOverlays(overlays);
-                      trimApplier(start, end);
-                    }}
-                    processing={processing}
-                    videoRef={videoRef}
-                  /> */}
+          </div>
+        )}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
+          {/* Restore action buttons row */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">
+            <button
+              onClick={() => router.push("/recorder")}
+              className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow-sm hover:bg-[#5B43C6] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit"
+            >
+              <span className="text-xl"></span> Back to Recorder
+            </button>
+            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0">
+              <button
+                className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                onClick={() => {
+                  if (videoUrl) {
+                    const a = document.createElement("a");
+                    a.href = videoUrl;
+                    a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
+                    a.click();
+                  }
+                }}
+              >
+                <span className="text-xl"></span> Save Demo
+              </button>
+            </div>
+          </div>
+          <span className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 lg:text-2xl   text-[#7C5CFC] font-semibold  text-base select-none cursor-default mb-4 w-max">
+            <span className="text-xl"></span> Preview
+          </span>
+          {/* Center video preview on desktop */}
+          <div>
+            <div
+              ref={videoContainerRef}
+              className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
+              style={{
+                minHeight: "160px",
+                padding: 0,
+                boxShadow: "0 4px 24px 0 #E6E1FA",
+              }}
+            >
+              {/* Browser Bar */}
+              <div
+                className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
+                style={{ minHeight: 32 }}
+              >
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
+                  <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
+                  <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
                 </div>
-                <div className="w-full max-w-xs ">
-                  <h2 className="text-xl font-semibold mb-3 text-gray-700">
-                    🧰 Tools
-                  </h2>
-                  <div className="flex flex-col gap-3">
-                    {tool === "text" && (
-                      <div className="flex gap-3 items-center">
-                        <label className="text-sm">Text Color:</label>
-                        <input
-                          type="color"
-                          value={textColor}
-                          onChange={(e) => setTextColor(e.target.value)}
-                          className="border rounded"
-                        />
-                        <label className="text-sm ml-4">Font:</label>
-                        <select
-                          value={textFont}
-                          onChange={(e) => setTextFont(e.target.value)}
-                          className="border p-1 rounded"
-                        >
-                          <option value="16px sans-serif">Default</option>
-                          <option value="20px serif">Serif</option>
-                          <option value="20px monospace">Monospace</option>
-                          <option value="18px Arial">Arial</option>
-                          <option value="18px Georgia">Georgia</option>
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-3 mt-2">
-                      {["blur", "rect", "arrow", "text"].map((t) => (
-                        <Button
-                          key={t}
-                          onClick={() =>
-                            setTool(tool == t ? null : (t as typeof tool))
-                          }
-                          variant="outline"
-                          className={`w-[100px] h-[50px] rounded-md text-black ${
-                            tool === t ? "bg-blue-700" : "bg-blue-500"
-                          }`}
-                        >
-                          {t.toUpperCase()}
-                        </Button>
-                      ))}
-
-                      <Button
-                        onClick={handleUndo}
-                        className="bg-yellow-600 w-[100px] h-[300xl] rounded-md text-black  px-3 py-1 hover:bg-red-100"
-                      >
-                        ↩️ Undo
-                      </Button>
-
-                      <Button
-                        variant="destructive"
-                        onClick={handleClear}
-                        className="w-[100px] h-[50px] rounded-md text-black px-3 py-1 hover:bg-red-50"
-                      >
-                        ❌ Clear
-                      </Button>
-
-                      <Button
-                        variant="default"
-                        onClick={handleSaveOverlays}
-                        className="bg-green-600 px-3 py-1 w-[100px] h-[50px] rounded-md text-black hover:bg-red-50"
-                      >
-                        💾 Save
-                      </Button>
-
-                      <Button
-                        onClick={handleLoadOverlays}
-                        className="bg-yellow-400 px-3 py-1 w-[100px] h-[50px] rounded-md text-black hover:bg-red-50"
-                      >
-                        📂 Load
-                      </Button>
-                    </div>
-
-                    <div className="flex gap-4 flex-wrap items-center">
-                      <a
-                        href={videoUrl}
-                        download={`${sanitizeFilename(clipName) || "clip"}.webm`}
-                      >
-                        <button className="bg-blue-600 text-white px-4 py-2 rounded">
-                          ⬇️ Download WebM
-                        </button>
-                      </a>
-                      {mp4Url && (
-                        <button
-                          onClick={() =>
-                            downloadBlob(
-                              mp4Url,
-                              `${sanitizeFilename(clipName) || "clip"}.mp4`
-                            )
-                          }
-                          className="bg-purple-600 text-white px-4 py-2 rounded"
-                        >
-                          💾 Save MP4
-                        </button>
-                      )}
-                      <button
-                        onClick={resetVideo}
-                        className="bg-gray-500 text-white px-4 py-2 rounded"
-                      >
-                        🔁 Reset
-                      </button>
-                    </div>
-
-                    {thumbnailUrl && (
-                      <div>
-                        <p className="text-sm text-gray-500 mt-2">
-                          📸 Thumbnail:
-                        </p>
-                        <Image
-                          src={thumbnailUrl}
-                          alt="thumbnail"
-                          width={128}
-                          height={72}
-                          className="w-32 mt-2 rounded border"
-                          unoptimized
-                        />
-                      </div>
-                    )}
-
-                    <div className="mt-4 space-y-2">
-                      <div>
-                        <input
-                          value={clipName}
-                          onChange={(e) => setClipName(e.target.value)}
-                          className="w-full border border-gray-300 p-2 rounded"
-                          placeholder="📎 Clip Name (optional)"
-                        />
-                      </div>
-                      <textarea
-                        value={clipNote}
-                        onChange={(e) => setClipNote(e.target.value)}
-                        rows={2}
-                        className="w-full border border-gray-300 p-2 rounded"
-                        placeholder="📝 Notes or Description"
+                <div className="flex-1 flex justify-center">
+                  <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
+                    Marvedge.com/Demo/Preview
+                  </span>
+                </div>
+                {/* Fullscreen button removed from here */}
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  position: "relative",
+                  zIndex: 1,
+                  borderRadius: "1.25rem",
+                  overflow: "hidden",
+                  background: "#F6F3FF",
+                }}
+              >
+                <ReactPlayer
+                  ref={playerRef}
+                  url={videoUrl || undefined}
+                  playing={true}
+                  controls={false}
+                  muted={false}
+                  volume={volume}
+                  width="100%"
+                  height="100%"
+                  style={{
+                    objectFit: "contain",
+                    borderRadius: "1.25rem",
+                    background: "#F6F3FF",
+                  }}
+                  onError={(e) => console.error("Video failed to load", e)}
+                  onReady={() => console.log("Video loaded")}
+                  progressInterval={100}
+                  onProgress={({ playedSeconds }) =>
+                    setCurrentTime(playedSeconds)
+                  }
+                  onDuration={(dur) => {
+                    if (isFinite(dur) && !isNaN(dur)) setDuration(dur);
+                  }}
+                />
+              </div>
+              <CustomVideoControls
+                playerRef={playerRef}
+                duration={duration}
+                currentTime={currentTime}
+                setCurrentTime={(t: number) => {
+                  setCurrentTime(t);
+                  playerRef.current?.seekTo(t, "seconds");
+                }}
+              />
+              {/* Updated Controls Row: 5s buttons left, sound bar center, fullscreen right */}
+              <div className="flex items-center justify-between mt-2 px-2 w-full">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const newTime = Math.max(0, currentTime - 5);
+                      setCurrentTime(newTime);
+                      playerRef.current?.seekTo(newTime, "seconds");
+                    }}
+                    className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    title="Back 5 seconds"
+                  >
+                    <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+                      <path
+                        d="M10 2v2.06A8 8 0 1 0 18 10"
+                        stroke="#7C5CFC"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                       />
-                    </div>
-                  </div>
+                      <path
+                        d="M7 9l-3 3 3 3"
+                        stroke="#7C5CFC"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newTime = Math.min(duration, currentTime + 5);
+                      setCurrentTime(newTime);
+                      playerRef.current?.seekTo(newTime, "seconds");
+                    }}
+                    className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    title="Forward 5 seconds"
+                  >
+                    <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+                      <path
+                        d="M10 2v2.06A8 8 0 1 1 2 10"
+                        stroke="#7C5CFC"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M13 11l3-3-3-3"
+                        stroke="#7C5CFC"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 flex-1 justify-center">
+                  <button
+                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                    className="focus:outline-none"
+                    title={volume === 0 ? "Unmute" : "Mute"}
+                  >
+                    {volume === 0 ? (
+                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                    ) : (
+                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
+                  />
+                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                    {Math.round(volume * 100)}%
+                  </span>
+                </div>
+                <div
+                  className="flex items-center justify-end"
+                  style={{ minWidth: 40 }}
+                >
+                  <button
+                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                    title="Fullscreen"
+                    onClick={handleFullscreen}
+                  >
+                    <FaExpand size={22} />
+                  </button>
                 </div>
               </div>
-            </>
-          ) : (
-            <p className="text-gray-600">No video found.</p>
+              <canvas
+                ref={canvasRef}
+                className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
+                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+                style={{
+                  pointerEvents: tool !== "none" ? "auto" : "none",
+                  borderRadius: "1.25rem",
+                }}
+              />
+              {/* Custom Video Controls */}
+            </div>
+          </div>
+          {tool === "text" && (
+            <div className="flex gap-3 items-center mb-6 sm:mb-0">
+              <label className="text-sm">Text Color:</label>
+              <input
+                type="color"
+                value={textColor}
+                onChange={(e) => setTextColor(e.target.value)}
+                className="border rounded"
+              />
+              <label className="text-sm ml-4">Font:</label>
+              <select
+                value={textFont}
+                onChange={(e) => setTextFont(e.target.value)}
+                className="border p-1 rounded"
+              >
+                <option value="16px sans-serif">Default</option>
+                <option value="20px serif">Serif</option>
+                <option value="20px monospace">Monospace</option>
+                <option value="18px Arial">Arial</option>
+                <option value="18px Georgia">Georgia</option>
+              </select>
+            </div>
           )}
-        </div>
 
-        <div></div>
+          <div className="mt-8 mb-16 mr-2 sm:mr-0">
+            <TimelineSlider
+              duration={duration}
+              processing={processing}
+              playerRef={playerRef}
+              ontrim={async (start, end) => {
+                toast.loading("Trimming video...");
+                await trimApplier(start, end, (success) => {
+                  toast.dismiss();
+                  if (success) {
+                    toast.success("Video trimmed successfully!");
+                  } else {
+                    toast.error("Failed to trim video.");
+                  }
+                });
+              }}
+              currentTime={currentTime}
+              setCurrentTime={(t) => {
+                setCurrentTime(t);
+                playerRef.current?.seekTo(t, "seconds");
+              }}
+              onResetVideo={resetVideo}
+            />
+          </div>
+        </div>
       </div>
     </main>
+  );
+}
+
+// Custom video controls component
+import React from "react";
+function CustomVideoControls({
+  playerRef,
+  duration,
+  currentTime,
+  setCurrentTime,
+}: {
+  playerRef: React.RefObject<ReactPlayer>;
+  duration: number;
+  currentTime: number;
+  setCurrentTime: (t: number) => void;
+}) {
+  const [playing, setPlaying] = React.useState(true);
+  const [dragging, setDragging] = React.useState(false);
+  const [dragValue, setDragValue] = React.useState(0);
+
+  const handlePlayPause = () => {
+    setPlaying((prev) => {
+      if (prev) playerRef.current?.getInternalPlayer()?.pause?.();
+      else playerRef.current?.getInternalPlayer()?.play?.();
+      return !prev;
+    });
+  };
+
+  // Use pointer events for slider to avoid type errors
+  const handleSeekStart = () => {
+    setDragging(true);
+    setDragValue(currentTime);
+  };
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDragValue(Number(e.target.value));
+  };
+  const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
+    const value = Number((e.target as HTMLInputElement).value);
+    setCurrentTime(value);
+    playerRef.current?.seekTo(value, "seconds");
+    setDragging(false);
+  };
+
+  const formatTime = (s: number) => {
+    if (!isFinite(s) || isNaN(s)) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const safeDuration = (d: number) => (d && isFinite(d) && d > 0 ? d : null);
+
+  return (
+    <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handlePlayPause}
+          className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+        >
+          {playing ? (
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <rect
+                x="3"
+                y="3"
+                width="4"
+                height="12"
+                rx="2"
+                fill="currentColor"
+              />
+              <rect
+                x="11"
+                y="3"
+                width="4"
+                height="12"
+                rx="2"
+                fill="currentColor"
+              />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M4 3V15L15 9L4 3Z" fill="currentColor" />
+            </svg>
+          )}
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={duration}
+          step={0.01}
+          value={dragging ? dragValue : currentTime}
+          onPointerDown={handleSeekStart}
+          onChange={handleSeek}
+          onPointerUp={handleSeekEnd}
+          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+          style={{
+            background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
+            height: 8,
+            borderRadius: 8,
+          }}
+        />
+        <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
+          {formatTime(currentTime)} /{" "}
+          {safeDuration(duration) ? formatTime(duration) : "Unknown"}
+        </span>
+      </div>
+    </div>
   );
 }

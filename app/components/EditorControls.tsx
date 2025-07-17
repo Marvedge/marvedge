@@ -101,10 +101,11 @@ const EditorControls = ({
           <Button
             onClick={handleTrim}
             disabled={processing || start >= end}
-            className={` text-white transition ${processing || start >= end
+            className={` text-white transition ${
+              processing || start >= end
                 ? "bg-blue-300 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
-              }`}
+            }`}
           >
             {processing ? "⏳ Trimming..." : "✂️ Trim Video"}
           </Button>
@@ -112,7 +113,8 @@ const EditorControls = ({
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            ⏱ Start Time: <span className="font-mono">{formatTime(start)}</span>
+            ⏱ Start Time:{" "}
+            <span className="font-mono">{formatTime(start)}</span>
           </label>
           <input
             type="range"
@@ -147,18 +149,18 @@ const EditorControls = ({
             className="w-full accent-blue-500 cursor-pointer"
           />
         </div>
-
-
       </div>
 
       <div className="text-xs text-gray-500 mt-6 border-t pt-4">
         <p className="mb-1 font-semibold">⌨️ Keyboard Shortcuts:</p>
         <ul className="list-disc list-inside leading-5">
           <li>
-            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek video
+            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek
+            video
           </li>
           <li>
-            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust trim range
+            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust
+            trim range
           </li>
           <li>
             <kbd className="kbd">Enter</kbd> — Apply trim

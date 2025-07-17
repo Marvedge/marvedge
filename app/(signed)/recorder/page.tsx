@@ -392,7 +392,7 @@ export default function RecorderPage() {
                   }}
                 >
                   {uploadedFileType?.startsWith("image/") ? (
-                    <img
+                    <Image
                       src={uploadedFileUrl!}
                       alt="Uploaded preview"
                       style={{
@@ -401,6 +401,8 @@ export default function RecorderPage() {
                         objectFit: "contain",
                         background: "#000",
                       }}
+                      width={900}
+                      height={500}
                     />
                   ) : (
                     <video

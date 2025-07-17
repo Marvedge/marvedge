@@ -21,6 +21,7 @@ export const useEditor = () => {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [clipName, setClipName] = useState(title || "clip");
   const [clipNote, setClipNote] = useState(description || "");
+  const [error, setError] = useState<string | null>(null); // <-- Add error state
 
   const thumbnailGenerated = useRef(false);
 
@@ -35,36 +36,43 @@ export const useEditor = () => {
     return stored ? JSON.parse(stored) : [];
   };
 
+  // Add a callback for when trimming is done
   const trimApplier = useCallback(
-    async (start: string, end: string) => {
+    async (start: string, end: string, onDone?: (success: boolean) => void) => {
       if (!blob) return;
       setProcessing(true);
+      setError(null);
+      try {
+        const trimmedBlob = await videoTrimmer(blob, start, end);
+        const trimmedUrl = URL.createObjectURL(trimmedBlob);
+        setVideoUrl(trimmedUrl);
 
-      const trimmedBlob = await videoTrimmer(blob, start, end);
-      const trimmedUrl = URL.createObjectURL(trimmedBlob);
-      setVideoUrl(trimmedUrl);
+        let mp4Blob: Blob;
 
-      let mp4Blob: Blob;
+        if (currentOverlays.current.length > 0) {
+          mp4Blob = await videoToMP4WithOverlays(
+            trimmedBlob,
+            currentOverlays.current
+          );
+        } else {
+          const { videoToMP4 } = await import("../lib/ffmpeg");
+          mp4Blob = await videoToMP4(trimmedBlob);
+        }
 
-      if (currentOverlays.current.length > 0) {
-        mp4Blob = await videoToMP4WithOverlays(
-          trimmedBlob,
-          currentOverlays.current
-        );
-      } else {
-        const { videoToMP4 } = await import("../lib/ffmpeg");
-        mp4Blob = await videoToMP4(trimmedBlob);
+        setMp4Url(URL.createObjectURL(mp4Blob));
+
+        if (!thumbnailGenerated.current) {
+          const thumbBlob = await videoToThumbnail(trimmedBlob);
+          setThumbnailUrl(URL.createObjectURL(thumbBlob));
+          thumbnailGenerated.current = true;
+        }
+        setProcessing(false);
+        if (onDone) onDone(true);
+      } catch (err: unknown) {
+        setProcessing(false);
+        setError((err as Error)?.message || "Failed to trim video");
+        if (onDone) onDone(false);
       }
-
-      setMp4Url(URL.createObjectURL(mp4Blob));
-
-      if (!thumbnailGenerated.current) {
-        const thumbBlob = await videoToThumbnail(trimmedBlob);
-        setThumbnailUrl(URL.createObjectURL(thumbBlob));
-        thumbnailGenerated.current = true;
-      }
-
-      setProcessing(false);
     },
     [blob]
   );
@@ -104,5 +112,6 @@ export const useEditor = () => {
     downloadBlob,
     setOverlays,
     loadOverlays,
+    error, // <-- return error state
   };
 };
