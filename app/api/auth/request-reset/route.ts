@@ -1,7 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-//DOMAIN HASN'T YET VERIFIED
 
 export async function POST(req: Request) {
   const { email } = await req.json();
@@ -20,9 +19,8 @@ export async function POST(req: Request) {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   //const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
   const resend = new Resend(process.env.RESEND_API_KEY);
-
   resend.emails.send({
-    from: "onboarding@resend.dev",
+    from: "no-reply@mail.marvedge.com",
     to: email,
     subject: "Hello World",
     html: `<p>Congrats on sending your <strong>first otp</strong>! OTP=${otp}</p>`,
