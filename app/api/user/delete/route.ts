@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 
-export async function DELETE(req: Request) {
+export async function DELETE() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
@@ -27,10 +27,10 @@ export async function DELETE(req: Request) {
     });
 
     return NextResponse.json({ message: "Account deleted successfully" });
-  } catch (error: any) {
-    console.error("Error deleting account:", error.message || error);
+  } catch (error) {
+    console.error("Error deleting account:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to delete account" },
+      { error: error || "Failed to delete account" },
       { status: 500 }
     );
   }

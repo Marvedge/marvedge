@@ -118,6 +118,7 @@ const SettingsPage = () => {
           toast.error(data.error || "Failed to upload photo.");
         }
       } catch (error) {
+        console.log(error)
         toast.error("Something went wrong during upload.");
       }
     }

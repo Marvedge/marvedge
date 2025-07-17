@@ -18,10 +18,10 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async session({ session, token }) {
       if (token && session.user) {
-        // @ts-ignore
+        // @ts-expect-error: token.sub is not in the default SessionUser type
         session.user.id = token.sub; 
       }
-      return session;
+      return session; 
     },
   },
 };

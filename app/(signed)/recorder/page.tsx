@@ -392,7 +392,7 @@ export default function RecorderPage() {
                   }}
                 >
                   {uploadedFileType?.startsWith("image/") ? (
-                    <img
+                    <Image
                       src={uploadedFileUrl!}
                       alt="Uploaded preview"
                       style={{

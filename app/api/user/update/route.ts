@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { firstName, lastName, bio, location, website, timezone, image } = body;
+  const { firstName, lastName, bio, location, website, image } = body;
 
   try {
     const user = await prisma.user.findUnique({
