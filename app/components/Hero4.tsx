@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
+import "react-toastify/dist/ReactToastify.css";
+import { ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import Image from "next/image";
 import {
   motion,
@@ -134,18 +137,46 @@ const LinkSection: React.FC<{
 };
 
 const ContactForm: React.FC = () => {
+  const [form, setForm] = useState({
+    email: "",
+    name: "",
+    message: "",
+  });
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const { email, name, message } = form;
+
+    const res = await fetch("/api/contact", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, name, message }),
+    });
+
+    const result = await res.json();
+    if (res.ok) {
+      toast.success("Message sent successfully!");
+      setForm({ email: "", name: "", message: "" }); // ✅ Reset form
+    } else {
+      toast.error(result.error || "Failed to send message.");
+    }
+  };
+
   return (
     <motion.div
       className="bg-[#3c3160] rounded-xl p-6 sm:p-8 shadow-lg w-full"
       initial={{ opacity: 0, y: 40 }}
-      animate={{
-        opacity: 1,
-        y: 0,
-      }}
-      transition={{
-        duration: 0.8,
-        ease: easeOut,
-      }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8, ease: easeOut }}
       whileHover={{
         y: -5,
         boxShadow: "0 20px 40px rgba(60, 49, 96, 0.3)",
@@ -154,19 +185,16 @@ const ContactForm: React.FC = () => {
       <h2 className="text-white text-xl sm:text-2xl font-semibold mb-4">
         Get In Touch
       </h2>
-      <form className="flex flex-col gap-3">
+      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         {[
-          { type: "email", placeholder: "Your Email" },
-          { type: "text", placeholder: "Full Name" },
-          { placeholder: "Your Message", isTextarea: true },
+          { type: "email", placeholder: "Your Email", name: "email" },
+          { type: "text", placeholder: "Full Name", name: "name" },
+          { placeholder: "Your Message", isTextarea: true, name: "message" },
         ].map((input, index) => (
           <motion.div
             key={index}
             initial={{ opacity: 0, x: -20 }}
-            animate={{
-              opacity: 1,
-              x: 0,
-            }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{
               duration: 0.5,
               ease: easeOut,
@@ -175,7 +203,10 @@ const ContactForm: React.FC = () => {
           >
             {input.isTextarea ? (
               <motion.textarea
+                name={input.name}
                 placeholder={input.placeholder}
+                value={form[input.name as keyof typeof form]}
+                onChange={handleChange}
                 rows={4}
                 className="bg-[#4b406a] text-white w-full placeholder:text-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#a68cff] resize-none"
                 whileFocus={{
@@ -186,7 +217,10 @@ const ContactForm: React.FC = () => {
             ) : (
               <motion.input
                 type={input.type}
+                name={input.name}
                 placeholder={input.placeholder}
+                value={form[input.name as keyof typeof form]}
+                onChange={handleChange}
                 className="bg-[#4b406a] text-white w-full placeholder:text-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#a68cff]"
                 whileFocus={{
                   scale: 1.02,
@@ -206,15 +240,8 @@ const ContactForm: React.FC = () => {
           }}
           whileTap={{ scale: 0.95 }}
           initial={{ opacity: 0, y: 20 }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          transition={{
-            duration: 0.5,
-            ease: easeOut,
-            delay: 0.4,
-          }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: easeOut, delay: 0.4 }}
         >
           Send Message
         </motion.button>
@@ -390,6 +417,7 @@ const Hero4: React.FC = () => {
           conversation.
         </motion.p>
       </motion.footer>
+      <ToastContainer position="top-center" autoClose={3000} />
     </div>
   );
 };

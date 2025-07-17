@@ -1,6 +1,16 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ChangeEvent,
+  FormEvent,
+} from "react";
 import { useSession, signOut } from "next-auth/react";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 import { FaPlayCircle } from "react-icons/fa";
 import Image from "next/image";
 import {
@@ -21,12 +31,15 @@ const SettingsPage = () => {
     location: "",
     website: "",
     timezone: "",
+    image: "",
   });
   const [avatar, setAvatar] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [topSearch, setTopSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   const initials = useMemo(() => {
     if (session?.user?.name) {
@@ -47,27 +60,127 @@ const SettingsPage = () => {
       lastName: session?.user?.name?.split(" ").slice(1).join(" ") || "",
       email: session?.user?.email || "",
     }));
+
+    const fetchUser = async () => {
+      const res = await fetch("/api/user/get");
+      const data = await res.json();
+
+      if (data.user) {
+        const user = data.user;
+        console.log(user.image, user.name);
+        setAvatar(user.image || "");
+
+        // ✅ Update form fields from user data
+        setForm((prev) => ({
+          ...prev,
+          bio: user.bio || "",
+          location: user.location || "",
+          website: user.website || "",
+          timezone: user.timezone || "",
+          image: user.image || "",
+          firstName: user.name?.split(" ")[0] || "",
+          lastName: user.name?.split(" ").slice(1).join(" ") || "",
+          email: user.email || "",
+        }));
+      }
+    };
+
+    fetchUser();
   }, [session]);
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setIsDirty(true);
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const imageUrl = URL.createObjectURL(file);
-      setAvatar(imageUrl);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        setIsUploading(true);
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.secure_url) {
+          setAvatar(data.secure_url); // for preview
+          setIsUploading(false);
+          setIsDirty(true);
+          setForm((prev) => ({ ...prev, image: data.secure_url })); // update form data
+          toast.success("Profile photo uploaded successfully!");
+        } else {
+          toast.error(data.error || "Failed to upload photo.");
+        }
+      } catch (error) {
+        toast.error("Something went wrong during upload.");
+      }
     }
   };
 
   const handleEdit = () => {};
 
-  const handleSave = (e: FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const res = await fetch("/api/user/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast("Changes updated successfully!");
+      setIsDirty(false);
+    } else {
+      toast(`Update failed: ${data.error}`);
+    }
   };
 
-  const handleCancel = () => {};
+  const handleCancel = async () => {
+    const res = await fetch("/api/user/get");
+    const data = await res.json();
+    if (data.user) {
+      const user = data.user;
+      setForm({
+        firstName: user.name?.split(" ")[0] || "",
+        lastName: user.name?.split(" ").slice(1).join(" ") || "",
+        email: user.email || "",
+        bio: user.bio || "",
+        location: user.location || "",
+        website: user.website || "",
+        timezone: user.timezone || "",
+        image: user.image || "",
+      });
+      setAvatar(user.image || "");
+      setIsDirty(false); // 👈 reset dirty flag
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = confirm(
+      "Are you sure you want to delete your account? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    const res = await fetch("/api/user/delete", {
+      method: "DELETE",
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      alert("Your account has been deleted.");
+      signOut({ callbackUrl: "/" });
+    } else {
+      alert(`Failed to delete account: ${data.error}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
@@ -102,7 +215,9 @@ const SettingsPage = () => {
                 <button
                   className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
                   onClick={() => setShowDropdown((v) => !v)}
-                  title={session?.user?.name || session?.user?.email || undefined}
+                  title={
+                    session?.user?.name || session?.user?.email || undefined
+                  }
                 >
                   {initials}
                 </button>
@@ -235,20 +350,48 @@ const SettingsPage = () => {
                 )}
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
-                <button
-                  type="button"
-                  className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Change Photo
-                </button>
-                <input
-                  type="file"
-                  accept="image/*"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handlePhotoChange}
-                />
+                {isUploading ? (
+                  <div className="flex items-center gap-2 text-[#7C5CFC] font-medium px-4 py-2">
+                    <svg
+                      className="animate-spin h-5 w-5 text-[#7C5CFC]"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                      ></path>
+                    </svg>
+                    Uploading...
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Change Photo
+                    </button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={handlePhotoChange}
+                    />
+                  </>
+                )}
                 <button
                   type="button"
                   className="px-5 py-2 min-w-[120px] rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
@@ -340,21 +483,23 @@ const SettingsPage = () => {
                 />
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 mt-8">
-              <button
-                type="button"
-                className="px-8 py-3 rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
-                onClick={handleCancel}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-8 py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
-              >
-                Save Changes
-              </button>
-            </div>
+            {isDirty && (
+              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 mt-8">
+                <button
+                  type="button"
+                  className="px-8 py-3 rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
+                  onClick={handleCancel}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-8 py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
+                >
+                  Save Changes
+                </button>
+              </div>
+            )}
           </form>
         </div>
       )}
@@ -688,7 +833,10 @@ const SettingsPage = () => {
                     Be Certain!
                   </div>
                 </div>
-                <button className="text-[#E53E3E] text-2xl focus:outline-none">
+                <button
+                  onClick={handleDeleteAccount}
+                  className="text-[#E53E3E] text-2xl focus:outline-none"
+                >
                   <Image
                     src="/icons/icon2.png"
                     alt="Chevron Down"
@@ -702,6 +850,7 @@ const SettingsPage = () => {
           </div>
         </div>
       )}
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };
