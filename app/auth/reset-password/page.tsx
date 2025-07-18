@@ -69,7 +69,8 @@ const ResetPassword = () => {
       const message =
         err instanceof z.ZodError
           ? err.errors[0].message
-          : (axios.isAxiosError(err) && err.response?.data?.error) || "Reset failed.";
+          : (axios.isAxiosError(err) && err.response?.data?.error) ||
+            "Reset failed.";
       toast.error(message);
     } finally {
       setIsLoading(false);

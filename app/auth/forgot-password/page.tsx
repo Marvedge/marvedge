@@ -42,13 +42,17 @@ const ForgotPassword = () => {
         );
       }
     } catch (err) {
-      const message =
-        err instanceof z.ZodError
-          ? err.errors[0].message
-          : (axios.isAxiosError(err) && err.response?.data?.error) || "Request failed.";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+      if (err instanceof z.ZodError) {
+        const message = err.errors.map((e) => e.message).join(" | ");
+        toast.error(message);
+      } else if (axios.isAxiosError(err)) {
+        console.error("Axios error:", err.response?.data || err.message);
+        const apiError = err.response?.data?.error || "Server error";
+        toast.error(apiError);
+      } else {
+        console.error("Unknown error:", err);
+        toast.error("Something went wrong.");
+      }
     }
   };
 

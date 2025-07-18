@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { useBlobStore } from "../lib/blobStore";
+import toast from 'react-hot-toast';
 
 export const useScreenRecorder = () => {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -21,8 +22,10 @@ export const useScreenRecorder = () => {
       });
       screenStreamRef.current = screen;
       setScreenStream(screen);
+      toast.success('Screen sharing started!');
     } catch (err) {
       console.error("Failed to get screen stream:", err);
+      toast.error('Screen share failed. Please try again.');
     }
   };
 
@@ -68,14 +71,17 @@ export const useScreenRecorder = () => {
 
       mediaRecorder.current.start();
       setRecording(true);
+      toast('Recording started', { icon: '⏺️' });
     } catch (err) {
       console.error("Recording failed:", err);
+      toast.error('Recording failed to start.');
     }
   };
 
   const stopRecording = () => {
     mediaRecorder.current?.stop();
     setRecording(false);
+    toast('Recording stopped', { icon: '⏹️' });
   };
 
   const reset = () => {
