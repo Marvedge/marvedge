@@ -285,7 +285,7 @@ export default function TemplatesPage() {
                   className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
                   onClick={() => setOpen((prev) => !prev)}
                 >
-                  <span className="material-icons">sort</span>
+                  <span className="material-icons"></span>
                   Sort By
                 </button>
                 {open && (
