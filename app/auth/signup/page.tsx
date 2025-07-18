@@ -6,7 +6,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { z } from "zod";
 import toast, { Toaster } from "react-hot-toast";
 import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
 
 const signUpSchema = z
   .object({
@@ -29,19 +28,19 @@ const SignUp = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [animatePanel, setAnimatePanel] = useState(false);
-  // const nameRef = useRef<HTMLInputElement>(null);
-  // const emailRef = useRef<HTMLInputElement>(null);
 
-  const searchParams = useSearchParams();
-  const emailFromQuery = searchParams.get("email") || "";
-  const nameFromQuery = searchParams.get("name") || "";
-  const [email, setEmail] = useState(emailFromQuery);
-  const [name, setName] = useState(nameFromQuery);
-
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setEmail(params.get("email") || "");
+    setName(params.get("name") || "");
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimatePanel(true), 100);
