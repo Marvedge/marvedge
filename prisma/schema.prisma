@@ -72,3 +72,11 @@ model ContactMessage {
   message   String
   createdAt DateTime @default(now())
 }
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}

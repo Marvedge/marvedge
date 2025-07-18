@@ -118,7 +118,7 @@ const SettingsPage = () => {
           toast.error(data.error || "Failed to upload photo.");
         }
       } catch (error) {
-        console.log(error)
+        console.log(error);
         toast.error("Something went wrong during upload.");
       }
     }
@@ -472,7 +472,7 @@ const SettingsPage = () => {
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-[#F8F6FF] text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9] shadow-sm"
                 />
               </div>
-              <div className="sm:col-span-2">
+              {/* <div className="sm:col-span-2">
                 <label className="block text-gray-600 mb-2">Timezone</label>
                 <input
                   type="text"
@@ -482,7 +482,7 @@ const SettingsPage = () => {
                   placeholder="UTC, Coordinated Universal Time"
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-[#F8F6FF] text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9] shadow-sm"
                 />
-              </div>
+              </div> */}
             </div>
             {isDirty && (
               <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 mt-8">
