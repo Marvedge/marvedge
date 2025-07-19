@@ -28,12 +28,19 @@ const SignUp = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [animatePanel, setAnimatePanel] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
+
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setEmail(params.get("email") || "");
+    setName(params.get("name") || "");
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimatePanel(true), 100);
@@ -51,8 +58,8 @@ const SignUp = () => {
     e.preventDefault();
     setIsLoading(true);
     const formData = {
-      name: nameRef.current?.value.trim(),
-      email: emailRef.current?.value.trim(),
+      name: name.trim(),
+      email: email.trim(),
       password: passwordRef.current?.value,
       confirmPassword: confirmPasswordRef.current?.value,
     };
@@ -73,7 +80,6 @@ const SignUp = () => {
   };
 
   return (
-
     <div className="flex flex-col md:flex-row h-full min-h-screen font-sans bg-[#F1ECFF]">
       <Toaster position="top-center" />
 
@@ -107,7 +113,6 @@ const SignUp = () => {
           </button>
         </div>
       </div>
-
 
       <div className="hidden md:flex md:w-1/2 relative justify-center items-center overflow-hidden rounded-r-[75px] bg-[#B09EE4]">
         <div
@@ -170,7 +175,8 @@ const SignUp = () => {
             name="name"
             autoComplete="name"
             placeholder="Your First Name"
-            ref={nameRef}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             required
             className="w-full p-3 border-2 border-gray-500 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
           />
@@ -180,7 +186,8 @@ const SignUp = () => {
             name="email"
             autoComplete="email"
             placeholder="Your Email"
-            ref={emailRef}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
             className="w-full p-3 border-2 border-gray-500 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
           />
@@ -194,7 +201,6 @@ const SignUp = () => {
               ref={passwordRef}
               required
               className="w-full p-3 border-2 border-gray-500 rounded-md text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
-
             />
             <button
               type="button"
@@ -205,7 +211,6 @@ const SignUp = () => {
                 src={
                   showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"
                 }
-
                 alt="Toggle Password"
                 width={20}
                 height={20}
@@ -222,7 +227,6 @@ const SignUp = () => {
               ref={confirmPasswordRef}
               required
               className="w-full p-3 border-2 border-gray-500 rounded-md text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
-
             />
             <button
               type="button"
@@ -273,7 +277,6 @@ const SignUp = () => {
                 width={25}
                 height={25}
               />
-
             </button>
           </div>
         </form>
