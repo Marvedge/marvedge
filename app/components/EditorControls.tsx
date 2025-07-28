@@ -16,6 +16,24 @@ const formatTime = (seconds: number) => {
   return [hrs, mins, secs].map((v) => String(v).padStart(2, "0")).join(":");
 };
 
+// Helper function to parse time input (HH:MM:SS format)
+const parseTimeInput = (timeString: string): number => {
+  const parts = timeString.split(":").map(Number);
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  } else if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  } else {
+    return Number(timeString) || 0;
+  }
+};
+
+// Helper function to validate time format
+const isValidTimeFormat = (timeString: string): boolean => {
+  const timeRegex = /^(\d{1,2}:)?(\d{1,2}:)?(\d{1,2})$/;
+  return timeRegex.test(timeString);
+};
+
 const EditorControls = ({
   onTrim,
   processing,
@@ -25,6 +43,25 @@ const EditorControls = ({
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
+  const [startTimeInput, setStartTimeInput] = useState("00:00:00");
+  const [endTimeInput, setEndTimeInput] = useState("00:00:10");
+  const [startTimeError, setStartTimeError] = useState("");
+  const [endTimeError, setEndTimeError] = useState("");
+  const [isTypingStart, setIsTypingStart] = useState(false);
+  const [isTypingEnd, setIsTypingEnd] = useState(false);
+
+  // Update input fields when slider values change (only if not typing)
+  useEffect(() => {
+    if (!isTypingStart) {
+      setStartTimeInput(formatTime(start));
+    }
+  }, [start, isTypingStart]);
+
+  useEffect(() => {
+    if (!isTypingEnd) {
+      setEndTimeInput(formatTime(end));
+    }
+  }, [end, isTypingEnd]);
 
   const toggleZoom = useCallback(() => {
     const video = videoRef.current;
@@ -41,6 +78,46 @@ const EditorControls = ({
     }
     setZoomed((z) => !z);
   }, [videoRef, zoomed]);
+
+  const handleStartTimeInputChange = (value: string) => {
+    setStartTimeInput(value);
+    setStartTimeError("");
+    setIsTypingStart(true);
+
+    if (isValidTimeFormat(value)) {
+      const parsedTime = parseTimeInput(value);
+      if (parsedTime >= 0 && parsedTime < end) {
+        setStart(parsedTime);
+      } else if (parsedTime >= end) {
+        setStartTimeError("Start time must be less than end time");
+      } else {
+        setStartTimeError("Start time cannot be negative");
+      }
+    } else {
+      setStartTimeError("Invalid time format (use HH:MM:SS or MM:SS or SS)");
+    }
+  };
+
+  const handleEndTimeInputChange = (value: string) => {
+    setEndTimeInput(value);
+    setEndTimeError("");
+    setIsTypingEnd(true);
+
+    if (isValidTimeFormat(value)) {
+      const parsedTime = parseTimeInput(value);
+      if (parsedTime > start && parsedTime <= duration) {
+        setEnd(parsedTime);
+      } else if (parsedTime <= start) {
+        setEndTimeError("End time must be greater than start time");
+      } else if (parsedTime > duration) {
+        setEndTimeError("End time cannot exceed video duration");
+      } else {
+        setEndTimeError("End time cannot be negative");
+      }
+    } else {
+      setEndTimeError("Invalid time format (use HH:MM:SS or MM:SS or SS)");
+    }
+  };
 
   const handleTrim = useCallback(() => {
     if (isNaN(duration) || duration === 0) {
@@ -100,9 +177,9 @@ const EditorControls = ({
 
           <Button
             onClick={handleTrim}
-            disabled={processing || start >= end}
+            disabled={processing || start >= end || !!startTimeError || !!endTimeError}
             className={` text-white transition ${
-              processing || start >= end
+              processing || start >= end || !!startTimeError || !!endTimeError
                 ? "bg-blue-300 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             }`}
@@ -116,6 +193,41 @@ const EditorControls = ({
             ⏱ Start Time:{" "}
             <span className="font-mono">{formatTime(start)}</span>
           </label>
+          
+                    {/* Manual input for start time */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="2"/>
+                    <polyline points="12,6 12,12 16,14" strokeWidth="2"/>
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={startTimeInput}
+                  onChange={(e) => handleStartTimeInputChange(e.target.value)}
+                  onBlur={() => setIsTypingStart(false)}
+                  placeholder="00:00:00"
+                  disabled={processing}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <span className="text-xs text-gray-400 font-medium">HH:MM:SS</span>
+                </div>
+              </div>
+            </div>
+            {startTimeError && (
+              <div className="flex items-center gap-1 text-red-500 text-xs">
+                <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                </svg>
+                {startTimeError}
+              </div>
+            )}
+          </div>
+          
           <input
             type="range"
             min={0}
@@ -135,6 +247,40 @@ const EditorControls = ({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             ⏲ End Time: <span className="font-mono">{formatTime(end)}</span>
           </label>
+          
+                    {/* Manual input for end time */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={endTimeInput}
+                  onChange={(e) => handleEndTimeInputChange(e.target.value)}
+                  onBlur={() => setIsTypingEnd(false)}
+                  placeholder="00:00:10"
+                  disabled={processing}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <span className="text-xs text-gray-400 font-medium">HH:MM:SS</span>
+                </div>
+              </div>
+            </div>
+            {endTimeError && (
+              <div className="flex items-center gap-1 text-red-500 text-xs">
+                <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                </svg>
+                {endTimeError}
+              </div>
+            )}
+          </div>
+          
           <input
             type="range"
             min={start + 1}
@@ -167,6 +313,9 @@ const EditorControls = ({
           </li>
           <li>🖱️ Click on video to toggle zoom</li>
         </ul>
+        <p className="mt-2 text-xs">
+          💡 <strong>Tip:</strong> You can manually type time values in HH:MM:SS format or use the sliders above
+        </p>
       </div>
     </div>
   );

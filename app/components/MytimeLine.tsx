@@ -49,6 +49,32 @@ export function TimelineSlider({
   const [isDragging, setIsDragging] = useState(false);
   const [mouseStartPos, setMouseStartPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Manual time input state for active segment
+  const [startTimeInput, setStartTimeInput] = useState("00:00:00");
+  const [endTimeInput, setEndTimeInput] = useState("00:00:10");
+  const [startTimeError, setStartTimeError] = useState("");
+  const [endTimeError, setEndTimeError] = useState("");
+  const [isTypingStart, setIsTypingStart] = useState(false);
+  const [isTypingEnd, setIsTypingEnd] = useState(false);
+
+  // Helper function to parse time input (HH:MM:SS format)
+  const parseTimeInput = (timeString: string): number => {
+    const parts = timeString.split(":").map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    } else {
+      return Number(timeString) || 0;
+    }
+  };
+
+  // Helper function to validate time format
+  const isValidTimeFormat = (timeString: string): boolean => {
+    const timeRegex = /^(\d{1,2}:)?(\d{1,2}:)?(\d{1,2})$/;
+    return timeRegex.test(timeString);
+  };
+
   useEffect(() => {
     if (setProgress) setProgress(progress);
   }, [progress, setProgress]);
@@ -62,10 +88,67 @@ export function TimelineSlider({
   };
   const timeFormatter = formatTime || defaultFormatTime;
 
+  // Update input fields when active segment changes (only if not typing)
+  useEffect(() => {
+    if (segments[activeIdx] && !isTypingStart && !isTypingEnd) {
+      setStartTimeInput(timeFormatter(segments[activeIdx].start));
+      setEndTimeInput(timeFormatter(segments[activeIdx].end));
+      setStartTimeError("");
+      setEndTimeError("");
+    }
+  }, [activeIdx, segments, timeFormatter, isTypingStart, isTypingEnd]);
+
   const toggleZoom = useCallback(() => {
     // ReactPlayer does not support zooming via style directly, so you may want to implement this differently if needed
     setzoomed((z) => !z);
   }, []);
+
+  // Manual input handlers for active segment
+  const handleStartTimeInputChange = (value: string) => {
+    setStartTimeInput(value);
+    setStartTimeError("");
+    setIsTypingStart(true);
+
+    if (isValidTimeFormat(value)) {
+      const parsedTime = parseTimeInput(value);
+      const activeSegment = segments[activeIdx];
+      if (parsedTime >= 0 && parsedTime < activeSegment.end) {
+        const newSegments = [...segments];
+        newSegments[activeIdx] = { ...activeSegment, start: parsedTime };
+        setSegments(newSegments);
+      } else if (parsedTime >= activeSegment.end) {
+        setStartTimeError("Start time must be less than end time");
+      } else {
+        setStartTimeError("Start time cannot be negative");
+      }
+    } else {
+      setStartTimeError("Invalid time format (use HH:MM:SS or MM:SS or SS)");
+    }
+  };
+
+  const handleEndTimeInputChange = (value: string) => {
+    setEndTimeInput(value);
+    setEndTimeError("");
+    setIsTypingEnd(true);
+
+    if (isValidTimeFormat(value)) {
+      const parsedTime = parseTimeInput(value);
+      const activeSegment = segments[activeIdx];
+      if (parsedTime > activeSegment.start && parsedTime <= duration) {
+        const newSegments = [...segments];
+        newSegments[activeIdx] = { ...activeSegment, end: parsedTime };
+        setSegments(newSegments);
+      } else if (parsedTime <= activeSegment.start) {
+        setEndTimeError("End time must be greater than start time");
+      } else if (parsedTime > duration) {
+        setEndTimeError("End time cannot exceed video duration");
+      } else {
+        setEndTimeError("End time cannot be negative");
+      }
+    } else {
+      setEndTimeError("Invalid time format (use HH:MM:SS or MM:SS or SS)");
+    }
+  };
 
   const handleTrim = useCallback(() => {
     if (isNaN(duration) || duration === 0) {
@@ -415,7 +498,7 @@ export function TimelineSlider({
           <Button
             onClick={handleTrim}
             disabled={
-              processing || segments.some((seg) => seg.start >= seg.end)
+              processing || segments.some((seg) => seg.start >= seg.end) || !!startTimeError || !!endTimeError
             }
             className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold disabled:opacity-60"
           >
@@ -572,7 +655,7 @@ export function TimelineSlider({
           </div>
         </div>
         {/* Timeline Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="text-sm font-medium text-muted-foreground">
             Timeline Duration: {timeFormatter(duration)}
           </div>
@@ -581,6 +664,85 @@ export function TimelineSlider({
           </div>
           <div className="text-lg font-mono">
             EndTime : {timeFormatter(end)}
+          </div>
+        </div>
+
+        {/* Manual Time Input for Active Segment */}
+        <div className="mb-4 p-6 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border border-purple-100 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-4">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+            Manual Time Input for Segment {activeIdx + 1}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Start Time
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="2"/>
+                    <polyline points="12,6 12,12 16,14" strokeWidth="2"/>
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={startTimeInput}
+                  onChange={(e) => handleStartTimeInputChange(e.target.value)}
+                  onBlur={() => setIsTypingStart(false)}
+                  placeholder="00:00:00"
+                  disabled={processing}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <span className="text-xs text-gray-400 font-medium">HH:MM:SS</span>
+                </div>
+              </div>
+              {startTimeError && (
+                <div className="flex items-center gap-1 text-red-500 text-xs mt-2">
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                  </svg>
+                  {startTimeError}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                End Time
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={endTimeInput}
+                  onChange={(e) => handleEndTimeInputChange(e.target.value)}
+                  onBlur={() => setIsTypingEnd(false)}
+                  placeholder="00:00:10"
+                  disabled={processing}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <span className="text-xs text-gray-400 font-medium">HH:MM:SS</span>
+                </div>
+              </div>
+              {endTimeError && (
+                <div className="flex items-center gap-1 text-red-500 text-xs mt-2">
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                  </svg>
+                  {endTimeError}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         {/* SVG Timeline */}
