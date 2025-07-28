@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useBlobStore } from "../lib/blobStore";
 import {
   videoTrimmer,
   videoToMP4WithOverlays,
   videoToThumbnail,
+  multiSegmentTrimmer,
 } from "../lib/ffmpeg";
 
 type Overlay =
@@ -12,7 +13,7 @@ type Overlay =
   | { type: "text"; x: number; y: number; text: string };
 
 export const useEditor = () => {
-  const { blob, title, description } = useBlobStore();
+  const { blob, title, description, restoreBlob } = useBlobStore();
   const [videoUrl, setVideoUrl] = useState(
     blob ? URL.createObjectURL(blob) : ""
   );
@@ -36,14 +37,30 @@ export const useEditor = () => {
     return stored ? JSON.parse(stored) : [];
   };
 
+  useEffect(() => {
+    if (!blob) {
+      restoreBlob();
+    }
+  }, [blob, restoreBlob]);
+
   // Add a callback for when trimming is done
   const trimApplier = useCallback(
-    async (start: string, end: string, onDone?: (success: boolean) => void) => {
+    async (
+      startOrSegments: string | { start: string; end: string }[],
+      end?: string,
+      onDone?: (success: boolean) => void,
+      onProgress?: (progress: number) => void
+    ) => {
       if (!blob) return;
       setProcessing(true);
       setError(null);
       try {
-        const trimmedBlob = await videoTrimmer(blob, start, end);
+        let trimmedBlob: Blob;
+        if (Array.isArray(startOrSegments)) {
+          trimmedBlob = await multiSegmentTrimmer(blob, startOrSegments, onProgress);
+        } else {
+          trimmedBlob = await videoTrimmer(blob, startOrSegments, end!);
+        }
         const trimmedUrl = URL.createObjectURL(trimmedBlob);
         setVideoUrl(trimmedUrl);
 
@@ -113,5 +130,6 @@ export const useEditor = () => {
     setOverlays,
     loadOverlays,
     error, // <-- return error state
+    multiSegmentTrimmer,
   };
 };

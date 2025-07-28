@@ -95,6 +95,7 @@ export default function EditorPage() {
   // --- Add currentTime and duration state for syncing ---
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -619,16 +620,20 @@ export default function EditorPage() {
               duration={duration}
               processing={processing}
               playerRef={playerRef}
-              ontrim={async (start, end) => {
-                toast.loading("Trimming video...");
-                await trimApplier(start, end, (success) => {
+              setProgress={setProgress}
+              ontrim={async (segments) => {
+                setProgress(1);
+                toast.loading("Trimming and merging segments...");
+                await trimApplier(segments, undefined, (success) => {
+                  setProgress(100);
                   toast.dismiss();
                   if (success) {
-                    toast.success("Video trimmed successfully!");
+                    toast.success("Video trimmed and merged successfully!");
                   } else {
-                    toast.error("Failed to trim video.");
+                    toast.error("Failed to trim/merge video.");
                   }
-                });
+                  setTimeout(() => setProgress(0), 1000);
+                }, setProgress);
               }}
               currentTime={currentTime}
               setCurrentTime={(t) => {

@@ -152,6 +152,8 @@ export default function RecorderPage() {
   const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
   const [saveMessage, setSaveMessage] = useState<string>("");
+  const [recordingTimer, setRecordingTimer] = useState(0);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -168,14 +170,56 @@ export default function RecorderPage() {
   useEffect(() => {
     if (!videoRef.current) return;
 
-    if (videoUrl) {
+    // If showing a recorded/uploaded video, use src
+    if (videoUrl || uploadedFileUrl) {
       videoRef.current.srcObject = null;
-      videoRef.current.src = videoUrl;
+      videoRef.current.src = videoUrl || uploadedFileUrl || "";
     } else if (screenStream) {
-      videoRef.current.srcObject = screenStream;
+      // For live preview/recording, use srcObject
       videoRef.current.src = "";
+      videoRef.current.srcObject = screenStream;
     }
-  }, [videoUrl, screenStream]);
+  }, [videoUrl, screenStream, uploadedFileUrl]);
+
+  // Start/reset timer when recording starts/stops
+  useEffect(() => {
+    if (recording) {
+      setRecordingTimer(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTimer((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    };
+  }, [recording]);
+
+  // Add a key to force remounting the video element
+  const [videoKey, setVideoKey] = useState(0);
+
+  // When recording starts, increment the key to remount the video element
+  useEffect(() => {
+    if (recording) {
+      setVideoKey((prev) => prev + 1);
+    }
+  }, [recording]);
+
+  // Helper to format seconds as mm:ss
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
 
   const handleSaveAndPublish = async () => {
     if (!blob) return;
@@ -229,7 +273,7 @@ export default function RecorderPage() {
                   const fileUrl = URL.createObjectURL(file);
                   setUploadedFileUrl(fileUrl);
                   setUploadedFileType(file.type);
-                  setBlob(file);
+                  setBlob(file); // setBlob now persists to localStorage
                   setUploadMessage("✅ Uploaded successfully!");
                   toast.success("File uploaded successfully!");
                   setTimeout(() => setUploadMessage(""), 3000);
@@ -404,13 +448,11 @@ export default function RecorderPage() {
                       width={900}
                       height={500}
                     />
-                  ) : (
+                  ) : uploadedFileUrl &&
+                    uploadedFileType?.startsWith("video/") ? (
                     <video
-                      ref={videoRef}
-                      src={uploadedFileUrl!}
+                      src={uploadedFileUrl}
                       controls
-                      autoPlay
-                      muted
                       style={{
                         width: "100%",
                         height: "100%",
@@ -421,6 +463,28 @@ export default function RecorderPage() {
                       }}
                       className="w-full object-contain"
                     />
+                  ) : screenStream ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      controls={!recording && (recording || !!videoUrl)}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        background: "#000",
+                        maxHeight: "60vh",
+                        zIndex: 1,
+                        position: "relative",
+                      }}
+                      className="w-full object-contain"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-400">
+                      No preview available. Start screen sharing or upload a
+                      video to see the preview.
+                    </div>
                   )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4 sm:mt-6 justify-end">
@@ -437,12 +501,7 @@ export default function RecorderPage() {
                       >
                         Change Tab
                       </button>
-                      <button
-                        onClick={startRecording}
-                        className="bg-[#6C63FF] text-white px-4 sm:px-8 py-2 rounded-lg font-semibold shadow hover:bg-[#5548c8] transition text-sm sm:text-base"
-                      >
-                        Start Recording
-                      </button>
+                      {/* Start Recording button removed: recording starts automatically after screen share */}
                     </>
                   )}
                   {screenStream && recording && !isUploaded && (
@@ -532,13 +591,51 @@ export default function RecorderPage() {
       <main className="flex h-screen w-full items-center justify-center bg-gray-900 text-white overflow-hidden">
         <div className="bg-gray-800 p-8 rounded-xl shadow-lg flex flex-col items-center space-y-6 w-full max-w-xl">
           <h2 className="text-2xl font-bold animate-pulse">⏺ Recording...</h2>
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            className="w-full rounded-lg border-2 border-red-500"
-            style={{ maxHeight: "60vh" }}
-          />
+          <div className="flex flex-col items-center mb-4">
+            <div className="text-5xl font-mono font-bold text-yellow-300 bg-gray-900 px-6 py-2 rounded-lg border-2 border-yellow-400 shadow-lg">
+              {formatTime(recordingTimer)}
+            </div>
+            <div className="mt-2 text-base text-yellow-200 text-center max-w-xs">
+              This timer shows your actual recording duration.
+              <br />
+              The video preview below is what is being recorded.
+            </div>
+          </div>
+          {/* Show the live preview during recording, but hide controls */}
+          <div
+            className="border-2 border-[#6C63FF] rounded-2xl mb-4 sm:mb-8 mx-auto"
+            style={{
+              width: "100%",
+              maxWidth: 900,
+              height: "auto",
+              maxHeight: "60vh",
+              background: "#000",
+              position: "relative",
+            }}
+          >
+            {screenStream ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                controls={false}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  background: "#000",
+                  maxHeight: "60vh",
+                  zIndex: 1,
+                  position: "relative",
+                }}
+                className="w-full object-contain"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                No preview available. Start screen sharing to see the preview.
+              </div>
+            )}
+          </div>
           <button
             onClick={stopRecording}
             className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded w-full text-lg font-semibold"
@@ -549,9 +646,7 @@ export default function RecorderPage() {
             <span>🎙️ Mic: {micEnabled ? "On" : "Off"}</span>
             <button
               onClick={toggleMic}
-              className={`px-3 py-1 rounded ${
-                micEnabled ? "bg-green-600" : "bg-gray-600"
-              }`}
+              className={`px-3 py-1 rounded ${micEnabled ? "bg-green-600" : "bg-gray-600"}`}
             >
               {micEnabled ? "Mute" : "Unmute"}
             </button>
@@ -768,7 +863,7 @@ export default function RecorderPage() {
                   onClick={startScreenShare}
                   className="w-full sm:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base"
                 >
-                  Start Screen Share
+                  Start Screen Recording
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
