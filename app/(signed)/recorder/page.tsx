@@ -147,7 +147,7 @@ export default function RecorderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const somethingxx = useRef<HTMLVideoElement>(null);
+  const videoPreview = useRef<HTMLVideoElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [enableCamera, setEnableCamera] = useState(false);
 
@@ -158,8 +158,8 @@ export default function RecorderPage() {
         audio: false,
       });
       setCameraStream(stream);
-      if (somethingxx.current) {
-        somethingxx.current.srcObject = stream;
+      if (videoPreview.current) {
+        videoPreview.current.srcObject = stream;
       }
     } catch (error) {
       console.error("Camera access denied or not available:", error);
@@ -169,7 +169,7 @@ export default function RecorderPage() {
   const stopCamera = () => {
     cameraStream?.getTracks().forEach((track) => track.stop());
     setCameraStream(null);
-    if (somethingxx.current) somethingxx.current.srcObject = null;
+    if (videoPreview.current) videoPreview.current.srcObject = null;
   };
 
   const [uploadMessage, setUploadMessage] = useState<string>("");
@@ -501,7 +501,7 @@ export default function RecorderPage() {
                         {enableCamera && (
                           <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
                             <video
-                              ref={somethingxx}
+                              ref={videoPreview}
                               autoPlay
                               playsInline
                               className="w-full h-full object-cover rounded-full"
