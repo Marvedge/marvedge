@@ -147,6 +147,31 @@ export default function RecorderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const somethingxx = useRef<HTMLVideoElement>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [enableCamera, setEnableCamera] = useState(false);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+      setCameraStream(stream);
+      if (somethingxx.current) {
+        somethingxx.current.srcObject = stream;
+      }
+    } catch (error) {
+      console.error("Camera access denied or not available:", error);
+    }
+  };
+
+  const stopCamera = () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    if (somethingxx.current) somethingxx.current.srcObject = null;
+  };
+
   const [uploadMessage, setUploadMessage] = useState<string>("");
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
@@ -409,15 +434,11 @@ export default function RecorderPage() {
                       controls
                       autoPlay
                       muted
+                      className="w-full h-auto max-h-[60vh] bg-black object-contain"
                       style={{
-                        width: "100%",
-                        height: "100%",
-                        background: "#000",
-                        maxHeight: "60vh",
-                        zIndex: 1,
-                        position: "relative",
+                        display: "block",
+                        margin: "0 auto",
                       }}
-                      className="w-full object-contain"
                     />
                   )}
                 </div>
@@ -444,12 +465,51 @@ export default function RecorderPage() {
                     </>
                   )}
                   {screenStream && recording && !isUploaded && (
-                    <button
-                      onClick={stopRecording}
-                      className="bg-[#6C63FF] text-white px-4 sm:px-8 py-2 rounded-lg font-semibold shadow hover:bg-[#5548c8] transition text-sm sm:text-base"
-                    >
-                      Stop Recording
-                    </button>
+                    <>
+                      <div className="flex items-center gap-4 justify-start">
+                        <div>
+                          <button
+                            onClick={stopRecording}
+                            className=" bg-blue-600 text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
+                          >
+                            Stop Recording
+                          </button>
+                        </div>
+
+                        <div className="">
+                          <button
+                            onClick={() => {
+                              setEnableCamera((prev) => !prev);
+                              if (cameraStream) {
+                                stopCamera();
+                              } else {
+                                startCamera();
+                              }
+                            }}
+                            className={`${
+                              cameraStream ? "bg-red-600" : "bg-green-600"
+                            } text-white px-4 py-2 rounded text-sm sm:text-base min-w-[150px] transition mr-30`}
+                          >
+                            {cameraStream ? "Stop Camera" : "Start Camera"}
+                          </button>
+                        </div>
+
+                        {/* {cameraStream && (
+                          <DraggableCameraPreview videoRef={somethingxx} />
+                        )} */}
+
+                        {enableCamera && (
+                          <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
+                            <video
+                              ref={somethingxx}
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-cover rounded-full"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
                 {(videoUrl || isUploaded) && (
