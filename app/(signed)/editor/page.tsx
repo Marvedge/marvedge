@@ -13,6 +13,8 @@ import toast, { Toaster } from "react-hot-toast";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
+import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
+import { videoWithZoomEffects } from "@/app/lib/ffmpeg";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -40,6 +42,15 @@ interface TextOverlay {
 }
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
+
+interface ZoomEffect {
+  id: string;
+  startTime: number;
+  endTime: number;
+  zoomLevel: number;
+  x: number;
+  y: number;
+}
 
 export default function EditorPage() {
   const router = useRouter();
@@ -96,6 +107,11 @@ export default function EditorPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
+
+  // Zoom effects state
+  const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
+  const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
+  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(null);
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -276,6 +292,27 @@ export default function EditorPage() {
     if (saved) setOverlays(JSON.parse(saved));
   };
 
+  // Zoom effects handlers
+  const onZoomEffectCreate = (effect: ZoomEffect) => {
+    setZoomEffects(prev => [...prev, effect]);
+  };
+
+  const onZoomEffectRemove = (id: string) => {
+    setZoomEffects(prev => prev.filter(effect => effect.id !== id));
+  };
+
+  const onZoomEffectsChange = (effects: ZoomEffect[]) => {
+    setZoomEffects(effects);
+  };
+
+  // Check for active zoom effects based on current time
+  useEffect(() => {
+    const activeEffect = zoomEffects.find(effect => 
+      currentTime >= effect.startTime && currentTime <= effect.endTime
+    );
+    setCurrentZoomEffect(activeEffect || null);
+  }, [currentTime, zoomEffects]);
+
   const [volume, setVolume] = useState(1); // 1 = 100%, 0 = mute
 
   return (
@@ -395,12 +432,48 @@ export default function EditorPage() {
             <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0">
               <button
                 className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => {
+                onClick={async () => {
                   if (videoUrl) {
-                    const a = document.createElement("a");
-                    a.href = videoUrl;
-                    a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
-                    a.click();
+                    try {
+                      // Show processing message
+                      if (zoomEffects.length > 0) {
+                        toast.loading("Processing video... (Note: Zoom effects are visible during playback but not in downloaded video)");
+                      } else {
+                        toast.loading("Processing video...");
+                      }
+                      
+                      // Get the original video blob
+                      const response = await fetch(videoUrl);
+                      const originalBlob = await response.blob();
+                      
+                      // Process video with zoom effects
+                      const processedBlob = await videoWithZoomEffects(originalBlob, zoomEffects);
+                      
+                      // Download the processed video
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(processedBlob);
+                      a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      
+                      toast.dismiss();
+                      if (zoomEffects.length > 0) {
+                        toast.success("Video downloaded! Zoom effects are visible during playback in the editor.");
+                      } else {
+                        toast.success("Video downloaded successfully!");
+                      }
+                    } catch (error) {
+                      console.error("Error processing video:", error);
+                      toast.dismiss();
+                      toast.error("Failed to process video. Downloading original video.");
+                      
+                      // Fallback to original video
+                      const a = document.createElement("a");
+                      a.href = videoUrl;
+                      a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
+                      a.click();
+                    }
                   }
                 }}
               >
@@ -450,30 +523,42 @@ export default function EditorPage() {
                   background: "#F6F3FF",
                 }}
               >
-                <ReactPlayer
-                  ref={playerRef}
-                  url={videoUrl || undefined}
-                  playing={true}
-                  controls={false}
-                  muted={false}
-                  volume={volume}
-                  width="100%"
-                  height="100%"
+                <div
                   style={{
-                    objectFit: "contain",
-                    borderRadius: "1.25rem",
-                    background: "#F6F3FF",
+                    width: "100%",
+                    height: "100%",
+                    transform: currentZoomEffect
+                      ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
+                      : "scale(1) translate(0%, 0%)",
+                    transformOrigin: "center center",
+                    transition: currentZoomEffect ? "transform 0.5s ease-in-out" : "transform 0.3s ease-out",
                   }}
-                  onError={(e) => console.error("Video failed to load", e)}
-                  onReady={() => console.log("Video loaded")}
-                  progressInterval={100}
-                  onProgress={({ playedSeconds }) =>
-                    setCurrentTime(playedSeconds)
-                  }
-                  onDuration={(dur) => {
-                    if (isFinite(dur) && !isNaN(dur)) setDuration(dur);
-                  }}
-                />
+                >
+                  <ReactPlayer
+                    ref={playerRef}
+                    url={videoUrl || undefined}
+                    playing={true}
+                    controls={false}
+                    muted={false}
+                    volume={volume}
+                    width="100%"
+                    height="100%"
+                    style={{
+                      objectFit: "contain",
+                      borderRadius: "1.25rem",
+                      background: "#F6F3FF",
+                    }}
+                    onError={(e) => console.error("Video failed to load", e)}
+                    onReady={() => console.log("Video loaded")}
+                    progressInterval={100}
+                    onProgress={({ playedSeconds }) =>
+                      setCurrentTime(playedSeconds)
+                    }
+                    onDuration={(dur) => {
+                      if (isFinite(dur) && !isNaN(dur)) setDuration(dur);
+                    }}
+                  />
+                </div>
               </div>
               <CustomVideoControls
                 playerRef={playerRef}
@@ -641,10 +726,26 @@ export default function EditorPage() {
                 playerRef.current?.seekTo(t, "seconds");
               }}
               onResetVideo={resetVideo}
+              zoomEffects={zoomEffects}
+              onZoomEffectCreate={onZoomEffectCreate}
+              onZoomEffectRemove={onZoomEffectRemove}
             />
           </div>
         </div>
       </div>
+      <ZoomEffectsPopup
+        isOpen={isZoomPopupOpen}
+        onClose={() => setIsZoomPopupOpen(false)}
+        zoomEffects={zoomEffects}
+        onZoomEffectsChange={onZoomEffectsChange}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={(time) => {
+          if (playerRef.current) {
+            playerRef.current.seekTo(time);
+          }
+        }}
+      />
     </main>
   );
 }

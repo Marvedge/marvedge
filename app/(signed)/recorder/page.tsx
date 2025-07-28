@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import Image from "next/image";
 import RecorderSidebar from "@/app/components/RecorderSidebar";
+import VideoPreview from "@/app/components/VideoPreview";
 import { sanitizeFilename } from "@/app/lib/constants";
 import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
@@ -424,66 +425,38 @@ export default function RecorderPage() {
                 <h2 className="text-base sm:text-xl font-semibold mb-2 sm:mb-4 text-[#6C63FF]">
                   Preview
                 </h2>
-                <div
-                  className="border-2 border-[#6C63FF] rounded-2xl mb-4 sm:mb-8 mx-auto"
-                  style={{
-                    width: "100%",
-                    maxWidth: 900,
-                    height: "auto",
-                    maxHeight: "60vh",
-                    background: "#000",
-                    position: "relative",
-                  }}
-                >
+                <div className="flex justify-center mb-4 sm:mb-8">
                   {uploadedFileType?.startsWith("image/") ? (
-                    <Image
-                      src={uploadedFileUrl!}
-                      alt="Uploaded preview"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        background: "#000",
-                      }}
-                      width={900}
-                      height={500}
-                    />
-                  ) : uploadedFileUrl &&
-                    uploadedFileType?.startsWith("video/") ? (
-                    <video
-                      src={uploadedFileUrl}
-                      controls
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        background: "#000",
-                        maxHeight: "60vh",
-                        zIndex: 1,
-                        position: "relative",
-                      }}
-                      className="w-full object-contain"
+                    <div className="border-2 border-[#6C63FF] rounded-2xl mx-auto" style={{ maxWidth: 900, background: "#000" }}>
+                      <Image
+                        src={uploadedFileUrl!}
+                        alt="Uploaded preview"
+                        style={{
+                          width: "100%",
+                          height: "auto",
+                          objectFit: "contain",
+                          background: "#000",
+                        }}
+                        width={900}
+                        height={500}
+                      />
+                    </div>
+                  ) : uploadedFileUrl && uploadedFileType?.startsWith("video/") ? (
+                    <VideoPreview 
+                      videoUrl={uploadedFileUrl} 
+                      isRecording={false}
+                      className="mx-auto"
                     />
                   ) : screenStream ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      muted
-                      playsInline
-                      controls={!recording && (recording || !!videoUrl)}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        background: "#000",
-                        maxHeight: "60vh",
-                        zIndex: 1,
-                        position: "relative",
-                      }}
-                      className="w-full object-contain"
+                    <VideoPreview 
+                      videoUrl={null}
+                      isRecording={recording}
+                      screenStream={screenStream}
+                      className="mx-auto"
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400">
-                      No preview available. Start screen sharing or upload a
-                      video to see the preview.
+                    <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
+                      No preview available. Start screen sharing or upload a video to see the preview.
                     </div>
                   )}
                 </div>
@@ -602,39 +575,13 @@ export default function RecorderPage() {
             </div>
           </div>
           {/* Show the live preview during recording, but hide controls */}
-          <div
-            className="border-2 border-[#6C63FF] rounded-2xl mb-4 sm:mb-8 mx-auto"
-            style={{
-              width: "100%",
-              maxWidth: 900,
-              height: "auto",
-              maxHeight: "60vh",
-              background: "#000",
-              position: "relative",
-            }}
-          >
-            {screenStream ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                controls={false}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  background: "#000",
-                  maxHeight: "60vh",
-                  zIndex: 1,
-                  position: "relative",
-                }}
-                className="w-full object-contain"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No preview available. Start screen sharing to see the preview.
-              </div>
-            )}
+          <div className="flex justify-center mb-4 sm:mb-8">
+            <VideoPreview 
+              videoUrl={null}
+              isRecording={true}
+              screenStream={screenStream}
+              className="mx-auto"
+            />
           </div>
           <button
             onClick={stopRecording}
