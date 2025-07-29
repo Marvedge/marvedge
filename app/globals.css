@@ -156,3 +156,16 @@ video {
   display: block;
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overflow-x: hidden;
+}
+
+@media (max-width: 639px) {
+  html, body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+

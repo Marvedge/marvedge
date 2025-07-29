@@ -99,7 +99,7 @@ const RecorderSidebar: React.FC<RecorderSidebarProps> = ({
               height={20}
               className="md:w-6 md:h-6"
             />
-            Start Screen Sharing
+            Start Screen Recording
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState, RefObject, useCallback } from "react";
+import { formatTimeFull } from "@/lib/dateUtils";
 
 type EditorControlsProps = {
   onTrim: (start: string, end: string) => void;
@@ -9,11 +10,24 @@ type EditorControlsProps = {
   duration: number;
 };
 
-const formatTime = (seconds: number) => {
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  return [hrs, mins, secs].map((v) => String(v).padStart(2, "0")).join(":");
+
+
+// Helper function to parse time input (HH:MM:SS format)
+const parseTimeInput = (timeString: string): number => {
+  const parts = timeString.split(":").map(Number);
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  } else if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  } else {
+    return Number(timeString) || 0;
+  }
+};
+
+// Helper function to validate time format
+const isValidTimeFormat = (timeString: string): boolean => {
+  const timeRegex = /^(\d{1,2}:)?(\d{1,2}:)?(\d{1,2})$/;
+  return timeRegex.test(timeString);
 };
 
 const EditorControls = ({
@@ -25,6 +39,25 @@ const EditorControls = ({
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
+  const [startTimeInput, setStartTimeInput] = useState("00:00:00");
+  const [endTimeInput, setEndTimeInput] = useState("00:00:10");
+  const [startTimeError, setStartTimeError] = useState("");
+  const [endTimeError, setEndTimeError] = useState("");
+  const [isTypingStart, setIsTypingStart] = useState(false);
+  const [isTypingEnd, setIsTypingEnd] = useState(false);
+
+  // Update input fields when slider values change (only if not typing)
+  useEffect(() => {
+    if (!isTypingStart) {
+      setStartTimeInput(formatTimeFull(start));
+    }
+  }, [start, isTypingStart]);
+
+  useEffect(() => {
+    if (!isTypingEnd) {
+      setEndTimeInput(formatTimeFull(end));
+    }
+  }, [end, isTypingEnd]);
 
   const toggleZoom = useCallback(() => {
     const video = videoRef.current;
@@ -42,6 +75,46 @@ const EditorControls = ({
     setZoomed((z) => !z);
   }, [videoRef, zoomed]);
 
+  const handleStartTimeInputChange = (value: string) => {
+    setStartTimeInput(value);
+    setStartTimeError("");
+    setIsTypingStart(true);
+
+    if (isValidTimeFormat(value)) {
+      const parsedTime = parseTimeInput(value);
+      if (parsedTime >= 0 && parsedTime < end) {
+        setStart(parsedTime);
+      } else if (parsedTime >= end) {
+        setStartTimeError("Start time must be less than end time");
+      } else {
+        setStartTimeError("Start time cannot be negative");
+      }
+    } else {
+      setStartTimeError("Invalid time format (use HH:MM:SS or MM:SS or SS)");
+    }
+  };
+
+  const handleEndTimeInputChange = (value: string) => {
+    setEndTimeInput(value);
+    setEndTimeError("");
+    setIsTypingEnd(true);
+
+    if (isValidTimeFormat(value)) {
+      const parsedTime = parseTimeInput(value);
+      if (parsedTime > start && parsedTime <= duration) {
+        setEnd(parsedTime);
+      } else if (parsedTime <= start) {
+        setEndTimeError("End time must be greater than start time");
+      } else if (parsedTime > duration) {
+        setEndTimeError("End time cannot exceed video duration");
+      } else {
+        setEndTimeError("End time cannot be negative");
+      }
+    } else {
+      setEndTimeError("Invalid time format (use HH:MM:SS or MM:SS or SS)");
+    }
+  };
+
   const handleTrim = useCallback(() => {
     if (isNaN(duration) || duration === 0) {
       alert("Video duration not loaded yet.");
@@ -53,7 +126,7 @@ const EditorControls = ({
       return;
     }
 
-    onTrim(formatTime(start), formatTime(end));
+    onTrim(formatTimeFull(start), formatTimeFull(end));
   }, [start, end, duration, onTrim]);
 
   useEffect(() => {
@@ -100,11 +173,14 @@ const EditorControls = ({
 
           <Button
             onClick={handleTrim}
-            disabled={processing || start >= end}
-            className={` text-white transition ${processing || start >= end
+            disabled={
+              processing || start >= end || !!startTimeError || !!endTimeError
+            }
+            className={` text-white transition ${
+              processing || start >= end || !!startTimeError || !!endTimeError
                 ? "bg-blue-300 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
-              }`}
+            }`}
           >
             {processing ? "⏳ Trimming..." : "✂️ Trim Video"}
           </Button>
@@ -112,8 +188,38 @@ const EditorControls = ({
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            ⏱ Start Time: <span className="font-mono">{formatTime(start)}</span>
+            ⏱ Start Time:{" "}
+                            <span className="font-mono">{formatTimeFull(start)}</span>
           </label>
+
+          {/* Manual input for start time */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"></div>
+                <input
+                  type="text"
+                  value={startTimeInput}
+                  onChange={(e) => handleStartTimeInputChange(e.target.value)}
+                  onBlur={() => setIsTypingStart(false)}
+                  placeholder="00:00:00"
+                  disabled={processing}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <span className="text-xs text-gray-400 font-medium">
+                    HH:MM:SS
+                  </span>
+                </div>
+              </div>
+            </div>
+            {startTimeError && (
+              <div className="flex items-center gap-1 text-red-500 text-xs">
+                {startTimeError}
+              </div>
+            )}
+          </div>
+
           <input
             type="range"
             min={0}
@@ -131,8 +237,37 @@ const EditorControls = ({
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            ⏲ End Time: <span className="font-mono">{formatTime(end)}</span>
+            ⏲ End Time: <span className="font-mono">{formatTimeFull(end)}</span>
           </label>
+
+          {/* Manual input for end time */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"></div>
+                <input
+                  type="text"
+                  value={endTimeInput}
+                  onChange={(e) => handleEndTimeInputChange(e.target.value)}
+                  onBlur={() => setIsTypingEnd(false)}
+                  placeholder="00:00:10"
+                  disabled={processing}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <span className="text-xs text-gray-400 font-medium">
+                    HH:MM:SS
+                  </span>
+                </div>
+              </div>
+            </div>
+            {endTimeError && (
+              <div className="flex items-center gap-1 text-red-500 text-xs">
+                {endTimeError}
+              </div>
+            )}
+          </div>
+
           <input
             type="range"
             min={start + 1}
@@ -147,24 +282,28 @@ const EditorControls = ({
             className="w-full accent-blue-500 cursor-pointer"
           />
         </div>
-
-
       </div>
 
       <div className="text-xs text-gray-500 mt-6 border-t pt-4">
         <p className="mb-1 font-semibold">⌨️ Keyboard Shortcuts:</p>
         <ul className="list-disc list-inside leading-5">
           <li>
-            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek video
+            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek
+            video
           </li>
           <li>
-            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust trim range
+            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust
+            trim range
           </li>
           <li>
             <kbd className="kbd">Enter</kbd> — Apply trim
           </li>
           <li>🖱️ Click on video to toggle zoom</li>
         </ul>
+        <p className="mt-2 text-xs">
+          💡 <strong>Tip:</strong> You can manually type time values in HH:MM:SS
+          format or use the sliders above
+        </p>
       </div>
     </div>
   );

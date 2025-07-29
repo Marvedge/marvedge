@@ -14,21 +14,6 @@ export const useScreenRecorder = () => {
 
   const toggleMic = () => setMicEnabled((prev) => !prev);
 
-  const startScreenShare = async () => {
-    try {
-      const screen = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      });
-      screenStreamRef.current = screen;
-      setScreenStream(screen);
-      toast.success('Screen sharing started!');
-    } catch (err) {
-      console.error("Failed to get screen stream:", err);
-      toast.error('Screen share failed. Please try again.');
-    }
-  };
-
   const startRecording = async () => {
     try {
       if (!screenStreamRef.current) return;
@@ -75,6 +60,23 @@ export const useScreenRecorder = () => {
     } catch (err) {
       console.error("Recording failed:", err);
       toast.error('Recording failed to start.');
+    }
+  };
+
+  const startScreenShare = async () => {
+    try {
+      const screen = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      });
+      screenStreamRef.current = screen;
+      setScreenStream(screen);
+      toast.success('Screen sharing started!');
+      // Start recording automatically after screen is selected
+      await startRecording();
+    } catch (err) {
+      console.error("Failed to get screen stream:", err);
+      toast.error('Screen share failed. Please try again.');
     }
   };
 

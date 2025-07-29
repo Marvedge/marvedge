@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Bell } from "lucide-react";
 import Hero from "./Hero";
 import { useSession } from "next-auth/react";
 
@@ -41,52 +41,58 @@ const Navbar: React.FC = () => {
 
   return (
     <>
-      <nav className="fixed top-0 left-0 w-full z-[1002] bg-gradient-to-tr from-white via-[#f9fef4] to-[#e9f8c5] min-h-[60px] flex items-center">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-between items-center w-full">
-          <div className="flex items-center space-x-3">
-            <Image
-              src="/images/Transparent logo.png"
-              alt="Marvedge logo"
-              width={80}
-              height={80}
-              className="w-12 h-12 md:w-16 md:h-16 object-contain"
-              priority
-            />
-            <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">
-              Marvedge
-            </span>
-          </div>
-
-          <button
-            onClick={toggleMenu}
-            className="md:hidden text-[#313053] focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] p-2"
-            aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={isMenuOpen}
-          >
-            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-
-          <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium">
-            <NavButton onClick={() => router.push("/features")}>
-              Features
-            </NavButton>
-            <NavButton onClick={() => router.push("/pricing")}>
-              Pricing
-            </NavButton>
-            <NavButton onClick={() => router.push("/reviews")}>
-              Reviews
-            </NavButton>
-            <NavButton
-              onClick={handleActionButtonClick}
-              className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors"
+      <nav className="fixed top-0 left-0 w-full z-[1002] bg-gradient-to-tr from-white via-[#f9fef4] to-[#e9f8c5] min-h-[80px] flex flex-col justify-start">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
+          {/* Top Row: Logo, Marvedge text, Hamburger */}
+          <div className="flex items-center justify-between w-full pt-2">
+            <div className="flex items-center space-x-3">
+              <Image
+                src="/images/Transparent logo.png"
+                alt="Marvedge logo"
+                width={80}
+                height={80}
+                className="w-12 h-12 md:w-16 md:h-16 object-contain"
+                priority
+              />
+              <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">
+                Marvedge
+              </span>
+            </div>
+            <button
+              onClick={toggleMenu}
+              className="md:hidden text-[#313053] focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] p-2"
+              aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMenuOpen}
             >
-              {actionButtonText}
-            </NavButton>
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
+          {/* Second Row: Bell and Avatar, right-aligned */}
+          <div className="flex justify-end items-center space-x-4 mt-2 pr-2">
+            <button className="relative">
+              <Bell className="w-6 h-6 text-[#8C5BFF]" />
+            </button>
+            {/* User initials avatar placeholder */}
+            <div className="w-9 h-9 rounded-full bg-[#8C5BFF] flex items-center justify-center text-white font-bold text-lg shadow">
+              AT
+            </div>
           </div>
         </div>
-
+        {/* Desktop nav links (unchanged) */}
+        <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium absolute right-8 top-6">
+          <NavButton onClick={() => router.push("/features")}>Features</NavButton>
+          <NavButton onClick={() => router.push("/pricing")}>Pricing</NavButton>
+          <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
+          <NavButton
+            onClick={handleActionButtonClick}
+            className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors"
+          >
+            {actionButtonText}
+          </NavButton>
+        </div>
+        {/* Mobile menu (unchanged) */}
         {isMenuOpen && (
-          <div className="md:hidden absolute top-[60px] left-0 w-full bg-gradient-to-tr from-gray-100 via-[#e6f0e1] to-[#d1e8a3] z-[1001] flex flex-col items-start p-4 space-y-3 shadow-md">
+          <div className="md:hidden absolute top-[80px] left-0 w-full bg-gradient-to-tr from-gray-100 via-[#e6f0e1] to-[#d1e8a3] z-[1001] flex flex-col items-start p-4 space-y-3 shadow-md">
             <NavButton
               onClick={() => {
                 router.push("/features");

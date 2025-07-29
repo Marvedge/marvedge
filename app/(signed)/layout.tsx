@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation";
 
 const SignedLayout = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
-  const isRecorder = pathname.startsWith("/recorder");
+  const isRecorderOrEditor =
+    pathname.startsWith("/recorder") || pathname.startsWith("/editor");
   return (
     <div className="flex min-h-screen">
-      {!isRecorder && <SidemenuDashboard />}
+      {!isRecorderOrEditor && <SidemenuDashboard />}
       <main
         className={`flex-1 bg-[#F1ECFF] pt-16 md:pt-0 ${
-          !isRecorder ? "md:ml-64" : ""
+          !isRecorderOrEditor ? "md:ml-64" : ""
         }`}
       >
         {children}
