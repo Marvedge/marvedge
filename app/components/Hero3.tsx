@@ -10,6 +10,8 @@ import {
 } from "framer-motion";
 import Hero4 from "./Hero4";
 import { Play } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const Hero3: React.FC = () => {
   const sectionRef = useRef(null);
@@ -18,10 +20,22 @@ const Hero3: React.FC = () => {
     target: sectionRef,
     offset: ["start end", "end start"],
   });
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
 
   const y1 = useTransform(scrollYProgress, [0, 1], [0, -50]);
   const y2 = useTransform(scrollYProgress, [0, 1], [0, 50]);
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1.02, 1]);
+
+  const router = useRouter();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !name) return;
+
+    router.push(
+      `/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`
+    );
+  };
 
   return (
     <>
@@ -159,34 +173,91 @@ const Hero3: React.FC = () => {
             y: -5,
           }}
         >
-          <form className="space-y-6">
-            {[
-              { type: "email", placeholder: "Enter your Email" },
-              { type: "text", placeholder: "Full Name" },
-              { type: "text", placeholder: "Company" },
-              { type: "text", placeholder: "Product URL (Optional)" },
-            ].map((input, index) => (
-              <motion.input
-                key={index}
-                type={input.type}
-                placeholder={input.placeholder}
-                className="w-full py-4 px-5 rounded-lg bg-purple-100 text-gray-700 text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
-                whileFocus={{
-                  scale: 1.02,
-                  boxShadow: "0 0 20px rgba(147, 51, 234, 0.2)",
-                }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{
-                  opacity: isInView ? 1 : 0,
-                  y: isInView ? 0 : 20,
-                }}
-                transition={{
-                  duration: 0.5,
-                  ease: easeOut,
-                  delay: 0.5 + index * 0.1,
-                }}
-              />
-            ))}
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <motion.input
+              type="email"
+              placeholder="Enter your Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full py-4 px-5 rounded-lg bg-purple-100 text-gray-700 text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
+              whileFocus={{
+                scale: 1.02,
+                boxShadow: "0 0 20px rgba(147, 51, 234, 0.2)",
+              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{
+                opacity: isInView ? 1 : 0,
+                y: isInView ? 0 : 20,
+              }}
+              transition={{
+                duration: 0.5,
+                ease: easeOut,
+                delay: 0.5,
+              }}
+            />
+            <motion.input
+              type="text"
+              placeholder="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full py-4 px-5 rounded-lg bg-purple-100 text-gray-700 text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
+              whileFocus={{
+                scale: 1.02,
+                boxShadow: "0 0 20px rgba(147, 51, 234, 0.2)",
+              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{
+                opacity: isInView ? 1 : 0,
+                y: isInView ? 0 : 20,
+              }}
+              transition={{
+                duration: 0.5,
+                ease: easeOut,
+                delay: 0.6,
+              }}
+            />
+            <motion.input
+              type="text"
+              placeholder="Company"
+              // value={company}
+              // onChange={(e) => setCompany(e.target.value)}
+              className="w-full py-4 px-5 rounded-lg bg-purple-100 text-gray-700 text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
+              whileFocus={{
+                scale: 1.02,
+                boxShadow: "0 0 20px rgba(147, 51, 234, 0.2)",
+              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{
+                opacity: isInView ? 1 : 0,
+                y: isInView ? 0 : 20,
+              }}
+              transition={{
+                duration: 0.5,
+                ease: easeOut,
+                delay: 0.7,
+              }}
+            />
+            <motion.input
+              type="text"
+              placeholder="Product URL (Optional)"
+              // value={url}
+              // onChange={(e) => setUrl(e.target.value)}
+              className="w-full py-4 px-5 rounded-lg bg-purple-100 text-gray-700 text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
+              whileFocus={{
+                scale: 1.02,
+                boxShadow: "0 0 20px rgba(147, 51, 234, 0.2)",
+              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{
+                opacity: isInView ? 1 : 0,
+                y: isInView ? 0 : 20,
+              }}
+              transition={{
+                duration: 0.5,
+                ease: easeOut,
+                delay: 0.8,
+              }}
+            />
             <motion.button
               type="submit"
               className="w-full py-4 bg-white text-purple-600 font-semibold rounded-lg flex items-center justify-center gap-2 hover:bg-purple-100 transition"

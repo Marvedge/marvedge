@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import SignUpForm from "./SignUpForm";
+import SignUp from "../signup/page";
 
 export default function SignUpPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <SignUpForm />
+      <SignUp />
     </Suspense>
   );
 }

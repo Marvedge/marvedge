@@ -148,6 +148,31 @@ export default function RecorderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const videoPreview = useRef<HTMLVideoElement>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [enableCamera, setEnableCamera] = useState(false);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+      setCameraStream(stream);
+      if (videoPreview.current) {
+        videoPreview.current.srcObject = stream;
+      }
+    } catch (error) {
+      console.error("Camera access denied or not available:", error);
+    }
+  };
+
+  const stopCamera = () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    if (videoPreview.current) videoPreview.current.srcObject = null;
+  };
+
   const [uploadMessage, setUploadMessage] = useState<string>("");
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
@@ -206,8 +231,6 @@ export default function RecorderPage() {
     };
   }, [recording]);
 
-
-
   // Helper to format seconds as mm:ss
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -217,14 +240,16 @@ export default function RecorderPage() {
     return `${m}:${s}`;
   };
 
-
-
   const handleSaveAndPublish = () => {
     if (!blob) return;
     setShowSavePopup(true);
   };
 
-  const handlePopupDownload = async (data: { title: string; description: string; format: string }) => {
+  const handlePopupDownload = async (data: {
+    title: string;
+    description: string;
+    format: string;
+  }) => {
     if (!blob) return;
 
     setProcessingDownload(true);
@@ -296,7 +321,10 @@ export default function RecorderPage() {
                 </h2>
                 <div className="flex justify-center mb-4 sm:mb-8">
                   {uploadedFileType?.startsWith("image/") ? (
-                    <div className="border-2 border-[#6C63FF] rounded-2xl mx-auto" style={{ maxWidth: 900, background: "#000" }}>
+                    <div
+                      className="border-2 border-[#6C63FF] rounded-2xl mx-auto"
+                      style={{ maxWidth: 900, background: "#000" }}
+                    >
                       <Image
                         src={uploadedFileUrl!}
                         alt="Uploaded preview"
@@ -310,22 +338,23 @@ export default function RecorderPage() {
                         height={500}
                       />
                     </div>
-                  ) : uploadedFileUrl && uploadedFileType?.startsWith("video/") ? (
-                    <VideoPreview 
-                      videoUrl={uploadedFileUrl} 
+                  ) : uploadedFileUrl &&
+                    uploadedFileType?.startsWith("video/") ? (
+                    <VideoPreview
+                      videoUrl={uploadedFileUrl}
                       isRecording={false}
                       className="mx-auto"
                       showControls={false}
                     />
                   ) : videoUrl ? (
-                    <VideoPreview 
+                    <VideoPreview
                       videoUrl={videoUrl}
                       isRecording={false}
                       className="mx-auto"
                       showControls={false}
                     />
                   ) : screenStream ? (
-                    <VideoPreview 
+                    <VideoPreview
                       videoUrl={null}
                       isRecording={recording}
                       screenStream={screenStream}
@@ -334,7 +363,8 @@ export default function RecorderPage() {
                     />
                   ) : (
                     <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
-                      No preview available. Start screen sharing or upload a video to see the preview.
+                      No preview available. Start screen sharing or upload a
+                      video to see the preview.
                     </div>
                   )}
                 </div>
@@ -355,12 +385,51 @@ export default function RecorderPage() {
                     </>
                   )}
                   {screenStream && recording && !isUploaded && (
-                    <button
-                      onClick={stopRecording}
-                      className="bg-[#6C63FF] text-white px-4 sm:px-8 py-2 rounded-lg font-semibold shadow hover:bg-[#5548c8] transition text-sm sm:text-base"
-                    >
-                      Stop Recording
-                    </button>
+                    <>
+                      <div className="flex items-center gap-4 justify-start">
+                        <div>
+                          <button
+                            onClick={stopRecording}
+                            className=" bg-blue-600 text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
+                          >
+                            Stop Recording
+                          </button>
+                        </div>
+
+                        <div className="">
+                          <button
+                            onClick={() => {
+                              setEnableCamera((prev) => !prev);
+                              if (cameraStream) {
+                                stopCamera();
+                              } else {
+                                startCamera();
+                              }
+                            }}
+                            className={`${
+                              cameraStream ? "bg-red-600" : "bg-green-600"
+                            } text-white px-4 py-2 rounded text-sm sm:text-base min-w-[150px] transition mr-30`}
+                          >
+                            {cameraStream ? "Stop Camera" : "Start Camera"}
+                          </button>
+                        </div>
+
+                        {/* {cameraStream && (
+                          <DraggableCameraPreview videoRef={somethingxx} />
+                        )} */}
+
+                        {enableCamera && (
+                          <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
+                            <video
+                              ref={videoPreview}
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-cover rounded-full"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
                 {(videoUrl || isUploaded) && (
@@ -439,7 +508,7 @@ export default function RecorderPage() {
             </div>
           </main>
         </div>
-        
+
         {/* Save Popup Form */}
         <SavePopupForm
           isOpen={showSavePopup}
@@ -471,7 +540,7 @@ export default function RecorderPage() {
           </div>
           {/* Show the live preview during recording, but hide controls */}
           <div className="flex justify-center mb-4 sm:mb-8">
-            <VideoPreview 
+            <VideoPreview
               videoUrl={null}
               isRecording={true}
               screenStream={screenStream}
@@ -726,7 +795,7 @@ export default function RecorderPage() {
           </div>
         </main>
       </div>
-      
+
       {/* Save Popup Form */}
       <SavePopupForm
         isOpen={showSavePopup}
@@ -738,4 +807,4 @@ export default function RecorderPage() {
       />
     </div>
   );
-} 
+}

@@ -57,9 +57,12 @@ const SignIn = () => {
       } else {
         toast.error(res?.error || "Invalid credentials.");
       }
-    } catch(err) {
-      console.warn(err)
-      if(err instanceof TypeError && err.message.includes("Failed to construct 'URL'")){
+    } catch (err) {
+      console.warn(err);
+      if (
+        err instanceof TypeError &&
+        err.message.includes("Failed to construct 'URL'")
+      ) {
         toast.success("Signed in successfully!");
         router.push("/dashboard");
         return;
@@ -125,7 +128,7 @@ const SignIn = () => {
               <button
                 type="button"
                 onClick={() => router.push("/auth/signup")}
-                className="text-[#6356D7] hover:underline font-semibold"
+                className="text-[#6356D7] hover:underline font-semibold cursor-pointer"
               >
                 Sign Up here.
               </button>
@@ -153,7 +156,7 @@ const SignIn = () => {
             <button
               type="button"
               onClick={togglePasswordVisibility}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
             >
               <Image
                 src={
@@ -167,7 +170,7 @@ const SignIn = () => {
             </button>
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-xs sm:text-sm">
-            <label className="flex items-center space-x-1 mb-2 sm:mb-0">
+            <label className="flex items-center space-x-1 mb-2 sm:mb-0 cursor-pointer">
               <input
                 type="checkbox"
                 className="accent-[#6356D7] w-3.5 h-3.5 sm:w-4 sm:h-4"
@@ -177,7 +180,7 @@ const SignIn = () => {
             <button
               type="button"
               onClick={() => router.push("/auth/forgot-password")}
-              className="text-[#6356D7] hover:underline font-bold"
+              className="text-[#6356D7] hover:underline font-bold cursor-pointer"
             >
               Forgot password?
             </button>
@@ -185,7 +188,7 @@ const SignIn = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 sm:py-3 bg-[#6356D7] text-white rounded-md hover:bg-[#7E5FFF] font-semibold transition-all text-sm shadow-md"
+            className="w-full py-2.5 sm:py-3 cursor-pointer bg-[#6356D7] text-white rounded-md hover:bg-[#7E5FFF] font-semibold transition-all text-sm shadow-md"
           >
             {isLoading ? "Signing In..." : "Sign In"}
           </button>
@@ -198,7 +201,7 @@ const SignIn = () => {
             <button
               type="button"
               onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-              className="h-10 sm:h-[45px] w-[100px] sm:w-[120px] rounded-md border border-[#D5C9FF] bg-[#F1ECFF] shadow-md hover:shadow-lg transition-all duration-300 active:scale-95 hover:scale-105 flex items-center justify-center"
+              className="h-10 sm:h-[45px] w-[100px] sm:w-[120px] rounded-md border border-[#D5C9FF] bg-[#F1ECFF] shadow-md hover:shadow-lg transition-all duration-300 active:scale-95 hover:scale-105 flex items-center justify-center cursor-pointer"
               title="Sign in with Google"
             >
               <Image
