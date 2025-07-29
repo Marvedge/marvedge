@@ -10,6 +10,7 @@ interface VideoPreviewProps {
   onTimeChange?: (time: number) => void;
   className?: string;
   screenStream?: MediaStream | null;
+  showControls?: boolean;
 }
 
 export default function VideoPreview({
@@ -18,10 +19,10 @@ export default function VideoPreview({
   onTimeChange,
   className = "",
   screenStream = null,
+  showControls = true,
 }: VideoPreviewProps) {
   const playerRef = useRef<ReactPlayer>(null!);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(!isRecording);
@@ -30,7 +31,7 @@ export default function VideoPreview({
   const [dragValue, setDragValue] = useState(0);
 
   const handlePlayPause = () => {
-    if (isRecording) return; // Disable controls during recording
+    if (isRecording) return;
     setPlaying((prev) => {
       if (screenStream && videoRef.current) {
         if (prev) videoRef.current.pause();
@@ -74,14 +75,59 @@ export default function VideoPreview({
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
-  const safeDuration = (d: number) => (d && isFinite(d) && d > 0 ? d : null);
-
   // Set srcObject when screenStream changes
   useEffect(() => {
     if (videoRef.current && screenStream) {
       videoRef.current.srcObject = screenStream;
     }
   }, [screenStream]);
+
+  // Monitor duration for recorded videos
+  useEffect(() => {
+    if (videoUrl && !screenStream) {
+      const checkDuration = () => {
+        if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+          setDuration(videoRef.current.duration);
+        }
+      };
+      
+      checkDuration();
+      
+      const timer = setTimeout(checkDuration, 100);
+      const timer2 = setTimeout(checkDuration, 500);
+      const timer3 = setTimeout(checkDuration, 1000);
+      
+      const getDurationFromBlob = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const blob = await response.blob();
+          const tempVideo = document.createElement('video');
+          tempVideo.src = URL.createObjectURL(blob);
+          
+          tempVideo.onloadedmetadata = () => {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+              setDuration(tempVideo.duration);
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+          
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+        } catch (error) {
+          console.error('Error getting duration from blob:', error);
+        }
+      };
+      
+      setTimeout(getDurationFromBlob, 200);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
+    }
+  }, [videoUrl, screenStream]);
 
   return (
     <div
@@ -91,7 +137,6 @@ export default function VideoPreview({
         padding: 0,
         boxShadow: "0 4px 24px 0 #E6E1FA",
       }}
-      ref={videoContainerRef}
     >
       {/* Browser Bar */}
       <div
@@ -135,6 +180,20 @@ export default function VideoPreview({
           background: "#F6F3FF",
         }}
       >
+        {/* Play/Pause Button Overlay - Only show when not recording and video is paused */}
+        {!isRecording && !playing && (
+          <button
+            onClick={handlePlayPause}
+            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 rounded-full bg-black/50 hover:bg-black/70 text-white p-4 transition-all duration-200"
+            style={{
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M8 5V19L19 12L8 5Z" fill="currentColor" />
+            </svg>
+          </button>
+        )}
         {screenStream ? (
           <video
             ref={videoRef}
@@ -149,7 +208,12 @@ export default function VideoPreview({
               background: "#F6F3FF",
             }}
             onLoadedMetadata={() => {
-              if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration)) {
+              if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+                setDuration(videoRef.current.duration);
+              }
+            }}
+            onCanPlay={() => {
+              if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
                 setDuration(videoRef.current.duration);
               }
             }}
@@ -183,144 +247,148 @@ export default function VideoPreview({
               onTimeChange?.(playedSeconds);
             }}
             onDuration={(dur) => {
-              if (isFinite(dur) && !isNaN(dur)) setDuration(dur);
+              if (isFinite(dur) && !isNaN(dur) && dur > 0) {
+                setDuration(dur);
+              }
             }}
           />
         )}
       </div>
 
       {/* Custom Video Controls */}
-      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handlePlayPause}
-            disabled={isRecording}
-            className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
-          >
-            {playing ? (
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <rect
-                  x="3"
-                  y="3"
-                  width="4"
-                  height="12"
-                  rx="2"
-                  fill="currentColor"
-                />
-                <rect
-                  x="11"
-                  y="3"
-                  width="4"
-                  height="12"
-                  rx="2"
-                  fill="currentColor"
-                />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M4 3V15L15 9L4 3Z" fill="currentColor" />
-              </svg>
-            )}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={duration}
-            step={0.01}
-            value={dragging ? dragValue : currentTime}
-            onPointerDown={handleSeekStart}
-            onChange={handleSeek}
-            onPointerUp={handleSeekEnd}
-            disabled={isRecording}
-            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC] disabled:opacity-50"
-            style={{
-              background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
-              height: 8,
-              borderRadius: 8,
-            }}
-          />
-          <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </span>
-        </div>
-
-        {/* 5-second skip buttons */}
-        <div className="flex items-center justify-between mt-2 px-2 w-full">
-          <div className="flex items-center gap-2">
+      {showControls && (
+        <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                if (isRecording) return;
-                const newTime = Math.max(0, currentTime - 5);
-                setCurrentTime(newTime);
-                if (screenStream && videoRef.current) {
-                  videoRef.current.currentTime = newTime;
-                } else {
-                  playerRef.current?.seekTo(newTime, "seconds");
-                }
-                onTimeChange?.(newTime);
-              }}
+              onClick={handlePlayPause}
               disabled={isRecording}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
-              title="Back 5 seconds"
+              className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
             >
-              <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-                <path
-                  d="M10 2v2.06A8 8 0 1 0 18 10"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M7 9l-3 3 3 3"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              {playing ? (
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <rect
+                    x="3"
+                    y="3"
+                    width="4"
+                    height="12"
+                    rx="2"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="11"
+                    y="3"
+                    width="4"
+                    height="12"
+                    rx="2"
+                    fill="currentColor"
+                  />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path d="M4 3V15L15 9L4 3Z" fill="currentColor" />
+                </svg>
+              )}
             </button>
-            <button
-              onClick={() => {
-                if (isRecording) return;
-                const newTime = Math.min(duration, currentTime + 5);
-                setCurrentTime(newTime);
-                if (screenStream && videoRef.current) {
-                  videoRef.current.currentTime = newTime;
-                } else {
-                  playerRef.current?.seekTo(newTime, "seconds");
-                }
-                onTimeChange?.(newTime);
-              }}
+            <input
+              type="range"
+              min={0}
+              max={duration}
+              step={0.01}
+              value={dragging ? dragValue : currentTime}
+              onPointerDown={handleSeekStart}
+              onChange={handleSeek}
+              onPointerUp={handleSeekEnd}
               disabled={isRecording}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
-              title="Forward 5 seconds"
-            >
-              <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-                <path
-                  d="M10 2v2.06A8 8 0 1 1 2 10"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M13 11l3-3-3-3"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A594F9] font-mono">
-              {isRecording ? "Recording..." : "Preview"}
+              className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC] disabled:opacity-50"
+              style={{
+                background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
+                height: 8,
+                borderRadius: 8,
+              }}
+            />
+            <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
+              {formatTime(currentTime)} / {duration > 0 ? formatTime(duration) : "0:00"}
             </span>
           </div>
+
+          {/* 5-second skip buttons */}
+          <div className="flex items-center justify-between mt-2 px-2 w-full">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (isRecording) return;
+                  const newTime = Math.max(0, currentTime - 5);
+                  setCurrentTime(newTime);
+                  if (screenStream && videoRef.current) {
+                    videoRef.current.currentTime = newTime;
+                  } else {
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }
+                  onTimeChange?.(newTime);
+                }}
+                disabled={isRecording}
+                className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
+                title="Back 5 seconds"
+              >
+                <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+                  <path
+                    d="M10 2v2.06A8 8 0 1 0 18 10"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M7 9l-3 3 3 3"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  if (isRecording) return;
+                  const newTime = Math.min(duration, currentTime + 5);
+                  setCurrentTime(newTime);
+                  if (screenStream && videoRef.current) {
+                    videoRef.current.currentTime = newTime;
+                  } else {
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }
+                  onTimeChange?.(newTime);
+                }}
+                disabled={isRecording}
+                className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
+                title="Forward 5 seconds"
+              >
+                <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+                  <path
+                    d="M10 2v2.06A8 8 0 1 1 2 10"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M13 11l3-3-3-3"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#A594F9] font-mono">
+                {isRecording ? "Recording..." : "Preview"}
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

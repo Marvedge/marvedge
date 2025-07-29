@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import Image from "next/image";
-import RecorderSidebar from "@/app/components/RecorderSidebar";
+
 import VideoPreview from "@/app/components/VideoPreview";
 import { sanitizeFilename } from "@/app/lib/constants";
 import { Toaster } from "react-hot-toast";
@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import { Dialog } from "@headlessui/react";
 import { Menu } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
+import SavePopupForm from "@/app/components/SavePopupForm";
 
 type RecorderTopbarProps = {
   onBack: () => void;
@@ -127,7 +128,6 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
 
 export default function RecorderPage() {
   const {
-    startRecording,
     stopRecording,
     toggleMic,
     micEnabled,
@@ -152,9 +152,12 @@ export default function RecorderPage() {
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
   const [format, setFormat] = useState<"webm" | "mp4">("webm");
-  const [saveMessage, setSaveMessage] = useState<string>("");
+  const [saveMessage] = useState<string>("");
+
   const [recordingTimer, setRecordingTimer] = useState(0);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [showSavePopup, setShowSavePopup] = useState(false);
+  const [processingDownload, setProcessingDownload] = useState(false);
 
   const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -203,15 +206,7 @@ export default function RecorderPage() {
     };
   }, [recording]);
 
-  // Add a key to force remounting the video element
-  const [videoKey, setVideoKey] = useState(0);
 
-  // When recording starts, increment the key to remount the video element
-  useEffect(() => {
-    if (recording) {
-      setVideoKey((prev) => prev + 1);
-    }
-  }, [recording]);
 
   // Helper to format seconds as mm:ss
   const formatTime = (seconds: number) => {
@@ -222,32 +217,39 @@ export default function RecorderPage() {
     return `${m}:${s}`;
   };
 
-  const handleSaveAndPublish = async () => {
+
+
+  const handleSaveAndPublish = () => {
+    if (!blob) return;
+    setShowSavePopup(true);
+  };
+
+  const handlePopupDownload = async (data: { title: string; description: string; format: string }) => {
     if (!blob) return;
 
+    setProcessingDownload(true);
     try {
-      if (format === "mp4") {
-        setSaveMessage("🔄 Converting to MP4...");
+      if (data.format === "mp4") {
         const outputBlob = await videoToMP4(blob);
-        setSaveMessage("⬇️ Downloading...");
         const url = URL.createObjectURL(outputBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${sanitizeFilename(title) || "recording"}.mp4`;
+        a.download = `${sanitizeFilename(data.title) || "recording"}.mp4`;
         a.click();
       } else {
-        setSaveMessage("💾 Saving...");
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${sanitizeFilename(title) || "recording"}.webm`;
+        a.download = `${sanitizeFilename(data.title) || "recording"}.webm`;
         a.click();
       }
-      setSaveMessage("✅ Video saved successfully!");
-      toast.success("Video saved and published!");
+      toast.success("Video downloaded successfully!");
+      setShowSavePopup(false);
+      setProcessingDownload(false);
     } catch (err) {
       console.error(err);
-      setSaveMessage("❌ Failed to save video.");
+      toast.error("Failed to download video.");
+      setProcessingDownload(false);
     }
   };
 
@@ -259,139 +261,6 @@ export default function RecorderPage() {
         <Toaster position="top-right" />
         <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar for desktop, button for mobile */}
-          <div className="hidden md:block">
-            <RecorderSidebar
-              title={title}
-              setTitle={setTitle}
-              description={description}
-              setDescription={setDescription}
-              fileInputRef={fileInputRef}
-              onFileInputClick={() => fileInputRef.current?.click()}
-              onFileChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  const fileUrl = URL.createObjectURL(file);
-                  setUploadedFileUrl(fileUrl);
-                  setUploadedFileType(file.type);
-                  setBlob(file); // setBlob now persists to localStorage
-                  setUploadMessage("✅ Uploaded successfully!");
-                  toast.success("File uploaded successfully!");
-                  setTimeout(() => setUploadMessage(""), 3000);
-                } else {
-                  toast.error("No file selected or upload failed.");
-                }
-              }}
-              uploadMessage={uploadMessage}
-              onStartScreenShare={startScreenShare}
-            />
-          </div>
-          {/* Mobile sidebar button */}
-          <div className="flex items-center sm:hidden mb-2">
-            <button
-              className="md:hidden fixed top-0 left-0 z-50 bg-[#7C5CFC] text-white p-3 shadow-lg focus:outline-none "
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Open settings"
-            >
-              <Menu size={28} />
-            </button>
-          </div>
-          {/* Mobile sidebar drawer */}
-          <Dialog
-            open={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-            className="relative z-50"
-          >
-            <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-            <div className="fixed inset-y-0 left-0 w-[90vw] max-w-xs bg-white shadow-2xl p-6 flex flex-col gap-6 overflow-y-auto">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-bold text-[#7C5CFC]">
-                  Recorder Settings
-                </h2>
-                <button
-                  className="text-[#7C5CFC] text-2xl p-1 rounded hover:bg-[#ede7fa] focus:outline-none"
-                  onClick={() => setSidebarOpen(false)}
-                  aria-label="Close settings"
-                >
-                  ✕
-                </button>
-              </div>
-              {/* Title */}
-              <div>
-                <label className="block text-[#7C5CFC] font-semibold mb-1">
-                  Title
-                </label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] text-base"
-                  placeholder="Enter recording title"
-                />
-              </div>
-              {/* Description */}
-              <div>
-                <label className="block text-[#7C5CFC] font-semibold mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] text-base"
-                  placeholder="Describe your recording"
-                  rows={3}
-                />
-              </div>
-              {/* Upload & Screen Share */}
-              <div>
-                <label className="block text-[#7C5CFC] font-semibold mb-1">
-                  Recording Source
-                </label>
-                <div className="border-2 border-dashed border-[#A594F9] rounded-lg p-4 flex flex-col items-center justify-center mb-4 bg-[#F8F6FF]">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center gap-2 text-[#7C5CFC] font-semibold text-base focus:outline-none"
-                  >
-                    <span className="text-2xl"></span>
-                    Upload Screen Recording
-                    <span className="text-xs text-gray-400">
-                      MP4, MOV up to 100MB
-                    </span>
-                  </button>
-                  <input
-                    type="file"
-                    accept="video/mp4,video/webm,video/*"
-                    ref={fileInputRef}
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const fileUrl = URL.createObjectURL(file);
-                        setUploadedFileUrl(fileUrl);
-                        setUploadedFileType(file.type);
-                        setBlob(file);
-                        setUploadMessage("✅ Uploaded successfully!");
-                        toast.success("File uploaded successfully!");
-                        setTimeout(() => setUploadMessage(""), 3000);
-                      } else {
-                        toast.error("No file selected or upload failed.");
-                      }
-                    }}
-                  />
-                  {uploadMessage && (
-                    <div className="mt-2 text-green-600 text-xs">
-                      {uploadMessage}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={startScreenShare}
-                  className="w-full mt-2 px-4 py-3 rounded-lg bg-white text-[#7C5CFC] font-semibold shadow hover:bg-[#8A76FC] hover:text-white transition flex items-center justify-center gap-2 text-base"
-                >
-                  Start Screen Sharing
-                </button>
-              </div>
-            </div>
-          </Dialog>
           {/* Right Panel */}
           <main className="flex-1 flex flex-col h-full overflow-hidden">
             {/* New Recording Header Bar */}
@@ -411,7 +280,7 @@ export default function RecorderPage() {
                 >
                   <Image
                     src="/icons/1.png"
-                    alt="Notifications"
+                    alt="Save"
                     width={20}
                     height={20}
                     className="md:w-6 md:h-6"
@@ -446,6 +315,14 @@ export default function RecorderPage() {
                       videoUrl={uploadedFileUrl} 
                       isRecording={false}
                       className="mx-auto"
+                      showControls={false}
+                    />
+                  ) : videoUrl ? (
+                    <VideoPreview 
+                      videoUrl={videoUrl}
+                      isRecording={false}
+                      className="mx-auto"
+                      showControls={false}
                     />
                   ) : screenStream ? (
                     <VideoPreview 
@@ -453,6 +330,7 @@ export default function RecorderPage() {
                       isRecording={recording}
                       screenStream={screenStream}
                       className="mx-auto"
+                      showControls={false}
                     />
                   ) : (
                     <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
@@ -474,7 +352,6 @@ export default function RecorderPage() {
                       >
                         Change Tab
                       </button>
-                      {/* Start Recording button removed: recording starts automatically after screen share */}
                     </>
                   )}
                   {screenStream && recording && !isUploaded && (
@@ -494,7 +371,7 @@ export default function RecorderPage() {
                           htmlFor="format-select"
                           className="font-medium text-[#6C63FF] text-sm"
                         >
-                          Save as:
+                          Download as:
                         </label>
                         <select
                           id="format-select"
@@ -524,6 +401,14 @@ export default function RecorderPage() {
                       >
                         Discard Video
                       </button>
+                      {!isUploaded && (
+                        <button
+                          onClick={handleSaveAndPublish}
+                          className="px-6 py-3 rounded-lg font-semibold bg-[#7C5CFC] text-white shadow-md hover:bg-[#8A76FC] transition flex items-center gap-2 text-base"
+                        >
+                          Save & Publish
+                        </button>
+                      )}
                       {isUploaded && (
                         <button
                           onClick={() => router.push("/editor")}
@@ -536,7 +421,7 @@ export default function RecorderPage() {
                         <>
                           <button
                             onClick={() => router.push("/editor")}
-                            className="px-6 py-3 rounded-lg font-semibold bg-[#7C5CFC] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
+                            className="px-6 py-3 rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
                           >
                             Edit Video
                           </button>
@@ -554,6 +439,16 @@ export default function RecorderPage() {
             </div>
           </main>
         </div>
+        
+        {/* Save Popup Form */}
+        <SavePopupForm
+          isOpen={showSavePopup}
+          onClose={() => setShowSavePopup(false)}
+          onDownload={handlePopupDownload}
+          initialTitle={title}
+          initialDescription={description}
+          processing={processingDownload}
+        />
       </div>
     );
   }
@@ -581,6 +476,7 @@ export default function RecorderPage() {
               isRecording={true}
               screenStream={screenStream}
               className="mx-auto"
+              showControls={false}
             />
           </div>
           <button
@@ -609,33 +505,6 @@ export default function RecorderPage() {
       <Toaster position="top-right" />
       <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar for desktop, button for mobile */}
-        <div className="hidden md:block">
-          <RecorderSidebar
-            title={title}
-            setTitle={setTitle}
-            description={description}
-            setDescription={setDescription}
-            fileInputRef={fileInputRef}
-            onFileInputClick={() => fileInputRef.current?.click()}
-            onFileChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const fileUrl = URL.createObjectURL(file);
-                setUploadedFileUrl(fileUrl);
-                setUploadedFileType(file.type);
-                setBlob(file);
-                setUploadMessage("✅ Uploaded successfully!");
-                toast.success("File uploaded successfully!");
-                setTimeout(() => setUploadMessage(""), 3000);
-              } else {
-                toast.error("No file selected or upload failed.");
-              }
-            }}
-            uploadMessage={uploadMessage}
-            onStartScreenShare={startScreenShare}
-          />
-        </div>
         {/* Mobile sidebar button */}
         <div className="flex items-center sm:hidden mb-2">
           <button
@@ -832,10 +701,41 @@ export default function RecorderPage() {
                   </button>
                 </div>
               </div>
+              {/* Hidden file input for main area upload */}
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/*"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const fileUrl = URL.createObjectURL(file);
+                    setUploadedFileUrl(fileUrl);
+                    setUploadedFileType(file.type);
+                    setBlob(file);
+                    setUploadMessage("✅ Uploaded successfully!");
+                    toast.success("File uploaded successfully!");
+                    setTimeout(() => setUploadMessage(""), 3000);
+                  } else {
+                    toast.error("No file selected or upload failed.");
+                  }
+                }}
+              />
             </div>
           </div>
         </main>
       </div>
+      
+      {/* Save Popup Form */}
+      <SavePopupForm
+        isOpen={showSavePopup}
+        onClose={() => setShowSavePopup(false)}
+        onDownload={handlePopupDownload}
+        initialTitle={title}
+        initialDescription={description}
+        processing={processingDownload}
+      />
     </div>
   );
-}
+} 

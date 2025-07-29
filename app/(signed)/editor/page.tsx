@@ -3,6 +3,7 @@ import { useRef, useState, useEffect, MouseEvent } from "react";
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
 import EditorTopbar from "@/app/components/EditorTopbar";
+
 import { useSession } from "next-auth/react";
 import { TimelineSlider } from "@/app/components/MytimeLine";
 import { FaExpand } from "react-icons/fa";
@@ -84,6 +85,8 @@ export default function EditorPage() {
   // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
   const [sidebarDescription, setSidebarDescription] = useState("");
+  const [trimStartTime, setTrimStartTime] = useState("");
+  const [trimEndTime, setTrimEndTime] = useState("");
 
   // Hamburger sidebar state for mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -106,7 +109,9 @@ export default function EditorPage() {
   // --- Add currentTime and duration state for syncing ---
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [progress, setProgress] = useState(0);
+  const setProgress = useCallback((value: number) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+    // Progress is not used, but setProgress is called
+  }, []);
 
   // Zoom effects state
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
@@ -549,7 +554,9 @@ export default function EditorPage() {
                       background: "#F6F3FF",
                     }}
                     onError={(e) => console.error("Video failed to load", e)}
-                    onReady={() => console.log("Video loaded")}
+                    onReady={() => {
+                      console.log("Video loaded");
+                    }}
                     progressInterval={100}
                     onProgress={({ playedSeconds }) =>
                       setCurrentTime(playedSeconds)
@@ -700,6 +707,65 @@ export default function EditorPage() {
             </div>
           )}
 
+
+          {/* Simple Trim Input Fields */}
+          <div className="mt-8 mb-4 mr-2 sm:mr-0">
+            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Trim Video</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Time
+                  </label>
+                  <input
+                    type="text"
+                    value={trimStartTime}
+                    onChange={(e) => setTrimStartTime(e.target.value)}
+                    placeholder="00:00:00"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Time
+                  </label>
+                  <input
+                    type="text"
+                    value={trimEndTime}
+                    onChange={(e) => setTrimEndTime(e.target.value)}
+                    placeholder="00:00:00"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={async () => {
+                    if (!trimStartTime || !trimEndTime) {
+                      toast.error("Please enter both start and end times");
+                      return;
+                    }
+                    setProgress(1);
+                    toast.loading("Trimming video...");
+                    await trimApplier([{ start: trimStartTime, end: trimEndTime }], undefined, (success) => {
+                      setProgress(100);
+                      toast.dismiss();
+                      if (success) {
+                        toast.success("Video trimmed successfully!");
+                      } else {
+                        toast.error("Failed to trim video.");
+                      }
+                      setTimeout(() => setProgress(0), 1000);
+                    }, setProgress);
+                  }}
+                  disabled={processing}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {processing ? "Trimming..." : "Apply Trim"}
+                </button>
+              </div>
+            </div>
+          </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
             <TimelineSlider
               duration={duration}

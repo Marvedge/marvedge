@@ -56,7 +56,7 @@ export function TimelineSlider({
   const [zoomed, setzoomed] = useState(false);
   const [dragging, setDragging] = useState<null | "start" | "end">(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [progress, setLocalProgress] = useState(0);
+  const [progress] = useState(0);
 
   // Drag and drop state for segment reordering
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -68,12 +68,23 @@ export function TimelineSlider({
     if (setProgress) setProgress(progress);
   }, [progress, setProgress]);
 
+  // Update segments when duration changes
+  useEffect(() => {
+    if (duration > 0) {
+      setSegments(prev => {
+        const updated = [...prev];
+        updated[0] = { start: 0, end: duration };
+        return updated;
+      });
+    }
+  }, [duration]);
+
   // Default time formatter
   const defaultFormatTime = (seconds: number): string => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    return `${hrs}:${mins}:${secs.toString().padStart(2, "0")}`;
+    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
   const timeFormatter = formatTime || defaultFormatTime;
 
@@ -181,7 +192,7 @@ export function TimelineSlider({
   };
 
   // Mouse event handlers as fallback
-  const handleMouseDown = (e: React.MouseEvent, index: number) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     setMouseStartPos({ x: e.clientX, y: e.clientY });
   };
 
@@ -245,11 +256,11 @@ export function TimelineSlider({
   }, []);
 
   // Update segment
-  const updateSegment = (key: "start" | "end", value: number) => {
+  const updateSegment = useCallback((key: "start" | "end", value: number) => {
     setSegments((segs) =>
       segs.map((seg, i) => (i === activeIdx ? { ...seg, [key]: value } : seg))
     );
-  };
+  }, [activeIdx]);
   // Replace start/end with active segment
   const start = segments[activeIdx]?.start ?? 0;
   const end = segments[activeIdx]?.end ?? duration;
@@ -552,7 +563,7 @@ export function TimelineSlider({
             <Button
               key={idx}
               variant={idx === activeIdx ? "default" : "outline"}
-              onClick={(e) => {
+              onClick={() => {
                 // Only handle click if not dragging
                 if (!isDragging) {
                   setActiveIdx(idx);
@@ -565,7 +576,7 @@ export function TimelineSlider({
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, idx)}
               onDragEnd={handleDragEnd}
-              onMouseDown={(e) => handleMouseDown(e, idx)}
+              onMouseDown={handleMouseDown}
               onMouseMove={(e) => handleMouseMove(e, idx)}
               onMouseUp={handleMouseUp}
               className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 ${
@@ -671,7 +682,7 @@ export function TimelineSlider({
               opacity={0.9}
             />
             {/* Zoom effects indicators */}
-            {zoomEffects.map((effect, idx) => {
+            {zoomEffects.map((effect) => {
               const startX = timeToX(effect.startTime);
               const endX = timeToX(effect.endTime);
               const width = endX - startX;

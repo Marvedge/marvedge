@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Plus, Trash2, Play, Pause } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 
 interface ZoomEffect {
   id: string;
@@ -12,6 +12,8 @@ interface ZoomEffect {
   y: number; // center point y (0-1)
 }
 
+
+
 interface ZoomEffectsPopupProps {
   isOpen: boolean;
   onClose: () => void;
@@ -19,7 +21,7 @@ interface ZoomEffectsPopupProps {
   onZoomEffectsChange: (effects: ZoomEffect[]) => void;
   currentTime: number;
   duration: number;
-  onSeek: (time: number) => void;
+  onSeek?: (time: number) => void;
 }
 
 export default function ZoomEffectsPopup({
@@ -29,7 +31,7 @@ export default function ZoomEffectsPopup({
   onZoomEffectsChange,
   currentTime,
   duration,
-  onSeek,
+  onSeek, // eslint-disable-line @typescript-eslint/no-unused-vars
 }: ZoomEffectsPopupProps) {
   const [editingEffect, setEditingEffect] = useState<ZoomEffect | null>(null);
   const [startTime, setStartTime] = useState("");
@@ -37,6 +39,7 @@ export default function ZoomEffectsPopup({
   const [zoomLevel, setZoomLevel] = useState(2.0);
   const [centerX, setCenterX] = useState(0.5);
   const [centerY, setCenterY] = useState(0.5);
+
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -103,7 +106,7 @@ export default function ZoomEffectsPopup({
   const resetForm = () => {
     setStartTime("");
     setEndTime("");
-    setZoomLevel(1.5);
+    setZoomLevel(2.0);
     setCenterX(0.5);
     setCenterY(0.5);
     setEditingEffect(null);
@@ -120,12 +123,13 @@ export default function ZoomEffectsPopup({
   const handleAddTestEffect = () => {
     const testEffect: ZoomEffect = {
       id: Date.now().toString(),
-      startTime: Math.max(0, currentTime - 2),
-      endTime: Math.min(duration, currentTime + 3),
+      startTime: Math.max(0, currentTime - 5),
+      endTime: Math.min(duration, currentTime + 5),
       zoomLevel: 2.0,
       x: 0.5,
       y: 0.5,
     };
+
     onZoomEffectsChange([...zoomEffects, testEffect]);
   };
 
@@ -155,10 +159,9 @@ export default function ZoomEffectsPopup({
         {/* Form */}
         <div className="space-y-4 mb-6">
           <div className="grid grid-cols-2 gap-4">
-            {/* Start Time */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Start Time (MM:SS)
+                Start Time
               </label>
               <input
                 type="text"
@@ -168,11 +171,9 @@ export default function ZoomEffectsPopup({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
-
-            {/* End Time */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                End Time (MM:SS)
+                End Time
               </label>
               <input
                 type="text"
@@ -184,94 +185,104 @@ export default function ZoomEffectsPopup({
             </div>
           </div>
 
-          {/* Zoom Level */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Zoom Level: {zoomLevel.toFixed(1)}x
+              Zoom Level
             </label>
             <input
               type="range"
               min="1"
-              max="3"
+              max="5"
               step="0.1"
               value={zoomLevel}
-              onChange={(e) => setZoomLevel(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+              className="w-full"
             />
+            <div className="text-sm text-gray-500 mt-1">{zoomLevel}x</div>
           </div>
 
-          {/* Center Position */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Center X: {centerX.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={centerX}
-                onChange={(e) => setCenterX(Number(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Center Y: {centerY.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={centerY}
-                onChange={(e) => setCenterY(Number(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Center Point
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">X Position</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={centerX}
+                  onChange={(e) => setCenterX(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-500">{Math.round(centerX * 100)}%</div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Y Position</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={centerY}
+                  onChange={(e) => setCenterY(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-500">{Math.round(centerY * 100)}%</div>
+              </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex gap-2">
             <Button
               onClick={handleSetCurrentTime}
               variant="outline"
-              className="flex items-center gap-2"
+              size="sm"
             >
-              <Play size={16} />
-              Set as {editingEffect ? "End" : "Start"}
+              Set Current Time ({formatTime(currentTime)})
             </Button>
             <Button
               onClick={handleAddTestEffect}
               variant="outline"
-              className="flex items-center gap-2"
+              size="sm"
             >
-              <Plus size={16} />
               Add Test Effect
             </Button>
+          </div>
+
+          <div className="flex gap-2">
             {editingEffect ? (
-              <Button
-                onClick={handleUpdateEffect}
-                className="flex items-center gap-2"
-              >
-                Update Effect
-              </Button>
+              <>
+                <Button
+                  onClick={handleUpdateEffect}
+                  className="flex-1"
+                >
+                  Update Effect
+                </Button>
+                <Button
+                  onClick={resetForm}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              </>
             ) : (
               <Button
                 onClick={handleAddEffect}
-                className="flex items-center gap-2"
+                disabled={!startTime || !endTime}
+                className="flex-1"
               >
-                <Plus size={16} />
                 Add Effect
               </Button>
             )}
           </div>
         </div>
 
-        {/* Active Effects List */}
+        {/* Effects List */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Active Effects</h3>
+          <h3 className="text-lg font-semibold mb-4">Current Effects</h3>
           {zoomEffects.length === 0 ? (
             <p className="text-gray-500 text-center py-4">No zoom effects added yet.</p>
           ) : (
@@ -281,12 +292,12 @@ export default function ZoomEffectsPopup({
                   key={effect.id}
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                 >
-                  <div>
+                  <div className="flex-1">
                     <div className="font-medium">
                       {formatTime(effect.startTime)} - {formatTime(effect.endTime)}
                     </div>
-                    <div className="text-sm text-gray-600">
-                      Zoom: {effect.zoomLevel.toFixed(1)}x | Center: ({effect.x.toFixed(2)}, {effect.y.toFixed(2)})
+                    <div className="text-sm text-gray-500">
+                      Zoom: {effect.zoomLevel}x | Center: ({Math.round(effect.x * 100)}%, {Math.round(effect.y * 100)}%)
                     </div>
                   </div>
                   <div className="flex gap-2">

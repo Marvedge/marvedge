@@ -211,7 +211,6 @@ export const videoWithZoomEffects = async (
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
   const inputName = "input.webm";
-  const outputName = "output_zoom.webm";
   ffmpeg.FS(
     "writeFile",
     inputName,

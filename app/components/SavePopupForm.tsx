@@ -2,11 +2,12 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import Image from "next/image";
 
 interface SavePopupFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { title: string; description: string; format: string }) => void;
+  onDownload: (data: { title: string; description: string; format: string }) => void;
   initialTitle?: string;
   initialDescription?: string;
   processing?: boolean;
@@ -15,7 +16,7 @@ interface SavePopupFormProps {
 export default function SavePopupForm({
   isOpen,
   onClose,
-  onSave,
+  onDownload,
   initialTitle = "",
   initialDescription = "",
   processing = false,
@@ -30,16 +31,9 @@ export default function SavePopupForm({
     setDescription(initialDescription);
   }, [initialTitle, initialDescription]);
 
-  const handleSave = () => {
-    onSave({ title, description, format });
+  const handleDownload = () => {
+    onDownload({ title, description, format });
   };
-
-  // Debug: Log when popup opens
-  useEffect(() => {
-    if (isOpen) {
-      console.log("Save popup opened with:", { initialTitle, initialDescription, processing });
-    }
-  }, [isOpen, initialTitle, initialDescription, processing]);
 
   if (!isOpen) return null;
 
@@ -55,7 +49,7 @@ export default function SavePopupForm({
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-800">Save Video</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Save & Publish Video</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -76,7 +70,7 @@ export default function SavePopupForm({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter video title..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] focus:border-[#7C5CFC] transition-all"
               disabled={processing}
             />
           </div>
@@ -91,7 +85,7 @@ export default function SavePopupForm({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter video description..."
               rows={3}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all resize-none"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] focus:border-[#7C5CFC] transition-all resize-none"
               disabled={processing}
             />
           </div>
@@ -99,7 +93,7 @@ export default function SavePopupForm({
           {/* Format Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Format
+              Download Format
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -107,7 +101,7 @@ export default function SavePopupForm({
                 onClick={() => setFormat("webm")}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
                   format === "webm"
-                    ? "border-purple-500 bg-purple-50 text-purple-700"
+                    ? "border-[#7C5CFC] bg-[#F8F6FF] text-[#7C5CFC]"
                     : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                 }`}
                 disabled={processing}
@@ -120,7 +114,7 @@ export default function SavePopupForm({
                 onClick={() => setFormat("mp4")}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
                   format === "mp4"
-                    ? "border-purple-500 bg-purple-50 text-purple-700"
+                    ? "border-[#7C5CFC] bg-[#F8F6FF] text-[#7C5CFC]"
                     : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                 }`}
                 disabled={processing}
@@ -143,11 +137,17 @@ export default function SavePopupForm({
             Cancel
           </Button>
           <Button
-            onClick={handleSave}
+            onClick={handleDownload}
             disabled={!title.trim() || processing}
-            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+            className="flex-1 bg-[#7C5CFC] hover:bg-[#8A76FC] text-white flex items-center gap-2"
           >
-            {processing ? "Saving..." : "Save Video"}
+            <Image
+              src="/icons/1.png"
+              alt="Download"
+              width={16}
+              height={16}
+            />
+            {processing ? "Processing..." : "Download Video"}
           </Button>
         </div>
       </div>
