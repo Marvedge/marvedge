@@ -4,6 +4,8 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ReactPlayer from "react-player";
+import { defaultFormatTime, toggleZoom, ZoomEffect } from "@/lib/dateUtils";
+
 interface TrimSegment {
   start: number;
   end: number;
@@ -23,15 +25,6 @@ interface TimelineSliderProps {
   zoomEffects?: ZoomEffect[];
   onZoomEffectCreate?: (effect: ZoomEffect) => void;
   onZoomEffectRemove?: (id: string) => void;
-}
-
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-  x: number;
-  y: number;
 }
 
 export function TimelineSlider({
@@ -79,29 +72,11 @@ export function TimelineSlider({
     }
   }, [duration]);
 
-  // Default time formatter
-  const defaultFormatTime = (seconds: number): string => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
   const timeFormatter = formatTime || defaultFormatTime;
 
-  const toggleZoom = useCallback(() => {
-    if (onZoomEffectCreate) {
-      const testEffect: ZoomEffect = {
-        id: Date.now().toString(),
-        startTime: Math.max(0, currentTime - 1),
-        endTime: Math.min(duration, currentTime + 2),
-        zoomLevel: 2.0,
-        x: 0.5,
-        y: 0.5,
-      };
-      onZoomEffectCreate(testEffect);
-    }
-    setzoomed((z) => !z);
-  }, [onZoomEffectCreate, currentTime, duration]);
+  const handleToggleZoom = useCallback(() => {
+    toggleZoom(onZoomEffectCreate, currentTime, duration, setzoomed);
+  }, [onZoomEffectCreate, currentTime, duration, setzoomed]);
 
   const handleTrim = useCallback(() => {
     if (isNaN(duration) || duration === 0) {
@@ -425,7 +400,7 @@ export function TimelineSlider({
         <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mb-4 w-full">
           <Button
             variant="outline"
-            onClick={toggleZoom}
+            onClick={handleToggleZoom}
             className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
           >
             <span className="flex items-center gap-2">
