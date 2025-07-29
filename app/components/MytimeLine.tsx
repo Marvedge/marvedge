@@ -1,10 +1,15 @@
 "use client";
-
+import Image from "next/image";
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ReactPlayer from "react-player";
-import { defaultFormatTime, toggleZoom, ZoomEffect } from "@/lib/dateUtils";
+import {
+  defaultFormatTime,
+  toggleZoom,
+  trianglePoints,
+  ZoomEffect,
+} from "@/lib/dateUtils";
 
 interface TrimSegment {
   start: number;
@@ -55,7 +60,10 @@ export function TimelineSlider({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [mouseStartPos, setMouseStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [mouseStartPos, setMouseStartPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     if (setProgress) setProgress(progress);
@@ -64,7 +72,7 @@ export function TimelineSlider({
   // Update segments when duration changes
   useEffect(() => {
     if (duration > 0) {
-      setSegments(prev => {
+      setSegments((prev) => {
         const updated = [...prev];
         updated[0] = { start: 0, end: duration };
         return updated;
@@ -97,7 +105,7 @@ export function TimelineSlider({
 
   // Drag and drop handlers for segment reordering
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    console.log('Drag start:', index);
+    console.log("Drag start:", index);
     setDragIndex(index);
     setIsDragging(true);
     e.dataTransfer.effectAllowed = "move";
@@ -128,7 +136,7 @@ export function TimelineSlider({
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    console.log('Drop:', dragIndex, 'to', dropIndex);
+    console.log("Drop:", dragIndex, "to", dropIndex);
     if (dragIndex === null || dragIndex === dropIndex) {
       setDragIndex(null);
       setDragOverIndex(null);
@@ -141,9 +149,9 @@ export function TimelineSlider({
     const draggedSegment = newSegments[dragIndex];
     newSegments.splice(dragIndex, 1);
     newSegments.splice(dropIndex, 0, draggedSegment);
-    
+
     setSegments(newSegments);
-    
+
     // Update active index if needed
     if (activeIdx === dragIndex) {
       setActiveIdx(dropIndex);
@@ -159,7 +167,7 @@ export function TimelineSlider({
   };
 
   const handleDragEnd = () => {
-    console.log('Drag end');
+    console.log("Drag end");
     setDragIndex(null);
     setDragOverIndex(null);
     // Small delay to prevent click event interference
@@ -175,10 +183,10 @@ export function TimelineSlider({
     if (mouseStartPos && !isDragging) {
       const deltaX = Math.abs(e.clientX - mouseStartPos.x);
       const deltaY = Math.abs(e.clientY - mouseStartPos.y);
-      
+
       // Start dragging if mouse moved more than 5px
       if (deltaX > 5 || deltaY > 5) {
-        console.log('Mouse drag start:', index);
+        console.log("Mouse drag start:", index);
         setDragIndex(index);
         setIsDragging(true);
         setMouseStartPos(null);
@@ -231,11 +239,14 @@ export function TimelineSlider({
   }, []);
 
   // Update segment
-  const updateSegment = useCallback((key: "start" | "end", value: number) => {
-    setSegments((segs) =>
-      segs.map((seg, i) => (i === activeIdx ? { ...seg, [key]: value } : seg))
-    );
-  }, [activeIdx]);
+  const updateSegment = useCallback(
+    (key: "start" | "end", value: number) => {
+      setSegments((segs) =>
+        segs.map((seg, i) => (i === activeIdx ? { ...seg, [key]: value } : seg))
+      );
+    },
+    [activeIdx]
+  );
   // Replace start/end with active segment
   const start = segments[activeIdx]?.start ?? 0;
   const end = segments[activeIdx]?.end ?? duration;
@@ -352,24 +363,10 @@ export function TimelineSlider({
   };
   // Remove segment
   const removeSegment = (idx: number) => {
-    if (segments.length === 1) return;
-    const newSegs = segments.filter((_, i) => i !== idx);
-    setSegments(newSegs);
-    setActiveIdx(Math.max(0, activeIdx - (idx < activeIdx ? 1 : 0)));
-  };
-
-  // Helper for triangle pointer
-  const trianglePoints = (
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    direction: "up" | "down"
-  ) => {
-    if (direction === "down") {
-      return `${x},${y} ${x - w / 2},${y + h} ${x + w / 2},${y + h}`;
-    } else {
-      return `${x},${y} ${x - w / 2},${y - h} ${x + w / 2},${y - h}`;
+    if (segments.length > 1) {
+      const newSegments = segments.filter((_, i) => i !== idx);
+      setSegments(newSegments);
+      setActiveIdx(Math.min(activeIdx, newSegments.length - 1));
     }
   };
 
@@ -404,22 +401,13 @@ export function TimelineSlider({
             className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
           >
             <span className="flex items-center gap-2">
-              <svg
-                width="50"
-                height="58"
-                viewBox="0 0 10 28"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="inline-block align-middle"
-              >
-                <path
-                  d="M19.5 18.5703L16.3634 15.4337M16.3634 15.4337C16.8999 14.8972 17.3255 14.2603 17.6159 13.5593C17.9063 12.8583 18.0557 12.1069 18.0557 11.3482C18.0557 10.5894 17.9063 9.83808 17.6159 9.13708C17.3255 8.43608 16.8999 7.79913 16.3634 7.26261C15.8269 6.72608 15.19 6.30049 14.489 6.01013C13.7879 5.71976 13.0366 5.57031 12.2779 5.57031C11.5191 5.57031 10.7678 5.71976 10.0668 6.01013C9.36577 6.30049 8.72882 6.72608 8.1923 7.26261C7.10874 8.34617 6.5 9.81579 6.5 11.3482C6.5 12.8806 7.10874 14.3502 8.1923 15.4337C9.27586 16.5173 10.7455 17.126 12.2779 17.126C13.8102 17.126 15.2799 16.5173 16.3634 15.4337ZM12.2779 9.18153V13.5148M10.1112 11.3482H14.4445"
-                  stroke="#8A76FC"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <Image
+                src="/icons/zoom.png"
+                alt="Notifications"
+                width={24}
+                height={24}
+                className="w-6 h-6"
+              />
               {zoomed ? "Zoom out" : "Zoom in"}
             </span>
           </Button>
@@ -428,72 +416,48 @@ export function TimelineSlider({
             disabled={
               processing || segments.some((seg) => seg.start >= seg.end)
             }
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold disabled:opacity-60"
+            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800"
           >
             <span className="flex items-center gap-2">
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 28 28"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="inline-block align-middle"
-              >
-                <path
-                  d="M12.4053 14.4053L20.375 6.43555C20.5 6.31055 20.4053 6.09375 20.1875 6.09375H17.9375C17.875 6.09375 17.8125 6.11719 17.7715 6.16406L11.1719 12.7637L8.95312 10.541C9.23438 10.0547 9.375 9.50781 9.375 8.92188C9.375 7.00781 7.74219 5.375 5.82812 5.375C3.91406 5.375 2.28125 7.00781 2.28125 8.92188C2.28125 10.8359 3.91406 12.4688 5.82812 12.4688C6.41406 12.4688 6.96094 12.3281 7.44727 12.0469L9.67188 14.2715L7.44531 16.498C6.96094 16.2148 6.41406 16.0781 5.82812 16.0781C3.91406 16.0781 2.28125 17.7109 2.28125 19.625C2.28125 21.5391 3.91406 23.1719 5.82812 23.1719C7.74219 23.1719 9.375 21.5391 9.375 19.625C9.375 19.0391 9.23438 18.4922 8.95312 18.0059L11.1719 15.7871L17.7715 22.3867C17.8125 22.4336 17.875 22.457 17.9375 22.457H20.1875C20.4053 22.457 20.5 22.2402 20.375 22.1152L12.4053 14.4053ZM5.82812 11.1094C4.8125 11.1094 3.98438 10.2812 3.98438 9.26562C3.98438 8.25 4.8125 7.42188 5.82812 7.42188C6.84375 7.42188 7.67188 8.25 7.67188 9.26562C7.67188 10.2812 6.84375 11.1094 5.82812 11.1094ZM5.82812 20.8594C4.8125 20.8594 3.98438 20.0312 3.98438 19.0156C3.98438 18 4.8125 17.1719 5.82812 17.1719C6.84375 17.1719 7.67188 18 7.67188 19.0156C7.67188 20.0312 6.84375 20.8594 5.82812 20.8594Z"
-                  fill="#8A76FC"
-                />
-              </svg>
+              <Image
+                src="/icons/trim.png"
+                alt="Notifications"
+                width={24}
+                height={24}
+                className="w-6 h-6"
+              />
               Trim & Merge
             </span>
           </Button>
           <Button
             onClick={addSegment}
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
+            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800"
           >
             <span className="flex items-center gap-2">
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 28 28"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="inline-block align-middle"
-              >
-                <path
-                  d="M14 2V26M2 14H26"
-                  stroke="#8A76FC"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <Image
+                src="/icons/plus.png"
+                alt="Notifications"
+                width={24}
+                height={24}
+                className="w-6 h-6"
+              />
               Add Segment
             </span>
           </Button>
           {segments.length > 1 && (
             <Button
               onClick={() => removeSegment(activeIdx)}
-              className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
+              className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800"
             >
               <span className="flex items-center gap-2">
-                <svg
-                  width="28"
-                  height="28"
-                  viewBox="0 0 28 28"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="inline-block align-middle"
-                >
-                  <path
-                    d="M14 2V26M2 14H26"
-                    stroke="#8A76FC"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                - Remove Segment
+                <Image
+                  src="/icons/minus.png"
+                  alt="Notifications"
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                />
+                Remove Segment
               </span>
             </Button>
           )}
@@ -504,21 +468,13 @@ export function TimelineSlider({
               className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
             >
               <span className="flex items-center gap-2">
-                <svg
-                  width="22"
-                  height="22"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className="inline-block align-middle"
-                >
-                  <path
-                    d="M17.65 6.35A8 8 0 1 0 12 4v4l5-5-5-5v4a10 10 0 1 1-7.07 2.93"
-                    stroke="#7C5CFC"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <Image
+                  src="/icons/reset.png"
+                  alt="Notifications"
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                />
                 Reset
               </span>
             </Button>
@@ -530,56 +486,47 @@ export function TimelineSlider({
             <span>📋</span>
             <span>Drag segments to reorder them</span>
             {isDragging && <span className="text-blue-500">(Dragging...)</span>}
-            {dragIndex !== null && <span className="text-green-500">(From: {dragIndex + 1})</span>}
-            {dragOverIndex !== null && <span className="text-purple-500">(To: {dragOverIndex + 1})</span>}
+            {dragIndex !== null && (
+              <span className="text-green-500">(From: {dragIndex + 1})</span>
+            )}
+            {dragOverIndex !== null && (
+              <span className="text-purple-500">(To: {dragOverIndex + 1})</span>
+            )}
           </div>
           <div className="flex gap-2">
-          {segments.map((seg, idx) => (
-            <Button
-              key={idx}
-              variant={idx === activeIdx ? "default" : "outline"}
-              onClick={() => {
-                // Only handle click if not dragging
-                if (!isDragging) {
-                  setActiveIdx(idx);
-                }
-              }}
-              draggable
-              onDragStart={(e) => handleDragStart(e, idx)}
-              onDragOver={(e) => handleDragOver(e, idx)}
-              onDragEnter={(e) => handleDragEnter(e, idx)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, idx)}
-              onDragEnd={handleDragEnd}
-              onMouseDown={handleMouseDown}
-              onMouseMove={(e) => handleMouseMove(e, idx)}
-              onMouseUp={handleMouseUp}
-              className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 ${
-                idx === activeIdx 
-                  ? "bg-[#7C5CFC] text-white shadow-lg" 
-                  : "bg-white text-[#7C5CFC] border border-[#7C5CFC] hover:bg-[#F6F3FF] hover:text-[#7C5CFC] hover:shadow-md"
-              } ${
-                dragOverIndex === idx 
-                  ? "ring-2 ring-[#7C5CFC] ring-opacity-50 scale-110" 
-                  : ""
-              } ${
-                dragIndex === idx 
-                  ? "opacity-50 scale-95 shadow-xl" 
-                  : ""
-              }`}
-            >
-              <svg 
-                width="12" 
-                height="12" 
-                viewBox="0 0 24 24" 
-                fill="currentColor" 
-                className="mr-1 opacity-60"
+            {segments.map((seg, idx) => (
+              <Button
+                key={idx}
+                variant={idx === activeIdx ? "default" : "outline"}
+                onClick={() => {
+                  // Only handle click if not dragging
+                  if (!isDragging) {
+                    setActiveIdx(idx);
+                  }
+                }}
+                draggable
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragEnter={(e) => handleDragEnter(e, idx)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, idx)}
+                onDragEnd={handleDragEnd}
+                onMouseDown={handleMouseDown}
+                onMouseMove={(e) => handleMouseMove(e, idx)}
+                onMouseUp={handleMouseUp}
+                className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 ${
+                  idx === activeIdx
+                    ? "bg-[#7C5CFC] text-white shadow-lg"
+                    : "bg-white text-[#7C5CFC] border border-[#7C5CFC] hover:bg-[#F6F3FF] hover:text-[#7C5CFC] hover:shadow-md"
+                } ${
+                  dragOverIndex === idx
+                    ? "ring-2 ring-[#7C5CFC] ring-opacity-50 scale-110"
+                    : ""
+                } ${dragIndex === idx ? "opacity-50 scale-95 shadow-xl" : ""}`}
               >
-                <path d="M8 6h8v2H8V6zm0 5h8v2H8v-2zm0 5h8v2H8v-2z"/>
-              </svg>
-              Segment {idx + 1}
-            </Button>
-          ))}
+                Segment {idx + 1}
+              </Button>
+            ))}
           </div>
         </div>
         {/* Timeline Header */}
@@ -691,39 +638,73 @@ export function TimelineSlider({
                       y={timelineY - 22}
                       width={20}
                       height={20}
-                      style={{ overflow: 'visible' }}
+                      style={{ overflow: "visible" }}
                     >
                       <button
                         style={{
-                          width: '20px',
-                          height: '20px',
-                          background: '#7C5CFC',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '50%',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                          width: "20px",
+                          height: "20px",
+                          background: "#7C5CFC",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "50%",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
                         }}
                         title="Remove zoom effect"
-                        onClick={e => { 
-                          e.stopPropagation(); 
-                          console.log('Removing zoom effect:', effect.id);
-                          onZoomEffectRemove(effect.id); 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log("Removing zoom effect:", effect.id);
+                          onZoomEffectRemove(effect.id);
                         }}
                       >
                         ✕
                       </button>
                     </foreignObject>
                   )}
-                  <circle cx={startX} cy={timelineY + timelineHeight / 2} r={4} fill="#7C5CFC" stroke="white" strokeWidth={2} />
-                  <circle cx={endX} cy={timelineY + timelineHeight / 2} r={4} fill="#7C5CFC" stroke="white" strokeWidth={2} />
-                  <text x={startX} y={timelineY + timelineHeight + 15} textAnchor="middle" fontSize={9} fill="#7C5CFC" fontWeight="bold" style={{ userSelect: "none" }}>{timeFormatter(effect.startTime)}</text>
-                  <text x={endX} y={timelineY + timelineHeight + 15} textAnchor="middle" fontSize={9} fill="#7C5CFC" fontWeight="bold" style={{ userSelect: "none" }}>{timeFormatter(effect.endTime)}</text>
+                  <circle
+                    cx={startX}
+                    cy={timelineY + timelineHeight / 2}
+                    r={4}
+                    fill="#7C5CFC"
+                    stroke="white"
+                    strokeWidth={2}
+                  />
+                  <circle
+                    cx={endX}
+                    cy={timelineY + timelineHeight / 2}
+                    r={4}
+                    fill="#7C5CFC"
+                    stroke="white"
+                    strokeWidth={2}
+                  />
+                  <text
+                    x={startX}
+                    y={timelineY + timelineHeight + 15}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fill="#7C5CFC"
+                    fontWeight="bold"
+                    style={{ userSelect: "none" }}
+                  >
+                    {timeFormatter(effect.startTime)}
+                  </text>
+                  <text
+                    x={endX}
+                    y={timelineY + timelineHeight + 15}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fill="#7C5CFC"
+                    fontWeight="bold"
+                    style={{ userSelect: "none" }}
+                  >
+                    {timeFormatter(effect.endTime)}
+                  </text>
                 </g>
               );
             })}

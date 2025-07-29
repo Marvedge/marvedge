@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Trash2 } from "lucide-react";
+import { formatTime } from "@/lib/dateUtils";
 
 interface ZoomEffect {
   id: string;
@@ -41,11 +42,7 @@ export default function ZoomEffectsPopup({
   const [centerY, setCenterY] = useState(0.5);
 
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+
 
   const parseTime = (timeString: string) => {
     const parts = timeString.split(":").map(Number);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import Image from "next/image";
+import { formatTime } from "@/lib/dateUtils";
 
 import VideoPreview from "@/app/components/VideoPreview";
 import { sanitizeFilename } from "@/app/lib/constants";
@@ -231,14 +232,7 @@ export default function RecorderPage() {
     };
   }, [recording]);
 
-  // Helper to format seconds as mm:ss
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  };
+
 
   const handleSaveAndPublish = () => {
     if (!blob) return;

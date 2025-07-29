@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import ReactPlayer from "react-player";
 import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
+import { formatTime } from "@/lib/dateUtils";
 
 interface VideoPreviewProps {
   videoUrl: string | null;
@@ -68,12 +69,7 @@ export default function VideoPreview({
     setDragging(false);
   };
 
-  const formatTime = (s: number) => {
-    if (!isFinite(s) || isNaN(s)) return "0:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, "0")}`;
-  };
+
 
   // Set srcObject when screenStream changes
   useEffect(() => {

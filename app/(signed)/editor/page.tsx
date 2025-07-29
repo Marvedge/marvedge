@@ -1,8 +1,9 @@
 "use client";
-import { useRef, useState, useEffect, MouseEvent } from "react";
+import React, { useRef, useState, useEffect, MouseEvent } from "react";
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
 import EditorTopbar from "@/app/components/EditorTopbar";
+import Image from "next/image";
 
 import { useSession } from "next-auth/react";
 import { TimelineSlider } from "@/app/components/MytimeLine";
@@ -16,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import { videoWithZoomEffects } from "@/app/lib/ffmpeg";
+import { formatTime } from "@/lib/dateUtils";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -109,14 +111,16 @@ export default function EditorPage() {
   // --- Add currentTime and duration state for syncing ---
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const setProgress = useCallback((value: number) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-    // Progress is not used, but setProgress is called
-  }, []);
+  // No-op setProgress to satisfy required callback
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const setProgress = (_value?: number) => {};
 
   // Zoom effects state
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(null);
+  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
+    null
+  );
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -129,8 +133,16 @@ export default function EditorPage() {
     // Enter fullscreen
     if (
       !document.fullscreenElement &&
-      !("webkitFullscreenElement" in document && (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement) &&
-      !("msFullscreenElement" in document && (document as Document & { msFullscreenElement?: Element }).msFullscreenElement)
+      !(
+        "webkitFullscreenElement" in document &&
+        (document as Document & { webkitFullscreenElement?: Element })
+          .webkitFullscreenElement
+      ) &&
+      !(
+        "msFullscreenElement" in document &&
+        (document as Document & { msFullscreenElement?: Element })
+          .msFullscreenElement
+      )
     ) {
       if (el.requestFullscreen) {
         el.requestFullscreen().catch((err) => {
@@ -138,9 +150,13 @@ export default function EditorPage() {
           console.error("Fullscreen error:", err);
         });
       } else if ("webkitRequestFullscreen" in el) {
-        (el as HTMLElement & { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.();
+        (
+          el as HTMLElement & { webkitRequestFullscreen?: () => void }
+        ).webkitRequestFullscreen?.();
       } else if ("msRequestFullscreen" in el) {
-        (el as HTMLElement & { msRequestFullscreen?: () => void }).msRequestFullscreen?.();
+        (
+          el as HTMLElement & { msRequestFullscreen?: () => void }
+        ).msRequestFullscreen?.();
       } else {
         alert("Fullscreen API is not supported in this browser.");
         console.error("Fullscreen API not supported");
@@ -150,9 +166,13 @@ export default function EditorPage() {
       if (document.exitFullscreen) {
         document.exitFullscreen();
       } else if ("webkitExitFullscreen" in document) {
-        (document as Document & { webkitExitFullscreen?: () => void }).webkitExitFullscreen?.();
+        (
+          document as Document & { webkitExitFullscreen?: () => void }
+        ).webkitExitFullscreen?.();
       } else if ("msExitFullscreen" in document) {
-        (document as Document & { msExitFullscreen?: () => void }).msExitFullscreen?.();
+        (
+          document as Document & { msExitFullscreen?: () => void }
+        ).msExitFullscreen?.();
       } else {
         alert("Cannot exit fullscreen: API not supported.");
         console.error("Exit Fullscreen API not supported");
@@ -299,11 +319,11 @@ export default function EditorPage() {
 
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
-    setZoomEffects(prev => [...prev, effect]);
+    setZoomEffects((prev) => [...prev, effect]);
   };
 
   const onZoomEffectRemove = (id: string) => {
-    setZoomEffects(prev => prev.filter(effect => effect.id !== id));
+    setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
   };
 
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
@@ -312,8 +332,9 @@ export default function EditorPage() {
 
   // Check for active zoom effects based on current time
   useEffect(() => {
-    const activeEffect = zoomEffects.find(effect => 
-      currentTime >= effect.startTime && currentTime <= effect.endTime
+    const activeEffect = zoomEffects.find(
+      (effect) =>
+        currentTime >= effect.startTime && currentTime <= effect.endTime
     );
     setCurrentZoomEffect(activeEffect || null);
   }, [currentTime, zoomEffects]);
@@ -326,22 +347,19 @@ export default function EditorPage() {
         position="top-center"
         toastOptions={{
           style: {
-            background: '#2D2A3A',
-            color: '#fff',
-            fontWeight: 'bold',
-            fontSize: '1.1rem',
-            boxShadow: '0 4px 24px 0 #0008',
-            borderRadius: '10px',
+            background: "#2D2A3A",
+            color: "#fff",
+            fontWeight: "bold",
+            fontSize: "1.1rem",
+            boxShadow: "0 4px 24px 0 #0008",
+            borderRadius: "10px",
             zIndex: 99999,
           },
-          success: { iconTheme: { primary: '#7C5CFC', secondary: '#fff' } },
-          error: { iconTheme: { primary: '#f87171', secondary: '#fff' } },
+          success: { iconTheme: { primary: "#7C5CFC", secondary: "#fff" } },
+          error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
         }}
       />
-      <EditorTopbar
-        onBack={() => router.back()}
-        userInitials={initials}
-      />
+      <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
         {/* Desktop Sidebar */}
         <EditorSidebar
@@ -442,18 +460,23 @@ export default function EditorPage() {
                     try {
                       // Show processing message
                       if (zoomEffects.length > 0) {
-                        toast.loading("Processing video... (Note: Zoom effects are visible during playback but not in downloaded video)");
+                        toast.loading(
+                          "Processing video... (Note: Zoom effects are visible during playback but not in downloaded video)"
+                        );
                       } else {
                         toast.loading("Processing video...");
                       }
-                      
+
                       // Get the original video blob
                       const response = await fetch(videoUrl);
                       const originalBlob = await response.blob();
-                      
+
                       // Process video with zoom effects
-                      const processedBlob = await videoWithZoomEffects(originalBlob, zoomEffects);
-                      
+                      const processedBlob = await videoWithZoomEffects(
+                        originalBlob,
+                        zoomEffects
+                      );
+
                       // Download the processed video
                       const a = document.createElement("a");
                       a.href = URL.createObjectURL(processedBlob);
@@ -461,18 +484,22 @@ export default function EditorPage() {
                       document.body.appendChild(a);
                       a.click();
                       document.body.removeChild(a);
-                      
+
                       toast.dismiss();
                       if (zoomEffects.length > 0) {
-                        toast.success("Video downloaded! Zoom effects are visible during playback in the editor.");
+                        toast.success(
+                          "Video downloaded! Zoom effects are visible during playback in the editor."
+                        );
                       } else {
                         toast.success("Video downloaded successfully!");
                       }
                     } catch (error) {
                       console.error("Error processing video:", error);
                       toast.dismiss();
-                      toast.error("Failed to process video. Downloading original video.");
-                      
+                      toast.error(
+                        "Failed to process video. Downloading original video."
+                      );
+
                       // Fallback to original video
                       const a = document.createElement("a");
                       a.href = videoUrl;
@@ -536,7 +563,9 @@ export default function EditorPage() {
                       ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
                       : "scale(1) translate(0%, 0%)",
                     transformOrigin: "center center",
-                    transition: currentZoomEffect ? "transform 0.5s ease-in-out" : "transform 0.3s ease-out",
+                    transition: currentZoomEffect
+                      ? "transform 0.5s ease-in-out"
+                      : "transform 0.3s ease-out",
                   }}
                 >
                   <ReactPlayer
@@ -588,22 +617,13 @@ export default function EditorPage() {
                     className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
                     title="Back 5 seconds"
                   >
-                    <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-                      <path
-                        d="M10 2v2.06A8 8 0 1 0 18 10"
-                        stroke="#7C5CFC"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M7 9l-3 3 3 3"
-                        stroke="#7C5CFC"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <Image
+                      src="/icons/backward.png"
+                      alt="Notifications"
+                      width={24}
+                      height={24}
+                      className="w-6 h-6"
+                    />
                   </button>
                   <button
                     onClick={() => {
@@ -614,22 +634,13 @@ export default function EditorPage() {
                     className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
                     title="Forward 5 seconds"
                   >
-                    <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-                      <path
-                        d="M10 2v2.06A8 8 0 1 1 2 10"
-                        stroke="#7C5CFC"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M13 11l3-3-3-3"
-                        stroke="#7C5CFC"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <Image
+                      src="/icons/forward.png"
+                      alt="Notifications"
+                      width={24}
+                      height={24}
+                      className="w-6 h-6"
+                    />
                   </button>
                 </div>
                 <div className="flex items-center gap-2 flex-1 justify-center">
@@ -707,11 +718,12 @@ export default function EditorPage() {
             </div>
           )}
 
-
           {/* Simple Trim Input Fields */}
           <div className="mt-8 mb-4 mr-2 sm:mr-0">
             <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Trim Video</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                Trim Video
+              </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -745,18 +757,21 @@ export default function EditorPage() {
                       toast.error("Please enter both start and end times");
                       return;
                     }
-                    setProgress(1);
                     toast.loading("Trimming video...");
-                    await trimApplier([{ start: trimStartTime, end: trimEndTime }], undefined, (success) => {
-                      setProgress(100);
-                      toast.dismiss();
-                      if (success) {
-                        toast.success("Video trimmed successfully!");
-                      } else {
-                        toast.error("Failed to trim video.");
-                      }
-                      setTimeout(() => setProgress(0), 1000);
-                    }, setProgress);
+                    await trimApplier(
+                      [{ start: trimStartTime, end: trimEndTime }],
+                      undefined,
+                      (success) => {
+                        toast.dismiss();
+                        if (success) {
+                          toast.success("Video trimmed successfully!");
+                        } else {
+                          toast.error("Failed to trim video.");
+                        }
+                        setTimeout(() => setProgress(0), 1000);
+                      },
+                      setProgress
+                    );
                   }}
                   disabled={processing}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
@@ -775,16 +790,21 @@ export default function EditorPage() {
               ontrim={async (segments) => {
                 setProgress(1);
                 toast.loading("Trimming and merging segments...");
-                await trimApplier(segments, undefined, (success) => {
-                  setProgress(100);
-                  toast.dismiss();
-                  if (success) {
-                    toast.success("Video trimmed and merged successfully!");
-                  } else {
-                    toast.error("Failed to trim/merge video.");
-                  }
-                  setTimeout(() => setProgress(0), 1000);
-                }, setProgress);
+                await trimApplier(
+                  segments,
+                  undefined,
+                  (success) => {
+                    setProgress(100);
+                    toast.dismiss();
+                    if (success) {
+                      toast.success("Video trimmed and merged successfully!");
+                    } else {
+                      toast.error("Failed to trim/merge video.");
+                    }
+                    setTimeout(() => setProgress(0), 1000);
+                  },
+                  setProgress
+                );
               }}
               currentTime={currentTime}
               setCurrentTime={(t) => {
@@ -817,7 +837,6 @@ export default function EditorPage() {
 }
 
 // Custom video controls component
-import React from "react";
 function CustomVideoControls({
   playerRef,
   duration,
@@ -829,9 +848,9 @@ function CustomVideoControls({
   currentTime: number;
   setCurrentTime: (t: number) => void;
 }) {
-  const [playing, setPlaying] = React.useState(true);
-  const [dragging, setDragging] = React.useState(false);
-  const [dragValue, setDragValue] = React.useState(0);
+  const [playing, setPlaying] = useState(true);
+  const [dragging, setDragging] = useState(false);
+  const [dragValue, setDragValue] = useState(0);
 
   const handlePlayPause = () => {
     setPlaying((prev) => {
@@ -856,13 +875,6 @@ function CustomVideoControls({
     setDragging(false);
   };
 
-  const formatTime = (s: number) => {
-    if (!isFinite(s) || isNaN(s)) return "0:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, "0")}`;
-  };
-
   const safeDuration = (d: number) => (d && isFinite(d) && d > 0 ? d : null);
 
   return (
@@ -873,28 +885,21 @@ function CustomVideoControls({
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
         >
           {playing ? (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <rect
-                x="3"
-                y="3"
-                width="4"
-                height="12"
-                rx="2"
-                fill="currentColor"
-              />
-              <rect
-                x="11"
-                y="3"
-                width="4"
-                height="12"
-                rx="2"
-                fill="currentColor"
-              />
-            </svg>
+            <Image
+              src="/icons/play.png"
+              alt="Notifications"
+              width={24}
+              height={24}
+              className="w-6 h-6"
+            />
           ) : (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M4 3V15L15 9L4 3Z" fill="currentColor" />
-            </svg>
+            <Image
+              src="/icons/pause.png"
+              alt="Notifications"
+              width={24}
+              height={24}
+              className="w-6 h-6"
+            />
           )}
         </button>
         <input
