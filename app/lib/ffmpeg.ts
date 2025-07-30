@@ -203,40 +203,9 @@ export const videoWithZoomEffects = async (
   inputBlob: Blob,
   zoomEffects: ZoomEffect[]
 ): Promise<Blob> => {
-  const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
-  const ffmpeg = createFFmpeg({
-    log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
-  });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
-
-  const inputName = "input.webm";
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
-
-  if (zoomEffects.length === 0) {
-    // No zoom effects, just return the original video
-    const data = ffmpeg.FS("readFile", inputName);
-    return new Blob([data.slice(0).buffer], { type: "video/webm" });
-  }
-
-  try {
-    // For now, return the original video since time-based zoom processing is complex
-    // The preview zoom effects work perfectly, but baking them into the video file
-    // requires very complex FFmpeg filter chains that are beyond the current scope
-    console.log("Zoom effects detected but time-based processing is not yet implemented:", zoomEffects);
-    
-    const data = ffmpeg.FS("readFile", inputName);
-    return new Blob([data.slice(0).buffer], { type: "video/webm" });
-  } catch (err) {
-    console.error("FFmpeg zoom effects error", err);
-    // Fallback to original video if processing fails
-    const data = ffmpeg.FS("readFile", inputName);
-    return new Blob([data.slice(0).buffer], { type: "video/webm" });
-  }
+  // Use the enhanced zoom processor
+  const { createEnhancedZoomProcessor } = await import("./enhancedZoomProcessor");
+  return await createEnhancedZoomProcessor(inputBlob, zoomEffects);
 };
 
 function generateFFmpegFilters(overlays: Overlay[]): string {
@@ -255,6 +224,8 @@ function generateFFmpegFilters(overlays: Overlay[]): string {
     })
     .join(",");
 }
+
+
 
 export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");

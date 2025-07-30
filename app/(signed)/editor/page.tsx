@@ -690,7 +690,17 @@ export default function EditorPage() {
 
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
+    console.log('Creating zoom effect:', effect);
+    console.log('Zoom level:', effect.zoomLevel, 'Expected: > 1.0');
+    console.log('Coordinates:', { x: effect.x, y: effect.y }, 'Expected: 0-1 range');
+    
+    if (effect.zoomLevel <= 1.0) {
+      console.warn('⚠️ Zoom level is too low, forcing to 2.0');
+      effect.zoomLevel = 2.0;
+    }
+    
     setZoomEffects((prev) => [...prev, effect]);
+    console.log('Total zoom effects:', [...zoomEffects, effect].length);
   };
 
   const onZoomEffectRemove = (id: string) => {
@@ -832,25 +842,30 @@ export default function EditorPage() {
                       // Show processing message
                       if (zoomEffects.length > 0) {
                         toast.loading(
-                          "Processing video... (Note: Zoom effects are visible during playback but not in downloaded video)"
+                          "Processing video with enhanced zoom effects..."
                         );
                       } else {
                         toast.loading("Processing video...");
                       }
 
-                      // Get the original video blob
+                      // Get the current video blob (which may already have zoom effects applied)
                       const response = await fetch(videoUrl);
-                      const originalBlob = await response.blob();
+                      const currentBlob = await response.blob();
 
-                      // Process video with zoom effects
-                      const processedBlob = await videoWithZoomEffects(
-                        originalBlob,
-                        zoomEffects
-                      );
+                      // If there are zoom effects and the current video doesn't have them, process it
+                      let finalBlob = currentBlob;
+                      if (zoomEffects && zoomEffects.length > 0) {
+                        console.log("Processing zoom effects for download:", zoomEffects);
+                        console.log("Current video URL:", videoUrl);
+                        console.log("Current blob size:", currentBlob.size);
+                        const { createEnhancedZoomProcessor } = await import("../../lib/enhancedZoomProcessor");
+                        finalBlob = await createEnhancedZoomProcessor(currentBlob, zoomEffects);
+                        console.log("Final blob size:", finalBlob.size);
+                      }
 
                       // Download the processed video
                       const a = document.createElement("a");
-                      a.href = URL.createObjectURL(processedBlob);
+                      a.href = URL.createObjectURL(finalBlob);
                       a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
                       document.body.appendChild(a);
                       a.click();
@@ -859,7 +874,7 @@ export default function EditorPage() {
                       toast.dismiss();
                       if (zoomEffects.length > 0) {
                         toast.success(
-                          "Video downloaded! Zoom effects are visible during playback in the editor."
+                          "Video downloaded with smooth zoom effects! Check the downloaded video for enhanced quality."
                         );
                       } else {
                         toast.success("Video downloaded successfully!");
@@ -1184,7 +1199,8 @@ export default function EditorPage() {
                         }
                         setTimeout(() => setProgress(0), 1000);
                       },
-                      setProgress
+                      setProgress,
+                      zoomEffects
                     );
                   }}
                   disabled={processing}
@@ -1217,7 +1233,8 @@ export default function EditorPage() {
                     }
                     setTimeout(() => setProgress(0), 1000);
                   },
-                  setProgress
+                  setProgress,
+                  zoomEffects
                 );
               }}
               currentTime={currentTime}

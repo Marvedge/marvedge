@@ -12,6 +12,15 @@ type Overlay =
   | { type: "arrow"; x: number; y: number; x2: number; y2: number }
   | { type: "text"; x: number; y: number; text: string };
 
+interface ZoomEffect {
+  id: string;
+  startTime: number;
+  endTime: number;
+  zoomLevel: number;
+  x: number;
+  y: number;
+}
+
 export const useEditor = () => {
   const { blob, title, description, restoreBlob } = useBlobStore();
   const [videoUrl, setVideoUrl] = useState(
@@ -49,7 +58,8 @@ export const useEditor = () => {
       startOrSegments: string | { start: string; end: string }[],
       end?: string,
       onDone?: (success: boolean) => void,
-      onProgress?: (progress: number) => void
+      onProgress?: (progress: number) => void,
+      zoomEffects?: ZoomEffect[]
     ) => {
       if (!blob) return;
       setProcessing(true);
@@ -64,16 +74,37 @@ export const useEditor = () => {
         const trimmedUrl = URL.createObjectURL(trimmedBlob);
         setVideoUrl(trimmedUrl);
 
+        let processedBlob: Blob = trimmedBlob;
+
+        // Apply zoom effects if any
+        if (zoomEffects && zoomEffects.length > 0) {
+          console.log("Processing zoom effects:", zoomEffects);
+          console.log("Original blob size:", trimmedBlob.size);
+          
+          // Use enhanced zoom processor
+          const { createEnhancedZoomProcessor } = await import("../lib/enhancedZoomProcessor");
+          processedBlob = await createEnhancedZoomProcessor(trimmedBlob, zoomEffects);
+          
+          console.log("Zoom effects processing completed");
+          console.log("Processed blob size:", processedBlob.size);
+          
+          // Update the video URL to show the processed video with zoom effects
+          const processedUrl = URL.createObjectURL(processedBlob);
+          setVideoUrl(processedUrl);
+        } else {
+          console.log("No zoom effects to process");
+        }
+
         let mp4Blob: Blob;
 
         if (currentOverlays.current.length > 0) {
           mp4Blob = await videoToMP4WithOverlays(
-            trimmedBlob,
+            processedBlob,
             currentOverlays.current
           );
         } else {
           const { videoToMP4 } = await import("../lib/ffmpeg");
-          mp4Blob = await videoToMP4(trimmedBlob);
+          mp4Blob = await videoToMP4(processedBlob);
         }
 
         setMp4Url(URL.createObjectURL(mp4Blob));
