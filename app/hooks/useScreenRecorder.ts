@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { useBlobStore } from "../lib/blobStore";
-import toast from 'react-hot-toast';
+import toast from "react-hot-toast";
 
 export const useScreenRecorder = () => {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -10,6 +10,8 @@ export const useScreenRecorder = () => {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingStartTimeRef = useRef<number>(0);
   const setBlob = useBlobStore((state) => state.setBlob);
 
   const toggleMic = () => setMicEnabled((prev) => !prev);
@@ -51,15 +53,23 @@ export const useScreenRecorder = () => {
         const url = URL.createObjectURL(blob);
         setBlob(blob);
         setVideoUrl(url);
+
+        // Calculate and set the actual recording duration
+        const endTime = Date.now();
+        const actualDuration = (endTime - recordingStartTimeRef.current) / 1000;
+        setRecordingDuration(actualDuration);
+
         combinedStream.getTracks().forEach((track) => track.stop());
       };
 
       mediaRecorder.current.start();
       setRecording(true);
-      toast('Recording started', { icon: '⏺️' });
+      recordingStartTimeRef.current = Date.now();
+      setRecordingDuration(0);
+      toast("Recording started", { icon: "⏺️" });
     } catch (err) {
       console.error("Recording failed:", err);
-      toast.error('Recording failed to start.');
+      toast.error("Recording failed to start.");
     }
   };
 
@@ -71,25 +81,26 @@ export const useScreenRecorder = () => {
       });
       screenStreamRef.current = screen;
       setScreenStream(screen);
-      toast.success('Screen sharing started!');
+      toast.success("Screen sharing started!");
       // Start recording automatically after screen is selected
       await startRecording();
     } catch (err) {
       console.error("Failed to get screen stream:", err);
-      toast.error('Screen share failed. Please try again.');
+      toast.error("Screen share failed. Please try again.");
     }
   };
 
   const stopRecording = () => {
     mediaRecorder.current?.stop();
     setRecording(false);
-    toast('Recording stopped', { icon: '⏹️' });
+    toast("Recording stopped", { icon: "⏹️" });
   };
 
   const reset = () => {
     setVideoUrl(null);
     setScreenStream(null);
     screenStreamRef.current = null;
+    setRecordingDuration(0);
   };
 
   return {
@@ -101,6 +112,7 @@ export const useScreenRecorder = () => {
     recording,
     videoUrl,
     screenStream,
+    recordingDuration,
     reset,
   };
 };

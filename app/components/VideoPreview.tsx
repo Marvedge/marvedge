@@ -69,8 +69,6 @@ export default function VideoPreview({
     setDragging(false);
   };
 
-
-
   // Set srcObject when screenStream changes
   useEffect(() => {
     if (videoRef.current && screenStream) {
@@ -82,45 +80,298 @@ export default function VideoPreview({
   useEffect(() => {
     if (videoUrl && !screenStream) {
       const checkDuration = () => {
-        if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+        if (
+          videoRef.current &&
+          videoRef.current.duration &&
+          isFinite(videoRef.current.duration) &&
+          videoRef.current.duration > 0
+        ) {
           setDuration(videoRef.current.duration);
         }
       };
-      
+
       checkDuration();
-      
-      const timer = setTimeout(checkDuration, 100);
-      const timer2 = setTimeout(checkDuration, 500);
-      const timer3 = setTimeout(checkDuration, 1000);
-      
+
+      // Multiple attempts to get duration with different delays - FASTER
+      const timers = [
+        setTimeout(checkDuration, 10),
+        setTimeout(checkDuration, 50),
+        setTimeout(checkDuration, 100),
+        setTimeout(checkDuration, 200),
+        setTimeout(checkDuration, 300),
+      ];
+
       const getDurationFromBlob = async () => {
         try {
           const response = await fetch(videoUrl);
           const blob = await response.blob();
-          const tempVideo = document.createElement('video');
+          const tempVideo = document.createElement("video");
           tempVideo.src = URL.createObjectURL(blob);
-          
+          tempVideo.preload = "metadata";
+
           tempVideo.onloadedmetadata = () => {
-            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
               setDuration(tempVideo.duration);
             }
             URL.revokeObjectURL(tempVideo.src);
           };
-          
+
           tempVideo.onerror = () => {
             URL.revokeObjectURL(tempVideo.src);
           };
+
+          // Also try to load the video to trigger metadata loading
+          tempVideo.load();
         } catch (error) {
-          console.error('Error getting duration from blob:', error);
+          console.error("Error getting duration from blob:", error);
         }
       };
-      
-      setTimeout(getDurationFromBlob, 200);
-      
+
+      // Try blob method with multiple delays - FASTER
+      const blobTimers = [
+        setTimeout(getDurationFromBlob, 20),
+        setTimeout(getDurationFromBlob, 80),
+        setTimeout(getDurationFromBlob, 150),
+      ];
+
+      // Additional method: try to get duration from the video element directly
+      const getDurationFromVideoElement = () => {
+        if (videoRef.current) {
+          videoRef.current.load();
+          videoRef.current.addEventListener(
+            "loadedmetadata",
+            () => {
+              if (
+                videoRef.current &&
+                videoRef.current.duration &&
+                isFinite(videoRef.current.duration) &&
+                videoRef.current.duration > 0
+              ) {
+                setDuration(videoRef.current.duration);
+              }
+            },
+            { once: true }
+          );
+        }
+      };
+
+      const videoElementTimers = [
+        setTimeout(getDurationFromVideoElement, 30),
+        setTimeout(getDurationFromVideoElement, 90),
+        setTimeout(getDurationFromVideoElement, 180),
+      ];
+
+      // Force metadata loading immediately
+      const forceMetadataLoad = () => {
+        if (videoRef.current) {
+          videoRef.current.load();
+          videoRef.current.preload = "metadata";
+        }
+      };
+
+      // Try to force metadata loading immediately - FASTER
+      forceMetadataLoad();
+      const metadataTimers = [
+        setTimeout(forceMetadataLoad, 15),
+        setTimeout(forceMetadataLoad, 60),
+        setTimeout(forceMetadataLoad, 120),
+      ];
+
+      // Force metadata loading for ReactPlayer
+      const forceReactPlayerMetadata = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            player.preload = "metadata";
+            player.load();
+          }
+        }
+      };
+
+      const reactPlayerTimers = [
+        setTimeout(forceReactPlayerMetadata, 25),
+        setTimeout(forceReactPlayerMetadata, 70),
+        setTimeout(forceReactPlayerMetadata, 140),
+      ];
+
+      // Try to get duration by playing a small portion (this often triggers metadata loading)
+      const getDurationByPlaying = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            const wasPlaying = !player.paused;
+            player.currentTime = 0.1; // Seek to 0.1 seconds
+            player
+              .play()
+              .then(() => {
+                setTimeout(() => {
+                  if (
+                    player.duration &&
+                    isFinite(player.duration) &&
+                    player.duration > 0
+                  ) {
+                    setDuration(player.duration);
+                  }
+                  if (!wasPlaying) {
+                    player.pause();
+                    player.currentTime = 0;
+                  }
+                }, 50);
+              })
+              .catch(() => {
+                // If play fails, just try to get duration anyway
+                if (
+                  player.duration &&
+                  isFinite(player.duration) &&
+                  player.duration > 0
+                ) {
+                  setDuration(player.duration);
+                }
+              });
+          }
+        }
+      };
+
+      const playTimers = [
+        setTimeout(getDurationByPlaying, 100),
+        setTimeout(getDurationByPlaying, 200),
+      ];
+
+      // Create a hidden video element to force metadata loading
+      const createHiddenVideo = () => {
+        const hiddenVideo = document.createElement("video");
+        hiddenVideo.style.display = "none";
+        hiddenVideo.preload = "metadata";
+        hiddenVideo.muted = true;
+        hiddenVideo.src = videoUrl;
+
+        hiddenVideo.onloadedmetadata = () => {
+          if (
+            hiddenVideo.duration &&
+            isFinite(hiddenVideo.duration) &&
+            hiddenVideo.duration > 0
+          ) {
+            setDuration(hiddenVideo.duration);
+          }
+          document.body.removeChild(hiddenVideo);
+        };
+
+        hiddenVideo.onerror = () => {
+          document.body.removeChild(hiddenVideo);
+        };
+
+        document.body.appendChild(hiddenVideo);
+        hiddenVideo.load();
+      };
+
+      const hiddenVideoTimers = [
+        setTimeout(createHiddenVideo, 5),
+        setTimeout(createHiddenVideo, 40),
+        setTimeout(createHiddenVideo, 100),
+      ];
+
+      // Try to get duration by seeking to end of video
+      const getDurationBySeeking = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            const wasPlaying = !player.paused;
+            const wasTime = player.currentTime;
+
+            // Try to seek to a large number to trigger duration detection
+            player.currentTime = 999999;
+
+            setTimeout(() => {
+              if (
+                player.duration &&
+                isFinite(player.duration) &&
+                player.duration > 0
+              ) {
+                setDuration(player.duration);
+              }
+              // Restore original state
+              player.currentTime = wasTime;
+              if (wasPlaying) {
+                player.play();
+              }
+            }, 100);
+          }
+        }
+      };
+
+      const seekTimers = [
+        setTimeout(getDurationBySeeking, 80),
+        setTimeout(getDurationBySeeking, 160),
+      ];
+
+      // Try to get duration with different MIME types
+      const getDurationWithMimeTypes = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const blob = await response.blob();
+
+          const mimeTypes = [
+            "video/webm",
+            "video/mp4",
+            "video/ogg",
+            "video/quicktime",
+            "video/x-msvideo",
+          ];
+
+          for (const mimeType of mimeTypes) {
+            const tempVideo = document.createElement("video");
+            tempVideo.preload = "metadata";
+            tempVideo.muted = true;
+
+            const newBlob = new Blob([blob], { type: mimeType });
+            tempVideo.src = URL.createObjectURL(newBlob);
+
+            tempVideo.onloadedmetadata = () => {
+              if (
+                tempVideo.duration &&
+                isFinite(tempVideo.duration) &&
+                tempVideo.duration > 0
+              ) {
+                setDuration(tempVideo.duration);
+                URL.revokeObjectURL(tempVideo.src);
+                return;
+              }
+              URL.revokeObjectURL(tempVideo.src);
+            };
+
+            tempVideo.onerror = () => {
+              URL.revokeObjectURL(tempVideo.src);
+            };
+
+            tempVideo.load();
+
+            // Wait a bit before trying next MIME type - FASTER
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+        } catch (error) {
+          console.error("Error getting duration with MIME types:", error);
+        }
+      };
+
+      const mimeTypeTimers = [
+        setTimeout(getDurationWithMimeTypes, 120),
+        setTimeout(getDurationWithMimeTypes, 250),
+      ];
+
       return () => {
-        clearTimeout(timer);
-        clearTimeout(timer2);
-        clearTimeout(timer3);
+        timers.forEach((timer) => clearTimeout(timer));
+        blobTimers.forEach((timer) => clearTimeout(timer));
+        videoElementTimers.forEach((timer) => clearTimeout(timer));
+        metadataTimers.forEach((timer) => clearTimeout(timer));
+        reactPlayerTimers.forEach((timer) => clearTimeout(timer));
+        playTimers.forEach((timer) => clearTimeout(timer));
+        hiddenVideoTimers.forEach((timer) => clearTimeout(timer));
+        seekTimers.forEach((timer) => clearTimeout(timer));
+        mimeTypeTimers.forEach((timer) => clearTimeout(timer));
       };
     }
   }, [videoUrl, screenStream]);
@@ -204,12 +455,22 @@ export default function VideoPreview({
               background: "#F6F3FF",
             }}
             onLoadedMetadata={() => {
-              if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+              if (
+                videoRef.current &&
+                videoRef.current.duration &&
+                isFinite(videoRef.current.duration) &&
+                videoRef.current.duration > 0
+              ) {
                 setDuration(videoRef.current.duration);
               }
             }}
             onCanPlay={() => {
-              if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+              if (
+                videoRef.current &&
+                videoRef.current.duration &&
+                isFinite(videoRef.current.duration) &&
+                videoRef.current.duration > 0
+              ) {
                 setDuration(videoRef.current.duration);
               }
             }}
@@ -236,16 +497,71 @@ export default function VideoPreview({
               background: "#F6F3FF",
             }}
             onError={(e) => console.error("Video failed to load", e)}
-            onReady={() => console.log("Video loaded")}
-            progressInterval={100}
-            onProgress={({ playedSeconds }) => {
-              setCurrentTime(playedSeconds);
-              onTimeChange?.(playedSeconds);
-            }}
             onDuration={(dur) => {
               if (isFinite(dur) && !isNaN(dur) && dur > 0) {
                 setDuration(dur);
               }
+            }}
+            onReady={() => {
+              console.log("Video loaded");
+              // Try to get duration again when video is ready - FASTER
+              setTimeout(() => {
+                if (playerRef.current) {
+                  const player = playerRef.current.getInternalPlayer();
+                  if (
+                    player &&
+                    player.duration &&
+                    isFinite(player.duration) &&
+                    player.duration > 0
+                  ) {
+                    setDuration(player.duration);
+                  }
+                }
+              }, 10);
+
+              // Additional attempt after a longer delay - FASTER
+              setTimeout(() => {
+                if (playerRef.current) {
+                  const player = playerRef.current.getInternalPlayer();
+                  if (
+                    player &&
+                    player.duration &&
+                    isFinite(player.duration) &&
+                    player.duration > 0
+                  ) {
+                    setDuration(player.duration);
+                  }
+                }
+              }, 100);
+            }}
+            progressInterval={100}
+            onProgress={({ playedSeconds }) => {
+              setCurrentTime(playedSeconds);
+              onTimeChange?.(playedSeconds);
+
+              // Try to get duration when video starts playing (this often triggers metadata loading) - FASTER
+              if (playedSeconds > 0 && duration === 0) {
+                setTimeout(() => {
+                  if (playerRef.current) {
+                    const player = playerRef.current.getInternalPlayer();
+                    if (
+                      player &&
+                      player.duration &&
+                      isFinite(player.duration) &&
+                      player.duration > 0
+                    ) {
+                      setDuration(player.duration);
+                    }
+                  }
+                }, 10);
+              }
+            }}
+            config={{
+              file: {
+                attributes: {
+                  preload: "metadata",
+                },
+              },
             }}
           />
         )}
@@ -303,7 +619,8 @@ export default function VideoPreview({
               }}
             />
             <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-              {formatTime(currentTime)} / {duration > 0 ? formatTime(duration) : "0:00"}
+              {formatTime(currentTime)} /{" "}
+              {duration > 0 ? formatTime(duration) : "0:00"}
             </span>
           </div>
 
