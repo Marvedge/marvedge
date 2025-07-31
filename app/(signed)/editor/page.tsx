@@ -92,8 +92,16 @@ export default function EditorPage() {
   // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
   const [sidebarDescription, setSidebarDescription] = useState("");
-  const [trimStartTime, setTrimStartTime] = useState("");
-  const [trimEndTime, setTrimEndTime] = useState("");
+  const [trimStartTime, setTrimStartTime] = useState("00:00:00");
+  const [trimEndTime, setTrimEndTime] = useState("00:00:00");
+
+  // Synchronized trim times for timeline
+  const [synchronizedStartTime, setSynchronizedStartTime] = useState(0);
+  const [synchronizedEndTime, setSynchronizedEndTime] = useState(0);
+
+  // Validation state for input fields
+  const [startTimeError, setStartTimeError] = useState("");
+  const [endTimeError, setEndTimeError] = useState("");
 
   // Hamburger sidebar state for mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -129,6 +137,75 @@ export default function EditorPage() {
 
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+
+  // Helper functions for time conversion
+  const formatTimeForInput = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const parseTimeFromInput = (timeString: string): number => {
+    const parts = timeString.split(":").map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    } else {
+      return Number(timeString) || 0;
+    }
+  };
+
+  // Update synchronized times when duration changes
+  useEffect(() => {
+    if (duration > 0) {
+      setSynchronizedEndTime(Math.min(duration, 10));
+    }
+  }, [duration]);
+
+  // Simple direct two-way sync
+  const [inputStartTime, setInputStartTime] = useState("00:00:00");
+  const [inputEndTime, setInputEndTime] = useState("00:00:10");
+  const [timelineStartTime, setTimelineStartTime] = useState(0);
+  const [timelineEndTime, setTimelineEndTime] = useState(10);
+
+  // Initialize timeline pointers when video duration is loaded (only once)
+  useEffect(() => {
+    if (duration > 0 && timelineEndTime === 10) {
+      // Only initialize if not already set
+      const initialEndTime = Math.min(10, duration); // Use 10 seconds or video duration, whichever is smaller
+      setTimelineEndTime(initialEndTime);
+      setInputEndTime(formatTimeForInput(initialEndTime));
+      console.log("Initialized timeline pointers:", {
+        start: 0,
+        end: initialEndTime,
+      });
+    }
+  }, [duration, timelineEndTime]);
+
+  // Debounce function to prevent rapid updates
+  const debounce = (func: Function, delay: number) => {
+    let timeoutId: NodeJS.Timeout;
+    return (...args: any[]) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func(...args), delay);
+    };
+  };
+
+  // Simple timeline change handler
+  const handleTimelineChange = useCallback((start: number, end: number) => {
+    console.log("Timeline changed:", { start, end });
+    setInputStartTime(formatTimeForInput(start));
+    setInputEndTime(formatTimeForInput(end));
+  }, []);
+
+  // Direct update function for input field changes
+  const updateTimelineFromInput = useCallback((start: number, end: number) => {
+    console.log("Direct update from input:", { start, end });
+    setTimelineStartTime(start);
+    setTimelineEndTime(end);
+  }, []);
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -690,17 +767,21 @@ export default function EditorPage() {
 
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
-    console.log('Creating zoom effect:', effect);
-    console.log('Zoom level:', effect.zoomLevel, 'Expected: > 1.0');
-    console.log('Coordinates:', { x: effect.x, y: effect.y }, 'Expected: 0-1 range');
-    
+    console.log("Creating zoom effect:", effect);
+    console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
+    console.log(
+      "Coordinates:",
+      { x: effect.x, y: effect.y },
+      "Expected: 0-1 range"
+    );
+
     if (effect.zoomLevel <= 1.0) {
-      console.warn('⚠️ Zoom level is too low, forcing to 2.0');
+      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
       effect.zoomLevel = 2.0;
     }
-    
+
     setZoomEffects((prev) => [...prev, effect]);
-    console.log('Total zoom effects:', [...zoomEffects, effect].length);
+    console.log("Total zoom effects:", [...zoomEffects, effect].length);
   };
 
   const onZoomEffectRemove = (id: string) => {
@@ -855,11 +936,19 @@ export default function EditorPage() {
                       // If there are zoom effects and the current video doesn't have them, process it
                       let finalBlob = currentBlob;
                       if (zoomEffects && zoomEffects.length > 0) {
-                        console.log("Processing zoom effects for download:", zoomEffects);
+                        console.log(
+                          "Processing zoom effects for download:",
+                          zoomEffects
+                        );
                         console.log("Current video URL:", videoUrl);
                         console.log("Current blob size:", currentBlob.size);
-                        const { createEnhancedZoomProcessor } = await import("../../lib/enhancedZoomProcessor");
-                        finalBlob = await createEnhancedZoomProcessor(currentBlob, zoomEffects);
+                        const { createEnhancedZoomProcessor } = await import(
+                          "../../lib/enhancedZoomProcessor"
+                        );
+                        finalBlob = await createEnhancedZoomProcessor(
+                          currentBlob,
+                          zoomEffects
+                        );
                         console.log("Final blob size:", finalBlob.size);
                       }
 
@@ -971,7 +1060,11 @@ export default function EditorPage() {
                     onError={(e) => console.error("Video failed to load", e)}
                     onDuration={(dur) => {
                       // Only set duration if recordingDuration is not available
-                      if (recordingDuration === 0 && isFinite(dur) && !isNaN(dur)) {
+                      if (
+                        recordingDuration === 0 &&
+                        isFinite(dur) &&
+                        !isNaN(dur)
+                      ) {
                         setDuration(dur);
                       }
                     }}
@@ -982,7 +1075,8 @@ export default function EditorPage() {
                         // Try to get duration again when video is ready - FASTER
                         setTimeout(() => {
                           if (playerRef.current) {
-                            const player = playerRef.current.getInternalPlayer();
+                            const player =
+                              playerRef.current.getInternalPlayer();
                             if (
                               player &&
                               player.duration &&
@@ -997,7 +1091,8 @@ export default function EditorPage() {
                         // Additional attempt after a longer delay - FASTER
                         setTimeout(() => {
                           if (playerRef.current) {
-                            const player = playerRef.current.getInternalPlayer();
+                            const player =
+                              playerRef.current.getInternalPlayer();
                             if (
                               player &&
                               player.duration &&
@@ -1056,7 +1151,10 @@ export default function EditorPage() {
                   </button>
                   <button
                     onClick={() => {
-                      const newTime = Math.min(displayDuration, currentTime + 5);
+                      const newTime = Math.min(
+                        displayDuration,
+                        currentTime + 5
+                      );
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
@@ -1160,11 +1258,41 @@ export default function EditorPage() {
                   </label>
                   <input
                     type="text"
-                    value={trimStartTime}
-                    onChange={(e) => setTrimStartTime(e.target.value)}
+                    value={inputStartTime}
+                    onChange={(e) => {
+                      console.log("Start time input changed:", e.target.value);
+                      const newValue = e.target.value;
+                      setInputStartTime(newValue);
+                      const parsedTime = parseTimeFromInput(newValue);
+                      if (
+                        parsedTime >= 0 &&
+                        parsedTime < parseTimeFromInput(inputEndTime)
+                      ) {
+                        // Direct update to timeline
+                        console.log("Moving timeline pointer to:", parsedTime);
+                        const roundedTime = Math.round(parsedTime * 100) / 100;
+                        setTimelineStartTime(roundedTime);
+                        setStartTimeError("");
+                      } else if (
+                        parsedTime >= parseTimeFromInput(inputEndTime)
+                      ) {
+                        setStartTimeError(
+                          "Start time must be less than end time"
+                        );
+                      } else if (parsedTime < 0) {
+                        setStartTimeError("Start time cannot be negative");
+                      } else {
+                        setStartTimeError("Invalid time format");
+                      }
+                    }}
                     placeholder="00:00:00"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   />
+                  {startTimeError && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {startTimeError}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1172,43 +1300,44 @@ export default function EditorPage() {
                   </label>
                   <input
                     type="text"
-                    value={trimEndTime}
-                    onChange={(e) => setTrimEndTime(e.target.value)}
+                    value={inputEndTime}
+                    onChange={(e) => {
+                      console.log("End time input changed:", e.target.value);
+                      const newValue = e.target.value;
+                      setInputEndTime(newValue);
+                      const parsedTime = parseTimeFromInput(newValue);
+                      if (
+                        parsedTime > parseTimeFromInput(inputStartTime) &&
+                        parsedTime <= duration
+                      ) {
+                        // Direct update to timeline
+                        console.log("Moving timeline pointer to:", parsedTime);
+                        const roundedTime = Math.round(parsedTime * 100) / 100;
+                        setTimelineEndTime(roundedTime);
+                        setEndTimeError("");
+                      } else if (
+                        parsedTime <= parseTimeFromInput(inputStartTime)
+                      ) {
+                        setEndTimeError(
+                          "End time must be greater than start time"
+                        );
+                      } else if (parsedTime > duration) {
+                        setEndTimeError(
+                          "End time cannot exceed video duration"
+                        );
+                      } else {
+                        setEndTimeError("Invalid time format");
+                      }
+                    }}
                     placeholder="00:00:00"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   />
+                  {endTimeError && (
+                    <p className="text-red-500 text-xs mt-1">{endTimeError}</p>
+                  )}
                 </div>
               </div>
-              <div className="mt-4">
-                <button
-                  onClick={async () => {
-                    if (!trimStartTime || !trimEndTime) {
-                      toast.error("Please enter both start and end times");
-                      return;
-                    }
-                    toast.loading("Trimming video...");
-                    await trimApplier(
-                      [{ start: trimStartTime, end: trimEndTime }],
-                      undefined,
-                      (success) => {
-                        toast.dismiss();
-                        if (success) {
-                          toast.success("Video trimmed successfully!");
-                        } else {
-                          toast.error("Failed to trim video.");
-                        }
-                        setTimeout(() => setProgress(0), 1000);
-                      },
-                      setProgress,
-                      zoomEffects
-                    );
-                  }}
-                  disabled={processing}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {processing ? "Trimming..." : "Apply Trim"}
-                </button>
-              </div>
+              {/* Removed Apply Trim button - functionality moved to Trim & Merge button */}
             </div>
           </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
@@ -1246,6 +1375,9 @@ export default function EditorPage() {
               zoomEffects={zoomEffects}
               onZoomEffectCreate={onZoomEffectCreate}
               onZoomEffectRemove={onZoomEffectRemove}
+              externalStartTime={timelineStartTime}
+              externalEndTime={timelineEndTime}
+              onExternalTimeChange={handleTimelineChange}
             />
           </div>
         </div>
