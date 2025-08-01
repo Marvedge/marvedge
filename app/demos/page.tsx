@@ -4,7 +4,6 @@ import {
   FaPlayCircle,
   FaEdit,
   FaShareAlt,
-  FaTrash,
   FaTh,
   FaThList,
   FaFilter,
@@ -14,8 +13,6 @@ import {
   FaRegCalendarAlt,
   FaListUl,
   FaRegFileAlt,
-  FaArrowUp,
-  FaArrowDown,
   FaRegClock,
   FaPlusSquare,
 } from "react-icons/fa";
@@ -182,16 +179,37 @@ export default function DemosPage() {
                 >
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <FaListUl className="text-lg" /> All Status
+                      <Image
+                        src="/icons/all-status.svg"
+                        alt="Notifications"
+                        width={24}
+                        height={24}
+                        className="w-6 h-6"
+                      />{" "}
+                      All Status
                     </div>
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
                       <FaRegFileAlt className="text-lg" /> Draft
                     </div>
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <FaArrowUp className="text-lg" /> Published
+                      <Image
+                        src="/icons/publish.svg"
+                        alt="Notifications"
+                        width={24}
+                        height={24}
+                        className="w-6 h-6"
+                      />{" "}
+                      Published
                     </div>
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <FaArrowDown className="text-lg" /> Archived
+                      <Image
+                        src="/icons/aarcheive.svg"
+                        alt="Notifications"
+                        width={24}
+                        height={24}
+                        className="w-6 h-6"
+                      />{" "}
+                      Archived
                     </div>
                   </div>
                 </div>
@@ -278,7 +296,13 @@ export default function DemosPage() {
                     </div>
                   </div>
                   <div className="flex-1 flex items-center justify-center bg-[#F8F6FF] rounded-xl mb-6 min-h-[180px]">
-                    <FaPlayCircle className="text-6xl text-[#A594F9] opacity-40" />
+                    <Image
+                      src="/icons/play-demo.svg"
+                      alt="Notifications"
+                      width={24}
+                      height={24}
+                      className="w-6 h-6"
+                    />
                   </div>
                   <div className="flex items-center justify-between text-[#8B8B8B] text-base mb-4">
                     <div className="flex items-center gap-2">
@@ -315,7 +339,13 @@ export default function DemosPage() {
                     >
                       <td className="py-4 px-6 flex items-center gap-4">
                         <span className="inline-flex items-center justify-center w-14 h-14 bg-[#E5DEFF] rounded-xl">
-                          <FaPlayCircle className="text-3xl text-[#A594F9]" />
+                          <Image
+                            src="/icons/play-demo.svg"
+                            alt="Notifications"
+                            width={24}
+                            height={24}
+                            className="w-6 h-6"
+                          />{" "}
                         </span>
                         <div>
                           <div className="font-semibold text-lg text-[#1A0033]">
@@ -343,7 +373,13 @@ export default function DemosPage() {
                           <FaShareAlt />
                         </button>
                         <button className="text-red-400 hover:text-red-600 text-xl">
-                          <FaTrash />
+                          <Image
+                            src="/icons/delete-demo.svg"
+                            alt="Notifications"
+                            width={24}
+                            height={24}
+                            className="w-6 h-6"
+                          />
                         </button>
                       </td>
                     </tr>

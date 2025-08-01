@@ -213,7 +213,7 @@ const DashboardMain = () => {
             <div className="mb-2">
               <span className="inline-block bg-[#B8AAFF] p-2 rounded-lg">
                 <Image
-                  src="/icons/play.png"
+                  src="/icons/dash-rect.svg"
                   alt="Play"
                   width={24}
                   height={24}
@@ -235,7 +235,7 @@ const DashboardMain = () => {
             <div className="mb-2">
               <span className="inline-block bg-[#B8E0FF] p-2 rounded-lg">
                 <Image
-                  src="/icons/eye.png"
+                  src="/icons/dash-eye.svg"
                   alt="Views"
                   width={24}
                   height={24}
@@ -257,7 +257,7 @@ const DashboardMain = () => {
             <div className="mb-2">
               <span className="inline-block bg-[#B8AAFF] p-2 rounded-lg">
                 <Image
-                  src="/icons/top arrow.png"
+                  src="/icons/dash-grow.svg"
                   alt="Completion Rate"
                   width={24}
                   height={24}
@@ -375,7 +375,7 @@ const DashboardMain = () => {
               <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
                 <span className="bg-[#C6F7D0] p-2 rounded-lg flex-shrink-0">
                   <Image
-                    src="/icons/status-icon-green.png"
+                    src="/icons/dash-users.svg"
                     alt="Google"
                     width={20}
                     height={20}
@@ -395,7 +395,7 @@ const DashboardMain = () => {
               <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
                 <span className="bg-[#D0F0FF] p-2 rounded-lg flex-shrink-0">
                   <Image
-                    src="/icons/rocket.png"
+                    src="/icons/dash-rocket.svg"
                     alt="Google"
                     width={20}
                     height={20}

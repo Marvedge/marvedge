@@ -8,12 +8,13 @@ const SignedLayout = ({ children }: { children: ReactNode }) => {
   const isRecorderOrEditor =
     pathname.startsWith("/recorder") || pathname.startsWith("/editor");
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       {!isRecorderOrEditor && <SidemenuDashboard />}
       <main
-        className={`flex-1 bg-[#F1ECFF] pt-16 md:pt-0 ${
+        className={`flex-1 bg-[#F1ECFF] pt-16 md:pt-0 overflow-y-auto ${
           !isRecorderOrEditor ? "md:ml-64" : ""
         }`}
+        style={{ height: '100vh' }}
       >
         {children}
       </main>
