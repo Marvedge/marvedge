@@ -3,7 +3,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState, useRef } from "react";
 import AnalyticsMain from "@/app/components/AnalyticsMain";
 import { motion } from "framer-motion";
-import { BarChart2 } from "lucide-react";
+
 import Image from "next/image";
 
 const getInitials = (name: string | undefined): string => {

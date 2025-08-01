@@ -640,10 +640,10 @@ export default function VideoPreview({
                   onTimeChange?.(newTime);
                 }}
                 disabled={isRecording}
-                className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
+                className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition disabled:opacity-50 shadow-sm"
                 title="Back 5 seconds"
               >
-                <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+                <svg width="16" height="16" fill="none" viewBox="0 0 20 20">
                   <path
                     d="M10 2v2.06A8 8 0 1 0 18 10"
                     stroke="currentColor"
@@ -673,10 +673,10 @@ export default function VideoPreview({
                   onTimeChange?.(newTime);
                 }}
                 disabled={isRecording}
-                className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition disabled:opacity-50"
+                className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition disabled:opacity-50 shadow-sm"
                 title="Forward 5 seconds"
               >
-                <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+                <svg width="16" height="16" fill="none" viewBox="0 0 20 20">
                   <path
                     d="M10 2v2.06A8 8 0 1 1 2 10"
                     stroke="currentColor"

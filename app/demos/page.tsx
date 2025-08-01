@@ -4,7 +4,6 @@ import {
   FaPlayCircle,
   FaEdit,
   FaShareAlt,
-  FaTrash,
   FaTh,
   FaThList,
   FaFilter,
@@ -14,8 +13,6 @@ import {
   FaRegCalendarAlt,
   FaListUl,
   FaRegFileAlt,
-  FaArrowUp,
-  FaArrowDown,
   FaRegClock,
   FaPlusSquare,
 } from "react-icons/fa";

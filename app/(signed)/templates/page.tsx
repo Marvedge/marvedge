@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { FaFilter, FaLayerGroup } from "react-icons/fa";
+
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 

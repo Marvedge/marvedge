@@ -16,7 +16,7 @@ import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
-import { videoWithZoomEffects } from "@/app/lib/ffmpeg";
+
 import { formatTime } from "@/lib/dateUtils";
 import { useBlobStore } from "@/app/lib/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
@@ -92,16 +92,6 @@ export default function EditorPage() {
   // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
   const [sidebarDescription, setSidebarDescription] = useState("");
-  const [trimStartTime, setTrimStartTime] = useState("00:00:00");
-  const [trimEndTime, setTrimEndTime] = useState("00:00:00");
-
-  // Synchronized trim times for timeline
-  const [synchronizedStartTime, setSynchronizedStartTime] = useState(0);
-  const [synchronizedEndTime, setSynchronizedEndTime] = useState(0);
-
-  // Validation state for input fields
-  const [startTimeError, setStartTimeError] = useState("");
-  const [endTimeError, setEndTimeError] = useState("");
 
   // Hamburger sidebar state for mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -146,35 +136,20 @@ export default function EditorPage() {
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const parseTimeFromInput = (timeString: string): number => {
-    const parts = timeString.split(":").map(Number);
-    if (parts.length === 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    } else if (parts.length === 2) {
-      return parts[0] * 60 + parts[1];
-    } else {
-      return Number(timeString) || 0;
-    }
-  };
 
-  // Update synchronized times when duration changes
-  useEffect(() => {
-    if (duration > 0) {
-      setSynchronizedEndTime(Math.min(duration, 10));
-    }
-  }, [duration]);
+
+
 
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
-  const [inputEndTime, setInputEndTime] = useState("00:00:10");
-  const [timelineStartTime, setTimelineStartTime] = useState(0);
-  const [timelineEndTime, setTimelineEndTime] = useState(10);
+  const [inputEndTime, setInputEndTime] = useState("00:00:00");
+  const [timelineEndTime, setTimelineEndTime] = useState(0);
 
   // Initialize timeline pointers when video duration is loaded (only once)
   useEffect(() => {
-    if (duration > 0 && timelineEndTime === 10) {
+    if (duration > 0 && timelineEndTime === 0) {
       // Only initialize if not already set
-      const initialEndTime = Math.min(10, duration); // Use 10 seconds or video duration, whichever is smaller
+      const initialEndTime = duration; // Use the full video duration
       setTimelineEndTime(initialEndTime);
       setInputEndTime(formatTimeForInput(initialEndTime));
       console.log("Initialized timeline pointers:", {
@@ -184,14 +159,7 @@ export default function EditorPage() {
     }
   }, [duration, timelineEndTime]);
 
-  // Debounce function to prevent rapid updates
-  const debounce = (func: Function, delay: number) => {
-    let timeoutId: NodeJS.Timeout;
-    return (...args: any[]) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func(...args), delay);
-    };
-  };
+
 
   // Simple timeline change handler
   const handleTimelineChange = useCallback((start: number, end: number) => {
@@ -200,12 +168,7 @@ export default function EditorPage() {
     setInputEndTime(formatTimeForInput(end));
   }, []);
 
-  // Direct update function for input field changes
-  const updateTimelineFromInput = useCallback((start: number, end: number) => {
-    console.log("Direct update from input:", { start, end });
-    setTimelineStartTime(start);
-    setTimelineEndTime(end);
-  }, []);
+
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -535,7 +498,7 @@ export default function EditorPage() {
         timers.forEach((timer) => clearTimeout(timer));
       };
     }
-  }, [videoUrl, duration]);
+  }, [videoUrl, duration, recordingDuration]);
 
   // Additional method: try to get duration from the video element directly
   useEffect(() => {
@@ -1138,15 +1101,15 @@ export default function EditorPage() {
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
-                    className="rounded-full  bg-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                     title="Back 5 seconds"
                   >
                     <Image
                       src="/icons/backward-edit.svg"
                       alt="Notifications"
-                      width={20}
-                      height={20}
-                      className="w-6 h-6"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4"
                     />
                   </button>
                   <button
@@ -1158,15 +1121,15 @@ export default function EditorPage() {
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
-                    className="rounded-full bg-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                     title="Forward 5 seconds"
                   >
                     <Image
                       src="/icons/forward-edit.svg"
                       alt="Notifications"
-                      width={24}
-                      height={24}
-                      className="w-6 h-6"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4"
                     />
                   </button>
                 </div>
@@ -1259,40 +1222,10 @@ export default function EditorPage() {
                   <input
                     type="text"
                     value={inputStartTime}
-                    onChange={(e) => {
-                      console.log("Start time input changed:", e.target.value);
-                      const newValue = e.target.value;
-                      setInputStartTime(newValue);
-                      const parsedTime = parseTimeFromInput(newValue);
-                      if (
-                        parsedTime >= 0 &&
-                        parsedTime < parseTimeFromInput(inputEndTime)
-                      ) {
-                        // Direct update to timeline
-                        console.log("Moving timeline pointer to:", parsedTime);
-                        const roundedTime = Math.round(parsedTime * 100) / 100;
-                        setTimelineStartTime(roundedTime);
-                        setStartTimeError("");
-                      } else if (
-                        parsedTime >= parseTimeFromInput(inputEndTime)
-                      ) {
-                        setStartTimeError(
-                          "Start time must be less than end time"
-                        );
-                      } else if (parsedTime < 0) {
-                        setStartTimeError("Start time cannot be negative");
-                      } else {
-                        setStartTimeError("Invalid time format");
-                      }
-                    }}
+                    readOnly
                     placeholder="00:00:00"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-default"
                   />
-                  {startTimeError && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {startTimeError}
-                    </p>
-                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1301,40 +1234,10 @@ export default function EditorPage() {
                   <input
                     type="text"
                     value={inputEndTime}
-                    onChange={(e) => {
-                      console.log("End time input changed:", e.target.value);
-                      const newValue = e.target.value;
-                      setInputEndTime(newValue);
-                      const parsedTime = parseTimeFromInput(newValue);
-                      if (
-                        parsedTime > parseTimeFromInput(inputStartTime) &&
-                        parsedTime <= duration
-                      ) {
-                        // Direct update to timeline
-                        console.log("Moving timeline pointer to:", parsedTime);
-                        const roundedTime = Math.round(parsedTime * 100) / 100;
-                        setTimelineEndTime(roundedTime);
-                        setEndTimeError("");
-                      } else if (
-                        parsedTime <= parseTimeFromInput(inputStartTime)
-                      ) {
-                        setEndTimeError(
-                          "End time must be greater than start time"
-                        );
-                      } else if (parsedTime > duration) {
-                        setEndTimeError(
-                          "End time cannot exceed video duration"
-                        );
-                      } else {
-                        setEndTimeError("Invalid time format");
-                      }
-                    }}
+                    readOnly
                     placeholder="00:00:00"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-default"
                   />
-                  {endTimeError && (
-                    <p className="text-red-500 text-xs mt-1">{endTimeError}</p>
-                  )}
                 </div>
               </div>
               {/* Removed Apply Trim button - functionality moved to Trim & Merge button */}
@@ -1375,7 +1278,6 @@ export default function EditorPage() {
               zoomEffects={zoomEffects}
               onZoomEffectCreate={onZoomEffectCreate}
               onZoomEffectRemove={onZoomEffectRemove}
-              externalStartTime={timelineStartTime}
               externalEndTime={timelineEndTime}
               onExternalTimeChange={handleTimelineChange}
             />
@@ -1440,7 +1342,7 @@ function CustomVideoControls({
     setDragging(false);
   };
 
-  const safeDuration = (d: number) => (d && isFinite(d) && d > 0 ? d : null);
+
 
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;

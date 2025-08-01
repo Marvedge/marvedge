@@ -62,8 +62,7 @@ export function TimelineSlider({
   const [dragging, setDragging] = useState<null | "start" | "end">(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [progress] = useState(0);
-  const [isUpdatingFromExternal, setIsUpdatingFromExternal] = useState(false);
-  const [draggingEnded, setDraggingEnded] = useState(false);
+
 
   // Drag and drop state for segment reordering
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -295,7 +294,6 @@ export function TimelineSlider({
       start,
       end,
       dragging,
-      draggingEnded,
       externalStartTime,
       externalEndTime,
       segmentData: segments[0],

@@ -149,7 +149,7 @@ export default function RecorderPage() {
   const setDescription = useBlobStore((state) => state.setDescription);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+
 
   const videoPreview = useRef<HTMLVideoElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -396,7 +396,7 @@ export default function RecorderPage() {
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
   // Simple timeline component for recorder
-  const SimpleTimeline = ({ videoUrl }: { videoUrl: string }) => {
+  const SimpleTimeline = () => {
     const [dragging, setDragging] = useState(false);
     const [dragValue, setDragValue] = useState(0);
 
@@ -803,7 +803,7 @@ export default function RecorderPage() {
                             }}
                           />
                         </div>
-                        <SimpleTimeline videoUrl={uploadedFileUrl} />
+                        <SimpleTimeline />
                       </div>
                     </div>
                   ) : videoUrl ? (
@@ -902,7 +902,7 @@ export default function RecorderPage() {
                             }}
                           />
                         </div>
-                        <SimpleTimeline videoUrl={videoUrl} />
+                        <SimpleTimeline />
                       </div>
                     </div>
                   ) : screenStream ? (

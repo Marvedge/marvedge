@@ -88,7 +88,7 @@ export const createEnhancedZoomProcessor = async (
       const currentTime = video.currentTime;
       
       // Find active zoom effect
-      let activeEffect = zoomEffects.find(
+      const activeEffect = zoomEffects.find(
         effect => currentTime >= effect.startTime && currentTime <= effect.endTime
       );
       

@@ -4,10 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   Menu,
   X,
-  Home,
   Play,
-  FileText,
-  BarChart2,
   Users,
   Settings,
 } from "lucide-react";

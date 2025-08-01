@@ -60,7 +60,7 @@ export const createSimpleZoomTest = async (
       const currentTime = video.currentTime;
       
       // Find active zoom effect with smooth transition
-      let activeEffect = zoomEffects.find(
+      const activeEffect = zoomEffects.find(
         effect => currentTime >= effect.startTime && currentTime <= effect.endTime
       );
       
