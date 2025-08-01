@@ -3,6 +3,7 @@
 import { Eye, CheckCircle, Clock, MousePointerClick } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 const AnalyticsMain = () => {
   const [isVisible, setIsVisible] = useState(false);
@@ -197,7 +198,13 @@ const AnalyticsMain = () => {
           </div>
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
             <div className="bg-[#F6F3FF] p-4 rounded-full">
-              <CheckCircle className="w-8 h-8 text-[#8A76FC]" />
+              <Image
+                src="/icons/ana-tick.svg"
+                alt="Notifications"
+                width={20}
+                height={20}
+                className="md:w-6 md:h-6"
+              />
             </div>
             <p className="text-[#7569A5] font-semibold text-base">
               No Analytics yet

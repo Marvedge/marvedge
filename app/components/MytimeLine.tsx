@@ -470,13 +470,13 @@ export function TimelineSlider({
           >
             <span className="flex items-center gap-2">
               <Image
-                src="/icons/zoom.png"
+                src="/icons/zoom-new.png"
                 alt="Notifications"
                 width={24}
                 height={24}
                 className="w-6 h-6"
               />
-              {zoomed ? "Zoom out" : "Zoom in"}
+              {zoomed ? "Zoom in" : "Zoom in"}
             </span>
           </Button>
           <Button
@@ -488,7 +488,7 @@ export function TimelineSlider({
           >
             <span className="flex items-center gap-2">
               <Image
-                src="/icons/trim.png"
+                src="/icons/trim-new.svg"
                 alt="Notifications"
                 width={24}
                 height={24}
@@ -503,7 +503,7 @@ export function TimelineSlider({
           >
             <span className="flex items-center gap-2">
               <Image
-                src="/icons/plus.png"
+                src="/icons/+.svg"
                 alt="Notifications"
                 width={24}
                 height={24}
@@ -519,7 +519,7 @@ export function TimelineSlider({
             >
               <span className="flex items-center gap-2">
                 <Image
-                  src="/icons/minus.png"
+                  src="/icons/-.svg"
                   alt="Notifications"
                   width={24}
                   height={24}

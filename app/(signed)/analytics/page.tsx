@@ -54,7 +54,10 @@ const AnalyticsPage = () => {
   );
 
   return (
-    <div className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative">
+    <div
+      className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
+      style={{ minHeight: "calc(100vh - 80px)" }}
+    >
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -62,7 +65,13 @@ const AnalyticsPage = () => {
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white/80 rounded-lg p-3 md:p-4 shadow relative z-10"
       >
         <div className="flex items-center gap-2 ml-4 mr-6">
-          <BarChart2 color="#6356D7" size={24} />
+          <Image
+            src="/icons/dash-analytics.svg"
+            alt="Notifications"
+            width={20}
+            height={20}
+            className="w-5 h-5 sm:w-6 sm:h-6"
+          />
           <span className="text-base sm:text-lg text-gray-400 font-medium">
             Analytics
           </span>

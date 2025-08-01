@@ -1138,14 +1138,14 @@ export default function EditorPage() {
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
-                    className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    className="rounded-full  bg-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
                     title="Back 5 seconds"
                   >
                     <Image
-                      src="/icons/backward.png"
+                      src="/icons/backward-edit.svg"
                       alt="Notifications"
-                      width={24}
-                      height={24}
+                      width={20}
+                      height={20}
                       className="w-6 h-6"
                     />
                   </button>
@@ -1158,11 +1158,11 @@ export default function EditorPage() {
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
-                    className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    className="rounded-full bg-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
                     title="Forward 5 seconds"
                   >
                     <Image
-                      src="/icons/forward.png"
+                      src="/icons/forward-edit.svg"
                       alt="Notifications"
                       width={24}
                       height={24}
@@ -1454,7 +1454,7 @@ function CustomVideoControls({
         >
           {playing ? (
             <Image
-              src="/icons/play.png"
+              src="/icons/pause.png"
               alt="Notifications"
               width={24}
               height={24}
@@ -1462,7 +1462,7 @@ function CustomVideoControls({
             />
           ) : (
             <Image
-              src="/icons/pause.png"
+              src="/icons/play.png"
               alt="Notifications"
               width={24}
               height={24}

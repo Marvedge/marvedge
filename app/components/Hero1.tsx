@@ -276,8 +276,8 @@ const Hero1: React.FC = () => {
             </p>
             <ul className="mt-6 space-y-2 text-gray-600">
               <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Automatic feature
-                detection and highlighting
+                <span className="mr-2 text-green-600">✔</span> Automatic
+                feature detection and highlighting
               </li>
               <li className="flex items-center">
                 <span className="mr-2 text-green-600">✔</span> Professional

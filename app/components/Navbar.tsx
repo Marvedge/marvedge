@@ -37,7 +37,8 @@ const Navbar: React.FC = () => {
     }
   };
 
-  const actionButtonText = status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
+  const actionButtonText =
+    status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
 
   return (
     <>
@@ -68,19 +69,12 @@ const Navbar: React.FC = () => {
             </button>
           </div>
           {/* Second Row: Bell and Avatar, right-aligned */}
-          <div className="flex justify-end items-center space-x-4 mt-2 pr-2">
-            <button className="relative">
-              <Bell className="w-6 h-6 text-[#8C5BFF]" />
-            </button>
-            {/* User initials avatar placeholder */}
-            <div className="w-9 h-9 rounded-full bg-[#8C5BFF] flex items-center justify-center text-white font-bold text-lg shadow">
-              AT
-            </div>
-          </div>
         </div>
         {/* Desktop nav links (unchanged) */}
         <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium absolute right-8 top-6">
-          <NavButton onClick={() => router.push("/features")}>Features</NavButton>
+          <NavButton onClick={() => router.push("/features")}>
+            Features
+          </NavButton>
           <NavButton onClick={() => router.push("/pricing")}>Pricing</NavButton>
           <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
           <NavButton

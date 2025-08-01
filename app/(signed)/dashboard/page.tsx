@@ -49,12 +49,21 @@ const DashboardPage = () => {
   );
 
   return (
-    <div>
+    <div
+      className="overflow-y-auto h-full"
+      style={{ minHeight: "calc(100vh - 80px)" }}
+    >
       <div className="flex flex-col gap-3 md:gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white/80 rounded-lg p-3 md:p-4 shadow mb-2 relative">
           <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden md:flex items-center gap-2 ml-4 mr-6">
-              <Home color="#6356D7" size={24} />
+              <Image
+                src="/icons/Vector (1).svg"
+                alt="Notifications"
+                width={20}
+                height={20}
+                className="md:w-6 md:h-6"
+              />
               <span className="text-lg text-gray-400 font-medium">
                 Dashboard
               </span>

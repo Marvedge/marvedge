@@ -93,7 +93,14 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="mr-2">
-                <Home color="#fff" size={20} />
+                <Image
+                  src="/icons/dash-home.svg"
+                  alt="Marvedge logo"
+                  width={30}
+                  height={30}
+                  className="object-contain"
+                  priority
+                />
               </span>
               Dashboard
             </li>
@@ -105,7 +112,14 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="mr-2">
-                <Play color="#fff" size={20} />
+                <Image
+                  src="/icons/dash-play.svg"
+                  alt="Marvedge logo"
+                  width={30}
+                  height={30}
+                  className="object-contain"
+                  priority
+                />
               </span>
               My Demos
             </li>
@@ -117,7 +131,14 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="mr-2">
-                <FileText color="#fff" size={20} />
+                <Image
+                  src="/icons/dash-file.svg"
+                  alt="Marvedge logo"
+                  width={30}
+                  height={30}
+                  className="object-contain"
+                  priority
+                />
               </span>
               Templates
             </li>
@@ -129,7 +150,13 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="mr-2">
-                <BarChart2 color="#fff" size={20} />
+                <Image
+                  src="/icons/dash-analytics.svg"
+                  alt="Notifications"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5 sm:w-6 sm:h-6"
+                />{" "}
               </span>
               Analytics
             </li>

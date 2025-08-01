@@ -1296,7 +1296,7 @@ export default function RecorderPage() {
                     style={{ width: 96, height: 66, display: "inline-block" }}
                   >
                     <Image
-                      src="/icons/play_button_icon.png"
+                      src="/icons/tabler_video.svg"
                       alt="Preview Icon"
                       width={96}
                       height={66}
