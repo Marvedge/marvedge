@@ -64,7 +64,6 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -88,8 +87,6 @@ export default function EditorPage() {
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
-  const [trimStartTime, setTrimStartTime] = useState("");
-  const [trimEndTime, setTrimEndTime] = useState("");
 
   // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
@@ -759,23 +756,6 @@ export default function EditorPage() {
   }, [currentTime, zoomEffects]);
 
   const [volume, setVolume] = useState(1); // 1 = 100%, 0 = mute
-  const convertToSeconds = (timeStr: string): number => {
-    const parts = timeStr.trim().split(":").map(Number);
-
-    if (parts.some(isNaN)) return NaN;
-
-    if (parts.length === 3) {
-      const [hours, minutes, seconds] = parts;
-      return hours * 3600 + minutes * 60 + seconds;
-    } else if (parts.length === 2) {
-      const [minutes, seconds] = parts;
-      return minutes * 60 + seconds;
-    } else if (parts.length === 1) {
-      return parts[0];
-    }
-
-    return NaN;
-  };
 
   return (
     <main className="flex flex-col h-screen w-full bg-gray-50">

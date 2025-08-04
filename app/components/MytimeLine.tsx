@@ -50,8 +50,6 @@ export function TimelineSlider({
   zoomEffects = [],
   onZoomEffectCreate,
   onZoomEffectRemove,
-  externalStartTime,
-  externalEndTime,
   onExternalTimeChange,
 }: TimelineSliderProps) {
   const [segments, setSegments] = useState<TrimSegment[]>([
