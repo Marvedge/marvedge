@@ -63,6 +63,9 @@ export function TimelineSlider({
   const svgRef = useRef<SVGSVGElement>(null);
   const [progress] = useState(0);
 
+  // Undo/Redo state management
+  const [removedSegments, setRemovedSegments] = useState<TrimSegment[]>([]);
+  const [removedActiveIdx, setRemovedActiveIdx] = useState<number[]>([]);
 
   // Drag and drop state for segment reordering
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -72,10 +75,22 @@ export function TimelineSlider({
     x: number;
     y: number;
   } | null>(null);
+  const [hasBeenTrimmed, setHasBeenTrimmed] = useState(false);
 
   useEffect(() => {
     if (setProgress) setProgress(progress);
   }, [progress, setProgress]);
+
+  // Debug logging for undo/redo state
+  useEffect(() => {
+    console.log(
+      "Current state - segments:",
+      segments.length,
+      "removedSegments:",
+      removedSegments.length
+    );
+    console.log("Segments:", segments);
+  }, [segments.length, removedSegments.length, segments]);
 
   // Update segments when duration changes
   useEffect(() => {
@@ -109,6 +124,7 @@ export function TimelineSlider({
         end: timeFormatter(seg.end),
       }))
     );
+    setHasBeenTrimmed(true);
   }, [segments, duration, ontrim, timeFormatter]);
 
   // Drag and drop handlers for segment reordering
@@ -151,6 +167,8 @@ export function TimelineSlider({
       setIsDragging(false);
       return;
     }
+
+    // Note: Reordering segments (no undo tracking for this)
 
     // Reorder segments
     const newSegments = [...segments];
@@ -272,6 +290,7 @@ export function TimelineSlider({
           return seg;
         });
         console.log("New segments:", updated);
+
         return updated;
       });
     },
@@ -381,6 +400,54 @@ export function TimelineSlider({
     setCurrentTime(seekTime);
   };
 
+  // Simple undo/redo functions
+  const handleUndo = () => {
+    if (segments.length > 1) {
+      const lastSegment = segments[segments.length - 1];
+      console.log("Undoing - removing segment:", lastSegment);
+
+      // Store the removed segment for redo
+      setRemovedSegments((prev) => [...prev, lastSegment]);
+      setRemovedActiveIdx((prev) => [...prev, activeIdx]);
+
+      // Remove the last segment
+      setSegments((prev) => prev.slice(0, -1));
+      setActiveIdx((prev) => Math.min(prev, segments.length - 2));
+    }
+  };
+
+  const handleRedo = () => {
+    if (removedSegments.length > 0) {
+      // Restore only the most recently removed segment
+      const segmentToRestore = removedSegments[removedSegments.length - 1];
+      const activeIdxToRestore = removedActiveIdx[removedActiveIdx.length - 1];
+      console.log("Redoing - restoring segment:", segmentToRestore);
+
+      // Restore the segment
+      setSegments((prev) => [...prev, segmentToRestore]);
+      setActiveIdx(activeIdxToRestore);
+
+      // Remove from removed segments
+      setRemovedSegments((prev) => prev.slice(0, -1));
+      setRemovedActiveIdx((prev) => prev.slice(0, -1));
+    }
+  };
+
+  // Add segment
+  const addSegment = () => {
+    setSegments([...segments, { start: 0, end: duration }]);
+    setActiveIdx(segments.length);
+  };
+
+  // Remove segment
+  const removeSegment = (idx: number) => {
+    if (segments.length > 1) {
+      const newSegments = segments.filter((_, i) => i !== idx);
+      setSegments(newSegments);
+      setActiveIdx(Math.min(activeIdx, newSegments.length - 1));
+    }
+  };
+
   // Keyboard controls for trim handles and video
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -406,6 +473,22 @@ export function TimelineSlider({
         case "Enter":
           handleTrim();
           break;
+        case "z":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              handleRedo();
+            } else {
+              handleUndo();
+            }
+          }
+          break;
+        case "y":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            handleRedo();
+          }
+          break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -420,21 +503,9 @@ export function TimelineSlider({
     currentTime,
     setCurrentTime,
     updateSegment,
+    handleUndo,
+    handleRedo,
   ]);
-
-  // Add segment
-  const addSegment = () => {
-    setSegments([...segments, { start: 0, end: duration }]);
-    setActiveIdx(segments.length);
-  };
-  // Remove segment
-  const removeSegment = (idx: number) => {
-    if (segments.length > 1) {
-      const newSegments = segments.filter((_, i) => i !== idx);
-      setSegments(newSegments);
-      setActiveIdx(Math.min(activeIdx, newSegments.length - 1));
-    }
-  };
 
   // Generate tick marks
   const markerCount = 21;
@@ -461,90 +532,135 @@ export function TimelineSlider({
         )}
         {/* Controls: Zoom, Trim, Add/Remove Segments */}
         <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mb-4 w-full">
-          <Button
-            variant="outline"
-            onClick={handleToggleZoom}
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
-          >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/zoom-new.png"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-              {zoomed ? "Zoom in" : "Zoom in"}
-            </span>
-          </Button>
-          <Button
-            onClick={handleTrim}
-            disabled={
-              processing || segments.some((seg) => seg.start >= seg.end)
-            }
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800"
-          >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/trim-new.svg"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-              Trim & Merge
-            </span>
-          </Button>
-          <Button
-            onClick={addSegment}
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800"
-          >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/+.svg"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-              Add Segment
-            </span>
-          </Button>
-          {segments.length > 1 && (
+          {/* Left Group: Zoom, Trim & Merge, Add Segment, Remove Segment */}
+          <div className="flex gap-2 sm:gap-4">
+            <Button
+              variant="outline"
+              onClick={handleToggleZoom}
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <Image
+                  src="/icons/zoom-new.png"
+                  alt="Notifications"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+                {zoomed ? "Zoom in" : "Zoom in"}
+              </span>
+            </Button>
+            <Button
+              onClick={handleTrim}
+              disabled={
+                processing || segments.some((seg) => seg.start >= seg.end)
+              }
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <Image
+                  src="/icons/trim-new.svg"
+                  alt="Notifications"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+                Trim & Merge
+              </span>
+            </Button>
+            <Button
+              onClick={addSegment}
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <Image
+                  src="/icons/+.svg"
+                  alt="Notifications"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+                Add Segment
+              </span>
+            </Button>
             <Button
               onClick={() => removeSegment(activeIdx)}
-              className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800"
+              disabled={segments.length <= 1}
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               <span className="flex items-center gap-2">
                 <Image
                   src="/icons/-.svg"
                   alt="Notifications"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
                 />
                 Remove Segment
               </span>
             </Button>
-          )}
-          {onResetVideo && (
+          </div>
+
+          {/* Gap between left and right groups */}
+          <div className="flex-1"></div>
+
+          {/* Right Group: Undo, Redo, Reset */}
+          <div className="flex gap-2 sm:gap-4">
             <Button
-              variant="outline"
-              onClick={onResetVideo}
-              className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
+              onClick={() => {
+                console.log("Undo button clicked!");
+                handleUndo();
+              }}
+              disabled={segments.length <= 1}
+              className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="flex items-center gap-2">
+              <span className="flex items-center justify-center">
                 <Image
-                  src="/icons/reset.png"
+                  src="/icons/undo.svg"
                   alt="Notifications"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
                 />
-                Reset
               </span>
             </Button>
-          )}
+            <Button
+              onClick={() => {
+                console.log("Redo button clicked!");
+                handleRedo();
+              }}
+              disabled={removedSegments.length === 0}
+              className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center justify-center">
+                <Image
+                  src="/icons/redo.svg"
+                  alt="Notifications"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+              </span>
+            </Button>
+            {onResetVideo && hasBeenTrimmed && (
+              <Button
+                variant="outline"
+                onClick={onResetVideo}
+                className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <Image
+                    src="/icons/reset.png"
+                    alt="Notifications"
+                    width={20}
+                    height={20}
+                    className="w-5 h-5"
+                  />
+                  Reset
+                </span>
+              </Button>
+            )}
+          </div>
         </div>
         {/* Segment Selector */}
         <div className="mb-2">
