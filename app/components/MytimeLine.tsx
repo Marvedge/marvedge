@@ -50,8 +50,6 @@ export function TimelineSlider({
   zoomEffects = [],
   onZoomEffectCreate,
   onZoomEffectRemove,
-  externalStartTime,
-  externalEndTime,
   onExternalTimeChange,
 }: TimelineSliderProps) {
   const [segments, setSegments] = useState<TrimSegment[]>([
@@ -62,7 +60,6 @@ export function TimelineSlider({
   const [dragging, setDragging] = useState<null | "start" | "end">(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [progress] = useState(0);
-
 
   // Drag and drop state for segment reordering
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -113,7 +110,7 @@ export function TimelineSlider({
 
   // Drag and drop handlers for segment reordering
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    console.log("Drag start:", index);
+    // console.log("Drag start:", index);
     setDragIndex(index);
     setIsDragging(true);
     e.dataTransfer.effectAllowed = "move";
@@ -144,7 +141,7 @@ export function TimelineSlider({
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    console.log("Drop:", dragIndex, "to", dropIndex);
+    // console.log("Drop:", dragIndex, "to", dropIndex);
     if (dragIndex === null || dragIndex === dropIndex) {
       setDragIndex(null);
       setDragOverIndex(null);
@@ -175,7 +172,7 @@ export function TimelineSlider({
   };
 
   const handleDragEnd = () => {
-    console.log("Drag end");
+    // console.log("Drag end");
     setDragIndex(null);
     setDragOverIndex(null);
     // Small delay to prevent click event interference
@@ -194,7 +191,7 @@ export function TimelineSlider({
 
       // Start dragging if mouse moved more than 5px
       if (deltaX > 5 || deltaY > 5) {
-        console.log("Mouse drag start:", index);
+        // console.log("Mouse drag start:", index);
         setDragIndex(index);
         setIsDragging(true);
         setMouseStartPos(null);
@@ -224,7 +221,7 @@ export function TimelineSlider({
   const timeToX = (t: number) => {
     if (!duration || isNaN(duration) || isNaN(t)) return margin;
     const x = margin + ((svgWidth - 2 * margin) * t) / duration;
-    console.log("timeToX:", { t, duration, svgWidth, margin, x });
+    // console.log("timeToX:", { t, duration, svgWidth, margin, x });
     return x;
   };
   // Convert X position to time
@@ -251,27 +248,27 @@ export function TimelineSlider({
   // Update segment
   const updateSegment = useCallback(
     (key: "start" | "end", value: number) => {
-      console.log(
-        "Updating segment:",
-        key,
-        "to",
-        value,
-        "for activeIdx:",
-        activeIdx
-      );
+      // console.log(
+      //   "Updating segment:",
+      //   key,
+      //   "to",
+      //   value,
+      //   "for activeIdx:",
+      //   activeIdx
+      // );
       setSegments((segs) => {
-        console.log("Previous segments:", segs);
+        // console.log("Previous segments:", segs);
         const updated = segs.map((seg, i) => {
           if (i === activeIdx) {
-            console.log("Updating segment", i, "from", seg, "to", {
-              ...seg,
-              [key]: value,
-            });
+            // console.log("Updating segment", i, "from", seg, "to", {
+            //   ...seg,
+            //   [key]: value,
+            // });
             return { ...seg, [key]: value };
           }
           return seg;
         });
-        console.log("New segments:", updated);
+        // console.log("New segments:", updated);
         return updated;
       });
     },
@@ -281,30 +278,30 @@ export function TimelineSlider({
   const start = segments[activeIdx]?.start ?? 0;
   const end = segments[activeIdx]?.end ?? duration;
 
-  console.log("Current segment values:", {
-    start,
-    end,
-    activeIdx,
-    segments: segments[activeIdx],
-  });
+  // console.log("Current segment values:", {
+  //   start,
+  //   end,
+  //   activeIdx,
+  //   segments: segments[activeIdx],
+  // });
 
   // Special debugging for segment 1
   if (activeIdx === 0) {
-    console.log("Segment 1 specific:", {
-      start,
-      end,
-      dragging,
-      externalStartTime,
-      externalEndTime,
-      segmentData: segments[0],
-    });
+    // console.log("Segment 1 specific:", {
+    //   start,
+    //   end,
+    //   dragging,
+    //   externalStartTime,
+    //   externalEndTime,
+    //   segmentData: segments[0],
+    // });
   }
 
   // Mouse/touch handlers for dragging handles
   useEffect(() => {
     if (!dragging) return;
 
-    console.log("Dragging started:", dragging);
+    // console.log("Dragging started:", dragging);
 
     const onMove = (e: MouseEvent | TouchEvent) => {
       let clientX = 0;
@@ -316,7 +313,7 @@ export function TimelineSlider({
       let newTime = xToTime(x);
       newTime = Math.max(0, Math.min(duration, newTime));
 
-      console.log("Dragging:", dragging, "New time:", newTime);
+      // console.log("Dragging:", dragging, "New time:", newTime);
 
       if (dragging === "start") {
         if (newTime >= end) newTime = end - 0.01;
@@ -341,7 +338,7 @@ export function TimelineSlider({
       }
     };
     const onUp = () => {
-      console.log("Dragging ended");
+      // console.log("Dragging ended");
       setDragging(null);
     };
     window.addEventListener("mousemove", onMove);
@@ -723,7 +720,7 @@ export function TimelineSlider({
                         title="Remove zoom effect"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("Removing zoom effect:", effect.id);
+                          // console.log("Removing zoom effect:", effect.id);
                           onZoomEffectRemove(effect.id);
                         }}
                       >
@@ -801,12 +798,12 @@ export function TimelineSlider({
             <g
               style={{ cursor: "ew-resize" }}
               onMouseDown={(e) => {
-                console.log("Start handle mouse down");
+                // console.log("Start handle mouse down");
                 e.stopPropagation();
                 setDragging("start");
               }}
               onTouchStart={(e) => {
-                console.log("Start handle touch start");
+                // console.log("Start handle touch start");
                 e.stopPropagation();
                 setDragging("start");
               }}
@@ -848,12 +845,12 @@ export function TimelineSlider({
             <g
               style={{ cursor: "ew-resize" }}
               onMouseDown={(e) => {
-                console.log("End handle mouse down");
+                // console.log("End handle mouse down");
                 e.stopPropagation();
                 setDragging("end");
               }}
               onTouchStart={(e) => {
-                console.log("End handle touch start");
+                // console.log("End handle touch start");
                 e.stopPropagation();
                 setDragging("end");
               }}

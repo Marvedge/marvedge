@@ -64,7 +64,6 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -136,10 +135,6 @@ export default function EditorPage() {
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-
-
-
-
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
   const [inputEndTime, setInputEndTime] = useState("00:00:00");
@@ -159,16 +154,12 @@ export default function EditorPage() {
     }
   }, [duration, timelineEndTime]);
 
-
-
   // Simple timeline change handler
   const handleTimelineChange = useCallback((start: number, end: number) => {
     console.log("Timeline changed:", { start, end });
     setInputStartTime(formatTimeForInput(start));
     setInputEndTime(formatTimeForInput(end));
   }, []);
-
-
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -1240,7 +1231,109 @@ export default function EditorPage() {
                   />
                 </div>
               </div>
-              {/* Removed Apply Trim button - functionality moved to Trim & Merge button */}
+              <div className="mt-4">
+                {/* <button
+                  onClick={async () => {
+                    if (!trimStartTime || !trimEndTime) {
+                      toast.error("Please enter both start and end times");
+                      return;
+                    }
+
+                    const startSeconds = convertToSeconds(trimStartTime);
+                    const endSeconds = convertToSeconds(trimEndTime);
+
+                    if (
+                      isNaN(startSeconds) ||
+                      isNaN(endSeconds) ||
+                      startSeconds >= endSeconds
+                    ) {
+                      toast.error("Invalid start/end time format");
+                      return;
+                    }
+
+                    toast.loading("Getting your video ready...");
+
+                    try {
+                      const videoElement = document.querySelector("video");
+                      const blobUrl = videoElement?.src;
+
+                      if (!blobUrl) {
+                        throw new Error("Video source is undefined");
+                      }
+
+                      // 1. Get Blob from video
+                      const response = await fetch(blobUrl);
+                      const blob = await response.blob();
+
+                      // 2. Convert Blob to File
+                      const file = new File([blob], "uploaded.webm", {
+                        type: "video/webm",
+                      });
+
+                      // 3. Upload to Cloudinary
+                      const cloudFormData = new FormData();
+                      cloudFormData.append("file", file);
+                      cloudFormData.append("upload_preset", "upload_preset_1"); // 🔁 Replace
+
+                      const cloudRes = await fetch(
+                        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload", // 🔁 Replace
+                        {
+                          method: "POST",
+                          body: cloudFormData,
+                        }
+                      );
+
+                      const cloudData = await cloudRes.json();
+
+                      if (!cloudData.secure_url) {
+                        throw new Error("Cloudinary upload failed");
+                      }
+
+                      const videoUrl = cloudData.secure_url;
+                      console.log(videoUrl);
+                      console.log({ videoUrl, startSeconds, endSeconds });
+
+                      // 4. Send video URL and times to backend
+                      const trimRes = await fetch(
+                        "http://localhost:4000/api/trim",
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          credentials: "include",
+                          body: JSON.stringify({
+                            videoUrl,
+                            startTime: startSeconds,
+                            endTime: endSeconds,
+                          }),
+                        }
+                      );
+
+                      const data = await trimRes.json();
+                      toast.dismiss();
+
+                      if (data.trimmedUrl) {
+                        toast.success("Video trimmed successfully!");
+                        setVideoUrl(data.trimmedUrl);
+                        console.log(
+                          "Trimmed video URL from Backend:",
+                          data.trimmedUrl
+                        );
+                      } else {
+                        toast.error("Failed to trim video.");
+                      }
+                    } catch (err) {
+                      toast.dismiss();
+                      toast.error("Error processing video");
+                      console.error(err);
+                    }
+                  }}
+                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
+                >
+                  Upload & Trim Video
+                </button> */}
+              </div>
             </div>
           </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
@@ -1250,24 +1343,130 @@ export default function EditorPage() {
               playerRef={playerRef}
               setProgress={setProgress}
               ontrim={async (segments) => {
-                setProgress(1);
-                toast.loading("Trimming and merging segments...");
-                await trimApplier(
-                  segments,
-                  undefined,
-                  (success) => {
-                    setProgress(100);
-                    toast.dismiss();
-                    if (success) {
-                      toast.success("Video trimmed and merged successfully!");
-                    } else {
-                      toast.error("Failed to trim/merge video.");
+                try {
+                  setProgress(1);
+                  toast.loading("Uploading and trimming video...");
+
+                  // Check if videoUrl exists
+                  if (!videoUrl) {
+                    toast.error("No video available to trim");
+                    return;
+                  }
+
+                  console.log("Starting trim process...");
+                  console.log("Video URL:", videoUrl);
+                  console.log("Segments:", segments);
+
+                  // Get the current video blob
+                  const response = await fetch(videoUrl);
+                  if (!response.ok) {
+                    throw new Error(
+                      `Failed to fetch video: ${response.status}`
+                    );
+                  }
+                  const videoBlob = await response.blob();
+                  console.log("Video blob size:", videoBlob.size);
+
+                  // 1. Create FormData for Cloudinary upload
+                  const cloudFormData = new FormData();
+                  cloudFormData.append("file", videoBlob, "video.webm");
+                  cloudFormData.append("upload_preset", "upload_preset_1");
+
+                  console.log("Uploading to Cloudinary...");
+
+                  // 2. Upload to Cloudinary
+                  const cloudRes = await fetch(
+                    "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                    {
+                      method: "POST",
+                      body: cloudFormData,
                     }
-                    setTimeout(() => setProgress(0), 1000);
-                  },
-                  setProgress,
-                  zoomEffects
-                );
+                  );
+
+                  if (!cloudRes.ok) {
+                    const cloudError = await cloudRes.text();
+                    throw new Error(
+                      `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                    );
+                  }
+
+                  const cloudData = await cloudRes.json();
+                  console.log("Cloudinary response:", cloudData);
+
+                  if (!cloudData.secure_url) {
+                    throw new Error(
+                      "Cloudinary upload failed - no secure_url returned"
+                    );
+                  }
+
+                  const cloudinaryVideoUrl = cloudData.secure_url;
+                  console.log("Cloudinary URL:", cloudinaryVideoUrl);
+
+                  // 3. For single segment (first segment)
+                  const firstSegment = segments[0];
+                  if (!firstSegment) {
+                    throw new Error("No segments provided");
+                  }
+
+                  // Fix: Use the numbers directly instead of convertToSeconds
+                  const startSeconds = firstSegment.start;
+                  const endSeconds = firstSegment.end;
+                  console.log("this are the times", startSeconds, endSeconds);
+
+                  console.log("Trim times:", { startSeconds, endSeconds });
+
+                  // 4. Send video URL and times to backend
+                  console.log("Sending to backend...");
+                  const trimRes = await fetch(
+                    "http://localhost:4000/api/trim",
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      credentials: "include",
+                      body: JSON.stringify({
+                        videoUrl: cloudinaryVideoUrl,
+                        startTime: startSeconds,
+                        endTime: endSeconds,
+                      }),
+                    }
+                  );
+
+                  if (!trimRes.ok) {
+                    const trimError = await trimRes.text();
+                    throw new Error(
+                      `Backend trim failed: ${trimRes.status} - ${trimError}`
+                    );
+                  }
+
+                  const data = await trimRes.json();
+                  console.log("Backend response:", data);
+                  toast.dismiss();
+
+                  if (data.trimmedUrl) {
+                    toast.success("Video trimmed successfully!");
+                    setVideoUrl(data.trimmedUrl);
+                    console.log(
+                      "Trimmed video URL from Backend:",
+                      data.trimmedUrl
+                    );
+                  } else {
+                    toast.error(
+                      "Failed to trim video - no trimmedUrl returned"
+                    );
+                  }
+                } catch (err) {
+                  toast.dismiss();
+                  console.error("Trim error:", err);
+                  const errorMessage =
+                    err instanceof Error
+                      ? err.message
+                      : "Unknown error occurred";
+                  toast.error(`Error processing video: ${errorMessage}`);
+                } finally {
+                  setProgress(0);
+                }
               }}
               currentTime={currentTime}
               setCurrentTime={(t) => {
@@ -1341,8 +1540,6 @@ function CustomVideoControls({
     playerRef.current?.seekTo(value, "seconds");
     setDragging(false);
   };
-
-
 
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
