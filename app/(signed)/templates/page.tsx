@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { FaFilter, FaLayerGroup } from "react-icons/fa";
+
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 
@@ -167,7 +167,7 @@ export default function TemplatesPage() {
         <div className="flex items-center gap-3">
           <span className="mr-2">
             <Image
-              src="/icons/explore-templates.png"
+              src="/icons/explore-templates.svg"
               alt="Notifications"
               width={24}
               height={24}
@@ -236,7 +236,10 @@ export default function TemplatesPage() {
           </div>
         </div>
       </div>
-      <div className="p-8 bg-[#F3F0FC] min-h-screen">
+      <div
+        className="p-8 bg-[#F3F0FC] h-full overflow-y-auto"
+        style={{ minHeight: "calc(100vh - 80px)" }}
+      >
         <div className="mb-6">
           <p className="text-[#8B8B8B] text-lg">
             For faster demo creation use the professionally designed templates.
@@ -253,7 +256,14 @@ export default function TemplatesPage() {
             </div>
             <div className="flex items-center gap-4 ml-4">
               <button className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]">
-                <FaFilter className="text-lg" /> All Categories
+                <Image
+                  src="/icons/down-arrow.svg"
+                  alt="Notifications"
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                />
+                All Categories
               </button>
               <div className="relative" ref={ref}>
                 <button
@@ -261,6 +271,13 @@ export default function TemplatesPage() {
                   onClick={() => setOpen((prev) => !prev)}
                 >
                   <span className="material-icons"></span>
+                  <Image
+                    src="/icons/sort.svg"
+                    alt="Notifications"
+                    width={24}
+                    height={24}
+                    className="w-6 h-6"
+                  />
                   Sort By
                 </button>
                 {open && (
@@ -286,7 +303,14 @@ export default function TemplatesPage() {
                   className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
                   onClick={() => setLevelDropdownOpen((v) => !v)}
                 >
-                  <FaLayerGroup className="text-lg" /> All levels
+                  <Image
+                    src="/icons/filter.svg"
+                    alt="Notifications"
+                    width={24}
+                    height={24}
+                    className="w-6 h-6"
+                  />
+                  All levels
                 </button>
                 {levelDropdownOpen && (
                   <div

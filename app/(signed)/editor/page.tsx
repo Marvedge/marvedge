@@ -16,8 +16,10 @@ import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
-import { videoWithZoomEffects } from "@/app/lib/ffmpeg";
+
 import { formatTime } from "@/lib/dateUtils";
+import { useBlobStore } from "@/app/lib/blobStore";
+import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -67,6 +69,9 @@ export default function EditorPage() {
     downloadBlob,
   } = useEditor();
 
+  const blob = useBlobStore((state) => state.blob);
+  const { recordingDuration } = useScreenRecorder();
+
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const playerRef = useRef<ReactPlayer>(null!);
@@ -83,12 +88,12 @@ export default function EditorPage() {
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
+  const [trimStartTime, setTrimStartTime] = useState("");
+  const [trimEndTime, setTrimEndTime] = useState("");
 
   // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
   const [sidebarDescription, setSidebarDescription] = useState("");
-  const [trimStartTime, setTrimStartTime] = useState("");
-  const [trimEndTime, setTrimEndTime] = useState("");
 
   // Hamburger sidebar state for mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -121,6 +126,43 @@ export default function EditorPage() {
   const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
     null
   );
+
+  // Use recording duration if available, otherwise use detected duration
+  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+
+  // Helper functions for time conversion
+  const formatTimeForInput = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // Simple direct two-way sync
+  const [inputStartTime, setInputStartTime] = useState("00:00:00");
+  const [inputEndTime, setInputEndTime] = useState("00:00:00");
+  const [timelineEndTime, setTimelineEndTime] = useState(0);
+
+  // Initialize timeline pointers when video duration is loaded (only once)
+  useEffect(() => {
+    if (duration > 0 && timelineEndTime === 0) {
+      // Only initialize if not already set
+      const initialEndTime = duration; // Use the full video duration
+      setTimelineEndTime(initialEndTime);
+      setInputEndTime(formatTimeForInput(initialEndTime));
+      console.log("Initialized timeline pointers:", {
+        start: 0,
+        end: initialEndTime,
+      });
+    }
+  }, [duration, timelineEndTime]);
+
+  // Simple timeline change handler
+  const handleTimelineChange = useCallback((start: number, end: number) => {
+    console.log("Timeline changed:", { start, end });
+    setInputStartTime(formatTimeForInput(start));
+    setInputEndTime(formatTimeForInput(end));
+  }, []);
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -189,22 +231,385 @@ export default function EditorPage() {
     setVideoUrl(recordedVideoUrl);
   }, [recordedVideoUrl]);
 
+  // Use recording duration when available
   useEffect(() => {
-    const interval = setInterval(() => {
-      const video = playerRef.current?.getInternalPlayer();
-      if (
-        video &&
-        !isNaN(video.duration) &&
-        video.duration > 0 &&
-        duration === 0
-      ) {
-        setDuration(Math.floor(video.duration));
-        clearInterval(interval);
-      }
-    }, 500);
+    if (recordingDuration > 0 && videoUrl) {
+      setDuration(recordingDuration);
+    }
+  }, [recordingDuration, videoUrl]);
 
-    return () => clearInterval(interval);
-  }, [videoUrl, duration]);
+  // Try to get duration from blob store when video is first loaded
+  useEffect(() => {
+    if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
+      const getDurationFromBlob = async () => {
+        try {
+          const tempVideo = document.createElement("video");
+          tempVideo.src = URL.createObjectURL(blob);
+          tempVideo.preload = "metadata";
+
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setDuration(Math.floor(tempVideo.duration));
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from blob:", error);
+        }
+      };
+
+      // Try immediately and with delays - FASTER
+      getDurationFromBlob();
+      const timers = [
+        setTimeout(getDurationFromBlob, 10),
+        setTimeout(getDurationFromBlob, 50),
+        setTimeout(getDurationFromBlob, 100),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, blob, recordingDuration]);
+
+  // Force metadata loading for ReactPlayer
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const forceMetadataLoad = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            player.preload = "metadata";
+            player.load();
+          }
+        }
+      };
+
+      // Try to force metadata loading immediately - FASTER
+      forceMetadataLoad();
+      const timers = [
+        setTimeout(forceMetadataLoad, 20),
+        setTimeout(forceMetadataLoad, 60),
+        setTimeout(forceMetadataLoad, 120),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Create hidden video element to force metadata loading
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const createHiddenVideo = () => {
+        const hiddenVideo = document.createElement("video");
+        hiddenVideo.style.display = "none";
+        hiddenVideo.preload = "metadata";
+        hiddenVideo.muted = true;
+        hiddenVideo.src = videoUrl;
+
+        hiddenVideo.onloadedmetadata = () => {
+          if (
+            hiddenVideo.duration &&
+            isFinite(hiddenVideo.duration) &&
+            hiddenVideo.duration > 0
+          ) {
+            setDuration(hiddenVideo.duration);
+          }
+          document.body.removeChild(hiddenVideo);
+        };
+
+        hiddenVideo.onerror = () => {
+          document.body.removeChild(hiddenVideo);
+        };
+
+        document.body.appendChild(hiddenVideo);
+        hiddenVideo.load();
+      };
+
+      // Try multiple times with different delays - FASTER
+      createHiddenVideo();
+      const timers = [
+        setTimeout(createHiddenVideo, 5),
+        setTimeout(createHiddenVideo, 30),
+        setTimeout(createHiddenVideo, 80),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Try to get duration by seeking to end
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationBySeeking = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            // Try to seek to a large time to trigger duration detection
+            player.currentTime = 999999;
+            setTimeout(() => {
+              if (
+                player.duration &&
+                isFinite(player.duration) &&
+                player.duration > 0
+              ) {
+                setDuration(player.duration);
+              }
+              // Reset to beginning
+              player.currentTime = 0;
+            }, 100);
+          }
+        }
+      };
+
+      // Try with delays - FASTER
+      const timers = [
+        setTimeout(getDurationBySeeking, 70),
+        setTimeout(getDurationBySeeking, 140),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Last resort: try to get duration from the video URL directly
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromUrl = async () => {
+        try {
+          const tempVideo = document.createElement("video");
+          tempVideo.src = videoUrl;
+
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setDuration(Math.floor(tempVideo.duration));
+            }
+          };
+
+          tempVideo.onerror = () => {
+            console.error("Error loading video from URL");
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from URL:", error);
+        }
+      };
+
+      const timers = [
+        setTimeout(getDurationFromUrl, 800),
+        setTimeout(getDurationFromUrl, 1800),
+        setTimeout(getDurationFromUrl, 2800),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Original duration detection from ReactPlayer
+  useEffect(() => {
+    if (recordingDuration === 0) {
+      const interval = setInterval(() => {
+        const video = playerRef.current?.getInternalPlayer();
+        if (
+          video &&
+          !isNaN(video.duration) &&
+          video.duration > 0 &&
+          duration === 0
+        ) {
+          setDuration(Math.floor(video.duration));
+          clearInterval(interval);
+        }
+      }, 500);
+
+      return () => clearInterval(interval);
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Additional duration detection for recorded videos
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromVideo = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const videoBlob = await response.blob();
+          const tempVideo = document.createElement("video");
+          tempVideo.src = URL.createObjectURL(videoBlob);
+
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setDuration(Math.floor(tempVideo.duration));
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          // Load the video to trigger metadata loading
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from video:", error);
+        }
+      };
+
+      // Try multiple times with different delays
+      const timers = [
+        setTimeout(getDurationFromVideo, 500),
+        setTimeout(getDurationFromVideo, 1000),
+        setTimeout(getDurationFromVideo, 2000),
+        setTimeout(getDurationFromVideo, 3000),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Additional method: try to get duration from the video element directly
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromVideoElement = () => {
+        const video = playerRef.current?.getInternalPlayer();
+        if (video) {
+          video.load();
+          video.addEventListener(
+            "loadedmetadata",
+            () => {
+              if (
+                video.duration &&
+                isFinite(video.duration) &&
+                video.duration > 0
+              ) {
+                setDuration(Math.floor(video.duration));
+              }
+            },
+            { once: true }
+          );
+        }
+      };
+
+      const timers = [
+        setTimeout(getDurationFromVideoElement, 600),
+        setTimeout(getDurationFromVideoElement, 1500),
+        setTimeout(getDurationFromVideoElement, 2500),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Force duration detection for recorded videos
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromVideo = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const blob = await response.blob();
+          const tempVideo = document.createElement("video");
+          tempVideo.preload = "metadata";
+          tempVideo.muted = true;
+          tempVideo.src = URL.createObjectURL(blob);
+
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setDuration(Math.floor(tempVideo.duration));
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from video:", error);
+        }
+      };
+
+      // Try multiple times with different delays
+      getDurationFromVideo();
+      const timers = [
+        setTimeout(getDurationFromVideo, 50),
+        setTimeout(getDurationFromVideo, 150),
+        setTimeout(getDurationFromVideo, 300),
+      ];
+
+      // Try to get duration by seeking to end of video
+      const getDurationBySeeking = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            const wasPlaying = !player.paused;
+            const wasTime = player.currentTime;
+
+            // Try to seek to a large number to trigger duration detection
+            player.currentTime = 999999;
+
+            setTimeout(() => {
+              if (
+                player.duration &&
+                isFinite(player.duration) &&
+                player.duration > 0
+              ) {
+                setDuration(Math.floor(player.duration));
+              }
+              // Restore original state
+              player.currentTime = wasTime;
+              if (wasPlaying) {
+                player.play();
+              }
+            }, 100);
+          }
+        }
+      };
+
+      const seekTimers = [
+        setTimeout(getDurationBySeeking, 70),
+        setTimeout(getDurationBySeeking, 140),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+        seekTimers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -319,7 +724,21 @@ export default function EditorPage() {
 
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
+    console.log("Creating zoom effect:", effect);
+    console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
+    console.log(
+      "Coordinates:",
+      { x: effect.x, y: effect.y },
+      "Expected: 0-1 range"
+    );
+
+    if (effect.zoomLevel <= 1.0) {
+      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
+      effect.zoomLevel = 2.0;
+    }
+
     setZoomEffects((prev) => [...prev, effect]);
+    console.log("Total zoom effects:", [...zoomEffects, effect].length);
   };
 
   const onZoomEffectRemove = (id: string) => {
@@ -478,25 +897,38 @@ export default function EditorPage() {
                       // Show processing message
                       if (zoomEffects.length > 0) {
                         toast.loading(
-                          "Processing video... (Note: Zoom effects are visible during playback but not in downloaded video)"
+                          "Processing video with enhanced zoom effects..."
                         );
                       } else {
                         toast.loading("Processing video...");
                       }
 
-                      // Get the original video blob
+                      // Get the current video blob (which may already have zoom effects applied)
                       const response = await fetch(videoUrl);
-                      const originalBlob = await response.blob();
+                      const currentBlob = await response.blob();
 
-                      // Process video with zoom effects
-                      const processedBlob = await videoWithZoomEffects(
-                        originalBlob,
-                        zoomEffects
-                      );
+                      // If there are zoom effects and the current video doesn't have them, process it
+                      let finalBlob = currentBlob;
+                      if (zoomEffects && zoomEffects.length > 0) {
+                        console.log(
+                          "Processing zoom effects for download:",
+                          zoomEffects
+                        );
+                        console.log("Current video URL:", videoUrl);
+                        console.log("Current blob size:", currentBlob.size);
+                        const { createEnhancedZoomProcessor } = await import(
+                          "../../lib/enhancedZoomProcessor"
+                        );
+                        finalBlob = await createEnhancedZoomProcessor(
+                          currentBlob,
+                          zoomEffects
+                        );
+                        console.log("Final blob size:", finalBlob.size);
+                      }
 
                       // Download the processed video
                       const a = document.createElement("a");
-                      a.href = URL.createObjectURL(processedBlob);
+                      a.href = URL.createObjectURL(finalBlob);
                       a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
                       document.body.appendChild(a);
                       a.click();
@@ -505,7 +937,7 @@ export default function EditorPage() {
                       toast.dismiss();
                       if (zoomEffects.length > 0) {
                         toast.success(
-                          "Video downloaded! Zoom effects are visible during playback in the editor."
+                          "Video downloaded with smooth zoom effects! Check the downloaded video for enhanced quality."
                         );
                       } else {
                         toast.success("Video downloaded successfully!");
@@ -600,15 +1032,63 @@ export default function EditorPage() {
                       background: "#F6F3FF",
                     }}
                     onError={(e) => console.error("Video failed to load", e)}
+                    onDuration={(dur) => {
+                      // Only set duration if recordingDuration is not available
+                      if (
+                        recordingDuration === 0 &&
+                        isFinite(dur) &&
+                        !isNaN(dur)
+                      ) {
+                        setDuration(dur);
+                      }
+                    }}
                     onReady={() => {
                       console.log("Video loaded");
+                      // Only try to get duration if recordingDuration is not available
+                      if (recordingDuration === 0) {
+                        // Try to get duration again when video is ready - FASTER
+                        setTimeout(() => {
+                          if (playerRef.current) {
+                            const player =
+                              playerRef.current.getInternalPlayer();
+                            if (
+                              player &&
+                              player.duration &&
+                              isFinite(player.duration) &&
+                              player.duration > 0
+                            ) {
+                              setDuration(Math.floor(player.duration));
+                            }
+                          }
+                        }, 10);
+
+                        // Additional attempt after a longer delay - FASTER
+                        setTimeout(() => {
+                          if (playerRef.current) {
+                            const player =
+                              playerRef.current.getInternalPlayer();
+                            if (
+                              player &&
+                              player.duration &&
+                              isFinite(player.duration) &&
+                              player.duration > 0
+                            ) {
+                              setDuration(Math.floor(player.duration));
+                            }
+                          }
+                        }, 100);
+                      }
                     }}
                     progressInterval={100}
                     onProgress={({ playedSeconds }) =>
                       setCurrentTime(playedSeconds)
                     }
-                    onDuration={(dur) => {
-                      if (isFinite(dur) && !isNaN(dur)) setDuration(dur);
+                    config={{
+                      file: {
+                        attributes: {
+                          preload: "metadata",
+                        },
+                      },
                     }}
                   />
                 </div>
@@ -621,6 +1101,7 @@ export default function EditorPage() {
                   setCurrentTime(t);
                   playerRef.current?.seekTo(t, "seconds");
                 }}
+                recordingDuration={recordingDuration}
               />
               {/* Updated Controls Row: 5s buttons left, sound bar center, fullscreen right */}
               <div className="flex items-center justify-between mt-2 px-2 w-full">
@@ -631,32 +1112,35 @@ export default function EditorPage() {
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
-                    className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                     title="Back 5 seconds"
                   >
                     <Image
-                      src="/icons/backward.png"
+                      src="/icons/backward-edit.svg"
                       alt="Notifications"
-                      width={24}
-                      height={24}
-                      className="w-6 h-6"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4"
                     />
                   </button>
                   <button
                     onClick={() => {
-                      const newTime = Math.min(duration, currentTime + 5);
+                      const newTime = Math.min(
+                        displayDuration,
+                        currentTime + 5
+                      );
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
-                    className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                     title="Forward 5 seconds"
                   >
                     <Image
-                      src="/icons/forward.png"
+                      src="/icons/forward-edit.svg"
                       alt="Notifications"
-                      width={24}
-                      height={24}
-                      className="w-6 h-6"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4"
                     />
                   </button>
                 </div>
@@ -748,10 +1232,10 @@ export default function EditorPage() {
                   </label>
                   <input
                     type="text"
-                    value={trimStartTime}
-                    onChange={(e) => setTrimStartTime(e.target.value)}
+                    value={inputStartTime}
+                    readOnly
                     placeholder="00:00:00"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-default"
                   />
                 </div>
                 <div>
@@ -760,15 +1244,15 @@ export default function EditorPage() {
                   </label>
                   <input
                     type="text"
-                    value={trimEndTime}
-                    onChange={(e) => setTrimEndTime(e.target.value)}
+                    value={inputEndTime}
+                    readOnly
                     placeholder="00:00:00"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-default"
                   />
                 </div>
               </div>
               <div className="mt-4">
-                <button
+                {/* <button
                   onClick={async () => {
                     if (!trimStartTime || !trimEndTime) {
                       toast.error("Please enter both start and end times");
@@ -868,7 +1352,7 @@ export default function EditorPage() {
                   className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
                 >
                   Upload & Trim Video
-                </button>
+                </button> */}
               </div>
             </div>
           </div>
@@ -879,23 +1363,130 @@ export default function EditorPage() {
               playerRef={playerRef}
               setProgress={setProgress}
               ontrim={async (segments) => {
-                setProgress(1);
-                toast.loading("Trimming and merging segments...");
-                await trimApplier(
-                  segments,
-                  undefined,
-                  (success) => {
-                    setProgress(100);
-                    toast.dismiss();
-                    if (success) {
-                      toast.success("Video trimmed and merged successfully!");
-                    } else {
-                      toast.error("Failed to trim/merge video.");
+                try {
+                  setProgress(1);
+                  toast.loading("Uploading and trimming video...");
+
+                  // Check if videoUrl exists
+                  if (!videoUrl) {
+                    toast.error("No video available to trim");
+                    return;
+                  }
+
+                  console.log("Starting trim process...");
+                  console.log("Video URL:", videoUrl);
+                  console.log("Segments:", segments);
+
+                  // Get the current video blob
+                  const response = await fetch(videoUrl);
+                  if (!response.ok) {
+                    throw new Error(
+                      `Failed to fetch video: ${response.status}`
+                    );
+                  }
+                  const videoBlob = await response.blob();
+                  console.log("Video blob size:", videoBlob.size);
+
+                  // 1. Create FormData for Cloudinary upload
+                  const cloudFormData = new FormData();
+                  cloudFormData.append("file", videoBlob, "video.webm");
+                  cloudFormData.append("upload_preset", "upload_preset_1");
+
+                  console.log("Uploading to Cloudinary...");
+
+                  // 2. Upload to Cloudinary
+                  const cloudRes = await fetch(
+                    "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                    {
+                      method: "POST",
+                      body: cloudFormData,
                     }
-                    setTimeout(() => setProgress(0), 1000);
-                  },
-                  setProgress
-                );
+                  );
+
+                  if (!cloudRes.ok) {
+                    const cloudError = await cloudRes.text();
+                    throw new Error(
+                      `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                    );
+                  }
+
+                  const cloudData = await cloudRes.json();
+                  console.log("Cloudinary response:", cloudData);
+
+                  if (!cloudData.secure_url) {
+                    throw new Error(
+                      "Cloudinary upload failed - no secure_url returned"
+                    );
+                  }
+
+                  const cloudinaryVideoUrl = cloudData.secure_url;
+                  console.log("Cloudinary URL:", cloudinaryVideoUrl);
+
+                  // 3. For single segment (first segment)
+                  const firstSegment = segments[0];
+                  if (!firstSegment) {
+                    throw new Error("No segments provided");
+                  }
+
+                  // Fix: Use the numbers directly instead of convertToSeconds
+                  const startSeconds = firstSegment.start;
+                  const endSeconds = firstSegment.end;
+                  console.log("this are the times", startSeconds, endSeconds);
+
+                  console.log("Trim times:", { startSeconds, endSeconds });
+
+                  // 4. Send video URL and times to backend
+                  console.log("Sending to backend...");
+                  const trimRes = await fetch(
+                    "http://localhost:4000/api/trim",
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      credentials: "include",
+                      body: JSON.stringify({
+                        videoUrl: cloudinaryVideoUrl,
+                        startTime: startSeconds,
+                        endTime: endSeconds,
+                      }),
+                    }
+                  );
+
+                  if (!trimRes.ok) {
+                    const trimError = await trimRes.text();
+                    throw new Error(
+                      `Backend trim failed: ${trimRes.status} - ${trimError}`
+                    );
+                  }
+
+                  const data = await trimRes.json();
+                  console.log("Backend response:", data);
+                  toast.dismiss();
+
+                  if (data.trimmedUrl) {
+                    toast.success("Video trimmed successfully!");
+                    setVideoUrl(data.trimmedUrl);
+                    console.log(
+                      "Trimmed video URL from Backend:",
+                      data.trimmedUrl
+                    );
+                  } else {
+                    toast.error(
+                      "Failed to trim video - no trimmedUrl returned"
+                    );
+                  }
+                } catch (err) {
+                  toast.dismiss();
+                  console.error("Trim error:", err);
+                  const errorMessage =
+                    err instanceof Error
+                      ? err.message
+                      : "Unknown error occurred";
+                  toast.error(`Error processing video: ${errorMessage}`);
+                } finally {
+                  setProgress(0);
+                }
               }}
               currentTime={currentTime}
               setCurrentTime={(t) => {
@@ -906,6 +1497,8 @@ export default function EditorPage() {
               zoomEffects={zoomEffects}
               onZoomEffectCreate={onZoomEffectCreate}
               onZoomEffectRemove={onZoomEffectRemove}
+              externalEndTime={timelineEndTime}
+              onExternalTimeChange={handleTimelineChange}
             />
           </div>
         </div>
@@ -933,11 +1526,13 @@ function CustomVideoControls({
   duration,
   currentTime,
   setCurrentTime,
+  recordingDuration,
 }: {
   playerRef: React.RefObject<ReactPlayer>;
   duration: number;
   currentTime: number;
   setCurrentTime: (t: number) => void;
+  recordingDuration: number;
 }) {
   const [playing, setPlaying] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -966,7 +1561,8 @@ function CustomVideoControls({
     setDragging(false);
   };
 
-  const safeDuration = (d: number) => (d && isFinite(d) && d > 0 ? d : null);
+  // Use recording duration if available, otherwise use detected duration
+  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
   return (
     <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
@@ -977,7 +1573,7 @@ function CustomVideoControls({
         >
           {playing ? (
             <Image
-              src="/icons/play.png"
+              src="/icons/pause.png"
               alt="Notifications"
               width={24}
               height={24}
@@ -985,7 +1581,7 @@ function CustomVideoControls({
             />
           ) : (
             <Image
-              src="/icons/pause.png"
+              src="/icons/play.png"
               alt="Notifications"
               width={24}
               height={24}
@@ -996,7 +1592,7 @@ function CustomVideoControls({
         <input
           type="range"
           min={0}
-          max={duration}
+          max={displayDuration}
           step={0.01}
           value={dragging ? dragValue : currentTime}
           onPointerDown={handleSeekStart}
@@ -1011,7 +1607,7 @@ function CustomVideoControls({
         />
         <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
           {formatTime(currentTime)} /{" "}
-          {safeDuration(duration) ? formatTime(duration) : "Unknown"}
+          {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
         </span>
       </div>
     </div>

@@ -15,6 +15,7 @@ import { Dialog } from "@headlessui/react";
 import { Menu } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import SavePopupForm from "@/app/components/SavePopupForm";
+import ReactPlayer from "react-player";
 
 type RecorderTopbarProps = {
   onBack: () => void;
@@ -136,6 +137,7 @@ export default function RecorderPage() {
     videoUrl,
     screenStream,
     startScreenShare,
+    recordingDuration,
     reset,
   } = useScreenRecorder();
 
@@ -147,7 +149,7 @@ export default function RecorderPage() {
   const setDescription = useBlobStore((state) => state.setDescription);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+
 
   const videoPreview = useRef<HTMLVideoElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -185,6 +187,202 @@ export default function RecorderPage() {
   const [showSavePopup, setShowSavePopup] = useState(false);
   const [processingDownload, setProcessingDownload] = useState(false);
 
+  // Video controls state
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const videoPlayerRef = useRef<ReactPlayer>(null);
+
+  // Use recording duration when available
+  useEffect(() => {
+    if (recordingDuration > 0 && videoUrl) {
+      setVideoDuration(recordingDuration);
+    }
+  }, [recordingDuration, videoUrl]);
+
+  // Force duration detection for recorded videos
+  useEffect(() => {
+    if (videoUrl && videoDuration === 0) {
+      const getDurationFromVideo = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const blob = await response.blob();
+          const tempVideo = document.createElement("video");
+          tempVideo.preload = "metadata";
+          tempVideo.muted = true;
+          tempVideo.src = URL.createObjectURL(blob);
+
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setVideoDuration(tempVideo.duration);
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from video:", error);
+        }
+      };
+
+      // Try multiple times with different delays
+      getDurationFromVideo();
+      const timers = [
+        setTimeout(getDurationFromVideo, 50),
+        setTimeout(getDurationFromVideo, 150),
+        setTimeout(getDurationFromVideo, 300),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, videoDuration]);
+
+  // Force duration detection for uploaded videos
+  useEffect(() => {
+    if (uploadedFileUrl && videoDuration === 0) {
+      const getDurationFromUploadedVideo = async () => {
+        try {
+          const response = await fetch(uploadedFileUrl);
+          const blob = await response.blob();
+          const tempVideo = document.createElement("video");
+          tempVideo.preload = "metadata";
+          tempVideo.muted = true;
+          tempVideo.src = URL.createObjectURL(blob);
+
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setVideoDuration(tempVideo.duration);
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from uploaded video:", error);
+        }
+      };
+
+      // Try multiple times with different delays
+      getDurationFromUploadedVideo();
+      const timers = [
+        setTimeout(getDurationFromUploadedVideo, 50),
+        setTimeout(getDurationFromUploadedVideo, 150),
+        setTimeout(getDurationFromUploadedVideo, 300),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [uploadedFileUrl, videoDuration]);
+
+  // Create hidden video element to force metadata loading immediately
+  useEffect(() => {
+    if ((videoUrl || uploadedFileUrl) && videoDuration === 0) {
+      const createHiddenVideo = () => {
+        const hiddenVideo = document.createElement("video");
+        hiddenVideo.style.display = "none";
+        hiddenVideo.preload = "metadata";
+        hiddenVideo.muted = true;
+        hiddenVideo.src = videoUrl || uploadedFileUrl || "";
+
+        hiddenVideo.onloadedmetadata = () => {
+          if (
+            hiddenVideo.duration &&
+            isFinite(hiddenVideo.duration) &&
+            hiddenVideo.duration > 0
+          ) {
+            setVideoDuration(hiddenVideo.duration);
+          }
+          document.body.removeChild(hiddenVideo);
+        };
+
+        hiddenVideo.onerror = () => {
+          document.body.removeChild(hiddenVideo);
+        };
+
+        document.body.appendChild(hiddenVideo);
+        hiddenVideo.load();
+      };
+
+      const timers = [
+        setTimeout(createHiddenVideo, 5),
+        setTimeout(createHiddenVideo, 30),
+        setTimeout(createHiddenVideo, 80),
+      ];
+
+      // Try to get duration by playing a tiny portion
+      const getDurationByPlaying = () => {
+        if (videoPlayerRef.current) {
+          const player = videoPlayerRef.current.getInternalPlayer();
+          if (player) {
+            const wasPlaying = !player.paused;
+            const wasTime = player.currentTime;
+
+            // Seek to 0.1 seconds and play briefly
+            player.currentTime = 0.1;
+            player
+              .play()
+              .then(() => {
+                setTimeout(() => {
+                  if (
+                    player.duration &&
+                    isFinite(player.duration) &&
+                    player.duration > 0
+                  ) {
+                    setVideoDuration(player.duration);
+                  }
+                  // Restore original state
+                  player.currentTime = wasTime;
+                  if (!wasPlaying) {
+                    player.pause();
+                  }
+                }, 50);
+              })
+              .catch(() => {
+                // If play fails, just try to get duration anyway
+                if (
+                  player.duration &&
+                  isFinite(player.duration) &&
+                  player.duration > 0
+                ) {
+                  setVideoDuration(player.duration);
+                }
+              });
+          }
+        }
+      };
+
+      const playTimers = [
+        setTimeout(getDurationByPlaying, 100),
+        setTimeout(getDurationByPlaying, 200),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+        playTimers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, uploadedFileUrl, videoDuration]);
+
   const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -197,42 +395,209 @@ export default function RecorderPage() {
         .slice(0, 2)
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
+  // Simple timeline component for recorder
+  const SimpleTimeline = () => {
+    const [dragging, setDragging] = useState(false);
+    const [dragValue, setDragValue] = useState(0);
+
+    // Use recording duration if available, otherwise use detected duration
+    const displayDuration =
+      recordingDuration > 0 ? recordingDuration : videoDuration;
+
+    const handlePlayPause = () => {
+      setVideoPlaying(!videoPlaying);
+    };
+
+    const handleSeekStart = () => {
+      setDragging(true);
+      setDragValue(videoCurrentTime);
+    };
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setDragValue(Number(e.target.value));
+    };
+
+    const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
+      const value = Number((e.target as HTMLInputElement).value);
+      setVideoCurrentTime(value);
+      videoPlayerRef.current?.seekTo(value, "seconds");
+      setDragging(false);
+    };
+
+    return (
+      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePlayPause}
+            className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+          >
+            {videoPlaying ? (
+              <Image
+                src="/icons/pause.png"
+                alt="Pause"
+                width={18}
+                height={18}
+                className="w-4 h-4"
+              />
+            ) : (
+              <Image
+                src="/icons/play.png"
+                alt="Play"
+                width={18}
+                height={18}
+                className="w-4 h-4"
+              />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={displayDuration}
+            step={0.01}
+            value={dragging ? dragValue : videoCurrentTime}
+            onPointerDown={handleSeekStart}
+            onChange={handleSeek}
+            onPointerUp={handleSeekEnd}
+            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+            style={{
+              background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
+              height: 8,
+              borderRadius: 8,
+            }}
+          />
+          <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
+            {formatTime(videoCurrentTime)} /{" "}
+            {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
+          </span>
+        </div>
+
+        {/* 5-second skip buttons */}
+        <div className="flex items-center justify-between mt-2 px-2 w-full">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const newTime = Math.max(0, videoCurrentTime - 5);
+                setVideoCurrentTime(newTime);
+                videoPlayerRef.current?.seekTo(newTime, "seconds");
+              }}
+              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              title="Back 5 seconds"
+            >
+              <Image
+                src="/icons/backward.png"
+                alt="Back 5 seconds"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </button>
+            <button
+              onClick={() => {
+                const newTime = Math.min(displayDuration, videoCurrentTime + 5);
+                setVideoCurrentTime(newTime);
+                videoPlayerRef.current?.seekTo(newTime, "seconds");
+              }}
+              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              title="Forward 5 seconds"
+            >
+              <Image
+                src="/icons/forward.png"
+                alt="Forward 5 seconds"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A594F9] font-mono">Preview</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Recording timeline component for active recording
+  const RecordingTimeline = () => {
+    return (
+      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <div className="rounded-full bg-red-500 text-white p-2 animate-pulse">
+            <div className="w-4 h-4 bg-white rounded-full"></div>
+          </div>
+          <div className="flex-1 bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-red-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+              style={{
+                width: `${Math.min((recordingTimer / 3600) * 100, 100)}%`, // Max 1 hour
+              }}
+            ></div>
+          </div>
+          <span className="text-xs text-red-500 font-mono min-w-[60px] text-right font-bold">
+            {formatTime(recordingTimer)}
+          </span>
+        </div>
+
+        {/* Recording status */}
+        <div className="flex items-center justify-between mt-2 px-2 w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-red-500 font-semibold animate-pulse">
+              ⏺ Recording in progress...
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-mono">
+              Live Preview
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Enhanced initialization
   useEffect(() => {
-    if (!videoRef.current) return;
-
-    // If showing a recorded/uploaded video, use src
-    if (videoUrl || uploadedFileUrl) {
-      videoRef.current.srcObject = null;
-      videoRef.current.src = videoUrl || uploadedFileUrl || "";
-    } else if (screenStream) {
-      // For live preview/recording, use srcObject
-      videoRef.current.src = "";
-      videoRef.current.srcObject = screenStream;
+    setRecordingTimer(0);
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
     }
-  }, [videoUrl, screenStream, uploadedFileUrl]);
+  }, []);
 
-  // Start/reset timer when recording starts/stops
+  // Improved recording timer logic
   useEffect(() => {
     if (recording) {
-      setRecordingTimer(0);
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingTimer((prev) => prev + 1);
-      }, 1000);
+      setRecordingTimer(0); // Reset to 0 when recording starts
+
+      // Clear existing interval first
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+
+      // Start new interval after delay to ensure recording is active
+      const timer = setTimeout(() => {
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingTimer((prev) => prev + 1);
+        }, 1000);
+      }, 100);
+
+      return () => {
+        clearTimeout(timer);
+        if (recordingIntervalRef.current) {
+          clearInterval(recordingIntervalRef.current);
+          recordingIntervalRef.current = null;
+        }
+      };
     } else {
+      // Stop and reset timer
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
       }
+      setRecordingTimer(0);
     }
-    return () => {
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
-      }
-    };
   }, [recording]);
-
-
 
   const handleSaveAndPublish = () => {
     if (!blob) return;
@@ -334,27 +699,239 @@ export default function RecorderPage() {
                     </div>
                   ) : uploadedFileUrl &&
                     uploadedFileType?.startsWith("video/") ? (
-                    <VideoPreview
-                      videoUrl={uploadedFileUrl}
-                      isRecording={false}
-                      className="mx-auto"
-                      showControls={false}
-                    />
+                    <div className="w-full max-w-[900px] mx-auto">
+                      <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
+                        <div className="w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
+                            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
+                            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
+                          </div>
+                          <div className="flex-1 flex justify-center">
+                            <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
+                              Marvedge.com/Demo/Preview
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
+                          <ReactPlayer
+                            ref={videoPlayerRef}
+                            url={uploadedFileUrl}
+                            playing={videoPlaying}
+                            controls={false}
+                            muted={false}
+                            width="100%"
+                            height="100%"
+                            style={{
+                              objectFit: "contain",
+                              borderRadius: "1.25rem",
+                              background: "#F6F3FF",
+                            }}
+                            onProgress={({ playedSeconds }) =>
+                              setVideoCurrentTime(playedSeconds)
+                            }
+                            onDuration={(dur) => {
+                              // Only set videoDuration if recordingDuration is not available
+                              if (
+                                recordingDuration === 0 &&
+                                isFinite(dur) &&
+                                !isNaN(dur) &&
+                                dur > 0
+                              ) {
+                                setVideoDuration(dur);
+                              }
+                            }}
+                            onEnded={() => setVideoPlaying(false)}
+                            onReady={() => {
+                              console.log("Video loaded in recorder");
+                              // Only try to get duration if recordingDuration is not available
+                              if (recordingDuration === 0) {
+                                // Try to get duration immediately when video is ready
+                                setTimeout(() => {
+                                  if (videoPlayerRef.current) {
+                                    const player =
+                                      videoPlayerRef.current.getInternalPlayer();
+                                    if (
+                                      player &&
+                                      player.duration &&
+                                      isFinite(player.duration) &&
+                                      player.duration > 0
+                                    ) {
+                                      setVideoDuration(player.duration);
+                                    }
+                                  }
+                                }, 10);
+
+                                // Additional attempts with delays
+                                setTimeout(() => {
+                                  if (videoPlayerRef.current) {
+                                    const player =
+                                      videoPlayerRef.current.getInternalPlayer();
+                                    if (
+                                      player &&
+                                      player.duration &&
+                                      isFinite(player.duration) &&
+                                      player.duration > 0
+                                    ) {
+                                      setVideoDuration(player.duration);
+                                    }
+                                  }
+                                }, 100);
+
+                                setTimeout(() => {
+                                  if (videoPlayerRef.current) {
+                                    const player =
+                                      videoPlayerRef.current.getInternalPlayer();
+                                    if (
+                                      player &&
+                                      player.duration &&
+                                      isFinite(player.duration) &&
+                                      player.duration > 0
+                                    ) {
+                                      setVideoDuration(player.duration);
+                                    }
+                                  }
+                                }, 500);
+                              }
+                            }}
+                            config={{
+                              file: {
+                                attributes: {
+                                  preload: "metadata",
+                                },
+                              },
+                            }}
+                          />
+                        </div>
+                        <SimpleTimeline />
+                      </div>
+                    </div>
                   ) : videoUrl ? (
-                    <VideoPreview
-                      videoUrl={videoUrl}
-                      isRecording={false}
-                      className="mx-auto"
-                      showControls={false}
-                    />
+                    <div className="w-full max-w-[900px] mx-auto">
+                      <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
+                        <div className="w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
+                            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
+                            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
+                          </div>
+                          <div className="flex-1 flex justify-center">
+                            <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
+                              Marvedge.com/Demo/Preview
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
+                          <ReactPlayer
+                            ref={videoPlayerRef}
+                            url={videoUrl}
+                            playing={videoPlaying}
+                            controls={false}
+                            muted={false}
+                            width="100%"
+                            height="100%"
+                            style={{
+                              objectFit: "contain",
+                              borderRadius: "1.25rem",
+                              background: "#F6F3FF",
+                            }}
+                            onProgress={({ playedSeconds }) =>
+                              setVideoCurrentTime(playedSeconds)
+                            }
+                            onDuration={(dur) => {
+                              if (isFinite(dur) && !isNaN(dur) && dur > 0) {
+                                setVideoDuration(dur);
+                              }
+                            }}
+                            onEnded={() => setVideoPlaying(false)}
+                            onReady={() => {
+                              console.log("Video loaded in recorder");
+                              // Try to get duration immediately when video is ready
+                              setTimeout(() => {
+                                if (videoPlayerRef.current) {
+                                  const player =
+                                    videoPlayerRef.current.getInternalPlayer();
+                                  if (
+                                    player &&
+                                    player.duration &&
+                                    isFinite(player.duration) &&
+                                    player.duration > 0
+                                  ) {
+                                    setVideoDuration(player.duration);
+                                  }
+                                }
+                              }, 10);
+
+                              // Additional attempts with delays
+                              setTimeout(() => {
+                                if (videoPlayerRef.current) {
+                                  const player =
+                                    videoPlayerRef.current.getInternalPlayer();
+                                  if (
+                                    player &&
+                                    player.duration &&
+                                    isFinite(player.duration) &&
+                                    player.duration > 0
+                                  ) {
+                                    setVideoDuration(player.duration);
+                                  }
+                                }
+                              }, 100);
+
+                              setTimeout(() => {
+                                if (videoPlayerRef.current) {
+                                  const player =
+                                    videoPlayerRef.current.getInternalPlayer();
+                                  if (
+                                    player &&
+                                    player.duration &&
+                                    isFinite(player.duration) &&
+                                    player.duration > 0
+                                  ) {
+                                    setVideoDuration(player.duration);
+                                  }
+                                }
+                              }, 500);
+                            }}
+                            config={{
+                              file: {
+                                attributes: {
+                                  preload: "metadata",
+                                },
+                              },
+                            }}
+                          />
+                        </div>
+                        <SimpleTimeline />
+                      </div>
+                    </div>
                   ) : screenStream ? (
-                    <VideoPreview
-                      videoUrl={null}
-                      isRecording={recording}
-                      screenStream={screenStream}
-                      className="mx-auto"
-                      showControls={false}
-                    />
+                    <div className="w-full max-w-[900px] mx-auto">
+                      <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
+                        <div className="w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
+                            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
+                            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
+                          </div>
+                          <div className="flex-1 flex justify-center">
+                            <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
+                              Marvedge.com/Demo/Preview
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
+                          <VideoPreview
+                            videoUrl={null}
+                            isRecording={recording}
+                            screenStream={screenStream}
+                            className="w-full h-full"
+                            showControls={false}
+                          />
+                        </div>
+                        {recording && <RecordingTimeline />}
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
                       No preview available. Start screen sharing or upload a
@@ -719,7 +1296,7 @@ export default function RecorderPage() {
                     style={{ width: 96, height: 66, display: "inline-block" }}
                   >
                     <Image
-                      src="/icons/play_button_icon.png"
+                      src="/icons/tabler_video.svg"
                       alt="Preview Icon"
                       width={96}
                       height={66}
