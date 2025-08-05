@@ -26,12 +26,11 @@ interface TimelineRulerProps {
   onRedo?: () => void;
   onResetVideo?: () => void;
   onZoomEffectCreate?: (effect: any) => void;
-
 }
 
 export default function TimelineRuler({
   minValue = 0.05,
-  maxValue = 1.00,
+  maxValue = 1.0,
   currentValue = 0.07,
   onValueChange,
   step = 0.002,
@@ -53,19 +52,32 @@ export default function TimelineRuler({
   onZoomEffectCreate,
 }: TimelineRulerProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [draggingHandle, setDraggingHandle] = useState<'current' | 'start' | 'end' | null>(null);
+  const [draggingHandle, setDraggingHandle] = useState<
+    "current" | "start" | "end" | null
+  >(null);
   const rulerRef = useRef<HTMLDivElement>(null);
   const [localValue, setLocalValue] = useState(currentValue || 0);
   const [localStartTime, setLocalStartTime] = useState(startTime || minValue);
   const [localEndTime, setLocalEndTime] = useState(endTime || maxValue);
-  
-  // Segment management state
-  const [segments, setSegments] = useState<{ start: number; end: number }[]>([
-    { start: 0, end: maxValue },
-  ]);
+
+  // Segment management state - start with empty array
+  const [segments, setSegments] = useState<{ start: number; end: number }[]>(
+    []
+  );
   const [activeSegment, setActiveSegment] = useState(0);
-  const [removedSegments, setRemovedSegments] = useState<{ start: number; end: number }[]>([]);
+  const [removedSegments, setRemovedSegments] = useState<
+    { start: number; end: number }[]
+  >([]);
   const [hasBeenTrimmed, setHasBeenTrimmed] = useState(false);
+
+  // Add new state for scissor dragging
+  const [draggingScissor, setDraggingScissor] = useState<
+    null | "left" | "right"
+  >(null);
+  const [scissorPreview, setScissorPreview] = useState<number | null>(null);
+
+  // Add state for dragging the current time marker
+  const [draggingCurrentTime, setDraggingCurrentTime] = useState(false);
 
   useEffect(() => {
     // Ensure we always update localValue when currentValue changes
@@ -89,6 +101,83 @@ export default function TimelineRuler({
     }
   }, [activeSegment, segments]);
 
+  // Mouse event handlers for scissor dragging
+  useEffect(() => {
+    if (!draggingScissor) return;
+    const onMove = (e: MouseEvent) => {
+      if (!rulerRef.current) return;
+      const rect = rulerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const width = rect.width;
+      const percentage = Math.max(0, Math.min(1, x / width));
+      const value = minValue + (maxValue - minValue) * percentage;
+      setScissorPreview(value);
+    };
+    const onUp = () => {
+      if (scissorPreview !== null) {
+        if (
+          draggingScissor === "left" &&
+          scissorPreview > minValue &&
+          scissorPreview < maxValue
+        ) {
+          // Create segment from 0 to scissorPreview
+          setSegments((prev) => [
+            ...prev,
+            { start: minValue, end: scissorPreview },
+          ]);
+          setActiveSegment(segments.length); // new segment is last
+        } else if (
+          draggingScissor === "right" &&
+          scissorPreview > minValue &&
+          scissorPreview < maxValue
+        ) {
+          // Create segment from scissorPreview to maxValue
+          setSegments((prev) => [
+            ...prev,
+            { start: scissorPreview, end: maxValue },
+          ]);
+          setActiveSegment(segments.length); // new segment is last
+        }
+      }
+      setDraggingScissor(null);
+      setScissorPreview(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingScissor, scissorPreview, minValue, maxValue, segments.length]);
+
+  // Handler to update current time based on mouse position
+  const updateCurrentTimeFromMouse = (e: MouseEvent | React.MouseEvent) => {
+    if (!rulerRef.current) return;
+    const rect = rulerRef.current.getBoundingClientRect();
+    const x =
+      (e instanceof MouseEvent ? e.clientX : e.nativeEvent.clientX) - rect.left;
+    const width = rect.width;
+    const percentage = Math.max(0, Math.min(1, x / width));
+    const value = minValue + (maxValue - minValue) * percentage;
+    setLocalValue(value);
+    if (onValueChange) onValueChange(value);
+  };
+
+  // Mouse event listeners for dragging
+  useEffect(() => {
+    if (!draggingCurrentTime) return;
+    const onMove = (e: MouseEvent) => {
+      updateCurrentTimeFromMouse(e);
+    };
+    const onUp = () => setDraggingCurrentTime(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingCurrentTime]);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     updateValueFromMouse(e);
@@ -105,7 +194,10 @@ export default function TimelineRuler({
     setDraggingHandle(null);
   };
 
-  const handleTrimHandleMouseDown = (e: React.MouseEvent, handle: 'start' | 'end') => {
+  const handleTrimHandleMouseDown = (
+    e: React.MouseEvent,
+    handle: "start" | "end"
+  ) => {
     e.stopPropagation();
     setDraggingHandle(handle);
     setIsDragging(true);
@@ -122,31 +214,54 @@ export default function TimelineRuler({
   };
 
   const removeSegment = (idx: number) => {
-    if (segments.length > 1) {
+    if (segments.length > 0) {
       const newSegments = segments.filter((_, i) => i !== idx);
       setSegments(newSegments);
-      const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
-      setActiveSegment(newActiveSegment);
-      // Update trim handles to match the new active segment
-      if (newSegments[newActiveSegment]) {
-        setLocalStartTime(newSegments[newActiveSegment].start);
-        setLocalEndTime(newSegments[newActiveSegment].end);
+      if (newSegments.length > 0) {
+        const newActiveSegment = Math.min(
+          activeSegment,
+          newSegments.length - 1
+        );
+        setActiveSegment(newActiveSegment);
+        // Update trim handles to match the new active segment
+        if (newSegments[newActiveSegment]) {
+          setLocalStartTime(newSegments[newActiveSegment].start);
+          setLocalEndTime(newSegments[newActiveSegment].end);
+        }
+      } else {
+        // No segments left, reset to default
+        setActiveSegment(0);
+        setLocalStartTime(minValue);
+        setLocalEndTime(maxValue);
       }
     }
   };
 
   const handleUndo = () => {
-    if (segments.length > 1) {
+    if (segments.length > 0) {
       const lastSegment = segments[segments.length - 1];
       setRemovedSegments((prev) => [...prev, lastSegment]);
-      setSegments((prev) => prev.slice(0, -1));
-      const newActiveSegment = Math.min(activeSegment, segments.length - 2);
-      setActiveSegment(newActiveSegment);
-      // Update trim handles to match the new active segment
-      if (segments[newActiveSegment]) {
-        setLocalStartTime(segments[newActiveSegment].start);
-        setLocalEndTime(segments[newActiveSegment].end);
-      }
+      setSegments((prev) => {
+        const newSegments = prev.slice(0, -1);
+        if (newSegments.length > 0) {
+          const newActiveSegment = Math.min(
+            activeSegment,
+            newSegments.length - 1
+          );
+          setActiveSegment(newActiveSegment);
+          // Update trim handles to match the new active segment
+          if (newSegments[newActiveSegment]) {
+            setLocalStartTime(newSegments[newActiveSegment].start);
+            setLocalEndTime(newSegments[newActiveSegment].end);
+          }
+        } else {
+          // No segments left, reset to default
+          setActiveSegment(0);
+          setLocalStartTime(minValue);
+          setLocalEndTime(maxValue);
+        }
+        return newSegments;
+      });
     }
   };
 
@@ -172,38 +287,71 @@ export default function TimelineRuler({
     setHasBeenTrimmed(true);
   };
 
+  // New function for smart trim based on current time
+  const handleSmartTrim = () => {
+    const currentTime = localValue; // Current video time
+    const segmentDuration = 4; // 4 seconds duration for each segment
+    const startTime = currentTime;
+    const endTime = Math.min(maxValue, currentTime + segmentDuration);
+
+    // Create a new segment from current time to current time + 4 seconds
+    const newSegment = { start: startTime, end: endTime };
+
+    // Add the new segment to the segments array
+    setSegments((prev) => {
+      const newSegments = [...prev, newSegment];
+      // Set this new segment as active
+      setActiveSegment(newSegments.length - 1);
+      return newSegments;
+    });
+
+    // Update local start and end times to match the new segment
+    setLocalStartTime(startTime);
+    setLocalEndTime(endTime);
+
+    console.log(
+      `Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`
+    );
+  };
+
   const updateValueFromMouse = (e: React.MouseEvent) => {
     if (!rulerRef.current) return;
-    
+
     const rect = rulerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const width = rect.width;
-    
+
     // Calculate value based on position, ensuring it starts from 0
     const percentage = Math.max(0, Math.min(1, x / width));
     const newValue = minValue + (maxValue - minValue) * percentage;
-    
+
     // Snap to nearest step and ensure it's not negative
     const snappedValue = Math.round(newValue / step) * step;
     const clampedValue = Math.max(0, Math.min(maxValue, snappedValue));
-    
-    if (draggingHandle === 'start') {
+
+    if (draggingHandle === "start") {
       const newStartTime = Math.min(clampedValue, localEndTime - step);
       setLocalStartTime(newStartTime);
       // Update the active segment's start time
       if (segments[activeSegment]) {
         const updatedSegments = [...segments];
-        updatedSegments[activeSegment] = { ...updatedSegments[activeSegment], start: newStartTime };
+        updatedSegments[activeSegment] = {
+          ...updatedSegments[activeSegment],
+          start: newStartTime,
+        };
         setSegments(updatedSegments);
       }
       onStartTimeChange?.(newStartTime);
-    } else if (draggingHandle === 'end') {
+    } else if (draggingHandle === "end") {
       const newEndTime = Math.max(clampedValue, localStartTime + step);
       setLocalEndTime(newEndTime);
       // Update the active segment's end time
       if (segments[activeSegment]) {
         const updatedSegments = [...segments];
-        updatedSegments[activeSegment] = { ...updatedSegments[activeSegment], end: newEndTime };
+        updatedSegments[activeSegment] = {
+          ...updatedSegments[activeSegment],
+          end: newEndTime,
+        };
         setSegments(updatedSegments);
       }
       onEndTimeChange?.(newEndTime);
@@ -221,12 +369,12 @@ export default function TimelineRuler({
       }
     };
 
-    document.addEventListener('mouseup', handleGlobalMouseUp);
-    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener("mouseup", handleGlobalMouseUp);
+    document.addEventListener("mousemove", handleGlobalMouseMove);
 
     return () => {
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener("mouseup", handleGlobalMouseUp);
+      document.removeEventListener("mousemove", handleGlobalMouseMove);
     };
   }, [isDragging]);
 
@@ -234,72 +382,76 @@ export default function TimelineRuler({
   const generateTicks = () => {
     const ticks = [];
     const totalRange = maxValue - minValue;
-    
+
     // Major ticks (every 0.05)
     for (let i = 0; i <= totalRange / majorStep; i++) {
       const value = minValue + i * majorStep;
       ticks.push({
         value,
-        type: 'major',
+        type: "major",
         label: value.toFixed(2),
         height: 20,
       });
     }
-    
+
     // Minor ticks (every 0.01)
     for (let i = 0; i <= totalRange / minorStep; i++) {
       const value = minValue + i * minorStep;
       if (value % majorStep !== 0) {
         ticks.push({
           value,
-          type: 'minor',
-          label: '',
+          type: "minor",
+          label: "",
           height: 12,
         });
       }
     }
-    
+
     // Micro ticks (every 0.002)
     for (let i = 0; i <= totalRange / microStep; i++) {
       const value = minValue + i * microStep;
       if (value % minorStep !== 0) {
         ticks.push({
           value,
-          type: 'micro',
-          label: '',
+          type: "micro",
+          label: "",
           height: 6,
         });
       }
     }
-    
+
     return ticks.sort((a, b) => a.value - b.value);
   };
 
   const ticks = generateTicks();
-  const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * 100;
-  
-
+  const currentPosition =
+    ((localValue - minValue) / (maxValue - minValue)) * 100;
 
   return (
     <div className="w-full max-w-6xl mx-auto p-8">
       {/* Controller buttons */}
-      <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mb-4 w-full">
+      <div className="flex flex-row items-center justify-between w-full mb-4 gap-2 sm:gap-4">
+        {/* Left group */}
         <div className="flex gap-2 sm:gap-4">
           <button
-            onClick={onZoomEffectCreate ? () => {
-              if (onZoomEffectCreate) {
-                const effect = {
-                  id: Date.now().toString(),
-                  startTime: Math.max(0, localValue - 1),
-                  endTime: Math.min(maxValue, localValue + 2),
-                  zoomLevel: 2.0,
-                  x: 0.5,
-                  y: 0.5,
-                };
-                onZoomEffectCreate(effect);
-              }
-            } : undefined}
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold text-sm"
+            onClick={
+              onZoomEffectCreate
+                ? () => {
+                    if (onZoomEffectCreate) {
+                      const effect = {
+                        id: Date.now().toString(),
+                        startTime: Math.max(0, localValue - 1),
+                        endTime: Math.min(maxValue, localValue + 2),
+                        zoomLevel: 2.0,
+                        x: 0.5,
+                        y: 0.5,
+                      };
+                      onZoomEffectCreate(effect);
+                    }
+                  }
+                : undefined
+            }
+            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
           >
             <span className="flex items-center gap-2">
               <Image
@@ -329,7 +481,7 @@ export default function TimelineRuler({
           </button>
           <button
             onClick={() => removeSegment(activeSegment)}
-            disabled={segments.length <= 1}
+            disabled={segments.length === 0}
             className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             <span className="flex items-center gap-2">
@@ -359,12 +511,44 @@ export default function TimelineRuler({
               Trim & Merge
             </span>
           </button>
+          <button
+            onClick={handleSmartTrim}
+            disabled={processing}
+            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+          >
+            <span className="flex items-center gap-2">
+              <Image
+                src="/icons/trim-new.svg"
+                alt="Trim"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+              Trim
+            </span>
+          </button>
+          <button
+            onClick={() => removeSegment(activeSegment)}
+            disabled={segments.length === 0}
+            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-red-200 hover:bg-red-300 text-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            <span className="flex items-center gap-2">
+              <Image
+                src="/icons/delete-demo.svg"
+                alt="Delete"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+              Delete
+            </span>
+          </button>
         </div>
-        <div className="flex-1"></div>
+        {/* Right group */}
         <div className="flex gap-2 sm:gap-4">
           <button
             onClick={handleUndo}
-            disabled={segments.length <= 1}
+            disabled={segments.length === 0}
             className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
@@ -409,11 +593,11 @@ export default function TimelineRuler({
       </div>
 
       {/* Segment display */}
-      {segments && segments.length > 0 && (
+      {segments && segments.length > 0 ? (
         <div className="mb-2">
           <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
             <span>📋</span>
-            <span>Drag segments to reorder them</span>
+            <span>Click segments to select them</span>
           </div>
           <div className="flex gap-2">
             {segments.map((seg, idx) => (
@@ -431,13 +615,18 @@ export default function TimelineRuler({
             ))}
           </div>
         </div>
+      ) : (
+        <div className="mb-2">
+          <div className="text-xs text-gray-500 mb-2 flex items-center gap-1"></div>
+        </div>
       )}
 
       <div className="relative">
         {/* Tick marks and labels - positioned ABOVE the timeline box */}
         <div className="absolute top-0 left-12 right-12 h-12 z-20">
           {ticks.map((tick, index) => {
-            const position = ((tick.value - minValue) / (maxValue - minValue)) * 100;
+            const position =
+              ((tick.value - minValue) / (maxValue - minValue)) * 100;
             return (
               <div
                 key={`${tick.type}-${index}`}
@@ -447,22 +636,28 @@ export default function TimelineRuler({
                 {/* Tick mark - extends downward from above the box */}
                 <div
                   className={`bg-[#A594F9] ${
-                    tick.type === 'major' ? 'w-1 h-8' :
-                    tick.type === 'minor' ? 'w-0.5 h-5' :
-                    'w-0.5 h-2'
+                    tick.type === "major"
+                      ? "w-1 h-8"
+                      : tick.type === "minor"
+                        ? "w-0.5 h-5"
+                        : "w-0.5 h-2"
                   }`}
                   style={{
-                    opacity: tick.type === 'micro' ? 0.4 : 0.7,
+                    opacity: tick.type === "micro" ? 0.4 : 0.7,
                   }}
                 />
-                
+
                 {/* Label for major ticks - positioned below the tick marks with more space */}
-                {tick.type === 'major' && (
-                  <div className={`absolute top-10 ${
-                    tick.value === minValue ? 'left-1/2 transform translate-x-2' : // Start time - move right more
-                    tick.value === maxValue ? 'left-1/2 transform -translate-x-10' : // End time - move left even more
-                    'left-1/2 transform -translate-x-1/2' // Other labels - center
-                  }`}>
+                {tick.type === "major" && (
+                  <div
+                    className={`absolute top-10 ${
+                      tick.value === minValue
+                        ? "left-1/2 transform translate-x-2" // Start time - move right more
+                        : tick.value === maxValue
+                          ? "left-1/2 transform -translate-x-10" // End time - move left even more
+                          : "left-1/2 transform -translate-x-1/2" // Other labels - center
+                    }`}
+                  >
                     <span className="text-sm text-[#A594F9] font-medium">
                       {tick.label}
                     </span>
@@ -474,15 +669,26 @@ export default function TimelineRuler({
         </div>
 
         {/* Main timeline box container - bigger and cleaner */}
-        <div 
+        <div
           ref={rulerRef}
           className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg cursor-pointer mt-12"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          onMouseDown={(e) => {
+            // Only allow seeking if not dragging a scissor
+            if (!draggingScissor) {
+              setDraggingCurrentTime(true);
+              updateCurrentTimeFromMouse(e);
+            }
+          }}
         >
-          {/* End bars with scissor icons - bigger */}
-          <div className="absolute left-0 top-0 w-12 h-full bg-[#A594F9] rounded-l-lg flex items-center justify-center">
+          {/* Left scissor (draggable) */}
+          <div
+            className="absolute left-0 top-0 w-12 h-full bg-[#A594F9] rounded-l-lg flex items-center justify-center cursor-ew-resize z-30"
+            onMouseDown={() => {
+              setDraggingScissor("left");
+              setScissorPreview(null);
+            }}
+            style={{ userSelect: "none" }}
+          >
             <Image
               src="/icons/trim-new.svg"
               alt="Trim"
@@ -491,7 +697,15 @@ export default function TimelineRuler({
               className="w-5 h-5 text-white"
             />
           </div>
-          <div className="absolute right-0 top-0 w-12 h-full bg-[#A594F9] rounded-r-lg flex items-center justify-center">
+          {/* Right scissor (draggable) */}
+          <div
+            className="absolute right-0 top-0 w-12 h-full bg-[#A594F9] rounded-r-lg flex items-center justify-center cursor-ew-resize z-30"
+            onMouseDown={() => {
+              setDraggingScissor("right");
+              setScissorPreview(null);
+            }}
+            style={{ userSelect: "none" }}
+          >
             <Image
               src="/icons/trim-new.svg"
               alt="Trim"
@@ -510,42 +724,49 @@ export default function TimelineRuler({
             <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-6 border-r-6 border-b-6 border-l-transparent border-r-transparent border-b-green-500" />
           </div>
 
-          {/* Trim handles */}
-          {showTrimHandles && (
-            <>
-              {/* Start trim handle */}
+          {/* Segment highlighting */}
+          {segments.map((segment, idx) => {
+            const startPosition =
+              ((segment.start - minValue) / (maxValue - minValue)) * 100;
+            const endPosition =
+              ((segment.end - minValue) / (maxValue - minValue)) * 100;
+            const width = endPosition - startPosition;
+            return (
               <div
-                className="absolute top-0 w-3 h-full bg-blue-500 cursor-ew-resize z-20"
-                style={{ left: `${((localStartTime - minValue) / (maxValue - minValue)) * 100}%` }}
-                onMouseDown={(e) => handleTrimHandleMouseDown(e, 'start')}
-              >
-                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-blue-500" />
-                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-blue-500 font-medium">
-                  {localStartTime.toFixed(2)}
-                </div>
-              </div>
-
-              {/* End trim handle */}
-              <div
-                className="absolute top-0 w-3 h-full bg-red-500 cursor-ew-resize z-20"
-                style={{ left: `${((localEndTime - minValue) / (maxValue - minValue)) * 100}%` }}
-                onMouseDown={(e) => handleTrimHandleMouseDown(e, 'end')}
-              >
-                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-red-500" />
-                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-red-500 font-medium">
-                  {localEndTime.toFixed(2)}
-                </div>
-              </div>
-
-              {/* Trim selection area */}
-              <div
-                className="absolute top-0 h-full bg-blue-200 opacity-30 z-5"
+                key={`segment-${idx}`}
+                className={`absolute top-0 h-full z-5 ${
+                  idx === activeSegment
+                    ? "bg-blue-400 opacity-60"
+                    : "bg-blue-200 opacity-40"
+                }`}
                 style={{
-                  left: `${((localStartTime - minValue) / (maxValue - minValue)) * 100}%`,
-                  width: `${((localEndTime - localStartTime) / (maxValue - minValue)) * 100}%`,
+                  left: `${startPosition}%`,
+                  width: `${width}%`,
                 }}
-              />
-            </>
+              >
+                {/* Segment label */}
+                <div className="absolute top-2 left-2 text-xs font-bold text-blue-800 bg-white bg-opacity-80 px-1 rounded">
+                  S{idx + 1}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Preview highlight while dragging scissor */}
+          {draggingScissor && scissorPreview !== null && (
+            <div
+              className="absolute top-0 h-full bg-yellow-300 opacity-40 z-20"
+              style={{
+                left:
+                  draggingScissor === "left"
+                    ? "0%"
+                    : `${((scissorPreview - minValue) / (maxValue - minValue)) * 100}%`,
+                width:
+                  draggingScissor === "left"
+                    ? `${((scissorPreview - minValue) / (maxValue - minValue)) * 100}%`
+                    : `${((maxValue - scissorPreview) / (maxValue - minValue)) * 100}%`,
+              }}
+            />
           )}
         </div>
 
