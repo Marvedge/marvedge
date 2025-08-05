@@ -730,7 +730,7 @@ export default function EditorPage() {
     );
 
     if (effect.zoomLevel <= 1.0) {
-      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
+      console.warn("⚠ Zoom level is too low, forcing to 2.0");
       effect.zoomLevel = 2.0;
     }
 
@@ -872,68 +872,49 @@ export default function EditorPage() {
               <button
                 className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={async () => {
+                  console.log("Clicked the save demo button");
                   if (videoUrl) {
                     try {
+                      if (
+                        !sidebarTitle?.trim() ||
+                        !sidebarDescription?.trim()
+                      ) {
+                        toast.error("Title and description are required.");
+                        return;
+                      }
                       // Show processing message
-                      if (zoomEffects.length > 0) {
-                        toast.loading(
-                          "Processing video with enhanced zoom effects..."
-                        );
-                      } else {
-                        toast.loading("Processing video...");
+                      toast.loading("Saving demo...");
+
+                      const startTime = inputStartTime;
+                      const endTime = inputEndTime;
+
+                      // Call the API to save demo
+                      const response = await fetch("/api/demo", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          title: sidebarTitle,
+                          description: sidebarDescription,
+                          videoUrl,
+                          startTime,
+                          endTime,
+                        }),
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                      });
+
+                      if (!response.ok) {
+                        throw new Error("Failed to save demo");
                       }
 
-                      // Get the current video blob (which may already have zoom effects applied)
-                      const response = await fetch(videoUrl);
-                      const currentBlob = await response.blob();
-
-                      // If there are zoom effects and the current video doesn't have them, process it
-                      let finalBlob = currentBlob;
-                      if (zoomEffects && zoomEffects.length > 0) {
-                        console.log(
-                          "Processing zoom effects for download:",
-                          zoomEffects
-                        );
-                        console.log("Current video URL:", videoUrl);
-                        console.log("Current blob size:", currentBlob.size);
-                        const { createEnhancedZoomProcessor } = await import(
-                          "../../lib/enhancedZoomProcessor"
-                        );
-                        finalBlob = await createEnhancedZoomProcessor(
-                          currentBlob,
-                          zoomEffects
-                        );
-                        console.log("Final blob size:", finalBlob.size);
-                      }
-
-                      // Download the processed video
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(finalBlob);
-                      a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-
+                      const data = await response.json();
                       toast.dismiss();
-                      if (zoomEffects.length > 0) {
-                        toast.success(
-                          "Video downloaded with smooth zoom effects! Check the downloaded video for enhanced quality."
-                        );
-                      } else {
-                        toast.success("Video downloaded successfully!");
-                      }
+                      toast.success("Demo saved successfully!");
+                      console.log("Demo saved:", data);
                     } catch (error) {
-                      console.error("Error processing video:", error);
+                      console.error("Error saving demo:", error);
                       toast.dismiss();
-                      toast.error(
-                        "Failed to process video. Downloading original video."
-                      );
-
-                      // Fallback to original video
-                      const a = document.createElement("a");
-                      a.href = videoUrl;
-                      a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
-                      a.click();
+                      toast.error("Failed to save demo");
                     }
                   }
                 }}
@@ -1231,109 +1212,6 @@ export default function EditorPage() {
                   />
                 </div>
               </div>
-              <div className="mt-4">
-                {/* <button
-                  onClick={async () => {
-                    if (!trimStartTime || !trimEndTime) {
-                      toast.error("Please enter both start and end times");
-                      return;
-                    }
-
-                    const startSeconds = convertToSeconds(trimStartTime);
-                    const endSeconds = convertToSeconds(trimEndTime);
-
-                    if (
-                      isNaN(startSeconds) ||
-                      isNaN(endSeconds) ||
-                      startSeconds >= endSeconds
-                    ) {
-                      toast.error("Invalid start/end time format");
-                      return;
-                    }
-
-                    toast.loading("Getting your video ready...");
-
-                    try {
-                      const videoElement = document.querySelector("video");
-                      const blobUrl = videoElement?.src;
-
-                      if (!blobUrl) {
-                        throw new Error("Video source is undefined");
-                      }
-
-                      // 1. Get Blob from video
-                      const response = await fetch(blobUrl);
-                      const blob = await response.blob();
-
-                      // 2. Convert Blob to File
-                      const file = new File([blob], "uploaded.webm", {
-                        type: "video/webm",
-                      });
-
-                      // 3. Upload to Cloudinary
-                      const cloudFormData = new FormData();
-                      cloudFormData.append("file", file);
-                      cloudFormData.append("upload_preset", "upload_preset_1"); // 🔁 Replace
-
-                      const cloudRes = await fetch(
-                        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload", // 🔁 Replace
-                        {
-                          method: "POST",
-                          body: cloudFormData,
-                        }
-                      );
-
-                      const cloudData = await cloudRes.json();
-
-                      if (!cloudData.secure_url) {
-                        throw new Error("Cloudinary upload failed");
-                      }
-
-                      const videoUrl = cloudData.secure_url;
-                      console.log(videoUrl);
-                      console.log({ videoUrl, startSeconds, endSeconds });
-
-                      // 4. Send video URL and times to backend
-                      const trimRes = await fetch(
-                        "http://localhost:4000/api/trim",
-                        {
-                          method: "POST",
-                          headers: {
-                            "Content-Type": "application/json",
-                          },
-                          credentials: "include",
-                          body: JSON.stringify({
-                            videoUrl,
-                            startTime: startSeconds,
-                            endTime: endSeconds,
-                          }),
-                        }
-                      );
-
-                      const data = await trimRes.json();
-                      toast.dismiss();
-
-                      if (data.trimmedUrl) {
-                        toast.success("Video trimmed successfully!");
-                        setVideoUrl(data.trimmedUrl);
-                        console.log(
-                          "Trimmed video URL from Backend:",
-                          data.trimmedUrl
-                        );
-                      } else {
-                        toast.error("Failed to trim video.");
-                      }
-                    } catch (err) {
-                      toast.dismiss();
-                      toast.error("Error processing video");
-                      console.error(err);
-                    }
-                  }}
-                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
-                >
-                  Upload & Trim Video
-                </button> */}
-              </div>
             </div>
           </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
@@ -1402,20 +1280,14 @@ export default function EditorPage() {
                   const cloudinaryVideoUrl = cloudData.secure_url;
                   console.log("Cloudinary URL:", cloudinaryVideoUrl);
 
-                  // 3. For single segment (first segment)
-                  const firstSegment = segments[0];
-                  if (!firstSegment) {
+                  // 3. Send all segments to backend
+                  if (!segments || segments.length === 0) {
                     throw new Error("No segments provided");
                   }
 
-                  // Fix: Use the numbers directly instead of convertToSeconds
-                  const startSeconds = firstSegment.start;
-                  const endSeconds = firstSegment.end;
-                  console.log("this are the times", startSeconds, endSeconds);
+                  console.log("Trim segments:", segments);
 
-                  console.log("Trim times:", { startSeconds, endSeconds });
-
-                  // 4. Send video URL and times to backend
+                  // 4. Send video URL and segments to backend
                   console.log("Sending to backend...");
                   const trimRes = await fetch(
                     "http://localhost:4000/api/trim",
@@ -1427,8 +1299,7 @@ export default function EditorPage() {
                       credentials: "include",
                       body: JSON.stringify({
                         videoUrl: cloudinaryVideoUrl,
-                        startTime: startSeconds,
-                        endTime: endSeconds,
+                        segments: segments,
                       }),
                     }
                   );
