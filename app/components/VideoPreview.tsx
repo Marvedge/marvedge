@@ -497,6 +497,16 @@ export default function VideoPreview({
               background: "#F6F3FF",
             }}
             onError={(e) => console.error("Video failed to load", e)}
+            onStart={() => {
+              // Ensure currentTime starts from 0 when video starts
+              setCurrentTime(0);
+              onTimeChange?.(0);
+            }}
+            onPlay={() => {
+              // Ensure currentTime is 0 when video starts playing
+              setCurrentTime(0);
+              onTimeChange?.(0);
+            }}
             onDuration={(dur) => {
               if (isFinite(dur) && !isNaN(dur) && dur > 0) {
                 setDuration(dur);
@@ -534,10 +544,16 @@ export default function VideoPreview({
                 }
               }, 100);
             }}
-            progressInterval={100}
+            progressInterval={50}
             onProgress={({ playedSeconds }) => {
-              setCurrentTime(playedSeconds);
-              onTimeChange?.(playedSeconds);
+              // Ensure currentTime starts from 0 immediately
+              if (playedSeconds === 0) {
+                setCurrentTime(0);
+                onTimeChange?.(0);
+              } else {
+                setCurrentTime(playedSeconds);
+                onTimeChange?.(playedSeconds);
+              }
 
               // Try to get duration when video starts playing (this often triggers metadata loading) - FASTER
               if (playedSeconds > 0 && duration === 0) {

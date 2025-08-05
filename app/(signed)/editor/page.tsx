@@ -7,6 +7,7 @@ import Image from "next/image";
 
 import { useSession } from "next-auth/react";
 import { TimelineSlider } from "@/app/components/MytimeLine";
+import TimelineRuler from "@/app/components/TimeLine";
 import { FaExpand } from "react-icons/fa";
 import { useCallback } from "react";
 import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
@@ -143,6 +144,7 @@ export default function EditorPage() {
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
   const [inputEndTime, setInputEndTime] = useState("00:00:00");
+  const [timelineStartTime, setTimelineStartTime] = useState(0);
   const [timelineEndTime, setTimelineEndTime] = useState(0);
 
   // Initialize timeline pointers when video duration is loaded (only once)
@@ -150,7 +152,9 @@ export default function EditorPage() {
     if (duration > 0 && timelineEndTime === 0) {
       // Only initialize if not already set
       const initialEndTime = duration; // Use the full video duration
+      setTimelineStartTime(0);
       setTimelineEndTime(initialEndTime);
+      setInputStartTime(formatTimeForInput(0));
       setInputEndTime(formatTimeForInput(initialEndTime));
       console.log("Initialized timeline pointers:", {
         start: 0,
@@ -1015,12 +1019,21 @@ export default function EditorPage() {
                     volume={volume}
                     width="100%"
                     height="100%"
+
                     style={{
                       objectFit: "contain",
                       borderRadius: "1.25rem",
                       background: "#F6F3FF",
                     }}
                     onError={(e) => console.error("Video failed to load", e)}
+                    onStart={() => {
+                      // Ensure currentTime starts from 0 when video starts
+                      setCurrentTime(0);
+                    }}
+                    onPlay={() => {
+                      // Ensure currentTime is 0 when video starts playing
+                      setCurrentTime(0);
+                    }}
                     onDuration={(dur) => {
                       // Only set duration if recordingDuration is not available
                       if (
@@ -1068,10 +1081,16 @@ export default function EditorPage() {
                         }, 100);
                       }
                     }}
-                    progressInterval={100}
-                    onProgress={({ playedSeconds }) =>
-                      setCurrentTime(playedSeconds)
-                    }
+                    progressInterval={50}
+                    onProgress={({ playedSeconds }) => {
+                      // Ensure currentTime starts from 0 immediately
+                      if (playedSeconds === 0) {
+                        setCurrentTime(0);
+                      } else {
+                        setCurrentTime(playedSeconds);
+                      }
+
+                    }}
                     config={{
                       file: {
                         attributes: {
@@ -1244,43 +1263,62 @@ export default function EditorPage() {
             </div>
           </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
-            <TimelineSlider
-              duration={duration}
-              processing={processing}
-              playerRef={playerRef}
-              setProgress={setProgress}
-              ontrim={async (segments) => {
-                setProgress(1);
-                toast.loading("Trimming and merging segments...");
-                await trimApplier(
-                  segments,
-                  undefined,
-                  (success) => {
-                    setProgress(100);
-                    toast.dismiss();
-                    if (success) {
-                      toast.success("Video trimmed and merged successfully!");
-                    } else {
-                      toast.error("Failed to trim/merge video.");
-                    }
-                    setTimeout(() => setProgress(0), 1000);
-                  },
-                  setProgress,
-                  zoomEffects
-                );
-              }}
-              currentTime={currentTime}
-              setCurrentTime={(t) => {
-                setCurrentTime(t);
-                playerRef.current?.seekTo(t, "seconds");
-              }}
-              onResetVideo={resetVideo}
-              zoomEffects={zoomEffects}
-              onZoomEffectCreate={onZoomEffectCreate}
-              onZoomEffectRemove={onZoomEffectRemove}
-              externalEndTime={timelineEndTime}
-              onExternalTimeChange={handleTimelineChange}
-            />
+            {duration > 0 ? (
+              <TimelineRuler
+                minValue={0}
+                maxValue={duration}
+                currentValue={Math.max(0, currentTime)}
+                onValueChange={(value) => {
+                  const clampedValue = Math.max(0, Math.min(duration, value));
+                  setCurrentTime(clampedValue);
+                  playerRef.current?.seekTo(clampedValue, "seconds");
+                }}
+                step={0.1}
+                majorStep={20}
+                minorStep={5}
+                microStep={1}
+                showTrimHandles={true}
+                startTime={timelineStartTime}
+                endTime={timelineEndTime}
+                onStartTimeChange={(value) => {
+                  setTimelineStartTime(value);
+                  handleTimelineChange(value, timelineEndTime);
+                }}
+                onEndTimeChange={(value) => {
+                  setTimelineEndTime(value);
+                  handleTimelineChange(timelineStartTime, value);
+                }}
+                onTrim={async (segments) => {
+                  setProgress(1);
+                  toast.loading("Trimming and merging segments...");
+                  await trimApplier(
+                    segments,
+                    undefined,
+                    (success) => {
+                      setProgress(100);
+                      toast.dismiss();
+                      if (success) {
+                        toast.success("Video trimmed and merged successfully!");
+                      } else {
+                        toast.error("Failed to trim/merge video.");
+                      }
+                      setTimeout(() => setProgress(0), 1000);
+                    },
+                    setProgress,
+                    zoomEffects
+                  );
+                }}
+                processing={processing}
+                onResetVideo={resetVideo}
+                onZoomEffectCreate={onZoomEffectCreate}
+              />
+            ) : (
+              <div className="w-full max-w-6xl mx-auto p-8">
+                <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg mt-12 flex items-center justify-center">
+                  <span className="text-[#A594F9] font-medium">Loading timeline...</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

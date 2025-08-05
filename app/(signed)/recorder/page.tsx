@@ -727,9 +727,15 @@ export default function RecorderPage() {
                               borderRadius: "1.25rem",
                               background: "#F6F3FF",
                             }}
-                            onProgress={({ playedSeconds }) =>
-                              setVideoCurrentTime(playedSeconds)
-                            }
+                            progressInterval={50}
+                            onProgress={({ playedSeconds }) => {
+                              // Ensure currentTime starts from 0 immediately
+                              if (playedSeconds === 0) {
+                                setVideoCurrentTime(0);
+                              } else {
+                                setVideoCurrentTime(playedSeconds);
+                              }
+                            }}
                             onDuration={(dur) => {
                               // Only set videoDuration if recordingDuration is not available
                               if (
@@ -740,6 +746,14 @@ export default function RecorderPage() {
                               ) {
                                 setVideoDuration(dur);
                               }
+                            }}
+                            onStart={() => {
+                              // Ensure currentTime starts from 0 when video starts
+                              setVideoCurrentTime(0);
+                            }}
+                            onPlay={() => {
+                              // Ensure currentTime is 0 when video starts playing
+                              setVideoCurrentTime(0);
                             }}
                             onEnded={() => setVideoPlaying(false)}
                             onReady={() => {
@@ -835,13 +849,27 @@ export default function RecorderPage() {
                               borderRadius: "1.25rem",
                               background: "#F6F3FF",
                             }}
-                            onProgress={({ playedSeconds }) =>
-                              setVideoCurrentTime(playedSeconds)
-                            }
+                            progressInterval={50}
+                            onProgress={({ playedSeconds }) => {
+                              // Ensure currentTime starts from 0 immediately
+                              if (playedSeconds === 0) {
+                                setVideoCurrentTime(0);
+                              } else {
+                                setVideoCurrentTime(playedSeconds);
+                              }
+                            }}
                             onDuration={(dur) => {
                               if (isFinite(dur) && !isNaN(dur) && dur > 0) {
                                 setVideoDuration(dur);
                               }
+                            }}
+                            onStart={() => {
+                              // Ensure currentTime starts from 0 when video starts
+                              setVideoCurrentTime(0);
+                            }}
+                            onPlay={() => {
+                              // Ensure currentTime is 0 when video starts playing
+                              setVideoCurrentTime(0);
                             }}
                             onEnded={() => setVideoPlaying(false)}
                             onReady={() => {
