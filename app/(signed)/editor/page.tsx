@@ -65,7 +65,6 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -766,7 +765,7 @@ export default function EditorPage() {
     );
 
     if (effect.zoomLevel <= 1.0) {
-      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
+      console.warn("⚠ Zoom level is too low, forcing to 2.0");
       effect.zoomLevel = 2.0;
     }
 
@@ -920,68 +919,49 @@ export default function EditorPage() {
               <button
                 className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={async () => {
+                  console.log("Clicked the save demo button");
                   if (videoUrl) {
                     try {
+                      if (
+                        !sidebarTitle?.trim() ||
+                        !sidebarDescription?.trim()
+                      ) {
+                        toast.error("Title and description are required.");
+                        return;
+                      }
                       // Show processing message
-                      if (zoomEffects.length > 0) {
-                        toast.loading(
-                          "Processing video with enhanced zoom effects..."
-                        );
-                      } else {
-                        toast.loading("Processing video...");
+                      toast.loading("Saving demo...");
+
+                      const startTime = inputStartTime;
+                      const endTime = inputEndTime;
+
+                      // Call the API to save demo
+                      const response = await fetch("/api/demo", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          title: sidebarTitle,
+                          description: sidebarDescription,
+                          videoUrl,
+                          startTime,
+                          endTime,
+                        }),
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                      });
+
+                      if (!response.ok) {
+                        throw new Error("Failed to save demo");
                       }
 
-                      // Get the current video blob (which may already have zoom effects applied)
-                      const response = await fetch(videoUrl);
-                      const currentBlob = await response.blob();
-
-                      // If there are zoom effects and the current video doesn't have them, process it
-                      let finalBlob = currentBlob;
-                      if (zoomEffects && zoomEffects.length > 0) {
-                        console.log(
-                          "Processing zoom effects for download:",
-                          zoomEffects
-                        );
-                        console.log("Current video URL:", videoUrl);
-                        console.log("Current blob size:", currentBlob.size);
-                        const { createEnhancedZoomProcessor } = await import(
-                          "../../lib/enhancedZoomProcessor"
-                        );
-                        finalBlob = await createEnhancedZoomProcessor(
-                          currentBlob,
-                          zoomEffects
-                        );
-                        console.log("Final blob size:", finalBlob.size);
-                      }
-
-                      // Download the processed video
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(finalBlob);
-                      a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-
+                      const data = await response.json();
                       toast.dismiss();
-                      if (zoomEffects.length > 0) {
-                        toast.success(
-                          "Video downloaded with smooth zoom effects! Check the downloaded video for enhanced quality."
-                        );
-                      } else {
-                        toast.success("Video downloaded successfully!");
-                      }
+                      toast.success("Demo saved successfully!");
+                      console.log("Demo saved:", data);
                     } catch (error) {
-                      console.error("Error processing video:", error);
+                      console.error("Error saving demo:", error);
                       toast.dismiss();
-                      toast.error(
-                        "Failed to process video. Downloading original video."
-                      );
-
-                      // Fallback to original video
-                      const a = document.createElement("a");
-                      a.href = videoUrl;
-                      a.download = `${sanitizeFilename(sidebarTitle) || "clip"}.webm`;
-                      a.click();
+                      toast.error("Failed to save demo");
                     }
                   }
                 }}
@@ -1272,7 +1252,6 @@ export default function EditorPage() {
                   />
                 </div>
               </div>
-              {/* Removed Apply Trim button - functionality moved to Trim & Merge button */}
             </div>
           </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">

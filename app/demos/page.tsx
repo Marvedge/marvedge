@@ -19,22 +19,16 @@ import {
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 
-const demoData = [
-  {
-    title: "Demo 1",
-    description: "No description",
-    status: "Draft",
-    views: 0,
-    updated: "10 June 2025",
-  },
-  {
-    title: "Demo 2",
-    description: "No description",
-    status: "Draft",
-    views: 0,
-    updated: "10 June 2025",
-  },
-];
+interface Demo {
+  id: string;
+  title: string;
+  description: string;
+  videoUrl: string;
+  startTime: string;
+  endTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function DemosPage() {
   const [search, setSearch] = useState("");
@@ -47,6 +41,9 @@ export default function DemosPage() {
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [topSearch, setTopSearch] = useState("");
+  const [demos, setDemos] = useState<Demo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const initials = React.useMemo(() => {
     if (session?.user?.name) {
@@ -59,6 +56,29 @@ export default function DemosPage() {
     }
     return session?.user?.email?.[0].toUpperCase() || "U";
   }, [session?.user]);
+
+  // Fetch demos from API
+  const fetchDemos = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/demo");
+      if (!response.ok) {
+        throw new Error("Failed to fetch demos");
+      }
+      const data = await response.json();
+      setDemos(data.demos || []);
+    } catch (err) {
+      console.error("Error fetching demos:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch demos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDemos();
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -84,6 +104,31 @@ export default function DemosPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Helper functions
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const formatTime = (timeString: string) => {
+    const seconds = parseInt(timeString);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // Filter demos based on search
+  const filteredDemos = demos.filter(
+    (demo) =>
+      demo.title.toLowerCase().includes(search.toLowerCase()) ||
+      demo.description.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
@@ -273,13 +318,25 @@ export default function DemosPage() {
             Your Demos
           </h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
-            {demoData.length}/2 demos
+            {filteredDemos.length}/{demos.length} demos
           </div>
-          {view === "grid" ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-[#A594F9] text-lg">Loading demos...</div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-red-500 text-lg">{error}</div>
+            </div>
+          ) : filteredDemos.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-[#8B8B8B] text-lg">No demos found</div>
+            </div>
+          ) : view === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
-              {demoData.map((demo) => (
+              {filteredDemos.map((demo: Demo) => (
                 <div
-                  key={demo.title}
+                  key={demo.id}
                   className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-4">
@@ -309,9 +366,19 @@ export default function DemosPage() {
                       <FaEye className="text-lg" /> 0
                     </div>
                     <div className="flex items-center gap-2">
-                      <FaRegCalendarAlt className="text-lg" /> 10 June 2025
+                      <FaRegCalendarAlt className="text-lg" />{" "}
+                      {formatDate(demo.updatedAt)}
                     </div>
                     <div>Draft</div>
+                  </div>
+                  <div className="text-sm text-[#8B8B8B] mb-4">
+                    <div>
+                      Duration: {formatTime(demo.startTime)} -{" "}
+                      {formatTime(demo.endTime)}
+                    </div>
+                    <div className="truncate">
+                      {demo.description || "No description"}
+                    </div>
                   </div>
                   <button className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto">
                     <FaShareAlt /> Share
@@ -325,16 +392,16 @@ export default function DemosPage() {
                 <thead className="bg-[#F3F0FC] text-[#8B8B8B] text-lg">
                   <tr>
                     <th className="py-4 px-6 font-medium">Demos</th>
+                    <th className="py-4 px-6 font-medium">Duration</th>
                     <th className="py-4 px-6 font-medium">Status</th>
-                    <th className="py-4 px-6 font-medium">Views</th>
                     <th className="py-4 px-6 font-medium">Updated</th>
                     <th className="py-4 px-6 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {demoData.map((demo) => (
+                  {filteredDemos.map((demo: Demo) => (
                     <tr
-                      key={demo.title}
+                      key={demo.id}
                       className="border-t border-[#F3F0FC] hover:bg-[#F8F6FF]"
                     >
                       <td className="py-4 px-6 flex items-center gap-4">
@@ -352,18 +419,19 @@ export default function DemosPage() {
                             {demo.title}
                           </div>
                           <div className="text-[#8B8B8B] text-sm">
-                            {demo.description}
+                            {demo.description || "No description"}
                           </div>
                         </div>
                       </td>
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
-                        {demo.status}
-                      </td>
-                      <td className="py-4 px-6 text-[#1A0033] font-bold">
-                        {demo.views}
+                        {formatTime(demo.startTime)} -{" "}
+                        {formatTime(demo.endTime)}
                       </td>
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
-                        {demo.updated}
+                        Draft
+                      </td>
+                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">
+                        {formatDate(demo.updatedAt)}
                       </td>
                       <td className="py-4 px-6 flex gap-4 items-center">
                         <button className="text-[#A594F9] hover:text-[#7C6FEF] text-xl">

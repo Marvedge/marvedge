@@ -73,3 +73,14 @@ model PasswordReset {
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
+
+model Demo {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  videoUrl    String
+  startTime   String
+  endTime     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
