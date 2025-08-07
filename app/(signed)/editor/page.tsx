@@ -126,6 +126,37 @@ export default function EditorPage() {
     null
   );
 
+  // Background state
+  const [selectedBackground, setSelectedBackground] = useState<string | null>(
+    null
+  );
+  const [backgroundType, setBackgroundType] = useState<string>("");
+  const [customBackground, setCustomBackground] = useState<File | null>(null);
+
+  // Background style function
+  const getBackgroundStyle = (bgId: string): string => {
+    switch (bgId) {
+      case "bg1": // Mountain Sunset
+        return "linear-gradient(135deg, #FF6B35 0%, #FF8E53 50%, #FFB347 100%)";
+      case "bg2": // Abstract Circles
+        return "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+      case "bg3": // Crystalline Shapes
+        return "linear-gradient(135deg, #ff6b9d 0%, #4ecdc4 50%, #ffeaa7 100%)";
+      case "bg4": // Dynamic Brushstrokes
+        return "linear-gradient(135deg, #ff9a9e 0%, #a8edea 50%, #ffecd2 100%)";
+      case "bg5": // Warm Gradients
+        return "linear-gradient(135deg, #ff6b6b 0%, #ffa726 50%, #ffcc02 100%)";
+      case "bg6": // Ethereal Light
+        return "linear-gradient(135deg, #a8e6cf 0%, #4facfe 50%, #ffffff 100%)";
+      case "bg7": // Fiery Swirls
+        return "linear-gradient(135deg, #ff6b35 0%, #ff4757 50%, #ff3838 100%)";
+      case "bg8": // Elegant Ribbons
+        return "linear-gradient(135deg, #e1bee7 0%, #bbdefb 50%, #f3e5f5 100%)";
+      default:
+        return "#F6F3FF";
+    }
+  };
+
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
@@ -136,10 +167,6 @@ export default function EditorPage() {
     const secs = Math.floor(seconds % 60);
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
-
-
-
-
 
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
@@ -163,16 +190,12 @@ export default function EditorPage() {
     }
   }, [duration, timelineEndTime]);
 
-
-
   // Simple timeline change handler
   const handleTimelineChange = useCallback((start: number, end: number) => {
     console.log("Timeline changed:", { start, end });
     setInputStartTime(formatTimeForInput(start));
     setInputEndTime(formatTimeForInput(end));
   }, []);
-
-
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -820,6 +843,12 @@ export default function EditorPage() {
           handleSaveOverlays={handleSaveOverlays}
           handleLoadOverlays={handleLoadOverlays}
           thumbnailUrl={thumbnailUrl || undefined}
+          selectedBackground={selectedBackground}
+          setSelectedBackground={setSelectedBackground}
+          backgroundType={backgroundType}
+          setBackgroundType={setBackgroundType}
+          customBackground={customBackground}
+          setCustomBackground={setCustomBackground}
         />
         {/* Mobile Sidebar Drawer */}
         {isSidebarOpen && (
@@ -868,6 +897,12 @@ export default function EditorPage() {
                 handleLoadOverlays={handleLoadOverlays}
                 forceShowMobile={true}
                 thumbnailUrl={thumbnailUrl || undefined}
+                selectedBackground={selectedBackground}
+                setSelectedBackground={setSelectedBackground}
+                backgroundType={backgroundType}
+                setBackgroundType={setBackgroundType}
+                customBackground={customBackground}
+                setCustomBackground={setCustomBackground}
               />
             </div>
           </div>
@@ -959,249 +994,227 @@ export default function EditorPage() {
             <span className="text-xl"></span> Preview
           </span>
           {/* Center video preview on desktop */}
-          <div>
+          <div
+            ref={videoContainerRef}
+            className={`relative w-full max-w-[600px] h-[390px] sm:w-full sm:max-w-[1200px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
+            style={{
+              minHeight: "240px",
+              padding: 0,
+              boxShadow: "0 4px 24px 0 #E6E1FA",
+            }}
+          >
+            {/* Browser Bar */}
             <div
-              ref={videoContainerRef}
-              className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
+              className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
+              style={{ minHeight: 32 }}
+            >
+              <div className="flex items-center gap-1 sm:gap-2">
+                <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
+                <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
+                <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
+              </div>
+              <div className="flex-1 flex justify-center">
+                <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
+                  Marvedge.com/Demo/Preview
+                </span>
+              </div>
+            </div>
+            <div
               style={{
-                minHeight: "160px",
-                padding: 0,
-                boxShadow: "0 4px 24px 0 #E6E1FA",
+                width: "100%",
+                height: "100%",
+                position: "relative",
+                zIndex: 1,
+                borderRadius: "1.25rem",
+                overflow: "hidden",
+                background: selectedBackground
+                  ? getBackgroundStyle(selectedBackground)
+                  : "#F6F3FF",
               }}
             >
-              {/* Browser Bar */}
-              <div
-                className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
-                style={{ minHeight: 32 }}
-              >
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-                  <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-                  <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-                    Marvedge.com/Demo/Preview
-                  </span>
-                </div>
-                {/* Fullscreen button removed from here */}
-              </div>
               <div
                 style={{
                   width: "100%",
                   height: "100%",
-                  position: "relative",
-                  zIndex: 1,
-                  borderRadius: "1.25rem",
-                  overflow: "hidden",
-                  background: "#F6F3FF",
+                  transform: currentZoomEffect
+                    ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
+                    : "scale(1) translate(0%, 0%)",
+                  transformOrigin: "center center",
+                  transition: currentZoomEffect
+                    ? "transform 0.5s ease-in-out"
+                    : "transform 0.3s ease-out",
+                  marginTop: "5px",
                 }}
               >
-                <div
+                <ReactPlayer
+                  ref={playerRef}
+                  url={videoUrl || undefined}
+                  playing={true}
+                  controls={false}
+                  muted={false}
+                  volume={volume}
+                  width="80%"
+                  height="98%"
                   style={{
-                    width: "100%",
-                    height: "100%",
-                    transform: currentZoomEffect
-                      ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
-                      : "scale(1) translate(0%, 0%)",
-                    transformOrigin: "center center",
-                    transition: currentZoomEffect
-                      ? "transform 0.5s ease-in-out"
-                      : "transform 0.3s ease-out",
+                    objectFit: "contain",
+                    borderRadius: "1.25rem",
+                    background: "#F6F3FF",
+                    margin: "auto",
+                    display: "block",
                   }}
-                >
-                  <ReactPlayer
-                    ref={playerRef}
-                    url={videoUrl || undefined}
-                    playing={true}
-                    controls={false}
-                    muted={false}
-                    volume={volume}
-                    width="100%"
-                    height="100%"
-
-                    style={{
-                      objectFit: "contain",
-                      borderRadius: "1.25rem",
-                      background: "#F6F3FF",
-                    }}
-                    onError={(e) => console.error("Video failed to load", e)}
-                    onStart={() => {
-                      // Ensure currentTime starts from 0 when video starts
-                      setCurrentTime(0);
-                    }}
-                    onPlay={() => {
-                      // Ensure currentTime is 0 when video starts playing
-                      setCurrentTime(0);
-                    }}
-                    onDuration={(dur) => {
-                      // Only set duration if recordingDuration is not available
-                      if (
-                        recordingDuration === 0 &&
-                        isFinite(dur) &&
-                        !isNaN(dur)
-                      ) {
-                        setDuration(dur);
-                      }
-                    }}
-                    onReady={() => {
-                      console.log("Video loaded");
-                      // Only try to get duration if recordingDuration is not available
-                      if (recordingDuration === 0) {
-                        // Try to get duration again when video is ready - FASTER
-                        setTimeout(() => {
-                          if (playerRef.current) {
-                            const player =
-                              playerRef.current.getInternalPlayer();
-                            if (
-                              player &&
-                              player.duration &&
-                              isFinite(player.duration) &&
-                              player.duration > 0
-                            ) {
-                              setDuration(Math.floor(player.duration));
-                            }
+                  onError={(e) => console.error("Video failed to load", e)}
+                  onStart={() => setCurrentTime(0)}
+                  onPlay={() => setCurrentTime(0)}
+                  onDuration={(dur) => {
+                    if (
+                      recordingDuration === 0 &&
+                      isFinite(dur) &&
+                      !isNaN(dur)
+                    ) {
+                      setDuration(dur);
+                    }
+                  }}
+                  onReady={() => {
+                    console.log("Video loaded");
+                    if (recordingDuration === 0) {
+                      setTimeout(() => {
+                        if (playerRef.current) {
+                          const player = playerRef.current.getInternalPlayer();
+                          if (
+                            player &&
+                            player.duration &&
+                            isFinite(player.duration) &&
+                            player.duration > 0
+                          ) {
+                            setDuration(Math.floor(player.duration));
                           }
-                        }, 10);
-
-                        // Additional attempt after a longer delay - FASTER
-                        setTimeout(() => {
-                          if (playerRef.current) {
-                            const player =
-                              playerRef.current.getInternalPlayer();
-                            if (
-                              player &&
-                              player.duration &&
-                              isFinite(player.duration) &&
-                              player.duration > 0
-                            ) {
-                              setDuration(Math.floor(player.duration));
-                            }
+                        }
+                      }, 10);
+                      setTimeout(() => {
+                        if (playerRef.current) {
+                          const player = playerRef.current.getInternalPlayer();
+                          if (
+                            player &&
+                            player.duration &&
+                            isFinite(player.duration) &&
+                            player.duration > 0
+                          ) {
+                            setDuration(Math.floor(player.duration));
                           }
-                        }, 100);
-                      }
-                    }}
-                    progressInterval={50}
-                    onProgress={({ playedSeconds }) => {
-                      // Ensure currentTime starts from 0 immediately
-                      if (playedSeconds === 0) {
-                        setCurrentTime(0);
-                      } else {
-                        setCurrentTime(playedSeconds);
-                      }
-
-                    }}
-                    config={{
-                      file: {
-                        attributes: {
-                          preload: "metadata",
-                        },
+                        }
+                      }, 100);
+                    }
+                  }}
+                  progressInterval={50}
+                  onProgress={({ playedSeconds }) => {
+                    if (playedSeconds === 0) setCurrentTime(0);
+                    else setCurrentTime(playedSeconds);
+                  }}
+                  config={{
+                    file: {
+                      attributes: {
+                        preload: "metadata",
                       },
-                    }}
-                  />
-                </div>
+                    },
+                  }}
+                />
               </div>
-              <CustomVideoControls
-                playerRef={playerRef}
-                duration={duration}
-                currentTime={currentTime}
-                setCurrentTime={(t: number) => {
-                  setCurrentTime(t);
-                  playerRef.current?.seekTo(t, "seconds");
-                }}
-                recordingDuration={recordingDuration}
-              />
-              {/* Updated Controls Row: 5s buttons left, sound bar center, fullscreen right */}
-              <div className="flex items-center justify-between mt-2 px-2 w-full">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newTime = Math.max(0, currentTime - 5);
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Back 5 seconds"
-                  >
-                    <Image
-                      src="/icons/backward-edit.svg"
-                      alt="Notifications"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4"
-                    />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newTime = Math.min(
-                        displayDuration,
-                        currentTime + 5
-                      );
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Forward 5 seconds"
-                  >
-                    <Image
-                      src="/icons/forward-edit.svg"
-                      alt="Notifications"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4"
-                    />
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 flex-1 justify-center">
-                  <button
-                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                    className="focus:outline-none"
-                    title={volume === 0 ? "Unmute" : "Mute"}
-                  >
-                    {volume === 0 ? (
-                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                    ) : (
-                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                  />
-                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
-                    {Math.round(volume * 100)}%
-                  </span>
-                </div>
-                <div
-                  className="flex items-center justify-end"
-                  style={{ minWidth: 40 }}
-                >
-                  <button
-                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                    title="Fullscreen"
-                    onClick={handleFullscreen}
-                  >
-                    <FaExpand size={22} />
-                  </button>
-                </div>
-              </div>
-              <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
-                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
-                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
-                style={{
-                  pointerEvents: tool !== "none" ? "auto" : "none",
-                  borderRadius: "1.25rem",
-                }}
-              />
-              {/* Custom Video Controls */}
             </div>
+            <CustomVideoControls
+              playerRef={playerRef}
+              duration={duration}
+              currentTime={currentTime}
+              setCurrentTime={(t: number) => {
+                setCurrentTime(t);
+                playerRef.current?.seekTo(t, "seconds");
+              }}
+              recordingDuration={recordingDuration}
+            />
+            <div className="flex items-center justify-between mt-2 px-2 w-full">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const newTime = Math.max(0, currentTime - 5);
+                    setCurrentTime(newTime);
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }}
+                  className="rounded-full bg-[#7C5CFC] text-white p-1.5 transition shadow-sm"
+                  title="Back 5 seconds"
+                >
+                  <Image
+                    src="/icons/replay.svg"
+                    alt="Notifications"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4"
+                  />
+                </button>
+                <button
+                  onClick={() => {
+                    const newTime = Math.min(displayDuration, currentTime + 5);
+                    setCurrentTime(newTime);
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }}
+                  className="rounded-full bg-[#7C5CFC] text-white p-1.5 transition shadow-sm"
+                  title="Forward 5 seconds"
+                >
+                  <Image
+                    src="/icons/forward.svg"
+                    alt="Notifications"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4"
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 flex-1 justify-center">
+                <button
+                  onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                  className="focus:outline-none"
+                  title={volume === 0 ? "Unmute" : "Mute"}
+                >
+                  {volume === 0 ? (
+                    <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                  ) : (
+                    <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                  className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
+                />
+                <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+              <div
+                className="flex items-center justify-end"
+                style={{ minWidth: 40 }}
+              >
+                <button
+                  className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                  title="Fullscreen"
+                  onClick={handleFullscreen}
+                >
+                  <FaExpand size={22} />
+                </button>
+              </div>
+            </div>
+            <canvas
+              ref={canvasRef}
+              className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
+              onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+              onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+              style={{
+                pointerEvents: tool !== "none" ? "auto" : "none",
+                borderRadius: "1.25rem",
+              }}
+            />
           </div>
           {tool === "text" && (
             <div className="flex gap-3 items-center mb-6 sm:mb-0">
@@ -1315,7 +1328,9 @@ export default function EditorPage() {
             ) : (
               <div className="w-full max-w-6xl mx-auto p-8">
                 <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg mt-12 flex items-center justify-center">
-                  <span className="text-[#A594F9] font-medium">Loading timeline...</span>
+                  <span className="text-[#A594F9] font-medium">
+                    Loading timeline...
+                  </span>
                 </div>
               </div>
             )}
@@ -1379,8 +1394,6 @@ function CustomVideoControls({
     playerRef.current?.seekTo(value, "seconds");
     setDragging(false);
   };
-
-
 
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;

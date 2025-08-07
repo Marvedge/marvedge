@@ -1,0 +1,26 @@
+<svg width="120" height="80" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="brush1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff9a9e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fecfef;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="brush2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#a8edea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fed6e3;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="brush3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffecd2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fcb69f;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="120" height="80" fill="#f8f9fa"/>
+  
+  <!-- Dynamic brushstrokes -->
+  <path d="M10,20 Q30,10 50,20 T90,15" stroke="url(#brush1)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M5,40 Q25,30 45,40 T85,35" stroke="url(#brush2)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M15,60 Q35,50 55,60 T95,55" stroke="url(#brush3)" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M20,30 Q40,20 60,30 T100,25" stroke="url(#brush1)" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M0,50 Q20,40 40,50 T80,45" stroke="url(#brush2)" stroke-width="9" fill="none" stroke-linecap="round"/>
+</svg> 

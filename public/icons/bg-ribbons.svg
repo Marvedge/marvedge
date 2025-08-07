@@ -1,0 +1,28 @@
+<svg width="120" height="80" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ribbon1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e1bee7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ce93d8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="ribbon2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#bbdefb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#90caf9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="ribbon3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f3e5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e1bee7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="120" height="80" fill="#fafafa"/>
+  
+  <!-- Flowing ribbons in light purple and blue -->
+  <path d="M10,20 Q30,15 50,20 T90,18" stroke="url(#ribbon1)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M5,35 Q25,30 45,35 T85,33" stroke="url(#ribbon2)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M15,50 Q35,45 55,50 T95,48" stroke="url(#ribbon3)" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M0,40 Q20,35 40,40 T80,38" stroke="url(#ribbon1)" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M20,25 Q40,20 60,25 T100,23" stroke="url(#ribbon2)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M10,55 Q30,50 50,55 T90,53" stroke="url(#ribbon3)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M25,65 Q45,60 65,65 T105,63" stroke="url(#ribbon1)" stroke-width="7" fill="none" stroke-linecap="round"/>
+</svg> 

@@ -431,162 +431,144 @@ export default function TimelineRuler({
     <div className="w-full max-w-6xl mx-auto p-8">
       {/* Controller buttons */}
       <div className="flex flex-row items-center justify-between w-full mb-4 gap-2 sm:gap-4">
-        {/* Left group */}
+        {/* Editing Group */}
         <div className="flex gap-2 sm:gap-4">
           <button
             onClick={
               onZoomEffectCreate
-                ? () => {
-                    if (onZoomEffectCreate) {
-                      const effect = {
-                        id: Date.now().toString(),
-                        startTime: Math.max(0, localValue - 1),
-                        endTime: Math.min(maxValue, localValue + 2),
-                        zoomLevel: 2.0,
-                        x: 0.5,
-                        y: 0.5,
-                      };
-                      onZoomEffectCreate(effect);
-                    }
-                  }
+                ? () =>
+                    onZoomEffectCreate({
+                      id: Date.now().toString(),
+                      startTime: Math.max(0, localValue - 1),
+                      endTime: Math.min(maxValue, localValue + 2),
+                      zoomLevel: 2.0,
+                      x: 0.5,
+                      y: 0.5,
+                    })
                 : undefined
             }
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded"
           >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/zoom-new.png"
-                alt="Zoom"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-              Zoom in
-            </span>
+            <Image
+              src="/icons/zoom-new.png"
+              alt="Zoom"
+              width={16}
+              height={16}
+              className="w-4 h-4"
+            />
+            Zoom in
           </button>
           <button
             onClick={addSegment}
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded"
           >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/+.svg"
-                alt="Add"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-              Add Segment
-            </span>
+            <Image
+              src="/icons/+.svg"
+              alt="Add"
+              width={16}
+              height={16}
+              className="w-4 h-4"
+            />
+            Add Segment
           </button>
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0}
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/-.svg"
-                alt="Remove"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-              Remove Segment
-            </span>
+            <Image
+              src="/icons/-.svg"
+              alt="Remove"
+              width={16}
+              height={16}
+              className="w-4 h-4"
+            />
+            Remove
           </button>
           <button
             onClick={handleTrim}
             disabled={processing}
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-60"
           >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/trim-new.svg"
-                alt="Trim"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-              Trim & Merge
-            </span>
+            <Image
+              src="/icons/trim-new.svg"
+              alt="Trim"
+              width={16}
+              height={16}
+              className="w-4 h-4"
+            />
+            Trim & Merge
           </button>
           <button
             onClick={handleSmartTrim}
             disabled={processing}
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-60"
           >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/trim-new.svg"
-                alt="Trim"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-              Trim
-            </span>
+            <Image
+              src="/icons/trim-new.svg"
+              alt="Trim"
+              width={16}
+              height={16}
+              className="w-4 h-4"
+            />
+            Trim Part
           </button>
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0}
-            className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-red-200 hover:bg-red-300 text-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/delete-demo.svg"
-                alt="Delete"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-              Delete
-            </span>
+            <Image
+              src="/icons/delete-demo.svg"
+              alt="Delete"
+              width={16}
+              height={16}
+              className="w-4 h-4"
+            />
+            Delete
           </button>
         </div>
-        {/* Right group */}
+
         <div className="flex gap-2 sm:gap-4">
           <button
             onClick={handleUndo}
             disabled={segments.length === 0}
-            className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-[40px] h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/undo.svg"
               alt="Undo"
-              width={20}
-              height={20}
-              className="w-5 h-5"
+              width={16}
+              height={16}
+              className="w-4 h-4"
             />
           </button>
           <button
             onClick={handleRedo}
             disabled={removedSegments.length === 0}
-            className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-[40px] h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/redo.svg"
               alt="Redo"
-              width={20}
-              height={20}
-              className="w-5 h-5"
+              width={16}
+              height={16}
+              className="w-4 h-4"
             />
           </button>
           {onResetVideo && hasBeenTrimmed && (
             <button
               onClick={onResetVideo}
-              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold text-sm"
+              className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded"
             >
-              <span className="flex items-center gap-2">
-                <Image
-                  src="/icons/reset.png"
-                  alt="Reset"
-                  width={20}
-                  height={20}
-                  className="w-5 h-5"
-                />
-                Reset
-              </span>
+              <Image
+                src="/icons/reset.png"
+                alt="Reset"
+                width={16}
+                height={16}
+                className="w-4 h-4"
+              />
+              Reset video
             </button>
           )}
         </div>
