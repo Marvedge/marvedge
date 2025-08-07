@@ -83,4 +83,5 @@ model Demo {
   endTime     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  editing Json
 }

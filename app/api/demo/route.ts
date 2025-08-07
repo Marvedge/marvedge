@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
         videoUrl,
         startTime,
         endTime,
+        editing: ''
       },
     });
 
