@@ -20,12 +20,6 @@ interface EditorSidebarProps {
 }
 
 const EditorSidebar: React.FC<EditorSidebarProps> = ({
-  title,
-  setTitle,
-  description,
-  setDescription,
-  onDownloadWebM,
-  onDownloadMP4,
   onExportWebM,
   tool,
   setTool,
@@ -82,9 +76,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       </div>
 
       <div>
-        <h2 className="text-lg font-bold text-[#A594F9] mb-4">
-          Editing Tools
-        </h2>
+        <h2 className="text-lg font-bold text-[#A594F9] mb-4">Editing Tools</h2>
         {thumbnailUrl && (
           <div className="mb-4 flex flex-col items-center">
             <label className="block text-[#A594F9] font-semibold mb-1">

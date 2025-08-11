@@ -10,7 +10,7 @@ import {
   FaExpand,
   FaDownload,
 } from "react-icons/fa";
-import { ArrowLeft, Share2, Copy } from "lucide-react";
+import { ArrowLeft, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -27,7 +27,6 @@ export default function PreviewPage() {
   const [muted, setMuted] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const playerRef = React.useRef<ReactPlayer>(null);

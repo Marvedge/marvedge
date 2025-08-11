@@ -2,13 +2,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   FaPlayCircle,
-  FaEdit,
   FaShareAlt,
   FaTh,
   FaThList,
   FaFilter,
   FaSort,
-  FaEllipsisV,
   FaEye,
   FaRegCalendarAlt,
   FaListUl,
@@ -28,12 +26,12 @@ interface Demo {
   videoUrl: string;
   startTime: string;
   endTime: string;
-  segments?: any; // Add segments field
+  segments?: unknown;
   createdAt: string;
   updatedAt: string;
   editing?: {
-    segments?: any;
-    zoom?: any;
+    segments?: unknown;
+    zoom?: unknown;
   };
 }
 

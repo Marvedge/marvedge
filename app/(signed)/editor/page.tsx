@@ -86,17 +86,6 @@ export default function EditorPage() {
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const convertTimeStringToSeconds = (timeString: string): number => {
-    const parts = timeString.split(":");
-    if (parts.length === 3) {
-      const hours = parseInt(parts[0]) || 0;
-      const minutes = parseInt(parts[1]) || 0;
-      const seconds = parseInt(parts[2]) || 0;
-      return hours * 3600 + minutes * 60 + seconds;
-    }
-    return 0;
-  };
-
   // State to store loaded segments
   const [loadedSegments, setLoadedSegments] = useState<
     { start: string; end: string }[] | null
@@ -143,10 +132,12 @@ export default function EditorPage() {
         try {
           const segments = JSON.parse(urlSegments);
           console.log("Loaded segments from URL:", segments);
-          const convertedSegments = segments.map((seg: any) => ({
-            start: seg.start,
-            end: seg.end,
-          }));
+          const convertedSegments = segments.map(
+            (seg: { start: string; end: string }) => ({
+              start: seg.start,
+              end: seg.end,
+            })
+          );
           setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);
         } catch (error) {
