@@ -84,4 +84,5 @@ model Demo {
   editing     Json? // Store editing data (segments, zoom, etc.)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  editing Json
 }
