@@ -34,6 +34,10 @@ interface TimelineSliderProps {
   externalStartTime?: number;
   externalEndTime?: number;
   onExternalTimeChange?: (start: number, end: number) => void;
+  // New prop for initial segments
+  initialSegments?: { start: string; end: string }[];
+  // New prop for segment change callback
+  onSegmentsChange?: (segments: { start: string; end: string }[]) => void;
 }
 
 export function TimelineSlider({
@@ -51,6 +55,8 @@ export function TimelineSlider({
   onZoomEffectCreate,
   onZoomEffectRemove,
   onExternalTimeChange,
+  initialSegments,
+  onSegmentsChange,
 }: TimelineSliderProps) {
   const [segments, setSegments] = useState<TrimSegment[]>([
     { start: 0, end: duration },
@@ -74,18 +80,54 @@ export function TimelineSlider({
     if (setProgress) setProgress(progress);
   }, [progress, setProgress]);
 
-  // Update segments when duration changes
+  // Update segments when duration changes or when initialSegments are provided
   useEffect(() => {
     if (duration > 0) {
-      setSegments((prev) => {
-        const updated = [...prev];
-        updated[0] = { start: 0, end: duration };
-        return updated;
-      });
+      if (initialSegments && initialSegments.length > 0) {
+        // Convert time string format to numbers for internal use
+        const convertedSegments = initialSegments.map((seg) => {
+          const startSeconds = convertTimeStringToSeconds(seg.start);
+          const endSeconds = convertTimeStringToSeconds(seg.end);
+          return {
+            start: startSeconds,
+            end: endSeconds,
+          };
+        });
+        setSegments(convertedSegments);
+      } else {
+        setSegments((prev) => {
+          const updated = [...prev];
+          updated[0] = { start: 0, end: duration };
+          return updated;
+        });
+      }
     }
-  }, [duration]);
+  }, [duration, initialSegments]);
 
   const timeFormatter = formatTime || defaultFormatTime;
+
+  // Helper function to convert time string to seconds
+  const convertTimeStringToSeconds = (timeString: string): number => {
+    const parts = timeString.split(":");
+    if (parts.length === 3) {
+      const hours = parseInt(parts[0]) || 0;
+      const minutes = parseInt(parts[1]) || 0;
+      const seconds = parseInt(parts[2]) || 0;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+    return 0;
+  };
+
+  // Call onSegmentsChange when segments change
+  useEffect(() => {
+    if (onSegmentsChange) {
+      const formattedSegments = segments.map((seg) => ({
+        start: timeFormatter(seg.start),
+        end: timeFormatter(seg.end),
+      }));
+      onSegmentsChange(formattedSegments);
+    }
+  }, [segments, onSegmentsChange, timeFormatter]);
 
   const handleToggleZoom = useCallback(() => {
     toggleZoom(onZoomEffectCreate, currentTime, duration, setzoomed);

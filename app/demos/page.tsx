@@ -18,6 +18,8 @@ import {
 } from "react-icons/fa";
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import ConfirmModal from "../components/ConfirmModal";
 
 interface Demo {
   id: string;
@@ -26,11 +28,17 @@ interface Demo {
   videoUrl: string;
   startTime: string;
   endTime: string;
+  segments?: any; // Add segments field
   createdAt: string;
   updatedAt: string;
+  editing?: {
+    segments?: any;
+    zoom?: any;
+  };
 }
 
 export default function DemosPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [view, setView] = useState("list");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -44,6 +52,8 @@ export default function DemosPage() {
   const [demos, setDemos] = useState<Demo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const initials = React.useMemo(() => {
     if (session?.user?.name) {
@@ -116,7 +126,19 @@ export default function DemosPage() {
   };
 
   const formatTime = (timeString: string) => {
-    const seconds = parseInt(timeString);
+    // Check if timeString is in "HH:MM:SS" format
+    if (timeString.includes(":")) {
+      const parts = timeString.split(":").map(Number);
+      if (parts.length === 3) {
+        const hours = parts[0] || 0;
+        const minutes = parts[1] || 0;
+        const seconds = parts[2] || 0;
+        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      }
+    }
+
+    // Fallback: treat as seconds
+    const seconds = parseInt(timeString) || 0;
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -129,6 +151,83 @@ export default function DemosPage() {
       demo.title.toLowerCase().includes(search.toLowerCase()) ||
       demo.description.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Handle edit button click
+  const handleEditDemo = (demo: Demo) => {
+    const params = new URLSearchParams({
+      video: demo.videoUrl,
+      startTime: demo.startTime,
+      endTime: demo.endTime,
+      title: demo.title || "",
+      description: demo.description || "",
+    });
+
+    // Add segments and zoom data if available in editing
+    if (demo.editing) {
+      if (demo.editing.segments) {
+        params.append("segments", JSON.stringify(demo.editing.segments));
+      }
+      if (demo.editing.zoom) {
+        params.append("zoom", JSON.stringify(demo.editing.zoom));
+      }
+    } else if (demo.segments) {
+      // fallback for old demos
+      params.append("segments", JSON.stringify(demo.segments));
+    }
+
+    router.push(`/editor?${params.toString()}`);
+  };
+
+  // const handleDeleteDemo = async (id: string) => {
+  //   try {
+  //     const confirmDelete = window.confirm(
+  //       "Are you sure you want to delete this demo?"
+  //     );
+
+  //     if (!confirmDelete) {
+  //       return; // User canceled
+  //     }
+  //     const response = await fetch(`/api/demo/${id}`, {
+  //       method: "DELETE",
+  //     });
+
+  //     if (!response.ok) {
+  //       throw new Error("Failed to delete demo");
+  //     }
+
+  //     // Refresh demos after deletion
+  //     await fetchDemos();
+  //   } catch (error) {
+  //     console.error("Error deleting demo:", error);
+  //     setError("Failed to delete demo");
+  //   }
+  // };
+
+  const handleDeleteDemo = (id: string) => {
+    setDeleteId(id);
+    setIsModalOpen(true); // open modal
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    try {
+      const response = await fetch(`/api/demo/${deleteId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete demo");
+      }
+
+      await fetchDemos();
+    } catch (error) {
+      console.error("Error deleting demo:", error);
+      setError("Failed to delete demo");
+    } finally {
+      setIsModalOpen(false);
+      setDeleteId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
@@ -337,18 +436,28 @@ export default function DemosPage() {
               {filteredDemos.map((demo: Demo) => (
                 <div
                   key={demo.id}
-                  className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm"
+                  className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm cursor-pointer hover:shadow-md transition"
+                  onClick={() => handleEditDemo(demo)}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-2xl text-[#8B8B8B] font-normal">
                       {demo.title}
                     </div>
                     <div className="flex items-center gap-4">
-                      <button className="text-[#A594F9] hover:text-[#7C6FEF] text-xl">
-                        <FaEdit />
-                      </button>
-                      <button className="text-[#A594F9] hover:text-[#7C6FEF] text-xl">
-                        <FaEllipsisV />
+                      <button
+                        className="text-red-400 hover:text-red-600 text-xl"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDemo(demo.id);
+                        }}
+                      >
+                        <Image
+                          src="/icons/delete-demo.svg"
+                          alt="Delete"
+                          width={24}
+                          height={24}
+                          className="w-6 h-6"
+                        />
                       </button>
                     </div>
                   </div>
@@ -392,7 +501,7 @@ export default function DemosPage() {
                 <thead className="bg-[#F3F0FC] text-[#8B8B8B] text-lg">
                   <tr>
                     <th className="py-4 px-6 font-medium">Demos</th>
-                    <th className="py-4 px-6 font-medium">Duration</th>
+                    {/* <th className="py-4 px-6 font-medium">Duration</th> */}
                     <th className="py-4 px-6 font-medium">Status</th>
                     <th className="py-4 px-6 font-medium">Updated</th>
                     <th className="py-4 px-6 font-medium">Actions</th>
@@ -402,7 +511,8 @@ export default function DemosPage() {
                   {filteredDemos.map((demo: Demo) => (
                     <tr
                       key={demo.id}
-                      className="border-t border-[#F3F0FC] hover:bg-[#F8F6FF]"
+                      className="border-t border-[#F3F0FC] hover:bg-[#F8F6FF] cursor-pointer"
+                      onClick={() => handleEditDemo(demo)}
                     >
                       <td className="py-4 px-6 flex items-center gap-4">
                         <span className="inline-flex items-center justify-center w-14 h-14 bg-[#E5DEFF] rounded-xl">
@@ -423,10 +533,10 @@ export default function DemosPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">
+                      {/* <td className="py-4 px-6 text-[#8B8B8B] font-medium">
                         {formatTime(demo.startTime)} -{" "}
                         {formatTime(demo.endTime)}
-                      </td>
+                      </td> */}
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
                         Draft
                       </td>
@@ -434,16 +544,23 @@ export default function DemosPage() {
                         {formatDate(demo.updatedAt)}
                       </td>
                       <td className="py-4 px-6 flex gap-4 items-center">
-                        <button className="text-[#A594F9] hover:text-[#7C6FEF] text-xl">
-                          <FaEdit />
-                        </button>
-                        <button className="text-[#A594F9] hover:text-[#7C6FEF] text-xl">
+                        <button
+                          className="text-[#A594F9] hover:text-[#7C6FEF] text-xl"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <FaShareAlt />
                         </button>
-                        <button className="text-red-400 hover:text-red-600 text-xl">
+                        <button
+                          className="text-red-400 hover:text-red-600 text-xl"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDemo(demo.id);
+                          }}
+                        >
                           <Image
                             src="/icons/delete-demo.svg"
-                            alt="Notifications"
+                            alt="Delete"
                             width={24}
                             height={24}
                             className="w-6 h-6"
@@ -458,6 +575,13 @@ export default function DemosPage() {
           )}
         </div>
       </div>
+
+      {/* Confirmation Modal - moved outside table */}
+      <ConfirmModal
+        isOpen={isModalOpen}
+        onConfirm={confirmDelete}
+        onCancel={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }

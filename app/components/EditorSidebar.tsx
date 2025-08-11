@@ -8,6 +8,7 @@ interface EditorSidebarProps {
   setDescription: (v: string) => void;
   onDownloadWebM: () => void;
   onDownloadMP4: () => void;
+  onExportWebM: () => void;
   tool: string;
   setTool: (t: string) => void;
   handleUndo: () => void;
@@ -25,6 +26,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   setDescription,
   onDownloadWebM,
   onDownloadMP4,
+  onExportWebM,
   tool,
   setTool,
   handleUndo,
@@ -48,7 +50,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
         </button>
         {exportMenuOpen && (
           <div className="absolute left-0 mt-2 w-full bg-white border border-[#ede7fa] rounded-lg shadow z-10">
-            <button
+            {/* <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-t-lg"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -56,8 +58,17 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Download WebM
-            </button>
+            </button> */}
             <button
+              className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm"
+              onClick={() => {
+                setExportMenuOpen(false);
+                onExportWebM();
+              }}
+            >
+              Export WebM
+            </button>
+            {/* <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-b-lg"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -65,29 +76,20 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Download MP4
-            </button>
+            </button> */}
           </div>
         )}
       </div>
 
       <div>
         <h2 className="text-lg font-bold text-[#A594F9] mb-4">
-          Demo Properties
+          Editing Tools
         </h2>
-        <div className="mb-4">
-          <label className="block text-[#A594F9] font-semibold mb-1">
-            Title
-          </label>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
-            placeholder="Enter demo title"
-          />
-        </div>
-        {thumbnailUrl ? (
+        {thumbnailUrl && (
           <div className="mb-4 flex flex-col items-center">
-            <label className="block text-[#A594F9] font-semibold mb-1">📸 Thumbnail:</label>
+            <label className="block text-[#A594F9] font-semibold mb-1">
+              📸 Thumbnail:
+            </label>
             <Image
               src={thumbnailUrl}
               alt="thumbnail"
@@ -95,19 +97,6 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               height={72}
               className="w-32 mt-2 rounded border"
               unoptimized
-            />
-          </div>
-        ) : (
-          <div className="mb-4">
-            <label className="block text-[#A594F9] font-semibold mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
-              placeholder="Click here to continue"
-              rows={3}
             />
           </div>
         )}
