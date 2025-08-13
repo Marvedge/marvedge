@@ -28,9 +28,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { title, description, videoUrl, startTime, endTime } = await req.json();
+    const { title, description, videoUrl, startTime, endTime, editing } = await req.json();
 
-    console.log("Received demo save request:", { title, description, videoUrl, startTime, endTime });
+    console.log("Received demo save request:", { title, description, videoUrl, startTime, endTime, editing });
 
     // Validate required fields
     if (!title || !videoUrl || !startTime || !endTime) {
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create the demo record
+    // Create the demo record with editing object
     const demo = await prisma.demo.create({
       data: {
         title,
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         videoUrl,
         startTime,
         endTime,
-        editing: ''
+        editing: editing || null, // Store editing as JSON
       },
     });
 
