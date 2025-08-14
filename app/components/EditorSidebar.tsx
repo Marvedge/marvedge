@@ -8,6 +8,7 @@ interface EditorSidebarProps {
   setDescription: (v: string) => void;
   onDownloadWebM: () => void;
   onDownloadMP4: () => void;
+  onExportWebM: () => void;
   tool: string;
   setTool: (t: string) => void;
   handleUndo: () => void;
@@ -25,12 +26,7 @@ interface EditorSidebarProps {
 }
 
 const EditorSidebar: React.FC<EditorSidebarProps> = ({
-  title,
-  setTitle,
-  description,
-  setDescription,
-  onDownloadWebM,
-  onDownloadMP4,
+  onExportWebM,
   tool,
   setTool,
   handleUndo,
@@ -144,7 +140,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
         </button>
         {exportMenuOpen && (
           <div className="absolute left-0 mt-2 w-full bg-white border border-[#ede7fa] rounded-lg shadow z-10">
-            <button
+            {/* <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-t-lg"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -152,8 +148,17 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Download WebM
-            </button>
+            </button> */}
             <button
+              className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm"
+              onClick={() => {
+                setExportMenuOpen(false);
+                onExportWebM();
+              }}
+            >
+              Export WebM
+            </button>
+            {/* <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-b-lg"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -161,7 +166,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Download MP4
-            </button>
+            </button> */}
           </div>
         )}
       </div>
@@ -196,18 +201,90 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               unoptimized
             />
           </div>
-        ) : (
-          <div className="mb-4">
-            <label className="block text-[#A594F9] font-semibold mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
-              placeholder="Click here to continue"
-              rows={3}
+        )}
+      </div>
+
+      {/* Background Selection Section */}
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-[#A594F9] mb-4">Background</h2>
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          {backgroundOptions.map((bg) => (
+            <button
+              key={bg.id}
+              onClick={() => handleBackgroundSelect(bg.id)}
+              className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                localSelectedBackground === bg.id
+                  ? "border-[#7C5CFC] shadow-md"
+                  : "border-[#ede7fa] hover:border-[#A594F9]"
+              }`}
+            >
+              <div className="w-full h-15 flex items-center justify-center bg-white">
+                <Image
+                  src={bg.thumbnail}
+                  alt={bg.name}
+                  width={80}
+                  height={60}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {localSelectedBackground === bg.id && (
+                <div className="absolute top-1 right-1 w-4 h-4 bg-[#7C5CFC] rounded-full flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="mb-4">
+          <label className="block text-[#A594F9] font-semibold mb-2">
+            Select Type
+          </label>
+          <select
+            value={localBackgroundType}
+            onChange={(e) => {
+              setLocalBackgroundType(e.target.value);
+              setBackgroundType?.(e.target.value);
+            }}
+            className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] text-[#7C5CFC]"
+          >
+            <option value="">Select Type</option>
+            <option value="static">Static Background</option>
+            <option value="animated">Animated Background</option>
+            <option value="gradient">Gradient Background</option>
+            <option value="pattern">Pattern Background</option>
+          </select>
+        </div>
+        <div className="mb-4">
+          <label className="block text-[#A594F9] font-semibold mb-2">
+            Upload Custom Image
+          </label>
+          <div className="relative">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleCustomBackgroundUpload}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
+            <div className="border border-[#ede7fa] rounded px-3 py-2 text-[#7C5CFC] flex items-center justify-between">
+              <span className="text-sm">
+                {localCustomBackground
+                  ? localCustomBackground.name
+                  : "Upload Custom Image"}
+              </span>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
+              </svg>
+            </div>
           </div>
         )}
       </div>

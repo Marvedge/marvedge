@@ -14,9 +14,10 @@ import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import ReactPlayer from "react-player";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
+import SaveDemoModal from "@/app/components/SaveDemoModal";
 
 import { formatTime } from "@/lib/dateUtils";
 import { useBlobStore } from "@/app/lib/blobStore";
@@ -60,6 +61,7 @@ interface ZoomEffect {
 
 export default function EditorPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     videoUrl: recordedVideoUrl,
     mp4Url,
@@ -77,6 +79,86 @@ export default function EditorPage() {
   const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Helper functions for time conversion
+  const formatTimeForInput = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // State to store loaded segments
+  const [loadedSegments, setLoadedSegments] = useState<
+    { start: string; end: string }[] | null
+  >(null);
+  const [currentSegments, setCurrentSegments] = useState<
+    { start: string; end: string }[]
+  >([{ start: "00:00:00", end: "00:00:00" }]);
+
+  // Handle URL parameters for editing existing demos
+  useEffect(() => {
+    const urlVideo = searchParams.get("video");
+    const urlStartTime = searchParams.get("startTime");
+    const urlEndTime = searchParams.get("endTime");
+    const urlSegments = searchParams.get("segments");
+    const urlZoom = searchParams.get("zoom");
+    const urlTitle = searchParams.get("title");
+    const urlDescription = searchParams.get("description");
+
+    if (urlVideo) {
+      setVideoUrl(urlVideo);
+
+      // Set timeline values if provided
+      if (urlStartTime && urlEndTime) {
+        const startSeconds = parseInt(urlStartTime);
+        const endSeconds = parseInt(urlEndTime);
+
+        if (!isNaN(startSeconds) && !isNaN(endSeconds)) {
+          setInputStartTime(formatTimeForInput(startSeconds));
+          setInputEndTime(formatTimeForInput(endSeconds));
+          setTimelineEndTime(endSeconds);
+        }
+      }
+
+      if (urlTitle) {
+        setSidebarTitle(urlTitle);
+      }
+
+      if (urlDescription) {
+        setSidebarDescription(urlDescription);
+      }
+
+      // Load segments if provided
+      if (urlSegments) {
+        try {
+          const segments = JSON.parse(urlSegments);
+          console.log("Loaded segments from URL:", segments);
+          const convertedSegments = segments.map(
+            (seg: { start: string; end: string }) => ({
+              start: seg.start,
+              end: seg.end,
+            })
+          );
+          setLoadedSegments(convertedSegments);
+          setCurrentSegments(convertedSegments);
+        } catch (error) {
+          console.error("Error parsing segments from URL:", error);
+        }
+      }
+
+      // Load zoom effects if provided
+      if (urlZoom) {
+        try {
+          const zoom = JSON.parse(urlZoom);
+          console.log("Loaded zoom effects from URL:", zoom);
+          setZoomEffects(zoom);
+        } catch (error) {
+          console.error("Error parsing zoom from URL:", error);
+        }
+      }
+    }
+  }, [searchParams]);
+
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
     "none"
@@ -92,6 +174,10 @@ export default function EditorPage() {
   // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
   const [sidebarDescription, setSidebarDescription] = useState("");
+
+  // Save Demo Modal state
+  const [showSaveDemoModal, setShowSaveDemoModal] = useState(false);
+  const [savingDemo, setSavingDemo] = useState(false);
 
   // Hamburger sidebar state for mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -156,16 +242,39 @@ export default function EditorPage() {
     }
   };
 
+  // Background state
+  const [selectedBackground, setSelectedBackground] = useState<string | null>(
+    null
+  );
+  const [backgroundType, setBackgroundType] = useState<string>("");
+  const [customBackground, setCustomBackground] = useState<File | null>(null);
+
+  // Background style function
+  const getBackgroundStyle = (bgId: string): string => {
+    switch (bgId) {
+      case "bg1": // Mountain Sunset
+        return "linear-gradient(135deg, #FF6B35 0%, #FF8E53 50%, #FFB347 100%)";
+      case "bg2": // Abstract Circles
+        return "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+      case "bg3": // Crystalline Shapes
+        return "linear-gradient(135deg, #ff6b9d 0%, #4ecdc4 50%, #ffeaa7 100%)";
+      case "bg4": // Dynamic Brushstrokes
+        return "linear-gradient(135deg, #ff9a9e 0%, #a8edea 50%, #ffecd2 100%)";
+      case "bg5": // Warm Gradients
+        return "linear-gradient(135deg, #ff6b6b 0%, #ffa726 50%, #ffcc02 100%)";
+      case "bg6": // Ethereal Light
+        return "linear-gradient(135deg, #a8e6cf 0%, #4facfe 50%, #ffffff 100%)";
+      case "bg7": // Fiery Swirls
+        return "linear-gradient(135deg, #ff6b35 0%, #ff4757 50%, #ff3838 100%)";
+      case "bg8": // Elegant Ribbons
+        return "linear-gradient(135deg, #e1bee7 0%, #bbdefb 50%, #f3e5f5 100%)";
+      default:
+        return "#F6F3FF";
+    }
+  };
+
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
-
-  // Helper functions for time conversion
-  const formatTimeForInput = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
 
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
@@ -260,8 +369,11 @@ export default function EditorPage() {
   }, []);
 
   useEffect(() => {
-    setVideoUrl(recordedVideoUrl);
-  }, [recordedVideoUrl]);
+    // Only set recorded video URL if no URL parameter is provided
+    if (recordedVideoUrl && !searchParams.get("video")) {
+      setVideoUrl(recordedVideoUrl);
+    }
+  }, [recordedVideoUrl, searchParams]);
 
   // Use recording duration when available
   useEffect(() => {
@@ -754,6 +866,133 @@ export default function EditorPage() {
     if (saved) setOverlays(JSON.parse(saved));
   };
 
+  // Save Demo handler
+  const handleSaveDemo = async (data: {
+    title: string;
+    description: string;
+  }) => {
+    if (!videoUrl) {
+      toast.error("No video available to save");
+      return;
+    }
+
+    try {
+      setSavingDemo(true);
+      toast.loading("Saving demo...");
+
+      const startTime = inputStartTime;
+      const endTime = inputEndTime;
+
+      // First, upload video to Cloudinary if it's a blob URL
+      let cloudinaryVideoUrl = videoUrl;
+      if (videoUrl.startsWith("blob:")) {
+        try {
+          // Get the video blob
+          const response = await fetch(videoUrl);
+          if (!response.ok) {
+            throw new Error("Failed to fetch video blob");
+          }
+          const videoBlob = await response.blob();
+
+          // Create FormData for Cloudinary upload
+          const cloudFormData = new FormData();
+          cloudFormData.append("file", videoBlob, "video.webm");
+          cloudFormData.append("upload_preset", "upload_preset_1");
+
+          console.log("Uploading to Cloudinary...");
+
+          // Upload to Cloudinary
+          const cloudRes = await fetch(
+            "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+            {
+              method: "POST",
+              body: cloudFormData,
+            }
+          );
+
+          if (!cloudRes.ok) {
+            const cloudError = await cloudRes.text();
+            throw new Error(
+              `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+            );
+          }
+
+          const cloudData = await cloudRes.json();
+          console.log("Cloudinary response:", cloudData);
+
+          if (!cloudData.secure_url) {
+            throw new Error(
+              "Cloudinary upload failed - no secure_url returned"
+            );
+          }
+
+          cloudinaryVideoUrl = cloudData.secure_url;
+          console.log("Cloudinary URL:", cloudinaryVideoUrl);
+        } catch (cloudError) {
+          console.error("Error uploading to Cloudinary:", cloudError);
+          toast.dismiss();
+          toast.error("Failed to upload video to Cloudinary");
+          return;
+        }
+      }
+
+      // Use current segments from the timeline
+      const segmentsToSave =
+        currentSegments.length > 0
+          ? currentSegments
+          : [
+              {
+                start: startTime,
+                end: endTime,
+              },
+            ];
+
+      // Call the API to save demo with editing object
+      const editingToSave = {
+        segments: segmentsToSave,
+        zoom: zoomEffects,
+      };
+
+      const response = await fetch("/api/demo", {
+        method: "POST",
+        body: JSON.stringify({
+          title: data.title,
+          description: data.description,
+          videoUrl: cloudinaryVideoUrl,
+          startTime,
+          endTime,
+          editing: editingToSave,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save demo");
+      }
+
+      const responseData = await response.json();
+
+      // Update the sidebar state with the saved data
+      setSidebarTitle(data.title);
+      setSidebarDescription(data.description);
+
+      toast.dismiss();
+      toast.success("Demo saved successfully!");
+      console.log("Demo saved:", responseData);
+
+      // Close the modal
+      setShowSaveDemoModal(false);
+    } catch (error) {
+      console.error("Error saving demo:", error);
+      toast.dismiss();
+      toast.error("Failed to save demo");
+    } finally {
+      setSavingDemo(false);
+    }
+  };
+
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
@@ -833,6 +1072,86 @@ export default function EditorPage() {
               downloadBlob(mp4Url, `${filename}.mp4`);
             }
           }}
+          onExportWebM={async () => {
+            if (!videoUrl) {
+              toast.error("No video available to export");
+              return;
+            }
+
+            if (!sidebarTitle?.trim()) {
+              toast.error("Please enter a title for the video");
+              return;
+            }
+
+            try {
+              toast.loading("Exporting video to Cloudinary...");
+
+              // First, upload video to Cloudinary if it's a blob URL
+              let cloudinaryVideoUrl = videoUrl;
+              if (videoUrl.startsWith("blob:")) {
+                try {
+                  // Get the video blob
+                  const response = await fetch(videoUrl);
+                  if (!response.ok) {
+                    throw new Error("Failed to fetch video blob");
+                  }
+                  const videoBlob = await response.blob();
+
+                  // Create FormData for Cloudinary upload
+                  const cloudFormData = new FormData();
+                  cloudFormData.append("file", videoBlob, "video.webm");
+                  cloudFormData.append("upload_preset", "upload_preset_1");
+
+                  console.log("Uploading to Cloudinary...");
+
+                  // Upload to Cloudinary
+                  const cloudRes = await fetch(
+                    "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                    {
+                      method: "POST",
+                      body: cloudFormData,
+                    }
+                  );
+
+                  if (!cloudRes.ok) {
+                    const cloudError = await cloudRes.text();
+                    throw new Error(
+                      `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                    );
+                  }
+
+                  const cloudData = await cloudRes.json();
+                  console.log("Cloudinary response:", cloudData);
+
+                  if (!cloudData.secure_url) {
+                    throw new Error(
+                      "Cloudinary upload failed - no secure_url returned"
+                    );
+                  }
+
+                  cloudinaryVideoUrl = cloudData.secure_url;
+                  console.log("Cloudinary URL:", cloudinaryVideoUrl);
+                } catch (cloudError) {
+                  console.error("Error uploading to Cloudinary:", cloudError);
+                  toast.dismiss();
+                  toast.error("Failed to upload video to Cloudinary");
+                  return;
+                }
+              }
+
+              // Create preview URL with the Cloudinary URL
+              const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
+
+              toast.dismiss();
+              toast.success("Video exported successfully!");
+              // Navigate to the preview page
+              router.push(previewUrl);
+            } catch (error) {
+              console.error("Export error:", error);
+              toast.dismiss();
+              toast.error("Failed to export video");
+            }
+          }}
           tool={tool}
           setTool={(t: string) =>
             setTool(t as "none" | "blur" | "rect" | "arrow" | "text")
@@ -886,6 +1205,92 @@ export default function EditorPage() {
                     downloadBlob(mp4Url, `${filename}.mp4`);
                   }
                 }}
+                onExportWebM={async () => {
+                  if (!videoUrl) {
+                    toast.error("No video available to export");
+                    return;
+                  }
+
+                  if (!sidebarTitle?.trim()) {
+                    toast.error("Please enter a title for the video");
+                    return;
+                  }
+
+                  try {
+                    toast.loading("Exporting video to Cloudinary...");
+
+                    // First, upload video to Cloudinary if it's a blob URL
+                    let cloudinaryVideoUrl = videoUrl;
+                    if (videoUrl.startsWith("blob:")) {
+                      try {
+                        // Get the video blob
+                        const response = await fetch(videoUrl);
+                        if (!response.ok) {
+                          throw new Error("Failed to fetch video blob");
+                        }
+                        const videoBlob = await response.blob();
+
+                        // Create FormData for Cloudinary upload
+                        const cloudFormData = new FormData();
+                        cloudFormData.append("file", videoBlob, "video.webm");
+                        cloudFormData.append(
+                          "upload_preset",
+                          "upload_preset_1"
+                        );
+
+                        console.log("Uploading to Cloudinary...");
+
+                        // Upload to Cloudinary
+                        const cloudRes = await fetch(
+                          "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                          {
+                            method: "POST",
+                            body: cloudFormData,
+                          }
+                        );
+
+                        if (!cloudRes.ok) {
+                          const cloudError = await cloudRes.text();
+                          throw new Error(
+                            `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                          );
+                        }
+
+                        const cloudData = await cloudRes.json();
+                        console.log("Cloudinary response:", cloudData);
+
+                        if (!cloudData.secure_url) {
+                          throw new Error(
+                            "Cloudinary upload failed - no secure_url returned"
+                          );
+                        }
+
+                        cloudinaryVideoUrl = cloudData.secure_url;
+                        console.log("Cloudinary URL:", cloudinaryVideoUrl);
+                      } catch (cloudError) {
+                        console.error(
+                          "Error uploading to Cloudinary:",
+                          cloudError
+                        );
+                        toast.dismiss();
+                        toast.error("Failed to upload video to Cloudinary");
+                        return;
+                      }
+                    }
+
+                    // Create preview URL with the Cloudinary URL
+                    const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
+
+                    toast.dismiss();
+                    toast.success("Video exported successfully!");
+                    // Navigate to the preview page
+                    router.push(previewUrl);
+                  } catch (error) {
+                    console.error("Export error:", error);
+                    toast.dismiss();
+                    toast.error("Failed to export video");
+                  }
+                }}
                 tool={tool}
                 setTool={(t: string) =>
                   setTool(t as "none" | "blur" | "rect" | "arrow" | "text")
@@ -918,58 +1323,40 @@ export default function EditorPage() {
             <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0">
               <button
                 className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={async () => {
-                  console.log("Clicked the save demo button");
-                  if (videoUrl) {
-                    try {
-                      if (
-                        !sidebarTitle?.trim() ||
-                        !sidebarDescription?.trim()
-                      ) {
-                        toast.error("Title and description are required.");
-                        return;
-                      }
-                      // Show processing message
-                      toast.loading("Saving demo...");
-
-                      const startTime = inputStartTime;
-                      const endTime = inputEndTime;
-
-                      // Call the API to save demo
-                      const response = await fetch("/api/demo", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          title: sidebarTitle,
-                          description: sidebarDescription,
-                          videoUrl,
-                          startTime,
-                          endTime,
-                        }),
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                      });
-
-                      if (!response.ok) {
-                        throw new Error("Failed to save demo");
-                      }
-
-                      const data = await response.json();
-                      toast.dismiss();
-                      toast.success("Demo saved successfully!");
-                      console.log("Demo saved:", data);
-                    } catch (error) {
-                      console.error("Error saving demo:", error);
-                      toast.dismiss();
-                      toast.error("Failed to save demo");
-                    }
-                  }
+                onClick={() => {
+                  setShowSaveDemoModal(true);
                 }}
               >
                 <span className="text-xl"></span> Save Demo
               </button>
             </div>
           </div>
+          {/* Title and Description Display */}
+          {(sidebarTitle || sidebarDescription) && (
+            <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200">
+              {sidebarTitle && (
+                <div className="mb-3">
+                  <span className="text-sm font-medium text-gray-500">
+                    Title:{" "}
+                  </span>
+                  <span className="text-xl font-semibold text-gray-800">
+                    {sidebarTitle}
+                  </span>
+                </div>
+              )}
+              {sidebarDescription && (
+                <div>
+                  <span className="text-sm font-medium text-gray-500">
+                    Description:{" "}
+                  </span>
+                  <span className="text-gray-600 text-sm">
+                    {sidebarDescription}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <span className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 lg:text-2xl   text-[#7C5CFC] font-semibold  text-base select-none cursor-default mb-4 w-max">
             <span className="text-xl"></span> Preview
           </span>
@@ -1328,6 +1715,16 @@ export default function EditorPage() {
             playerRef.current.seekTo(time);
           }
         }}
+      />
+
+      {/* Save Demo Modal */}
+      <SaveDemoModal
+        isOpen={showSaveDemoModal}
+        onClose={() => setShowSaveDemoModal(false)}
+        onSave={handleSaveDemo}
+        initialTitle={sidebarTitle}
+        initialDescription={sidebarDescription}
+        processing={savingDemo}
       />
     </main>
   );
