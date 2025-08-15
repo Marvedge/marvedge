@@ -21,6 +21,7 @@ import SaveDemoModal from "@/app/components/SaveDemoModal";
 import { formatTime } from "@/lib/dateUtils";
 import { useBlobStore } from "@/app/lib/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
+import axios from "axios";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -234,7 +235,6 @@ export default function EditorPage() {
 
   // Simple timeline change handler
   const handleTimelineChange = useCallback((start: number, end: number) => {
-    console.log("Timeline changed:", { start, end });
     setInputStartTime(formatTimeForInput(start));
     setInputEndTime(formatTimeForInput(end));
   }, []);
@@ -296,6 +296,7 @@ export default function EditorPage() {
       }
     }
   }, []);
+
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFsChange);
@@ -924,6 +925,98 @@ export default function EditorPage() {
       toast.error("Failed to save demo");
     } finally {
       setSavingDemo(false);
+    }
+  };
+
+  const videoTrimHandler = async (segments: { start: string; end: string }[]) => {
+    try {
+      setProgress(1);
+      toast.loading("Uploading and trimming video...");
+
+      // Check if videoUrl exists
+      if (!videoUrl) {
+        toast.error("No video available to trim");
+        return;
+      }
+
+      console.log("Starting trim process...");
+      console.log("Video URL:", videoUrl);
+      console.log("Segments:", segments);
+
+      // Get the current video blob
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video: ${response.status}`);
+      }
+      const videoBlob = await response.blob();
+      console.log("Video blob size:", videoBlob.size);
+
+      // 1. Create FormData for Cloudinary upload
+      const cloudFormData = new FormData();
+      cloudFormData.append("file", videoBlob, "video.webm");
+      cloudFormData.append("upload_preset", "upload_preset_1");
+
+      console.log("Uploading to Cloudinary...");
+
+      // 2. Upload to Cloudinary
+      const cloudRes = await fetch(
+        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+        {
+          method: "POST",
+          body: cloudFormData,
+        }
+      );
+
+      if (!cloudRes.ok) {
+        const cloudError = await cloudRes.text();
+        throw new Error(
+          `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+        );
+      }
+
+      const cloudData = await cloudRes.json();
+      console.log("Cloudinary response:", cloudData);
+
+      if (!cloudData.secure_url) {
+        throw new Error("Cloudinary upload failed - no secure_url returned");
+      }
+
+      const cloudinaryVideoUrl = cloudData.secure_url;
+      console.log("Cloudinary URL:", cloudinaryVideoUrl);
+
+      // 3. Send all segments to backend
+      if (!segments || segments.length === 0) {
+        throw new Error("No segments provided");
+      }
+
+      console.log("Trim segments:", segments);
+
+      // 4. Send video URL and segments to backend
+      console.log("Sending to backend...");
+
+      const trimRes = await axios.post(
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`,
+        {
+          videoUrl: cloudinaryVideoUrl,
+          segments: segments,
+        }
+      );
+      console.log("trim res", trimRes);
+
+      const trimmedVideoUrl = trimRes.data.trimmedUrl;
+
+      if (trimmedVideoUrl) {
+        toast.success("Video trimmed successfully!");
+        setVideoUrl(trimmedVideoUrl);
+      } else {
+        toast.error("Failed to trim video - no trimmedUrl returned");
+      }
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Unknown error occurred";
+      toast.error(`Error processing video: ${errorMessage}`);
+    } finally {
+      setProgress(0);
     }
   };
 
@@ -1578,125 +1671,7 @@ export default function EditorPage() {
               setProgress={setProgress}
               initialSegments={loadedSegments || undefined}
               onSegmentsChange={setCurrentSegments}
-              ontrim={async (segments) => {
-                try {
-                  setProgress(1);
-                  toast.loading("Uploading and trimming video...");
-
-                  // Check if videoUrl exists
-                  if (!videoUrl) {
-                    toast.error("No video available to trim");
-                    return;
-                  }
-
-                  console.log("Starting trim process...");
-                  console.log("Video URL:", videoUrl);
-                  console.log("Segments:", segments);
-
-                  // Get the current video blob
-                  const response = await fetch(videoUrl);
-                  if (!response.ok) {
-                    throw new Error(
-                      `Failed to fetch video: ${response.status}`
-                    );
-                  }
-                  const videoBlob = await response.blob();
-                  console.log("Video blob size:", videoBlob.size);
-
-                  // 1. Create FormData for Cloudinary upload
-                  const cloudFormData = new FormData();
-                  cloudFormData.append("file", videoBlob, "video.webm");
-                  cloudFormData.append("upload_preset", "upload_preset_1");
-
-                  console.log("Uploading to Cloudinary...");
-
-                  // 2. Upload to Cloudinary
-                  const cloudRes = await fetch(
-                    "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                    {
-                      method: "POST",
-                      body: cloudFormData,
-                    }
-                  );
-
-                  if (!cloudRes.ok) {
-                    const cloudError = await cloudRes.text();
-                    throw new Error(
-                      `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-                    );
-                  }
-
-                  const cloudData = await cloudRes.json();
-                  console.log("Cloudinary response:", cloudData);
-
-                  if (!cloudData.secure_url) {
-                    throw new Error(
-                      "Cloudinary upload failed - no secure_url returned"
-                    );
-                  }
-
-                  const cloudinaryVideoUrl = cloudData.secure_url;
-                  console.log("Cloudinary URL:", cloudinaryVideoUrl);
-
-                  // 3. Send all segments to backend
-                  if (!segments || segments.length === 0) {
-                    throw new Error("No segments provided");
-                  }
-
-                  console.log("Trim segments:", segments);
-
-                  // 4. Send video URL and segments to backend
-                  console.log("Sending to backend...");
-                  const trimRes = await fetch(
-                    "https://video-processing-backend-wxfu.onrender.com/api/trim",
-                    {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      credentials: "include",
-                      body: JSON.stringify({
-                        videoUrl: cloudinaryVideoUrl,
-                        segments: segments,
-                      }),
-                    }
-                  );
-
-                  if (!trimRes.ok) {
-                    const trimError = await trimRes.text();
-                    throw new Error(
-                      `Backend trim failed: ${trimRes.status} - ${trimError}`
-                    );
-                  }
-
-                  const data = await trimRes.json();
-                  console.log("Backend response:", data);
-                  toast.dismiss();
-
-                  if (data.trimmedUrl) {
-                    toast.success("Video trimmed successfully!");
-                    setVideoUrl(data.trimmedUrl);
-                    console.log(
-                      "Trimmed video URL from Backend:",
-                      data.trimmedUrl
-                    );
-                  } else {
-                    toast.error(
-                      "Failed to trim video - no trimmedUrl returned"
-                    );
-                  }
-                } catch (err) {
-                  toast.dismiss();
-                  console.error("Trim error:", err);
-                  const errorMessage =
-                    err instanceof Error
-                      ? err.message
-                      : "Unknown error occurred";
-                  toast.error(`Error processing video: ${errorMessage}`);
-                } finally {
-                  setProgress(0);
-                }
-              }}
+              ontrim={videoTrimHandler}
               currentTime={currentTime}
               setCurrentTime={(t) => {
                 setCurrentTime(t);
