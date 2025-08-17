@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   FaPlayCircle,
   FaShareAlt,
@@ -17,7 +17,9 @@ import {
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import ConfirmModal from "../components/ConfirmModal";
+import axios from "axios";
+import { formatDate, formatTime_2 } from "@/app/lib/dateTimeUtils";
+import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 
 interface Demo {
   id: string;
@@ -53,7 +55,7 @@ export default function DemosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const initials = React.useMemo(() => {
+  const initials = useMemo(() => {
     if (session?.user?.name) {
       return session.user.name
         .split(" ")
@@ -65,7 +67,6 @@ export default function DemosPage() {
     return session?.user?.email?.[0].toUpperCase() || "U";
   }, [session?.user]);
 
-  // Fetch demos from API
   const fetchDemos = async () => {
     try {
       setLoading(true);
@@ -113,36 +114,6 @@ export default function DemosPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Helper functions
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
-  const formatTime = (timeString: string) => {
-    // Check if timeString is in "HH:MM:SS" format
-    if (timeString.includes(":")) {
-      const parts = timeString.split(":").map(Number);
-      if (parts.length === 3) {
-        const hours = parts[0] || 0;
-        const minutes = parts[1] || 0;
-        const seconds = parts[2] || 0;
-        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-      }
-    }
-
-    // Fallback: treat as seconds
-    const seconds = parseInt(timeString) || 0;
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
   // Filter demos based on search
   const filteredDemos = demos.filter(
     (demo) =>
@@ -150,7 +121,6 @@ export default function DemosPage() {
       demo.description.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Handle edit button click
   const handleEditDemo = (demo: Demo) => {
     const params = new URLSearchParams({
       video: demo.videoUrl,
@@ -176,47 +146,19 @@ export default function DemosPage() {
     router.push(`/editor?${params.toString()}`);
   };
 
-  // const handleDeleteDemo = async (id: string) => {
-  //   try {
-  //     const confirmDelete = window.confirm(
-  //       "Are you sure you want to delete this demo?"
-  //     );
-
-  //     if (!confirmDelete) {
-  //       return; // User canceled
-  //     }
-  //     const response = await fetch(`/api/demo/${id}`, {
-  //       method: "DELETE",
-  //     });
-
-  //     if (!response.ok) {
-  //       throw new Error("Failed to delete demo");
-  //     }
-
-  //     // Refresh demos after deletion
-  //     await fetchDemos();
-  //   } catch (error) {
-  //     console.error("Error deleting demo:", error);
-  //     setError("Failed to delete demo");
-  //   }
-  // };
-
   const handleDeleteDemo = (id: string) => {
     setDeleteId(id);
-    setIsModalOpen(true); // open modal
+    setIsModalOpen(true);
   };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
     try {
-      const response = await fetch(`/api/demo/${deleteId}`, {
-        method: "DELETE",
+      await axios.delete(`/api/demo/`, {
+        params: {
+          id: deleteId
+        }
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete demo");
-      }
-
       await fetchDemos();
     } catch (error) {
       console.error("Error deleting demo:", error);
@@ -480,8 +422,8 @@ export default function DemosPage() {
                   </div>
                   <div className="text-sm text-[#8B8B8B] mb-4">
                     <div>
-                      Duration: {formatTime(demo.startTime)} -{" "}
-                      {formatTime(demo.endTime)}
+                      Duration: {formatTime_2(demo.startTime)} -{" "}
+                      {formatTime_2(demo.endTime)}
                     </div>
                     <div className="truncate">
                       {demo.description || "No description"}
@@ -543,13 +485,13 @@ export default function DemosPage() {
                       </td>
                       <td className="py-4 px-6 flex gap-4 items-center">
                         <button
-                          className="text-[#A594F9] hover:text-[#7C6FEF] text-xl"
+                          className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <FaShareAlt />
                         </button>
                         <button
-                          className="text-red-400 hover:text-red-600 text-xl"
+                          className="text-red-400 hover:text-red-600 text-xl cursor-pointer"
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -574,8 +516,7 @@ export default function DemosPage() {
         </div>
       </div>
 
-      {/* Confirmation Modal - moved outside table */}
-      <ConfirmModal
+      <ConfirmDeleteModal
         isOpen={isModalOpen}
         onConfirm={confirmDelete}
         onCancel={() => setIsModalOpen(false)}

@@ -1,7 +1,7 @@
 "use client";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/app/components/ui/button";
 import { useEffect, useState, RefObject, useCallback } from "react";
-import { formatTimeFull } from "@/lib/dateUtils";
+import { formatTimeFull } from "@/app/lib/dateTimeUtils";
 
 type EditorControlsProps = {
   onTrim: (start: string, end: string) => void;

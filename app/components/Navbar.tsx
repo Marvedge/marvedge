@@ -79,7 +79,7 @@ const Navbar: React.FC = () => {
           <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
           <NavButton
             onClick={handleActionButtonClick}
-            className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors"
+            className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors hover:text-white"
           >
             {actionButtonText}
           </NavButton>

@@ -1,15 +1,14 @@
 "use client";
 import Image from "next/image";
 import React, { useCallback, useState, useEffect, useRef } from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
 import ReactPlayer from "react-player";
 import {
   defaultFormatTime,
-  toggleZoom,
-  trianglePoints,
-  ZoomEffect,
-} from "@/lib/dateUtils";
+} from "@/app/lib/dateTimeUtils";
+import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+import { toggleZoom, trianglePoints } from "../lib/utils";
 
 interface TrimSegment {
   start: number;

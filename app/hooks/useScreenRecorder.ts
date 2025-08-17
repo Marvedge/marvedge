@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { useBlobStore } from "../lib/blobStore";
+import { useBlobStore } from "../store/blobStore";
 import toast from "react-hot-toast";
 
 export const useScreenRecorder = () => {

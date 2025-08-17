@@ -1,16 +1,9 @@
+import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+
 type Overlay =
   | { type: "blur" | "rect"; x: number; y: number; w: number; h: number }
   | { type: "arrow"; x: number; y: number; x2: number; y2: number }
   | { type: "text"; x: number; y: number; text: string };
-
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-  x: number;
-  y: number;
-}
 
 export const videoTrimmer = async (
   inputBlob: Blob,

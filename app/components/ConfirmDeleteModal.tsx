@@ -1,7 +1,6 @@
-// components/ConfirmDeleteModal.tsx
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import React from "react";
+import { Button } from "@/app/components/ui/button";
+import { useEffect } from "react";
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -15,7 +14,7 @@ export default function ConfirmDeleteModal({
   onCancel,
 }: ConfirmDeleteModalProps) {
   // Prevent body scroll when modal is open
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -62,13 +61,13 @@ export default function ConfirmDeleteModal({
           <Button
             onClick={onCancel}
             variant="outline"
-            className="flex-1"
+            className="flex-1 cursor-pointer"
           >
             Cancel
           </Button>
           <Button
             onClick={onConfirm}
-            className="flex-1 bg-red-500 hover:bg-red-600 text-white"
+            className="flex-1 bg-red-500 hover:bg-red-600 text-white cursor-pointer"
           >
             Delete Demo
           </Button>
