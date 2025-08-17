@@ -1,11 +1,4 @@
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-  x: number;
-  y: number;
-}
+import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
 export const createEnhancedZoomProcessor = async (
   videoBlob: Blob,

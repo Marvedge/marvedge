@@ -1,11 +1,11 @@
 "use client";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
-import { useBlobStore } from "@/app/lib/blobStore";
+import { useBlobStore } from "@/app/store/blobStore";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import Image from "next/image";
-import { formatTime } from "@/lib/dateUtils";
+import { formatTime } from "@/app/lib/dateTimeUtils";
 
 import VideoPreview from "@/app/components/VideoPreview";
 import { sanitizeFilename } from "@/app/lib/constants";
@@ -75,14 +75,7 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="relative lg:mr-60 hidden sm:block">
-          <input
-            type="text"
-            placeholder="Search"
-            className="rounded-full border border-[#ede7fa] px-4 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#7C5CFC]"
-          />
-        </div>
-        <span className="hidden sm:block text-[#7C5CFC] font-medium text-base mr-2 flex items-center gap-1">
+        <span className="hidden text-[#7C5CFC] font-medium text-base mr-2 sm:flex items-center gap-1">
           Welcome, {username}
           <span role="img" aria-label="waving hand" className="ml-1">
             👋
@@ -129,6 +122,30 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
 }
 
 export default function RecorderPage() {
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [enableCamera, setEnableCamera] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string>("");
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
+  const [format, setFormat] = useState<"webm" | "mp4">("webm");
+  const [saveMessage] = useState<string>("");
+  const [recordingTimer, setRecordingTimer] = useState(0);
+  const [showSavePopup, setShowSavePopup] = useState(false);
+  const [processingDownload, setProcessingDownload] = useState(false);
+
+  // Video controls state
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoPreview = useRef<HTMLVideoElement>(null);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const videoPlayerRef = useRef<ReactPlayer>(null);
+
+  const { setBlob, blob, title, setTitle } = useBlobStore();
+
   const {
     stopRecording,
     toggleMic,
@@ -141,19 +158,7 @@ export default function RecorderPage() {
     reset,
   } = useScreenRecorder();
 
-  const setBlob = useBlobStore((state) => state.setBlob);
-  const blob = useBlobStore((state) => state.blob);
-  const title = useBlobStore((state) => state.title);
-  const description = useBlobStore((state) => state.description);
-  const setTitle = useBlobStore((state) => state.setTitle);
-  const setDescription = useBlobStore((state) => state.setDescription);
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-
-  const videoPreview = useRef<HTMLVideoElement>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [enableCamera, setEnableCamera] = useState(false);
 
   const startCamera = async () => {
     try {
@@ -176,22 +181,213 @@ export default function RecorderPage() {
     if (videoPreview.current) videoPreview.current.srcObject = null;
   };
 
-  const [uploadMessage, setUploadMessage] = useState<string>("");
-  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
-  const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
-  const [format, setFormat] = useState<"webm" | "mp4">("webm");
-  const [saveMessage] = useState<string>("");
+  const { data: session } = useSession();
 
-  const [recordingTimer, setRecordingTimer] = useState(0);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [showSavePopup, setShowSavePopup] = useState(false);
-  const [processingDownload, setProcessingDownload] = useState(false);
+  const initials = session?.user?.name
+    ? session.user.name
+        .split(" ")
+        .map((part: string) => part[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : session?.user?.email?.[0]?.toUpperCase() || "U";
 
-  // Video controls state
-  const [videoPlaying, setVideoPlaying] = useState(false);
-  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
-  const [videoDuration, setVideoDuration] = useState(0);
-  const videoPlayerRef = useRef<ReactPlayer>(null);
+  // Simple timeline component for recorder
+  const SimpleTimeline = () => {
+    const [dragging, setDragging] = useState(false);
+    const [dragValue, setDragValue] = useState(0);
+
+    // Use recording duration if available, otherwise use detected duration
+    const displayDuration =
+      recordingDuration > 0 ? recordingDuration : videoDuration;
+
+    const handlePlayPause = () => {
+      setVideoPlaying(!videoPlaying);
+    };
+
+    const handleSeekStart = () => {
+      setDragging(true);
+      setDragValue(videoCurrentTime);
+    };
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setDragValue(Number(e.target.value));
+    };
+
+    const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
+      const value = Number((e.target as HTMLInputElement).value);
+      setVideoCurrentTime(value);
+      videoPlayerRef.current?.seekTo(value, "seconds");
+      setDragging(false);
+    };
+
+    return (
+      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePlayPause}
+            className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+          >
+            {videoPlaying ? (
+              <Image
+                src="/icons/pause.png"
+                alt="Pause"
+                width={18}
+                height={18}
+                className="w-4 h-4"
+              />
+            ) : (
+              <Image
+                src="/icons/play.png"
+                alt="Play"
+                width={18}
+                height={18}
+                className="w-4 h-4"
+              />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={displayDuration}
+            step={0.01}
+            value={dragging ? dragValue : videoCurrentTime}
+            onPointerDown={handleSeekStart}
+            onChange={handleSeek}
+            onPointerUp={handleSeekEnd}
+            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+            style={{
+              background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
+              height: 8,
+              borderRadius: 8,
+            }}
+          />
+          <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
+            {formatTime(videoCurrentTime)} /{" "}
+            {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
+          </span>
+        </div>
+
+        {/* 5-second skip buttons */}
+        <div className="flex items-center justify-between mt-2 px-2 w-full">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const newTime = Math.max(0, videoCurrentTime - 5);
+                setVideoCurrentTime(newTime);
+                videoPlayerRef.current?.seekTo(newTime, "seconds");
+              }}
+              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              title="Back 5 seconds"
+            >
+              <Image
+                src="/icons/backward.png"
+                alt="Back 5 seconds"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </button>
+            <button
+              onClick={() => {
+                const newTime = Math.min(displayDuration, videoCurrentTime + 5);
+                setVideoCurrentTime(newTime);
+                videoPlayerRef.current?.seekTo(newTime, "seconds");
+              }}
+              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              title="Forward 5 seconds"
+            >
+              <Image
+                src="/icons/forward.png"
+                alt="Forward 5 seconds"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A594F9] font-mono">Preview</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Recording timeline component for active recording
+  const RecordingTimeline = () => {
+    return (
+      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+        <div className="flex justify-end items-center gap-3">
+          {/* <div className="rounded-full bg-red-500 text-white p-2 animate-pulse">
+            <div className="w-4 h-4 bg-white rounded-full"></div>
+          </div>
+          <div className="flex-1 bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-red-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+              style={{
+                width: `${Math.min((recordingTimer / 3600) * 100, 100)}%`, // Max 1 hour
+              }}
+            ></div>
+          </div> */}
+          <span className="text-xs text-red-500 font-mono min-w-[60px] text-right font-bold">
+            {formatTime(recordingTimer)}
+          </span>
+        </div>
+
+        {/* Recording status */}
+        <div className="flex items-center justify-between mt-2 px-2 w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-red-500 font-semibold animate-pulse">
+              ⏺ Recording in progress...
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-mono">
+              Live Preview
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleSaveAndPublish = () => {
+    if (!blob) return;
+    setShowSavePopup(true);
+  };
+
+  const handlePopupDownload = async (data: {
+    title: string;
+    format: string;
+  }) => {
+    if (!blob) return;
+
+    setProcessingDownload(true);
+    try {
+      if (data.format === "mp4") {
+        const outputBlob = await videoToMP4(blob);
+        const url = URL.createObjectURL(outputBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${sanitizeFilename(data.title) || "recording"}.mp4`;
+        a.click();
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${sanitizeFilename(data.title) || "recording"}.webm`;
+        a.click();
+      }
+      toast.success("Video downloaded successfully!");
+      setShowSavePopup(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to download video.");
+    } finally {
+      setProcessingDownload(false);
+    }
+  };
 
   // Use recording duration when available
   useEffect(() => {
@@ -383,178 +579,6 @@ export default function RecorderPage() {
     }
   }, [videoUrl, uploadedFileUrl, videoDuration]);
 
-  const { data: session } = useSession();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const initials = session?.user?.name
-    ? session.user.name
-        .split(" ")
-        .map((part: string) => part[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : session?.user?.email?.[0]?.toUpperCase() || "U";
-
-  // Simple timeline component for recorder
-  const SimpleTimeline = () => {
-    const [dragging, setDragging] = useState(false);
-    const [dragValue, setDragValue] = useState(0);
-
-    // Use recording duration if available, otherwise use detected duration
-    const displayDuration =
-      recordingDuration > 0 ? recordingDuration : videoDuration;
-
-    const handlePlayPause = () => {
-      setVideoPlaying(!videoPlaying);
-    };
-
-    const handleSeekStart = () => {
-      setDragging(true);
-      setDragValue(videoCurrentTime);
-    };
-
-    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setDragValue(Number(e.target.value));
-    };
-
-    const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
-      const value = Number((e.target as HTMLInputElement).value);
-      setVideoCurrentTime(value);
-      videoPlayerRef.current?.seekTo(value, "seconds");
-      setDragging(false);
-    };
-
-    return (
-      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handlePlayPause}
-            className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
-          >
-            {videoPlaying ? (
-              <Image
-                src="/icons/pause.png"
-                alt="Pause"
-                width={18}
-                height={18}
-                className="w-4 h-4"
-              />
-            ) : (
-              <Image
-                src="/icons/play.png"
-                alt="Play"
-                width={18}
-                height={18}
-                className="w-4 h-4"
-              />
-            )}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={displayDuration}
-            step={0.01}
-            value={dragging ? dragValue : videoCurrentTime}
-            onPointerDown={handleSeekStart}
-            onChange={handleSeek}
-            onPointerUp={handleSeekEnd}
-            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
-            style={{
-              background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
-              height: 8,
-              borderRadius: 8,
-            }}
-          />
-          <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-            {formatTime(videoCurrentTime)} /{" "}
-            {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
-          </span>
-        </div>
-
-        {/* 5-second skip buttons */}
-        <div className="flex items-center justify-between mt-2 px-2 w-full">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                const newTime = Math.max(0, videoCurrentTime - 5);
-                setVideoCurrentTime(newTime);
-                videoPlayerRef.current?.seekTo(newTime, "seconds");
-              }}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
-              title="Back 5 seconds"
-            >
-              <Image
-                src="/icons/backward.png"
-                alt="Back 5 seconds"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-            </button>
-            <button
-              onClick={() => {
-                const newTime = Math.min(displayDuration, videoCurrentTime + 5);
-                setVideoCurrentTime(newTime);
-                videoPlayerRef.current?.seekTo(newTime, "seconds");
-              }}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
-              title="Forward 5 seconds"
-            >
-              <Image
-                src="/icons/forward.png"
-                alt="Forward 5 seconds"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A594F9] font-mono">Preview</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Recording timeline component for active recording
-  const RecordingTimeline = () => {
-    return (
-      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-full bg-red-500 text-white p-2 animate-pulse">
-            <div className="w-4 h-4 bg-white rounded-full"></div>
-          </div>
-          <div className="flex-1 bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-red-500 h-2 rounded-full transition-all duration-1000 ease-linear"
-              style={{
-                width: `${Math.min((recordingTimer / 3600) * 100, 100)}%`, // Max 1 hour
-              }}
-            ></div>
-          </div>
-          <span className="text-xs text-red-500 font-mono min-w-[60px] text-right font-bold">
-            {formatTime(recordingTimer)}
-          </span>
-        </div>
-
-        {/* Recording status */}
-        <div className="flex items-center justify-between mt-2 px-2 w-full">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-red-500 font-semibold animate-pulse">
-              ⏺ Recording in progress...
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-mono">
-              Live Preview
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Enhanced initialization
   useEffect(() => {
     setRecordingTimer(0);
@@ -599,47 +623,9 @@ export default function RecorderPage() {
     }
   }, [recording]);
 
-  const handleSaveAndPublish = () => {
-    if (!blob) return;
-    setShowSavePopup(true);
-  };
-
-  const handlePopupDownload = async (data: {
-    title: string;
-    description: string;
-    format: string;
-  }) => {
-    if (!blob) return;
-
-    setProcessingDownload(true);
-    try {
-      if (data.format === "mp4") {
-        const outputBlob = await videoToMP4(blob);
-        const url = URL.createObjectURL(outputBlob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${sanitizeFilename(data.title) || "recording"}.mp4`;
-        a.click();
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${sanitizeFilename(data.title) || "recording"}.webm`;
-        a.click();
-      }
-      toast.success("Video downloaded successfully!");
-      setShowSavePopup(false);
-      setProcessingDownload(false);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to download video.");
-      setProcessingDownload(false);
-    }
-  };
-
   // UI after user selects a screen/tab (screenStream is set) or uploads a video file
   if (screenStream || uploadedFileUrl) {
-    const isUploaded = !!uploadedFileUrl && !screenStream;
+    const isUploaded = uploadedFileUrl && !screenStream;
     return (
       <div className="flex flex-col h-screen w-full overflow-hidden">
         <Toaster position="top-right" />
@@ -657,21 +643,6 @@ export default function RecorderPage() {
                   Last saved 2 minutes ago
                 </div>
               </div>
-              {!isUploaded && (
-                <button
-                  onClick={handleSaveAndPublish}
-                  className="mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition flex items-center gap-2 text-sm sm:text-base"
-                >
-                  <Image
-                    src="/icons/1.png"
-                    alt="Save"
-                    width={20}
-                    height={20}
-                    className="md:w-6 md:h-6"
-                  />
-                  Save & Publish
-                </button>
-              )}
             </div>
             <div className="flex-1 px-2 sm:px-4 pb-2 sm:pb-4 overflow-y-auto">
               <div className="bg-white rounded-2xl shadow p-4 sm:p-8">
@@ -701,18 +672,6 @@ export default function RecorderPage() {
                     uploadedFileType?.startsWith("video/") ? (
                     <div className="w-full max-w-[900px] mx-auto">
                       <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
-                        <div className="w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]">
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-                            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-                            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-                          </div>
-                          <div className="flex-1 flex justify-center">
-                            <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-                              Marvedge.com/Demo/Preview
-                            </span>
-                          </div>
-                        </div>
                         <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
                           <ReactPlayer
                             ref={videoPlayerRef}
@@ -809,18 +768,6 @@ export default function RecorderPage() {
                   ) : videoUrl ? (
                     <div className="w-full max-w-[900px] mx-auto">
                       <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
-                        <div className="w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]">
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-                            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-                            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-                          </div>
-                          <div className="flex-1 flex justify-center">
-                            <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-                              Marvedge.com/Demo/Preview
-                            </span>
-                          </div>
-                        </div>
                         <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
                           <ReactPlayer
                             ref={videoPlayerRef}
@@ -908,18 +855,6 @@ export default function RecorderPage() {
                   ) : screenStream ? (
                     <div className="w-full max-w-[900px] mx-auto">
                       <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
-                        <div className="w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]">
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-                            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-                            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-                          </div>
-                          <div className="flex-1 flex justify-center">
-                            <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-                              Marvedge.com/Demo/Preview
-                            </span>
-                          </div>
-                        </div>
                         <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
                           <VideoPreview
                             videoUrl={null}
@@ -1037,22 +972,22 @@ export default function RecorderPage() {
                             reset();
                           }
                         }}
-                        className="px-6 py-3 rounded-lg font-semibold bg-[#F44336] text-white shadow-md hover:bg-[#d32f2f] transition flex items-center gap-2 text-base"
+                        className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#F44336] text-white shadow-md hover:bg-[#d32f2f] transition flex items-center gap-2 text-base"
                       >
                         Discard Video
                       </button>
                       {!isUploaded && (
                         <button
                           onClick={handleSaveAndPublish}
-                          className="px-6 py-3 rounded-lg font-semibold bg-[#7C5CFC] text-white shadow-md hover:bg-[#8A76FC] transition flex items-center gap-2 text-base"
+                          className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#7C5CFC] text-white shadow-md hover:bg-[#8A76FC] transition flex items-center gap-2 text-base"
                         >
-                          Save & Publish
+                          Download Video
                         </button>
                       )}
                       {isUploaded && (
                         <button
                           onClick={() => router.push("/editor")}
-                          className="px-6 py-3 rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
+                          className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
                         >
                           Edit Video
                         </button>
@@ -1086,7 +1021,6 @@ export default function RecorderPage() {
           onClose={() => setShowSavePopup(false)}
           onDownload={handlePopupDownload}
           initialTitle={title}
-          initialDescription={description}
           processing={processingDownload}
         />
       </div>
@@ -1094,50 +1028,50 @@ export default function RecorderPage() {
   }
 
   // UI for when recording is in progress
-  if (recording) {
-    return (
-      <main className="flex h-screen w-full items-center justify-center bg-gray-900 text-white overflow-hidden">
-        <div className="bg-gray-800 p-8 rounded-xl shadow-lg flex flex-col items-center space-y-6 w-full max-w-xl">
-          <h2 className="text-2xl font-bold animate-pulse">⏺ Recording...</h2>
-          <div className="flex flex-col items-center mb-4">
-            <div className="text-5xl font-mono font-bold text-yellow-300 bg-gray-900 px-6 py-2 rounded-lg border-2 border-yellow-400 shadow-lg">
-              {formatTime(recordingTimer)}
-            </div>
-            <div className="mt-2 text-base text-yellow-200 text-center max-w-xs">
-              This timer shows your actual recording duration.
-              <br />
-              The video preview below is what is being recorded.
-            </div>
-          </div>
-          {/* Show the live preview during recording, but hide controls */}
-          <div className="flex justify-center mb-4 sm:mb-8">
-            <VideoPreview
-              videoUrl={null}
-              isRecording={true}
-              screenStream={screenStream}
-              className="mx-auto"
-              showControls={false}
-            />
-          </div>
-          <button
-            onClick={stopRecording}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded w-full text-lg font-semibold"
-          >
-            ⏹ Stop Recording
-          </button>
-          <div className="flex items-center gap-2">
-            <span>🎙️ Mic: {micEnabled ? "On" : "Off"}</span>
-            <button
-              onClick={toggleMic}
-              className={`px-3 py-1 rounded ${micEnabled ? "bg-green-600" : "bg-gray-600"}`}
-            >
-              {micEnabled ? "Mute" : "Unmute"}
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // if (recording) {
+  //   return (
+  //     <main className="flex h-screen w-full items-center justify-center bg-gray-900 text-white overflow-hidden">
+  //       <div className="bg-gray-800 p-8 rounded-xl shadow-lg flex flex-col items-center space-y-6 w-full max-w-xl">
+  //         <h2 className="text-2xl font-bold animate-pulse">⏺ Recording...</h2>
+  //         <div className="flex flex-col items-center mb-4">
+  //           <div className="text-5xl font-mono font-bold text-yellow-300 bg-gray-900 px-6 py-2 rounded-lg border-2 border-yellow-400 shadow-lg">
+  //             {formatTime(recordingTimer)}
+  //           </div>
+  //           <div className="mt-2 text-base text-yellow-200 text-center max-w-xs">
+  //             This timer shows your actual recording duration.
+  //             <br />
+  //             The video preview below is what is being recorded.
+  //           </div>
+  //         </div>
+  //         {/* Show the live preview during recording, but hide controls */}
+  //         <div className="flex justify-center mb-4 sm:mb-8">
+  //           <VideoPreview
+  //             videoUrl={null}
+  //             isRecording={true}
+  //             screenStream={screenStream}
+  //             className="mx-auto"
+  //             showControls={false}
+  //           />
+  //         </div>
+  //         <button
+  //           onClick={stopRecording}
+  //           className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded w-full text-lg font-semibold"
+  //         >
+  //           ⏹ Stop Recording
+  //         </button>
+  //         <div className="flex items-center gap-2">
+  //           <span>🎙️ Mic: {micEnabled ? "On" : "Off"}</span>
+  //           <button
+  //             onClick={toggleMic}
+  //             className={`px-3 py-1 rounded ${micEnabled ? "bg-green-600" : "bg-gray-600"}`}
+  //           >
+  //             {micEnabled ? "Mute" : "Unmute"}
+  //           </button>
+  //         </div>
+  //       </div>
+  //     </main>
+  //   );
+  // }
 
   // Initial UI (no recording or uploaded video)
   return (
@@ -1155,6 +1089,7 @@ export default function RecorderPage() {
             <Menu size={28} />
           </button>
         </div>
+
         {/* Mobile sidebar drawer */}
         <Dialog
           open={sidebarOpen}
@@ -1185,19 +1120,6 @@ export default function RecorderPage() {
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] text-base"
                 placeholder="Enter recording title"
-              />
-            </div>
-            {/* Description */}
-            <div>
-              <label className="block text-[#7C5CFC] font-semibold mb-1">
-                Description
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] text-base"
-                placeholder="Describe your recording"
-                rows={3}
               />
             </div>
             {/* Upload & Screen Share */}
@@ -1266,6 +1188,7 @@ export default function RecorderPage() {
             </div>
           </div>
         </Dialog>
+
         {/* Main Content */}
         <main className="flex-1 flex flex-col h-full overflow-hidden">
           {/* New Recording Header Bar */}
@@ -1317,13 +1240,13 @@ export default function RecorderPage() {
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4 sm:mt-6 justify-center items-center w-full">
                 <button
                   onClick={startScreenShare}
-                  className="w-full sm:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base"
+                  className="w-full sm:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base cursor-pointer"
                 >
                   Start Screen Recording
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full sm:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-white border border-[#ede7fa] text-[#7C5CFC] font-semibold shadow hover:bg-[#F3F0FC] transition text-sm sm:text-base"
+                  className="w-full sm:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-white border border-[#ede7fa] text-[#7C5CFC] font-semibold shadow hover:bg-[#F3F0FC] transition text-sm sm:text-base cursor-pointer"
                 >
                   Upload File
                 </button>
@@ -1333,7 +1256,7 @@ export default function RecorderPage() {
                   </span>
                   <button
                     onClick={toggleMic}
-                    className={`w-10 sm:w-12 h-6 rounded-full flex items-center px-1 transition ${micEnabled ? "bg-[#6C63FF]" : "bg-gray-300"}`}
+                    className={`w-10 sm:w-12 h-6 rounded-full flex items-center px-1 transition ${micEnabled ? "bg-[#6C63FF]" : "bg-gray-300"} cursor-pointer`}
                   >
                     <span
                       className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${micEnabled ? "translate-x-4 sm:translate-x-6" : ""}`}
@@ -1373,7 +1296,6 @@ export default function RecorderPage() {
         onClose={() => setShowSavePopup(false)}
         onDownload={handlePopupDownload}
         initialTitle={title}
-        initialDescription={description}
         processing={processingDownload}
       />
     </div>

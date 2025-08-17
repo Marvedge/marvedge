@@ -1,17 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/app/components/ui/button";
 import { X, Trash2 } from "lucide-react";
-import { formatTime } from "@/lib/dateUtils";
-
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-  x: number; // center point x (0-1)
-  y: number; // center point y (0-1)
-}
+import { formatTime } from "@/app/lib/dateTimeUtils";
+import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
 
 

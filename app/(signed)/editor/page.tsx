@@ -13,15 +13,16 @@ import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import ReactPlayer from "react-player";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
 
-import { formatTime } from "@/lib/dateUtils";
-import { useBlobStore } from "@/app/lib/blobStore";
+import { formatTime } from "@/app/lib/dateTimeUtils";
+import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import axios from "axios";
+import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -50,18 +51,57 @@ interface TextOverlay {
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
 
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-  x: number;
-  y: number;
-}
-
 export default function EditorPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [params, setParams] = useState<URLSearchParams | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
+  // State to store loaded segments
+  const [loadedSegments, setLoadedSegments] = useState<
+    { start: string; end: string }[] | null
+  >(null);
+  const [currentSegments, setCurrentSegments] = useState<
+    { start: string; end: string }[]
+  >([{ start: "00:00:00", end: "00:00:00" }]);
+
+  // Update tool state to include 'none' and set as default
+  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
+    "none"
+  );
+  const [drawing, setDrawing] = useState(false);
+  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [textColor, setTextColor] = useState("#000000");
+  const [textFont, setTextFont] = useState("16px sans-serif");
+
+  // Sidebar state
+  const [sidebarTitle, setSidebarTitle] = useState("");
+  const [sidebarDescription, setSidebarDescription] = useState("");
+
+  // Save Demo Modal state
+  const [showSaveDemoModal, setShowSaveDemoModal] = useState(false);
+  const [savingDemo, setSavingDemo] = useState(false);
+
+  // Hamburger sidebar state for mobile
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // --- Add currentTime and duration state for syncing ---
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  // Zoom effects state
+  const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
+  const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
+  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
+    null
+  );
+  // Simple direct two-way sync
+  const [inputStartTime, setInputStartTime] = useState("00:00:00");
+  const [inputEndTime, setInputEndTime] = useState("00:00:00");
+  const [timelineEndTime, setTimelineEndTime] = useState(0);
   const {
     videoUrl: recordedVideoUrl,
     mp4Url,
@@ -74,10 +114,10 @@ export default function EditorPage() {
   const blob = useBlobStore((state) => state.blob);
   const { recordingDuration } = useScreenRecorder();
 
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-
   const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+   // State for browser bar controls
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper functions for time conversion
   const formatTimeForInput = (seconds: number): string => {
@@ -87,23 +127,21 @@ export default function EditorPage() {
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // State to store loaded segments
-  const [loadedSegments, setLoadedSegments] = useState<
-    { start: string; end: string }[] | null
-  >(null);
-  const [currentSegments, setCurrentSegments] = useState<
-    { start: string; end: string }[]
-  >([{ start: "00:00:00", end: "00:00:00" }]);
+  useEffect(() => {
+    setParams(new URLSearchParams(window.location.search));
+  }, []);
 
   // Handle URL parameters for editing existing demos
   useEffect(() => {
-    const urlVideo = searchParams.get("video");
-    const urlStartTime = searchParams.get("startTime");
-    const urlEndTime = searchParams.get("endTime");
-    const urlSegments = searchParams.get("segments");
-    const urlZoom = searchParams.get("zoom");
-    const urlTitle = searchParams.get("title");
-    const urlDescription = searchParams.get("description");
+    if (!params) return;
+
+    const urlVideo = params.get("video");
+    const urlStartTime = params.get("startTime");
+    const urlEndTime = params.get("endTime");
+    const urlSegments = params.get("segments");
+    const urlZoom = params.get("zoom");
+    const urlTitle = params.get("title");
+    const urlDescription = params.get("description");
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
@@ -157,30 +195,7 @@ export default function EditorPage() {
         }
       }
     }
-  }, [searchParams]);
-
-  // Update tool state to include 'none' and set as default
-  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
-    "none"
-  );
-  const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null
-  );
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
-  const [textColor, setTextColor] = useState("#000000");
-  const [textFont, setTextFont] = useState("16px sans-serif");
-
-  // Sidebar state
-  const [sidebarTitle, setSidebarTitle] = useState("");
-  const [sidebarDescription, setSidebarDescription] = useState("");
-
-  // Save Demo Modal state
-  const [showSaveDemoModal, setShowSaveDemoModal] = useState(false);
-  const [savingDemo, setSavingDemo] = useState(false);
-
-  // Hamburger sidebar state for mobile
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  }, [params]);
 
   // User initials logic (copied from recorder page)
   const { data: session } = useSession();
@@ -193,31 +208,12 @@ export default function EditorPage() {
         .slice(0, 2)
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
-  // State for browser bar controls
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // --- Add currentTime and duration state for syncing ---
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   // No-op setProgress to satisfy required callback
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const setProgress = (_value?: number) => {};
 
-  // Zoom effects state
-  const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
-  const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
-    null
-  );
-
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
-
-  // Simple direct two-way sync
-  const [inputStartTime, setInputStartTime] = useState("00:00:00");
-  const [inputEndTime, setInputEndTime] = useState("00:00:00");
-  const [timelineEndTime, setTimelineEndTime] = useState(0);
 
   // Initialize timeline pointers when video duration is loaded (only once)
   useEffect(() => {
@@ -304,11 +300,13 @@ export default function EditorPage() {
   }, []);
 
   useEffect(() => {
+    if (!params) return;
+
     // Only set recorded video URL if no URL parameter is provided
-    if (recordedVideoUrl && !searchParams.get("video")) {
+    if (recordedVideoUrl && !params.get("video")) {
       setVideoUrl(recordedVideoUrl);
     }
-  }, [recordedVideoUrl, searchParams]);
+  }, [recordedVideoUrl, params]);
 
   // Use recording duration when available
   useEffect(() => {
@@ -928,7 +926,9 @@ export default function EditorPage() {
     }
   };
 
-  const videoTrimHandler = async (segments: { start: string; end: string }[]) => {
+  const videoTrimHandler = async (
+    segments: { start: string; end: string }[]
+  ) => {
     try {
       setProgress(1);
       toast.loading("Uploading and trimming video...");
@@ -995,7 +995,7 @@ export default function EditorPage() {
       console.log("Sending to backend...");
 
       const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`,
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
         {
           videoUrl: cloudinaryVideoUrl,
           segments: segments,
@@ -1386,23 +1386,6 @@ export default function EditorPage() {
                 boxShadow: "0 4px 24px 0 #E6E1FA",
               }}
             >
-              {/* Browser Bar */}
-              <div
-                className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
-                style={{ minHeight: 32 }}
-              >
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-                  <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-                  <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-                    Marvedge.com/Demo/Preview
-                  </span>
-                </div>
-                {/* Fullscreen button removed from here */}
-              </div>
               <div
                 style={{
                   width: "100%",
@@ -1629,40 +1612,6 @@ export default function EditorPage() {
             </div>
           )}
 
-          {/* Simple Trim Input Fields */}
-          <div className="mt-8 mb-4 mr-2 sm:mr-0">
-            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Trim Video
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Time
-                  </label>
-                  <input
-                    type="text"
-                    value={inputStartTime}
-                    readOnly
-                    placeholder="00:00:00"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-default"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Time
-                  </label>
-                  <input
-                    type="text"
-                    value={inputEndTime}
-                    readOnly
-                    placeholder="00:00:00"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 cursor-default"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
             <TimelineSlider
               duration={duration}

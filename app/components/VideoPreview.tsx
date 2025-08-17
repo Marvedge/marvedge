@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import ReactPlayer from "react-player";
 import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
-import { formatTime } from "@/lib/dateUtils";
+import { formatTime } from "@/app/lib/dateTimeUtils";
 
 interface VideoPreviewProps {
   videoUrl: string | null;
@@ -390,16 +390,6 @@ export default function VideoPreview({
         className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
         style={{ minHeight: 32 }}
       >
-        <div className="flex items-center gap-1 sm:gap-2">
-          <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-          <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-          <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-        </div>
-        <div className="flex-1 flex justify-center">
-          <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-            Marvedge.com/Demo/Preview
-          </span>
-        </div>
         <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={() => setVolume(volume === 0 ? 1 : 0)}
