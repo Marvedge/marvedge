@@ -87,7 +87,7 @@ const TiltCard: React.FC<TiltCardProps> = ({
       }}
     >
       <motion.div
-        className="relative w-16 h-16 mx-auto mb-4 bg-[#e6e6fa] rounded-lg flex items-center justify-center"
+        className="relative w-16 h-5 mx-auto mb-4 bg-[#e6e6fa] rounded-lg flex items-center justify-center"
         animate={{
           rotate: [0, 5, -5, 0],
           scale: [1, 1.1, 1],
@@ -292,7 +292,16 @@ const Hero1: React.FC = () => {
               Try it for free
             </button>
           </div>
-          <div className="w-full md:w-1/2 h-[300px] bg-[#c2b3f5] rounded-lg flex items-center justify-center"></div>
+          <div className="w-full md:w-1/2 h-[300px] bg-[#c2b3f5] rounded-lg flex items-center justify-center">
+            <video
+              src="/icons/1.mp4" // 👉 put your video file path here
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-[90%] sm:w-[85%] h-[85%] rounded-2xl object-cover"
+            />
+          </div>
         </motion.div>
       </div>
       <Hero2 />

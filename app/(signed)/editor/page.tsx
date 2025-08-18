@@ -242,37 +242,6 @@ export default function EditorPage() {
     }
   };
 
-  // Background state
-  const [selectedBackground, setSelectedBackground] = useState<string | null>(
-    null
-  );
-  const [backgroundType, setBackgroundType] = useState<string>("");
-  const [customBackground, setCustomBackground] = useState<File | null>(null);
-
-  // Background style function
-  const getBackgroundStyle = (bgId: string): string => {
-    switch (bgId) {
-      case "bg1": // Mountain Sunset
-        return "linear-gradient(135deg, #FF6B35 0%, #FF8E53 50%, #FFB347 100%)";
-      case "bg2": // Abstract Circles
-        return "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
-      case "bg3": // Crystalline Shapes
-        return "linear-gradient(135deg, #ff6b9d 0%, #4ecdc4 50%, #ffeaa7 100%)";
-      case "bg4": // Dynamic Brushstrokes
-        return "linear-gradient(135deg, #ff9a9e 0%, #a8edea 50%, #ffecd2 100%)";
-      case "bg5": // Warm Gradients
-        return "linear-gradient(135deg, #ff6b6b 0%, #ffa726 50%, #ffcc02 100%)";
-      case "bg6": // Ethereal Light
-        return "linear-gradient(135deg, #a8e6cf 0%, #4facfe 50%, #ffffff 100%)";
-      case "bg7": // Fiery Swirls
-        return "linear-gradient(135deg, #ff6b35 0%, #ff4757 50%, #ff3838 100%)";
-      case "bg8": // Elegant Ribbons
-        return "linear-gradient(135deg, #e1bee7 0%, #bbdefb 50%, #f3e5f5 100%)";
-      default:
-        return "#F6F3FF";
-    }
-  };
-
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
@@ -1313,22 +1282,18 @@ export default function EditorPage() {
         )}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
           {/* Restore action buttons row */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">
-            <button
-              onClick={() => router.push("/recorder")}
-              className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow-sm hover:bg-[#5B43C6] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit"
-            >
-              <span className="text-xl"></span> Back to Recorder
-            </button>
-            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0">
-              <button
-                className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => {
-                  setShowSaveDemoModal(true);
-                }}
-              >
-                <span className="text-xl"></span> Save Demo
-              </button>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 sm:gap-4 mb-6 sm:mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 sm:gap-4 mb-6 sm:mb-6">
+              <div className="flex justify-end gap-2 sm:gap-4 mt-2 sm:mt-0">
+                <button
+                  className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                  onClick={() => {
+                    setShowSaveDemoModal(true);
+                  }}
+                >
+                  <span className="text-xl"></span> Save Demo
+                </button>
+              </div>
             </div>
           </div>
           {/* Title and Description Display */}

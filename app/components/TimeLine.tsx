@@ -471,20 +471,7 @@ export default function TimelineRuler({
             />
             Add Segment
           </button>
-          <button
-            onClick={() => removeSegment(activeSegment)}
-            disabled={segments.length === 0}
-            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Image
-              src="/icons/-.svg"
-              alt="Remove"
-              width={16}
-              height={16}
-              className="w-4 h-4"
-            />
-            Remove
-          </button>
+
           <button
             onClick={handleTrim}
             disabled={processing}

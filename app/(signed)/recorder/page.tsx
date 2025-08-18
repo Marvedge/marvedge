@@ -75,13 +75,6 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="relative lg:mr-60 hidden sm:block">
-          <input
-            type="text"
-            placeholder="Search"
-            className="rounded-full border border-[#ede7fa] px-4 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#7C5CFC]"
-          />
-        </div>
         <span className="hidden sm:block text-[#7C5CFC] font-medium text-base mr-2 flex items-center gap-1">
           Welcome, {username}
           <span role="img" aria-label="waving hand" className="ml-1">
@@ -149,7 +142,6 @@ export default function RecorderPage() {
   const setDescription = useBlobStore((state) => state.setDescription);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
 
   const videoPreview = useRef<HTMLVideoElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -480,11 +472,11 @@ export default function RecorderPage() {
                 setVideoCurrentTime(newTime);
                 videoPlayerRef.current?.seekTo(newTime, "seconds");
               }}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              className="rounded-full  bg-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
               title="Back 5 seconds"
             >
               <Image
-                src="/icons/backward.png"
+                src="/icons/replay.svg"
                 alt="Back 5 seconds"
                 width={20}
                 height={20}
@@ -497,11 +489,11 @@ export default function RecorderPage() {
                 setVideoCurrentTime(newTime);
                 videoPlayerRef.current?.seekTo(newTime, "seconds");
               }}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              className="rounded-full bg-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
               title="Forward 5 seconds"
             >
               <Image
-                src="/icons/forward.png"
+                src="/icons/forward.svg"
                 alt="Forward 5 seconds"
                 width={20}
                 height={20}
@@ -657,7 +649,7 @@ export default function RecorderPage() {
                   Last saved 2 minutes ago
                 </div>
               </div>
-              {!isUploaded && (
+              {!isUploaded && !recording && videoUrl && (
                 <button
                   onClick={handleSaveAndPublish}
                   className="mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition flex items-center gap-2 text-sm sm:text-base"
@@ -989,7 +981,7 @@ export default function RecorderPage() {
                         <div>
                           <button
                             onClick={stopRecording}
-                            className=" bg-blue-600 text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
+                            className=" bg-[#7C5CFC] text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
                           >
                             Stop Recording
                           </button>
@@ -1006,7 +998,7 @@ export default function RecorderPage() {
                               }
                             }}
                             className={`${
-                              cameraStream ? "bg-red-600" : "bg-green-600"
+                              cameraStream ? "bg-red-600" : "bg-[#7C5CFC]"
                             } text-white px-4 py-2 rounded text-sm sm:text-base min-w-[150px] transition mr-30`}
                           >
                             {cameraStream ? "Stop Camera" : "Start Camera"}
@@ -1157,7 +1149,7 @@ export default function RecorderPage() {
             <span>🎙️ Mic: {micEnabled ? "On" : "Off"}</span>
             <button
               onClick={toggleMic}
-              className={`px-3 py-1 rounded ${micEnabled ? "bg-green-600" : "bg-gray-600"}`}
+              className={`px-3 py-1 rounded ${micEnabled ? "bg-[#7C5CFC]" : "bg-gray-600"}`}
             >
               {micEnabled ? "Mute" : "Unmute"}
             </button>
