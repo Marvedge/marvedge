@@ -51,6 +51,10 @@ interface TextOverlay {
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
 
+interface ErrorResponse {
+  error: string;
+}
+
 export default function EditorPage() {
   const router = useRouter();
   const [params, setParams] = useState<URLSearchParams | null>(null);
@@ -116,7 +120,7 @@ export default function EditorPage() {
 
   const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-   // State for browser bar controls
+  // State for browser bar controls
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper functions for time conversion
@@ -950,60 +954,34 @@ export default function EditorPage() {
       }
       const videoBlob = await response.blob();
       console.log("Video blob size:", videoBlob.size);
-
-      // 1. Create FormData for Cloudinary upload
-      const cloudFormData = new FormData();
-      cloudFormData.append("file", videoBlob, "video.webm");
-      cloudFormData.append("upload_preset", "upload_preset_1");
-
-      console.log("Uploading to Cloudinary...");
-
-      // 2. Upload to Cloudinary
-      const cloudRes = await fetch(
-        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-        {
-          method: "POST",
-          body: cloudFormData,
-        }
-      );
-
-      if (!cloudRes.ok) {
-        const cloudError = await cloudRes.text();
-        throw new Error(
-          `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-        );
-      }
-
-      const cloudData = await cloudRes.json();
-      console.log("Cloudinary response:", cloudData);
-
-      if (!cloudData.secure_url) {
-        throw new Error("Cloudinary upload failed - no secure_url returned");
-      }
-
-      const cloudinaryVideoUrl = cloudData.secure_url;
-      console.log("Cloudinary URL:", cloudinaryVideoUrl);
-
-      // 3. Send all segments to backend
+      // 1. Validate segments
       if (!segments || segments.length === 0) {
         throw new Error("No segments provided");
       }
 
       console.log("Trim segments:", segments);
 
-      // 4. Send video URL and segments to backend
-      console.log("Sending to backend...");
+      // 2. Prepare multipart form data and send to backend
+      console.log("Sending to backend as FormData...");
+      const formData = new FormData();
+      formData.append("video", videoBlob, "video.mp4");
+      formData.append("segments", JSON.stringify(segments));
 
       const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
-        {
-          videoUrl: cloudinaryVideoUrl,
-          segments: segments,
-        }
+        "http://localhost:4000/api/trim",
+        formData
       );
-      console.log("trim res", trimRes);
 
-      const trimmedVideoUrl = trimRes.data.trimmedUrl;
+      console.log(trimRes);
+      if (trimRes.data.error) {
+        toast.error(`Video data is not present : ${trimRes.data.error}`);
+      }
+
+      const resData = await trimRes.data;
+      console.log("trim res", resData);
+      toast.dismiss();
+
+      const trimmedVideoUrl = resData.trimmedUrl;
 
       if (trimmedVideoUrl) {
         toast.success("Video trimmed successfully!");
@@ -1012,9 +990,14 @@ export default function EditorPage() {
         toast.error("Failed to trim video - no trimmedUrl returned");
       }
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      toast.error(`Error processing video: ${errorMessage}`);
+      if (axios.isAxiosError<ErrorResponse>(err)) {
+        const message = err.response?.data?.error || "Unexpected error";
+        toast.dismiss();
+        toast.error(`Error processing video: ${message}`);
+      } else {
+        toast.dismiss();
+        toast.error("Something went wrong");
+      }
     } finally {
       setProgress(0);
     }
