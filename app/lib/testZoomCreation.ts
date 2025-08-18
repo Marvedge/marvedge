@@ -1,11 +1,4 @@
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-  x: number;
-  y: number;
-}
+import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
 export const testZoomEffectCreation = () => {
   console.log('=== TESTING ZOOM EFFECT CREATION ===');

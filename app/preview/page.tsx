@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import ReactPlayer from "react-player";
 import {
   FaPlay,
@@ -15,12 +14,17 @@ import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 
 export default function PreviewPage() {
-  const searchParams = useSearchParams();
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [title, setTitle] = useState("Video Preview");
+  const [description, setDescription] = useState("");
   const router = useRouter();
 
-  const videoUrl = searchParams.get("video");
-  const title = searchParams.get("title") || "Video Preview";
-  const description = searchParams.get("description") || "";
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setVideoUrl(params.get("video"));
+    setTitle(params.get("title") || "Video Preview");
+    setDescription(params.get("description") || "");
+  }, []);
 
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -30,13 +34,6 @@ export default function PreviewPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const playerRef = React.useRef<ReactPlayer>(null);
-
-  useEffect(() => {
-    if (!videoUrl) {
-      toast.error("No video URL provided");
-      router.push("/");
-    }
-  }, [videoUrl, router]);
 
   const handlePlayPause = () => {
     setPlaying(!playing);

@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/app/components/ui/button";
 import { X } from "lucide-react";
 import Image from "next/image";
 
 interface SavePopupFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onDownload: (data: { title: string; description: string; format: string }) => void;
+  onDownload: (data: { title: string; format: string }) => void;
   initialTitle?: string;
   initialDescription?: string;
   processing?: boolean;
@@ -18,33 +18,30 @@ export default function SavePopupForm({
   onClose,
   onDownload,
   initialTitle = "",
-  initialDescription = "",
   processing = false,
 }: SavePopupFormProps) {
   const [title, setTitle] = useState(initialTitle);
-  const [description, setDescription] = useState(initialDescription);
   const [format, setFormat] = useState("webm");
 
   // Update internal state when props change
   useEffect(() => {
     setTitle(initialTitle);
-    setDescription(initialDescription);
-  }, [initialTitle, initialDescription]);
+  }, [initialTitle]);
 
   const handleDownload = () => {
-    onDownload({ title, description, format });
+    onDownload({ title, format });
   };
 
   // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
 
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
@@ -57,12 +54,14 @@ export default function SavePopupForm({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 transform transition-all duration-300 scale-100">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-800">Save & Publish Video</h2>
+          <h2 className="text-xl font-semibold text-gray-800">
+            Download Video
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
@@ -88,21 +87,6 @@ export default function SavePopupForm({
             />
           </div>
 
-          {/* Description Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter video description..."
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] focus:border-[#7C5CFC] transition-all resize-none"
-              disabled={processing}
-            />
-          </div>
-
           {/* Format Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -120,7 +104,9 @@ export default function SavePopupForm({
                 disabled={processing}
               >
                 <div className="text-sm font-medium">WebM</div>
-                <div className="text-xs text-gray-500">High quality, smaller size</div>
+                <div className="text-xs text-gray-500">
+                  High quality, smaller size
+                </div>
               </button>
               <button
                 type="button"
@@ -154,16 +140,11 @@ export default function SavePopupForm({
             disabled={!title.trim() || processing}
             className="flex-1 bg-[#7C5CFC] hover:bg-[#8A76FC] text-white flex items-center gap-2"
           >
-            <Image
-              src="/icons/1.png"
-              alt="Download"
-              width={16}
-              height={16}
-            />
+            <Image src="/icons/1.png" alt="Download" width={16} height={16} />
             {processing ? "Processing..." : "Download Video"}
           </Button>
         </div>
       </div>
     </div>
   );
-} 
+}
