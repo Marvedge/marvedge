@@ -56,6 +56,7 @@ export default function EditorPage() {
   const router = useRouter();
   const [params, setParams] = useState<URLSearchParams | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   // State to store loaded segments
   const [loadedSegments, setLoadedSegments] = useState<
@@ -108,6 +109,7 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
+    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -214,11 +216,11 @@ export default function EditorPage() {
   const setProgress = (_value?: number) => {};
 
   // Zoom effects state
-  const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
-  const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
-    null
-  );
+  // const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
+  // const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
+  // const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
+  //   null
+  // );
 
   // Background state
   const [selectedBackground, setSelectedBackground] = useState<string | null>(
@@ -255,10 +257,10 @@ export default function EditorPage() {
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
   // Simple direct two-way sync
-  const [inputStartTime, setInputStartTime] = useState("00:00:00");
-  const [inputEndTime, setInputEndTime] = useState("00:00:00");
+  // const [inputStartTime, setInputStartTime] = useState("00:00:00");
+  // const [inputEndTime, setInputEndTime] = useState("00:00:00");
   const [timelineStartTime, setTimelineStartTime] = useState(0);
-  const [timelineEndTime, setTimelineEndTime] = useState(0);
+  // const [timelineEndTime, setTimelineEndTime] = useState(0);
 
   // Initialize timeline pointers when video duration is loaded (only once)
   useEffect(() => {
@@ -1486,7 +1488,7 @@ export default function EditorPage() {
                 <ReactPlayer
                   ref={playerRef}
                   url={videoUrl || undefined}
-                  playing={true}
+                  playing={playing}
                   controls={false}
                   muted={false}
                   volume={volume}
@@ -1501,16 +1503,6 @@ export default function EditorPage() {
                   }}
                   onError={(e) => console.error("Video failed to load", e)}
                   onStart={() => setCurrentTime(0)}
-                  onPlay={() => setCurrentTime(0)}
-                  onDuration={(dur) => {
-                    if (
-                      recordingDuration === 0 &&
-                      isFinite(dur) &&
-                      !isNaN(dur)
-                    ) {
-                      setDuration(dur);
-                    }
-                  }}
                   onReady={() => {
                     console.log("Video loaded");
                     if (recordingDuration === 0) {
@@ -1542,6 +1534,21 @@ export default function EditorPage() {
                       }, 100);
                     }
                   }}
+                  onPlay={() => {
+                    setPlaying(true); // Sync state when video plays
+                  }}
+                  onPause={() => {
+                    setPlaying(false); // Sync state when video pauses
+                  }}
+                  onDuration={(dur) => {
+                    if (
+                      recordingDuration === 0 &&
+                      isFinite(dur) &&
+                      !isNaN(dur)
+                    ) {
+                      setDuration(dur);
+                    }
+                  }}
                   progressInterval={50}
                   onProgress={({ playedSeconds }) => {
                     if (playedSeconds === 0) setCurrentTime(0);
@@ -1566,6 +1573,8 @@ export default function EditorPage() {
                 playerRef.current?.seekTo(t, "seconds");
               }}
               recordingDuration={recordingDuration}
+              setPlaying={setPlaying}
+              playing={playing}
             />
             <div className="flex items-center justify-between mt-2 px-2 w-full">
               <div className="flex items-center gap-2">
@@ -1709,7 +1718,7 @@ export default function EditorPage() {
                   await trimApplier(
                     segments,
                     undefined,
-                    (success) => {
+                    (success: boolean) => {
                       setProgress(100);
                       toast.dismiss();
                       if (success) {
@@ -1773,16 +1782,24 @@ function CustomVideoControls({
   currentTime,
   setCurrentTime,
   recordingDuration,
+  setPlaying,
+  playing,
 }: {
   playerRef: React.RefObject<ReactPlayer>;
   duration: number;
   currentTime: number;
   setCurrentTime: (t: number) => void;
   recordingDuration: number;
+  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+  playing: boolean;
 }) {
-  const [playing, setPlaying] = useState(true);
+  // const [playing, setPlaying] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
+
+  useEffect(() => {
+    setPlaying(playing);
+  }, [playing, setPlaying]);
 
   const handlePlayPause = () => {
     setPlaying((prev) => {
