@@ -1435,29 +1435,13 @@ export default function EditorPage() {
           {/* Center video preview on desktop */}
           <div
             ref={videoContainerRef}
-            className={`relative w-full max-w-[600px] h-[390px] sm:w-full sm:max-w-[1200px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
+            className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
             style={{
-              minHeight: "240px",
+              minHeight: "160px",
               padding: 0,
               boxShadow: "0 4px 24px 0 #E6E1FA",
             }}
           >
-            {/* Browser Bar */}
-            <div
-              className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
-              style={{ minHeight: 32 }}
-            >
-              <div className="flex items-center gap-1 sm:gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E6E1FA]" />
-                <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#E6E1FA]" />
-                <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#E6E1FA]" />
-              </div>
-              <div className="flex-1 flex justify-center">
-                <span className="text-xs sm:text-sm text-[#A594F9] font-mono bg-[#F6F3FF] px-2 sm:px-4 py-1 rounded-lg border border-[#E6E1FA] shadow-sm">
-                  Marvedge.com/Demo/Preview
-                </span>
-              </div>
-            </div>
             <div
               style={{
                 width: "100%",
@@ -1466,9 +1450,7 @@ export default function EditorPage() {
                 zIndex: 1,
                 borderRadius: "1.25rem",
                 overflow: "hidden",
-                background: selectedBackground
-                  ? getBackgroundStyle(selectedBackground)
-                  : "#F6F3FF",
+                background: "#F6F3FF",
               }}
             >
               <div
@@ -1482,27 +1464,32 @@ export default function EditorPage() {
                   transition: currentZoomEffect
                     ? "transform 0.5s ease-in-out"
                     : "transform 0.3s ease-out",
-                  marginTop: "5px",
                 }}
               >
                 <ReactPlayer
                   ref={playerRef}
                   url={videoUrl || undefined}
-                  playing={playing}
+                  playing={playing} // Controlled by state, defaults to false
                   controls={false}
                   muted={false}
                   volume={volume}
-                  width="80%"
-                  height="98%"
+                  width="100%"
+                  height="100%"
                   style={{
                     objectFit: "contain",
                     borderRadius: "1.25rem",
                     background: "#F6F3FF",
-                    margin: "auto",
-                    display: "block",
                   }}
                   onError={(e) => console.error("Video failed to load", e)}
-                  onStart={() => setCurrentTime(0)}
+                  onDuration={(dur) => {
+                    if (
+                      recordingDuration === 0 &&
+                      isFinite(dur) &&
+                      !isNaN(dur)
+                    ) {
+                      setDuration(dur);
+                    }
+                  }}
                   onReady={() => {
                     console.log("Video loaded");
                     if (recordingDuration === 0) {
@@ -1540,20 +1527,10 @@ export default function EditorPage() {
                   onPause={() => {
                     setPlaying(false); // Sync state when video pauses
                   }}
-                  onDuration={(dur) => {
-                    if (
-                      recordingDuration === 0 &&
-                      isFinite(dur) &&
-                      !isNaN(dur)
-                    ) {
-                      setDuration(dur);
-                    }
-                  }}
-                  progressInterval={50}
-                  onProgress={({ playedSeconds }) => {
-                    if (playedSeconds === 0) setCurrentTime(0);
-                    else setCurrentTime(playedSeconds);
-                  }}
+                  progressInterval={100}
+                  onProgress={({ playedSeconds }) =>
+                    setCurrentTime(playedSeconds)
+                  }
                   config={{
                     file: {
                       attributes: {
@@ -1573,8 +1550,8 @@ export default function EditorPage() {
                 playerRef.current?.seekTo(t, "seconds");
               }}
               recordingDuration={recordingDuration}
-              setPlaying={setPlaying}
-              playing={playing}
+              setPlaying={setPlaying} // Pass setPlaying to controls for play/pause
+              playing={playing} // Pass current playing state
             />
             <div className="flex items-center justify-between mt-2 px-2 w-full">
               <div className="flex items-center gap-2">
@@ -1584,11 +1561,11 @@ export default function EditorPage() {
                     setCurrentTime(newTime);
                     playerRef.current?.seekTo(newTime, "seconds");
                   }}
-                  className="rounded-full bg-[#7C5CFC] text-white p-1.5 transition shadow-sm"
+                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                   title="Back 5 seconds"
                 >
                   <Image
-                    src="/icons/replay.svg"
+                    src="/icons/backward-edit.svg"
                     alt="Notifications"
                     width={16}
                     height={16}
@@ -1601,11 +1578,11 @@ export default function EditorPage() {
                     setCurrentTime(newTime);
                     playerRef.current?.seekTo(newTime, "seconds");
                   }}
-                  className="rounded-full bg-[#7C5CFC] text-white p-1.5 transition shadow-sm"
+                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                   title="Forward 5 seconds"
                 >
                   <Image
-                    src="/icons/forward.svg"
+                    src="/icons/forward-edit.svg"
                     alt="Notifications"
                     width={16}
                     height={16}

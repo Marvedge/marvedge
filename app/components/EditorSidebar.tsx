@@ -241,46 +241,6 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       </div>
 
       {/* Demo Properties */}
-      <div className="mb-2">
-        <h2 className="text-lg font-bold text-[#A594F9] mb-3">
-          Demo Properties
-        </h2>
-
-        <label className="block text-[#A594F9] font-semibold mb-1">Title</label>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] mb-3"
-          placeholder="Enter demo title"
-        />
-
-        <label className="block text-[#A594F9] font-semibold mb-1">
-          Description
-        </label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] mb-3"
-          placeholder="Short description"
-        />
-
-        {thumbnailUrl && (
-          <div className="mb-2 flex flex-col items-center">
-            <label className="block text-[#A594F9] font-semibold mb-1">
-              Thumbnail
-            </label>
-            <Image
-              src={thumbnailUrl}
-              alt="thumbnail"
-              width={128}
-              height={72}
-              className="w-32 mt-2 rounded border"
-              unoptimized
-            />
-          </div>
-        )}
-      </div>
 
       {/* Main Tabs */}
       <div className="flex justify-between bg-[#F6F3FF] rounded-xl p-1">
