@@ -22,6 +22,7 @@ model User {
   website       String?
   accounts      Account[]
   sessions      Session[]
+  Demo          Demo[]
 }
 
 model Account {
@@ -84,4 +85,7 @@ model Demo {
   editing     Json? // Store editing data (segments, zoom, etc.)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 }

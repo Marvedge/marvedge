@@ -1,31 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // adjust path
+
 
 export async function GET() {
   try {
-    console.log("Fetching demos...");
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
     const demos = await prisma.demo.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
+      where: { userId: user.id }, // filter by logged-in user
+      orderBy: { createdAt: "desc" },
     });
 
-    console.log("Demos fetched successfully:", demos.length);
-
-    return NextResponse.json({
-      success: true,
-      demos,
-    });
+    return NextResponse.json({ success: true, demos });
   } catch (error) {
     console.error("Error fetching demos:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch demos" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch demos" }, { status: 500 });
   }
 }
 
+//Current session strategy is set to use jwt, entry in the Session table will only be created when set to "database"
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
 
@@ -53,19 +60,15 @@ export async function DELETE(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { title, description, videoUrl, startTime, endTime, editing } =
       await req.json();
 
-    console.log("Received demo save request:", {
-      title,
-      description,
-      videoUrl,
-      startTime,
-      endTime,
-      editing,
-    });
-
-    // Validate required fields
     if (!title || !videoUrl || !startTime || !endTime) {
       return NextResponse.json(
         { error: "Title, videoUrl, startTime, and endTime are required" },
@@ -73,7 +76,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create the demo record with editing object
+    // Get logged-in user
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     const demo = await prisma.demo.create({
       data: {
         title,
@@ -81,11 +92,10 @@ export async function POST(req: NextRequest) {
         videoUrl,
         startTime,
         endTime,
-        editing: editing || null, // Store editing as JSON
+        editing: editing || null,
+        userId: user.id, // attach logged-in user
       },
     });
-
-    console.log("Demo saved successfully:", demo);
 
     return NextResponse.json({
       success: true,
@@ -94,9 +104,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Demo save error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

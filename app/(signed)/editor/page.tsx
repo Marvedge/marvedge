@@ -11,7 +11,8 @@ import { FaExpand } from "react-icons/fa";
 import { useCallback } from "react";
 import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+// import toast, { Toaster } from "react-hot-toast";
+import { toast, Toaster } from "sonner";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
@@ -969,19 +970,17 @@ export default function EditorPage() {
 
       const trimRes = await axios.post(
         "http://localhost:4000/api/trim",
-        formData
+        formData,
+        {
+          responseType: "blob",
+        }
       );
-
-      console.log(trimRes);
-      if (trimRes.data.error) {
-        toast.error(`Video data is not present : ${trimRes.data.error}`);
-      }
-
-      const resData = await trimRes.data;
-      console.log("trim res", resData);
       toast.dismiss();
 
-      const trimmedVideoUrl = resData.trimmedUrl;
+      console.log(trimRes);
+
+      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
+      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
 
       if (trimmedVideoUrl) {
         toast.success("Video trimmed successfully!");
@@ -1044,21 +1043,19 @@ export default function EditorPage() {
   return (
     <main className="flex flex-col h-screen w-full bg-gray-50">
       <Toaster
-        position="top-center"
+        position="bottom-right" // 👈 set your desired position
+        richColors
+        expand
         toastOptions={{
-          style: {
-            background: "#2D2A3A",
-            color: "#fff",
-            fontWeight: "bold",
-            fontSize: "1.1rem",
-            boxShadow: "0 4px 24px 0 #0008",
-            borderRadius: "10px",
-            zIndex: 99999,
+          classNames: {
+            toast:
+              "bg-[#2D2A3A] text-white font-bold text-lg rounded-xl shadow-lg z-[99999]",
+            success: "bg-green-500 text-white",
+            error: "bg-red-500 text-white",
           },
-          success: { iconTheme: { primary: "#7C5CFC", secondary: "#fff" } },
-          error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
         }}
       />
+
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
         {/* Desktop Sidebar */}
@@ -1088,13 +1085,13 @@ export default function EditorPage() {
               return;
             }
 
-            if (!sidebarTitle?.trim()) {
-              toast.error("Please enter a title for the video");
-              return;
-            }
+            // if (!sidebarTitle?.trim()) {
+            //   toast.error("Please enter a title for the video");
+            //   return;
+            // }
 
             try {
-              toast.loading("Exporting video to Cloudinary...");
+              toast.loading("Exporting video to Cloudinary...aa");
 
               // First, upload video to Cloudinary if it's a blob URL
               let cloudinaryVideoUrl = videoUrl;
@@ -1141,6 +1138,8 @@ export default function EditorPage() {
 
                   cloudinaryVideoUrl = cloudData.secure_url;
                   console.log("Cloudinary URL:", cloudinaryVideoUrl);
+
+                  toast.dismiss();
                 } catch (cloudError) {
                   console.error("Error uploading to Cloudinary:", cloudError);
                   toast.dismiss();
@@ -1215,13 +1214,15 @@ export default function EditorPage() {
                     return;
                   }
 
-                  if (!sidebarTitle?.trim()) {
-                    toast.error("Please enter a title for the video");
-                    return;
-                  }
+                  toast.message("hai from the export");
+
+                  // if (!sidebarTitle?.trim()) {
+                  //   toast.error("Please enter a title for the video");
+                  //   return;
+                  // }
 
                   try {
-                    toast.loading("Exporting video to Cloudinary...");
+                    toast.loading("Exporting video to Cloudinary...xx");
 
                     // First, upload video to Cloudinary if it's a blob URL
                     let cloudinaryVideoUrl = videoUrl;

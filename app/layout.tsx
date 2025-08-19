@@ -1,6 +1,7 @@
 "use client";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
+import { Toaster } from "sonner";
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -13,6 +14,7 @@ export default function RootLayout({
       </head>
       <body className="overflow-x-hidden">
         <SessionProvider>{children}</SessionProvider>
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );

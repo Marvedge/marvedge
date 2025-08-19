@@ -5,4 +5,4 @@
 
 */
 -- AlterTable
-ALTER TABLE "Demo" ADD COLUMN     "editing" JSONB NOT NULL;
+-- ALTER TABLE "Demo" ADD COLUMN     "editing" JSONB NOT NULL;
