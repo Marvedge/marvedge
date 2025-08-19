@@ -13,12 +13,12 @@ interface TrimSegment {
   end: number;
 }
 
-interface ZoomEffect {
-  id: string;
-  startTime: number;
-  endTime: number;
-  zoomLevel: number;
-}
+// interface ZoomEffect {
+//   id: string;
+//   startTime: number;
+//   endTime: number;
+//   zoomLevel: number;
+// }
 
 interface TimelineSliderProps {
   duration: number; // Duration in seconds
@@ -396,7 +396,7 @@ export function TimelineSlider({
     setCurrentTime(seekTime);
   };
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (segments.length > 1) {
       const lastSegment = segments[segments.length - 1];
       setRemovedSegments((prev) => [...prev, lastSegment]);
@@ -404,9 +404,16 @@ export function TimelineSlider({
       setSegments((prev) => prev.slice(0, -1));
       setActiveIdx(Math.min(activeIdx, segments.length - 2));
     }
-  };
+  }, [
+    segments,
+    activeIdx,
+    setRemovedSegments,
+    setRemovedActiveIdx,
+    setSegments,
+    setActiveIdx,
+  ]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (removedSegments.length > 0) {
       const segmentToRestore = removedSegments[removedSegments.length - 1];
       const activeIdxToRestore = removedActiveIdx[removedActiveIdx.length - 1];
@@ -415,7 +422,14 @@ export function TimelineSlider({
       setRemovedSegments((prev) => prev.slice(0, -1));
       setRemovedActiveIdx((prev) => prev.slice(0, -1));
     }
-  };
+  }, [
+    removedSegments,
+    removedActiveIdx,
+    setSegments,
+    setActiveIdx,
+    setRemovedSegments,
+    setRemovedActiveIdx,
+  ]);
 
   const addSegment = () => {
     setSegments([...segments, { start: 0, end: duration || 80.0 }]);

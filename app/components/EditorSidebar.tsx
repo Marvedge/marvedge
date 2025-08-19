@@ -29,11 +29,11 @@ type MainTab = "background" | "tools";
 type BgSubTab = "image" | "gradient" | "color" | "hidden";
 
 const EditorSidebar: React.FC<EditorSidebarProps> = ({
-  title,
-  setTitle,
-  description,
-  setDescription,
-  onDownloadWebM,
+  // title,
+  // setTitle,
+  // description,
+  // setDescription,
+  // onDownloadWebM,
   onDownloadMP4,
   onExportWebM,
   tool,
@@ -43,7 +43,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   handleSaveOverlays,
   handleLoadOverlays,
   forceShowMobile = false,
-  thumbnailUrl,
+  // thumbnailUrl,
   selectedBackground,
   setSelectedBackground,
   backgroundType,
@@ -176,31 +176,31 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
     { id: "#0f172a", name: "Slate", hex: "#0f172a" },
   ];
 
-  const Segmented = ({
-    value,
-    onChange,
-    options,
-  }: {
-    value: string;
-    onChange: (v: any) => void;
-    options: { label: string; value: string }[];
-  }) => (
-    <div className="inline-flex bg-[#F6F3FF] rounded-xl p-1 gap-1">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
-            value === o.value
-              ? "bg-white text-[#7C5CFC] shadow"
-              : "text-gray-600 hover:text-[#7C5CFC]"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
+  // const Segmented = ({
+  //   value,
+  //   onChange,
+  //   options,
+  // }: {
+  //   value: string;
+  //   onChange: (v: any) => void;
+  //   options: { label: string; value: string }[];
+  // }) => (
+  //   <div className="inline-flex bg-[#F6F3FF] rounded-xl p-1 gap-1">
+  //     {options.map((o) => (
+  //       <button
+  //         key={o.value}
+  //         onClick={() => onChange(o.value)}
+  //         className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+  //           value === o.value
+  //             ? "bg-white text-[#7C5CFC] shadow"
+  //             : "text-gray-600 hover:text-[#7C5CFC]"
+  //         }`}
+  //       >
+  //         {o.label}
+  //       </button>
+  //     ))}
+  //   </div>
+  // );
 
   return (
     <aside
