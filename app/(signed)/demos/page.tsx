@@ -71,15 +71,16 @@ export default function DemosPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/demo");
-      if (!response.ok) {
-        throw new Error("Failed to fetch demos");
-      }
-      const data = await response.json();
-      setDemos(data.demos || []);
-    } catch (err) {
+      const response = await axios.get("/api/demo");
+      setDemos(response.data.demos || []);
+    } catch (err: unknown) {
       console.error("Error fetching demos:", err);
-      setError(err instanceof Error ? err.message : "Failed to fetch demos");
+
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.message || "Failed to fetch demos");
+      } else {
+        setError("Failed to fetch demos");
+      }
     } finally {
       setLoading(false);
     }
@@ -156,8 +157,8 @@ export default function DemosPage() {
     try {
       await axios.delete(`/api/demo/`, {
         params: {
-          id: deleteId
-        }
+          id: deleteId,
+        },
       });
       await fetchDemos();
     } catch (error) {

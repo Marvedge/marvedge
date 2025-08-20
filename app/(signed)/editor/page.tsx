@@ -12,7 +12,7 @@ import { useCallback } from "react";
 import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 // import toast, { Toaster } from "react-hot-toast";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
@@ -1042,19 +1042,19 @@ export default function EditorPage() {
 
   return (
     <main className="flex flex-col h-screen w-full bg-gray-50">
-      <Toaster
-        position="bottom-right" // 👈 set your desired position
+      {/* <Toaster
+        position="bottom-right"
         richColors
         expand
         toastOptions={{
           classNames: {
             toast:
-              "bg-[#2D2A3A] text-white font-bold text-lg rounded-xl shadow-lg z-[99999]",
+              "bg-[#2D2A3A] text-white font-bold text-lg rounded-xl shadow-lg z-[99999] flex items-center justify-between",
             success: "bg-green-500 text-white",
             error: "bg-red-500 text-white",
           },
         }}
-      />
+      /> */}
 
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
