@@ -11,7 +11,7 @@ import { FaExpand } from "react-icons/fa";
 import { useCallback } from "react";
 import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import { toast } from "sonner";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
@@ -23,6 +23,7 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import axios from "axios";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ErrorResponse } from "@/app/interfaces/IErrorResponse";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -116,7 +117,7 @@ export default function EditorPage() {
 
   const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-   // State for browser bar controls
+  // State for browser bar controls
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper functions for time conversion
@@ -950,60 +951,27 @@ export default function EditorPage() {
       }
       const videoBlob = await response.blob();
       console.log("Video blob size:", videoBlob.size);
-
-      // 1. Create FormData for Cloudinary upload
-      const cloudFormData = new FormData();
-      cloudFormData.append("file", videoBlob, "video.webm");
-      cloudFormData.append("upload_preset", "upload_preset_1");
-
-      console.log("Uploading to Cloudinary...");
-
-      // 2. Upload to Cloudinary
-      const cloudRes = await fetch(
-        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-        {
-          method: "POST",
-          body: cloudFormData,
-        }
-      );
-
-      if (!cloudRes.ok) {
-        const cloudError = await cloudRes.text();
-        throw new Error(
-          `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-        );
-      }
-
-      const cloudData = await cloudRes.json();
-      console.log("Cloudinary response:", cloudData);
-
-      if (!cloudData.secure_url) {
-        throw new Error("Cloudinary upload failed - no secure_url returned");
-      }
-
-      const cloudinaryVideoUrl = cloudData.secure_url;
-      console.log("Cloudinary URL:", cloudinaryVideoUrl);
-
-      // 3. Send all segments to backend
+      // 1. Validate segments
       if (!segments || segments.length === 0) {
         throw new Error("No segments provided");
       }
 
-      console.log("Trim segments:", segments);
-
-      // 4. Send video URL and segments to backend
-      console.log("Sending to backend...");
+      // 2. Prepare multipart form data and send to backend
+      console.log("Sending video blob to backend");
+      const formData = new FormData();
+      formData.append("video", videoBlob, "video.mp4");
+      formData.append("segments", JSON.stringify(segments));
 
       const trimRes = await axios.post(
         `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
+        formData,
         {
-          videoUrl: cloudinaryVideoUrl,
-          segments: segments,
+          responseType: "blob",
         }
       );
-      console.log("trim res", trimRes);
 
-      const trimmedVideoUrl = trimRes.data.trimmedUrl;
+      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
+      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
 
       if (trimmedVideoUrl) {
         toast.success("Video trimmed successfully!");
@@ -1012,9 +980,14 @@ export default function EditorPage() {
         toast.error("Failed to trim video - no trimmedUrl returned");
       }
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      toast.error(`Error processing video: ${errorMessage}`);
+      if (axios.isAxiosError<ErrorResponse>(err)) {
+        const message = err.response?.data?.error || "Unexpected error";
+        toast.dismiss();
+        toast.error(`Error processing video: ${message}`);
+      } else {
+        toast.dismiss();
+        toast.error("Something went wrong");
+      }
     } finally {
       setProgress(0);
     }
@@ -1060,24 +1033,9 @@ export default function EditorPage() {
 
   return (
     <main className="flex flex-col h-screen w-full bg-gray-50">
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          style: {
-            background: "#2D2A3A",
-            color: "#fff",
-            fontWeight: "bold",
-            fontSize: "1.1rem",
-            boxShadow: "0 4px 24px 0 #0008",
-            borderRadius: "10px",
-            zIndex: 99999,
-          },
-          success: { iconTheme: { primary: "#7C5CFC", secondary: "#fff" } },
-          error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
-        }}
-      />
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
+
         {/* Desktop Sidebar */}
         <EditorSidebar
           title={sidebarTitle}
@@ -1102,11 +1060,6 @@ export default function EditorPage() {
           onExportWebM={async () => {
             if (!videoUrl) {
               toast.error("No video available to export");
-              return;
-            }
-
-            if (!sidebarTitle?.trim()) {
-              toast.error("Please enter a title for the video");
               return;
             }
 
@@ -1158,6 +1111,8 @@ export default function EditorPage() {
 
                   cloudinaryVideoUrl = cloudData.secure_url;
                   console.log("Cloudinary URL:", cloudinaryVideoUrl);
+
+                  toast.dismiss();
                 } catch (cloudError) {
                   console.error("Error uploading to Cloudinary:", cloudError);
                   toast.dismiss();
@@ -1189,6 +1144,7 @@ export default function EditorPage() {
           handleLoadOverlays={handleLoadOverlays}
           thumbnailUrl={thumbnailUrl || undefined}
         />
+
         {/* Mobile Sidebar Drawer */}
         {isSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
@@ -1231,12 +1187,6 @@ export default function EditorPage() {
                     toast.error("No video available to export");
                     return;
                   }
-
-                  if (!sidebarTitle?.trim()) {
-                    toast.error("Please enter a title for the video");
-                    return;
-                  }
-
                   try {
                     toast.loading("Exporting video to Cloudinary...");
 
@@ -1326,6 +1276,7 @@ export default function EditorPage() {
             </div>
           </div>
         )}
+
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
           {/* Restore action buttons row */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">

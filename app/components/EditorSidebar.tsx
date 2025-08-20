@@ -38,7 +38,11 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       <div className="relative mb-4">
         <button
           className="w-full bg-[#A594F9] hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
-          onClick={() => setExportMenuOpen((v) => !v)}
+          onClick={() => {
+            setExportMenuOpen((v) => !v);
+            onExportWebM(); // 👈 call it here
+          }}
+          // onClick={onExportWebM()}
         >
           Export Video
         </button>
@@ -53,7 +57,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
             >
               Download WebM
             </button> */}
-            <button
+            {/* <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -61,7 +65,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Export WebM
-            </button>
+            </button> */}
             {/* <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-b-lg"
               onClick={() => {

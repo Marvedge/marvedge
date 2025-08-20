@@ -12,6 +12,7 @@ import {
 import { ArrowLeft, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
+import DownloadModal from "../components/DownloadModal";
 
 export default function PreviewPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -32,6 +33,8 @@ export default function PreviewPage() {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
 
   const playerRef = React.useRef<ReactPlayer>(null);
 
@@ -92,6 +95,37 @@ export default function PreviewPage() {
         console.error("Download failed:", error);
         toast.error("Error downloading video");
       }
+    }
+  };
+
+  const handleDownloadFile = async ({
+    title,
+    format,
+  }: {
+    title: string;
+    format: "webm" | "mp4";
+  }) => {
+    if (!videoUrl) return;
+
+    try {
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      window.URL.revokeObjectURL(url);
+      toast.success("Download Completed!");
+    } catch (error) {
+      console.error("Download failed:", error);
+      toast.error("Error downloading video");
+    } finally {
+      setDownloadOpen(false);
     }
   };
 
@@ -198,13 +232,45 @@ export default function PreviewPage() {
                 <Share2 className="w-4 h-4" />
                 <span>Share</span>
               </button>
-              <button
-                onClick={handleDownload}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                <FaDownload className="w-4 h-4" />
-                <span>Download</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setDownloadOpen(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  <FaDownload className="w-4 h-4" />
+                  <span>Download</span>
+                </button>
+                {/* Download Modal */}
+                <DownloadModal
+                  isOpen={downloadOpen}
+                  onClose={() => setDownloadOpen(false)}
+                  onDownload={handleDownloadFile}
+                  defaultTitle={title}
+                />
+
+                {exportMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-[#ede7fa] rounded-lg shadow z-10">
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-t-lg"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        handleDownload(); // ✅ actually download
+                      }}
+                    >
+                      Download WebM
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-t-lg"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        handleDownload(); // ✅ actually download
+                      }}
+                    >
+                      Download Mp4
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
