@@ -5,8 +5,6 @@ import { X, Trash2 } from "lucide-react";
 import { formatTime } from "@/app/lib/dateTimeUtils";
 import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
-
-
 interface ZoomEffectsPopupProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,10 +30,6 @@ export default function ZoomEffectsPopup({
   const [zoomLevel, setZoomLevel] = useState(2.0);
   const [centerX, setCenterX] = useState(0.5);
   const [centerY, setCenterY] = useState(0.5);
-
-
-
-
   const parseTime = (timeString: string) => {
     const parts = timeString.split(":").map(Number);
     if (parts.length === 2) {
@@ -79,7 +73,7 @@ export default function ZoomEffectsPopup({
       y: centerY,
     };
 
-    const updatedEffects = zoomEffects.map(effect =>
+    const updatedEffects = zoomEffects.map((effect) =>
       effect.id === editingEffect.id ? updatedEffect : effect
     );
 
@@ -89,7 +83,7 @@ export default function ZoomEffectsPopup({
   };
 
   const handleDeleteEffect = (id: string) => {
-    onZoomEffectsChange(zoomEffects.filter(effect => effect.id !== id));
+    onZoomEffectsChange(zoomEffects.filter((effect) => effect.id !== id));
   };
 
   const resetForm = () => {
@@ -131,7 +125,6 @@ export default function ZoomEffectsPopup({
         className="absolute inset-0 bg-black bg-opacity-50"
         onClick={onClose}
       />
-      
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
         {/* Header */}
@@ -196,7 +189,9 @@ export default function ZoomEffectsPopup({
             </label>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">X Position</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  X Position
+                </label>
                 <input
                   type="range"
                   min="0"
@@ -206,10 +201,14 @@ export default function ZoomEffectsPopup({
                   onChange={(e) => setCenterX(parseFloat(e.target.value))}
                   className="w-full"
                 />
-                <div className="text-xs text-gray-500">{Math.round(centerX * 100)}%</div>
+                <div className="text-xs text-gray-500">
+                  {Math.round(centerX * 100)}%
+                </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Y Position</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Y Position
+                </label>
                 <input
                   type="range"
                   min="0"
@@ -219,24 +218,18 @@ export default function ZoomEffectsPopup({
                   onChange={(e) => setCenterY(parseFloat(e.target.value))}
                   className="w-full"
                 />
-                <div className="text-xs text-gray-500">{Math.round(centerY * 100)}%</div>
+                <div className="text-xs text-gray-500">
+                  {Math.round(centerY * 100)}%
+                </div>
               </div>
             </div>
           </div>
 
           <div className="flex gap-2">
-            <Button
-              onClick={handleSetCurrentTime}
-              variant="outline"
-              size="sm"
-            >
+            <Button onClick={handleSetCurrentTime} variant="outline" size="sm">
               Set Current Time ({formatTime(currentTime)})
             </Button>
-            <Button
-              onClick={handleAddTestEffect}
-              variant="outline"
-              size="sm"
-            >
+            <Button onClick={handleAddTestEffect} variant="outline" size="sm">
               Add Test Effect
             </Button>
           </div>
@@ -244,16 +237,10 @@ export default function ZoomEffectsPopup({
           <div className="flex gap-2">
             {editingEffect ? (
               <>
-                <Button
-                  onClick={handleUpdateEffect}
-                  className="flex-1"
-                >
+                <Button onClick={handleUpdateEffect} className="flex-1">
                   Update Effect
                 </Button>
-                <Button
-                  onClick={resetForm}
-                  variant="outline"
-                >
+                <Button onClick={resetForm} variant="outline">
                   Cancel
                 </Button>
               </>
@@ -273,7 +260,9 @@ export default function ZoomEffectsPopup({
         <div>
           <h3 className="text-lg font-semibold mb-4">Current Effects</h3>
           {zoomEffects.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No zoom effects added yet.</p>
+            <p className="text-gray-500 text-center py-4">
+              No zoom effects added yet.
+            </p>
           ) : (
             <div className="space-y-2">
               {zoomEffects.map((effect) => (
@@ -283,10 +272,13 @@ export default function ZoomEffectsPopup({
                 >
                   <div className="flex-1">
                     <div className="font-medium">
-                      {formatTime(effect.startTime)} - {formatTime(effect.endTime)}
+                      {formatTime(effect.startTime)} -{" "}
+                      {formatTime(effect.endTime)}
                     </div>
                     <div className="text-sm text-gray-500">
-                      Zoom: {effect.zoomLevel}x | Center: ({Math.round(effect.x * 100)}%, {Math.round(effect.y * 100)}%)
+                      Zoom: {effect.zoomLevel}x | Center: (
+                      {Math.round(effect.x * 100)}%,{" "}
+                      {Math.round(effect.y * 100)}%)
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -314,4 +306,4 @@ export default function ZoomEffectsPopup({
       </div>
     </div>
   );
-} 
+}

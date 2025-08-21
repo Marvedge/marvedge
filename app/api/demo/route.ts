@@ -66,12 +66,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { title, description, videoUrl, startTime, endTime, editing } =
+    const { title, description, videoUrl, editing } =
       await req.json();
 
-    if (!title || !videoUrl || !startTime || !endTime) {
+    if (!title || !videoUrl ) {
       return NextResponse.json(
-        { error: "Title, videoUrl, startTime, and endTime are required" },
+        { error: "Title, videoUrl are required" },
         { status: 400 }
       );
     }
@@ -90,8 +90,6 @@ export async function POST(req: NextRequest) {
         title,
         description: description || "",
         videoUrl,
-        startTime,
-        endTime,
         editing: editing || null,
         userId: user.id, // attach logged-in user
       },

@@ -829,39 +829,53 @@ export default function EditorPage() {
           const videoBlob = await response.blob();
 
           // Create FormData for Cloudinary upload
+          const CLOUDINARY_CLOUD_NAME =
+            process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+          const CLOUDINARY_UPLOAD_PRESET =
+            process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+          const CLOUDINARY_API_BASE =
+            process.env.NEXT_PUBLIC_CLOUDINARY_API_BASE!;
+
+          // const CLOUDINARY_API_URL = `/v1_1https://api.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+          const CLOUDINARY_API_URL = `${CLOUDINARY_API_BASE}/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
           const cloudFormData = new FormData();
           cloudFormData.append("file", videoBlob, "video.webm");
-          cloudFormData.append("upload_preset", "upload_preset_1");
+          cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
           console.log("Uploading to Cloudinary...");
 
           // Upload to Cloudinary
-          const cloudRes = await fetch(
-            "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-            {
-              method: "POST",
-              body: cloudFormData,
+          // const cloudRes = await fetch(
+          //   "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+          //   {
+          //     method: "POST",
+          //     body: cloudFormData,
+          //   }
+          // );
+
+          try {
+            const cloudRes = await axios.post(
+              CLOUDINARY_API_URL,
+              cloudFormData,
+              {
+                headers: {
+                  "Content-Type": "multipart/form-data",
+                },
+              }
+            );
+             console.log("Upload success:", cloudRes.data);
+            cloudinaryVideoUrl = cloudRes.data.secure_url;
+          } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+              console.error("Cloudinary upload failed:");
+              console.error("Status:", error.response?.status);
+              console.error("Status Text:", error.response?.statusText);
+              console.error("Response Data:", error.response?.data);
+              console.error("Headers:", error.response?.headers);
+            } else {
+              console.error("Unexpected error:", error);
             }
-          );
-
-          if (!cloudRes.ok) {
-            const cloudError = await cloudRes.text();
-            throw new Error(
-              `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-            );
           }
-
-          const cloudData = await cloudRes.json();
-          console.log("Cloudinary response:", cloudData);
-
-          if (!cloudData.secure_url) {
-            throw new Error(
-              "Cloudinary upload failed - no secure_url returned"
-            );
-          }
-
-          cloudinaryVideoUrl = cloudData.secure_url;
-          console.log("Cloudinary URL:", cloudinaryVideoUrl);
         } catch (cloudError) {
           console.error("Error uploading to Cloudinary:", cloudError);
           toast.dismiss();
@@ -887,26 +901,31 @@ export default function EditorPage() {
         zoom: zoomEffects,
       };
 
-      const response = await fetch("/api/demo", {
-        method: "POST",
-        body: JSON.stringify({
+      try {
+        const response = await axios.post("/api/demo", {
           title: data.title,
           description: data.description,
           videoUrl: cloudinaryVideoUrl,
-          startTime,
-          endTime,
+          // startTime,
+          // endTime,
           editing: editingToSave,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save demo");
+        });
+          console.log("Demo saved:", response.data);
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+          if (error.response) {
+            console.error(
+              `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
+            );
+          } else {
+            console.error("Axios error:", error.message);
+          }
+        } else if (error instanceof Error) {
+          console.error("Unexpected error:", error.message);
+        } else {
+          console.error("Unknown error:", error);
+        }
       }
-
-      const responseData = await response.json();
 
       // Update the sidebar state with the saved data
       setSidebarTitle(data.title);
@@ -914,7 +933,6 @@ export default function EditorPage() {
 
       toast.dismiss();
       toast.success("Demo saved successfully!");
-      console.log("Demo saved:", responseData);
 
       // Close the modal
       setShowSaveDemoModal(false);
@@ -974,6 +992,7 @@ export default function EditorPage() {
       const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
 
       if (trimmedVideoUrl) {
+        toast.dismiss();
         toast.success("Video trimmed successfully!");
         setVideoUrl(trimmedVideoUrl);
       } else {
