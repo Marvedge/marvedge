@@ -33,7 +33,7 @@ export default function PreviewPage() {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
 
   const playerRef = React.useRef<ReactPlayer>(null);

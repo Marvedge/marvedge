@@ -1,7 +1,6 @@
 "use client";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
-
 import { SonnerToaster } from "./components/sonner-toaster";
 export default function RootLayout({
   children,

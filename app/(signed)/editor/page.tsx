@@ -23,6 +23,7 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import axios from "axios";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ErrorResponse } from "@/app/interfaces/IErrorResponse";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -50,10 +51,6 @@ interface TextOverlay {
 }
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
-
-interface ErrorResponse {
-  error: string;
-}
 
 export default function EditorPage() {
   const router = useRouter();
@@ -979,24 +976,19 @@ export default function EditorPage() {
         throw new Error("No segments provided");
       }
 
-      console.log("Trim segments:", segments);
-
       // 2. Prepare multipart form data and send to backend
-      console.log("Sending to backend as FormData...");
+      console.log("Sending video blob to backend");
       const formData = new FormData();
       formData.append("video", videoBlob, "video.mp4");
       formData.append("segments", JSON.stringify(segments));
 
       const trimRes = await axios.post(
-        "http://localhost:4000/api/trim",
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
         formData,
         {
           responseType: "blob",
         }
       );
-      toast.dismiss();
-
-      console.log(trimRes);
 
       const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
       const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
@@ -1063,6 +1055,7 @@ export default function EditorPage() {
     <main className="flex flex-col h-screen w-full bg-gray-50">
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
+
         {/* Desktop Sidebar */}
         <EditorSidebar
           title={sidebarTitle}
@@ -1089,11 +1082,6 @@ export default function EditorPage() {
               toast.error("No video available to export");
               return;
             }
-
-            // if (!sidebarTitle?.trim()) {
-            //   toast.error("Please enter a title for the video");
-            //   return;
-            // }
 
             try {
               toast.loading("Exporting video to Cloudinary...");
@@ -1176,6 +1164,7 @@ export default function EditorPage() {
           handleLoadOverlays={handleLoadOverlays}
           thumbnailUrl={thumbnailUrl || undefined}
         />
+
         {/* Mobile Sidebar Drawer */}
         {isSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
@@ -1218,16 +1207,8 @@ export default function EditorPage() {
                     toast.error("No video available to export");
                     return;
                   }
-
-                  toast.message("hai from the export");
-
-                  // if (!sidebarTitle?.trim()) {
-                  //   toast.error("Please enter a title for the video");
-                  //   return;
-                  // }
-
                   try {
-                    toast.loading("Exporting video to Cloudinary...xx");
+                    toast.loading("Exporting video to Cloudinary...");
 
                     // First, upload video to Cloudinary if it's a blob URL
                     let cloudinaryVideoUrl = videoUrl;
@@ -1315,6 +1296,7 @@ export default function EditorPage() {
             </div>
           </div>
         )}
+
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
           {/* Restore action buttons row */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">

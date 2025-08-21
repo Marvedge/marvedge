@@ -1,11 +1,11 @@
 import { prisma } from "@/app/lib/prisma";
-import NextAuth, { NextAuthOptions } from "next-auth";
+import NextAuth from "next-auth";
 import bcrypt from "bcrypt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
-export const authOptions: NextAuthOptions = {
+const handler = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
@@ -47,8 +47,6 @@ export const authOptions: NextAuthOptions = {
       return "/dashboard";
     },
   },
-};
-// @ts-expect-error - Next.js doesn’t like extra exports here
-const handler = NextAuth(authOptions);
+});
 
 export { handler as GET, handler as POST };
