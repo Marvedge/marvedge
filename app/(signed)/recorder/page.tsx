@@ -9,8 +9,8 @@ import { formatTime } from "@/app/lib/dateTimeUtils";
 
 import VideoPreview from "@/app/components/VideoPreview";
 import { sanitizeFilename } from "@/app/lib/constants";
-import { Toaster } from "react-hot-toast";
-import toast from "react-hot-toast";
+
+import { toast } from "sonner";
 import { Dialog } from "@headlessui/react";
 import { Menu } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
@@ -628,7 +628,6 @@ export default function RecorderPage() {
     const isUploaded = uploadedFileUrl && !screenStream;
     return (
       <div className="flex flex-col h-screen w-full overflow-hidden">
-        <Toaster position="top-right" />
         <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
         <div className="flex flex-1 overflow-hidden">
           {/* Right Panel */}
@@ -1076,7 +1075,6 @@ export default function RecorderPage() {
   // Initial UI (no recording or uploaded video)
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
-      <Toaster position="top-right" />
       <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 overflow-hidden">
         {/* Mobile sidebar button */}

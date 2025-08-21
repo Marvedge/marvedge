@@ -10,7 +10,8 @@ import React, {
 import { useSession, signOut } from "next-auth/react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { toast } from "react-toastify";
+// import { toast } from "react-toastify";
+import { toast } from "sonner";
 import { FaPlayCircle } from "react-icons/fa";
 import Image from "next/image";
 import {

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import toast, { Toaster } from "react-hot-toast";
+import { toast } from "sonner";
 import axios from "axios";
 
 const forgotPasswordSchema = z.object({
@@ -58,7 +58,6 @@ const ForgotPassword = () => {
 
   return (
     <div className="flex flex-col md:flex-row h-full min-h-screen font-sans bg-[#F1ECFF]">
-      <Toaster position="top-center" />
       <div
         className="md:hidden absolute top-0 left-0 w-full h-20 bg-gradient-to-b from-[#313053] to-[#261753] z-[1000] flex justify-center items-center shadow-lg"
         style={{
