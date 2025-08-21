@@ -1,20 +1,26 @@
-"use client";
-import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 import { SonnerToaster } from "./components/sonner-toaster";
+import { Providers } from "./providers";
+
+export const metadata = {
+  title: "Marvedge",
+  icons: {
+    icon: "/icons/Transparent logo.png",
+  },
+};
+
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" className="overflow-x-hidden">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
       <body className="overflow-x-hidden">
-        <SessionProvider>{children}</SessionProvider>
-        <SonnerToaster />
+        <Providers>
+          {children}
+          <SonnerToaster />
+        </Providers>
       </body>
     </html>
   );
