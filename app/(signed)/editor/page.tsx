@@ -994,6 +994,7 @@ export default function EditorPage() {
       const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
 
       if (trimmedVideoUrl) {
+        toast.dismiss();
         toast.success("Video trimmed successfully!");
         setVideoUrl(trimmedVideoUrl);
       } else {
@@ -1055,7 +1056,6 @@ export default function EditorPage() {
     <main className="flex flex-col h-screen w-full bg-gray-50">
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
-
         {/* Desktop Sidebar */}
         <EditorSidebar
           title={sidebarTitle}

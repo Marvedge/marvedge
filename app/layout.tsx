@@ -2,6 +2,7 @@
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 import { SonnerToaster } from "./components/sonner-toaster";
+import TopLoader from "./components/TopLoader";
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -13,7 +14,10 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="overflow-x-hidden">
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <TopLoader />
+          {children}
+        </SessionProvider>
 
         <SonnerToaster />
       </body>
