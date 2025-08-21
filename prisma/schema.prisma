@@ -80,8 +80,6 @@ model Demo {
   title       String
   description String?
   videoUrl    String
-  startTime   String
-  endTime     String
   editing     Json? // Store editing data (segments, zoom, etc.)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

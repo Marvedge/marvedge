@@ -11,7 +11,7 @@ import {
 } from "react-icons/fa";
 import { ArrowLeft, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import toast, { Toaster } from "react-hot-toast";
+import { toast } from "sonner";
 import DownloadModal from "../components/DownloadModal";
 
 export default function PreviewPage() {
@@ -190,7 +190,7 @@ export default function PreviewPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100">
-      <Toaster
+      {/* <Toaster
         position="top-center"
         toastOptions={{
           style: {
@@ -205,7 +205,7 @@ export default function PreviewPage() {
           success: { iconTheme: { primary: "#7C5CFC", secondary: "#fff" } },
           error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
         }}
-      />
+      /> */}
 
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200">
