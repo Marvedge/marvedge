@@ -4,9 +4,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Card } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import ReactPlayer from "react-player";
-import {
-  defaultFormatTime,
-} from "@/app/lib/dateTimeUtils";
+import { defaultFormatTime } from "@/app/lib/dateTimeUtils";
 import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 import { toggleZoom, trianglePoints } from "../lib/utils";
 
@@ -360,8 +358,19 @@ export function TimelineSlider({
         if (newTime >= end) newTime = end - 0.01;
         updateSegment("start", newTime);
         onTimeChange?.(newTime);
-        playerRef?.current?.seekTo(newTime, "seconds");
         setCurrentTime(newTime);
+
+        // Force immediate video frame update during dragging
+        if (playerRef?.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            // Set time directly and force a frame update
+            player.currentTime = newTime;
+            // Force the video to update by triggering a seek event
+            player.dispatchEvent(new Event("seeking"));
+          }
+        }
+
         // Always notify parent
         if (onExternalTimeChange) {
           onExternalTimeChange(newTime, end);
@@ -370,8 +379,19 @@ export function TimelineSlider({
         if (newTime <= start) newTime = start + 0.01;
         updateSegment("end", newTime);
         onTimeChange?.(newTime);
-        playerRef?.current?.seekTo(newTime, "seconds");
         setCurrentTime(newTime);
+
+        // Force immediate video frame update during dragging
+        if (playerRef?.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            // Set time directly and force a frame update
+            player.currentTime = newTime;
+            // Force the video to update by triggering a seek event
+            player.dispatchEvent(new Event("seeking"));
+          }
+        }
+
         // Always notify parent
         if (onExternalTimeChange) {
           onExternalTimeChange(start, newTime);
@@ -415,8 +435,20 @@ export function TimelineSlider({
     const x = e.clientX - rect.left;
     let seekTime = xToTime(x);
     seekTime = Math.max(0, Math.min(duration, seekTime));
-    playerRef?.current?.seekTo(seekTime, "seconds");
+
     setCurrentTime(seekTime);
+
+    // Force immediate video frame update
+    if (playerRef?.current) {
+      const player = playerRef.current.getInternalPlayer();
+      if (player) {
+        // Set time directly and force a frame update
+        player.currentTime = seekTime;
+        // Force the video to update by triggering a seek event
+        player.dispatchEvent(new Event("seeking"));
+        playerRef.current.seekTo(seekTime, "seconds");
+      }
+    }
   };
 
   // Keyboard controls for trim handles and video
@@ -425,15 +457,36 @@ export function TimelineSlider({
       if (processing) return;
       switch (e.key) {
         case "ArrowLeft":
-          playerRef?.current?.seekTo(Math.max(0, currentTime - 1), "seconds");
-          setCurrentTime(Math.max(0, currentTime - 1));
+          const newTimeLeft = Math.max(0, currentTime - 1);
+          setCurrentTime(newTimeLeft);
+
+          // Force immediate video frame update
+          if (playerRef?.current) {
+            const player = playerRef.current.getInternalPlayer();
+            if (player) {
+              // Set time directly and force a frame update
+              player.currentTime = newTimeLeft;
+              // Force the video to update by triggering a seek event
+              player.dispatchEvent(new Event("seeking"));
+              playerRef.current.seekTo(newTimeLeft, "seconds");
+            }
+          }
           break;
         case "ArrowRight":
-          playerRef?.current?.seekTo(
-            Math.min(duration, currentTime + 1),
-            "seconds"
-          );
-          setCurrentTime(Math.min(duration, currentTime + 1));
+          const newTimeRight = Math.min(duration, currentTime + 1);
+          setCurrentTime(newTimeRight);
+
+          // Force immediate video frame update
+          if (playerRef?.current) {
+            const player = playerRef.current.getInternalPlayer();
+            if (player) {
+              // Set time directly and force a frame update
+              player.currentTime = newTimeRight;
+              // Force the video to update by triggering a seek event
+              player.dispatchEvent(new Event("seeking"));
+              playerRef.current.seekTo(newTimeRight, "seconds");
+            }
+          }
           break;
         case "[":
           updateSegment("start", Math.max(0, start - 1));

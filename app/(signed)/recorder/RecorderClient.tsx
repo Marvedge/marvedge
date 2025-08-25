@@ -209,13 +209,39 @@ export default function RecorderPage() {
     };
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setDragValue(Number(e.target.value));
+      const value = Number(e.target.value);
+      setDragValue(value);
+
+      // Update video frame immediately during dragging
+      if (videoPlayerRef.current) {
+        const player = videoPlayerRef.current.getInternalPlayer();
+        if (player) {
+          // Set time directly and force a frame update
+          player.currentTime = value;
+          // Force the video to update by triggering a seek event
+          player.dispatchEvent(new Event("seeking"));
+        }
+      }
     };
 
     const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
       const value = Number((e.target as HTMLInputElement).value);
       setVideoCurrentTime(value);
-      videoPlayerRef.current?.seekTo(value, "seconds");
+
+      // Force immediate video frame update
+      if (videoPlayerRef.current) {
+        const player = videoPlayerRef.current.getInternalPlayer();
+        if (player) {
+          // Set time directly and force a frame update
+          player.currentTime = value;
+          // Force the video to update by triggering a seek event
+          player.dispatchEvent(new Event("seeking"));
+          videoPlayerRef.current.seekTo(value, "seconds");
+        } else {
+          videoPlayerRef.current.seekTo(value, "seconds");
+        }
+      }
+
       setDragging(false);
     };
 
@@ -273,7 +299,18 @@ export default function RecorderPage() {
               onClick={() => {
                 const newTime = Math.max(0, videoCurrentTime - 5);
                 setVideoCurrentTime(newTime);
-                videoPlayerRef.current?.seekTo(newTime, "seconds");
+
+                // Force immediate video frame update
+                if (videoPlayerRef.current) {
+                  const player = videoPlayerRef.current.getInternalPlayer();
+                  if (player) {
+                    // Set time directly and force a frame update
+                    player.currentTime = newTime;
+                    // Force the video to update by triggering a seek event
+                    player.dispatchEvent(new Event("seeking"));
+                    videoPlayerRef.current.seekTo(newTime, "seconds");
+                  }
+                }
               }}
               className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
               title="Back 5 seconds"
@@ -290,7 +327,18 @@ export default function RecorderPage() {
               onClick={() => {
                 const newTime = Math.min(displayDuration, videoCurrentTime + 5);
                 setVideoCurrentTime(newTime);
-                videoPlayerRef.current?.seekTo(newTime, "seconds");
+
+                // Force immediate video frame update
+                if (videoPlayerRef.current) {
+                  const player = videoPlayerRef.current.getInternalPlayer();
+                  if (player) {
+                    // Set time directly and force a frame update
+                    player.currentTime = newTime;
+                    // Force the video to update by triggering a seek event
+                    player.dispatchEvent(new Event("seeking"));
+                    videoPlayerRef.current.seekTo(newTime, "seconds");
+                  }
+                }
               }}
               className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
               title="Forward 5 seconds"
