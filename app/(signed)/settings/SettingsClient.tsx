@@ -40,6 +40,8 @@ const SettingsPage = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [originalForm, setOriginalForm] = useState({ ...form }); // Store original state
 
   const initials = useMemo(() => {
     if (session?.user?.name) {
@@ -88,6 +90,33 @@ const SettingsPage = () => {
     fetchUser();
   }, [session]);
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      const res = await fetch("/api/user/get");
+      const data = await res.json();
+      if (data.user) {
+        const user = data.user;
+        const userFormData = {
+          firstName: user.name?.split(" ")[0] || "",
+          lastName: user.name?.split(" ").slice(1).join(" ") || "",
+          email: user.email || "",
+          bio: user.bio || "",
+          location: user.location || "",
+          website: user.website || "",
+          timezone: user.timezone || "",
+          image: user.image || "",
+        };
+        setForm(userFormData);
+        setOriginalForm(userFormData); // Set original state
+      }
+    };
+    fetchUser();
+  }, [session]);
+
+  const hasChanges = useMemo(() => {
+    return JSON.stringify(form) !== JSON.stringify(originalForm);
+  }, [form, originalForm]);
+
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setIsDirty(true);
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -124,10 +153,9 @@ const SettingsPage = () => {
     }
   };
 
-  const handleEdit = () => {};
-
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsSaving(true);
     const res = await fetch("/api/user/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -136,11 +164,12 @@ const SettingsPage = () => {
 
     const data = await res.json();
     if (res.ok) {
-      toast("Changes updated successfully!");
+      toast.success("Changes updated successfully!");
       setIsDirty(false);
     } else {
       toast(`Update failed: ${data.error}`);
     }
+    setIsSaving(false);
   };
 
   const handleCancel = async () => {
@@ -373,13 +402,13 @@ const SettingsPage = () => {
                     />
                   </>
                 )}
-                <button
+                {/* <button
                   type="button"
                   className="px-5 py-2 min-w-[120px] rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
                   onClick={handleEdit}
                 >
                   Edit
-                </button>
+                </button> */}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
@@ -464,7 +493,7 @@ const SettingsPage = () => {
                 />
               </div> */}
             </div>
-            {isDirty && (
+            {isDirty && hasChanges && (
               <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 mt-8">
                 <button
                   type="button"
@@ -477,7 +506,7 @@ const SettingsPage = () => {
                   type="submit"
                   className="px-8 py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
                 >
-                  Save Changes
+                  {isSaving ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             )}
