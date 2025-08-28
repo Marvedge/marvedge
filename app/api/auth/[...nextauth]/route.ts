@@ -1,52 +1,103 @@
 import { prisma } from "@/app/lib/prisma";
 import NextAuth from "next-auth";
-import bcrypt from "bcrypt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import bcrypt from "bcrypt";
 
 const handler = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
+    // Google OAuth
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+
+    // Email/Password Credentials
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        email: { label: "email", type: "text", placeholder: "" },
-        password: { label: "password", type: "password", placeholder: "" },
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const user = await prisma.user.findUnique({
-          where: { email: credentials?.email },
-        });
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            throw new Error("Email and password are required");
+          }
 
-        if (!user || !user.password) throw new Error("No user found");
+          // Attempt to fetch user from DB
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
+          });
 
-        const valid = await bcrypt.compare(credentials!.password, user.password);
-        if (!valid) throw new Error("Invalid password");
+          if (!user || !user.password) {
+            console.log("❌ No user found in DB:", credentials.email);
+            throw new Error("No user found with this email");
+          }
 
-        return user;
+          // Verify password
+          const valid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
+          if (!valid) {
+            console.log("❌ Invalid password for user:", credentials.email);
+            throw new Error("Invalid password");
+          }
+
+          console.log("✅ User authorized:", user.email);
+          return user;
+        } catch (err: unknown) {
+          if (err instanceof Error) {
+            if (
+              err.message.includes("Can't reach database server") ||
+              err.message.includes("ECONNREFUSED")
+            ) {
+              console.error("💥 Database connection error:", err);
+              throw new Error("Database connection failed. Try again later.");
+            }
+
+            console.error("💥 Credentials error:", err);
+            throw err;
+          } else {
+            console.error("💥 Unknown error:", err);
+            throw new Error("An unknown error occurred");
+          }
+        }
       },
     }),
   ],
+
   session: {
     strategy: "jwt",
   },
+  // Remove the unused directive
   pages: {
     signIn: "/auth/signin",
   },
+
   callbacks: {
+    async session({ session, token }) {
+      if (token && session.user) {
+        // Add user ID to session for frontend
+        // @ts-expect-error: `id` property does not exist on session.user by default, but we add it for frontend use
+        session.user.id = token.sub;
+      }
+      return session;
+    },
+
     async redirect({ url, baseUrl }) {
-      if (url === baseUrl || url === "/") return "/";
-      if (url === `${baseUrl}/dashboard` || url === "/dashboard")
-        return "/dashboard";
-      if (url.includes("signout") || url.includes("signin")) return "/";
-      return "/dashboard";
+      // Handle redirects safely
+      if (url === baseUrl || url === "/") return "/dashboard";
+      if (url.includes("/dashboard")) return "/dashboard";
+      return baseUrl;
     },
   },
+
+  // Optional: debug mode
+  debug: process.env.NODE_ENV !== "production",
 });
 
 export { handler as GET, handler as POST };

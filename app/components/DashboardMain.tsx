@@ -1,8 +1,81 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import axios from "axios";
+import { formatDate } from "@/app/lib/dateTimeUtils";
 
+import { useRouter } from "next/navigation";
+
+interface Demo {
+  id: string;
+  title: string;
+  description: string;
+  videoUrl: string;
+  startTime: string;
+  endTime: string;
+  segments?: unknown;
+  createdAt: string;
+  updatedAt: string;
+  editing?: {
+    segments?: unknown;
+    zoom?: unknown;
+  };
+}
 const DashboardMain = () => {
+  const [demos, setDemos] = useState<Demo[]>([]);
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDemos = async () => {
+      try {
+        setIsLoading(true);
+        const response = await axios.get("/api/demo");
+        console.log("Fetched demos:", response.data);
+        setDemos(response.data.demos || []);
+      } catch (err: unknown) {
+        console.error("Error fetching demos:", err);
+
+        if (axios.isAxiosError(err)) {
+          const errMsg = err.response?.data?.message || "Failed to fetch demos";
+          console.log(errMsg);
+        } else {
+          const errMsg = "Failed to fetch demos";
+          console.log(errMsg);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDemos();
+  }, []);
+
+  const handleEditDemo = (demo: Demo) => {
+    const params = new URLSearchParams({
+      video: demo.videoUrl,
+      startTime: demo.startTime,
+      endTime: demo.endTime,
+      title: demo.title || "",
+      description: demo.description || "",
+    });
+
+    // Add segments and zoom data if available in editing
+    if (demo.editing) {
+      if (demo.editing.segments) {
+        params.append("segments", JSON.stringify(demo.editing.segments));
+      }
+      if (demo.editing.zoom) {
+        params.append("zoom", JSON.stringify(demo.editing.zoom));
+      }
+    } else if (demo.segments) {
+      // fallback for old demos
+      params.append("segments", JSON.stringify(demo.segments));
+    }
+
+    router.push(`/editor?${params.toString()}`);
+  };
+
   return (
     <div className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen">
       <style jsx>{`
@@ -203,7 +276,6 @@ const DashboardMain = () => {
           }
         }
       `}</style>
-
       <div className="mb-6 md:mb-8">
         <h2 className="text-base md:text-lg font-light text-gray-400 mb-4">
           Here&apos;s what happening with your demos today
@@ -298,46 +370,127 @@ const DashboardMain = () => {
           </div>
         </div>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
-        <div className="lg:col-span-2 bg-white lg:h-100 lg:w-180 rounded-xl p-1 md:p-2 shadow-sm hover:shadow-lg transform">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
-            <Link href="/recorder">
-              <h3 className="text-xl lg:ml-5 lg:mt-3 md:text-2xl font-semibold text-[#7569A5] cursor-pointer transition">
-                Recent Demos
-              </h3>
-            </Link>
-            <button className="text-[#6356D7] lg:p-2 font-semibold hover:underline text-sm md:text-base">
-              View all
-            </button>
-          </div>
-          <div className="flex flex-col items-center  justify-center py-2 md:py-3">
-            <Image
-              src="/icons/play fill.png"
-              alt="Play"
-              width={40}
-              height={40}
-              className="md:w-12 md:h-12"
-            />
-            <div className="text-base md:text-lg font-semibold text-[#6356D7] mt-4">
-              No demos yet
+        <div className="lg:col-span-2 bg-white rounded-xl p-4 shadow-sm h-[410px]  hover:shadow-lg transform">
+          {isLoading ? (
+            // Show loader while fetching
+            <div className="flex flex-col items-center justify-center py-6 text-gray-500">
+              {/* <svg
+                className="animate-spin h-6 w-6 text-[#6356D7] mb-3"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                ></path>
+              </svg> */}
+              <span>Loading demos...</span>
             </div>
-            <div className="text-gray-500 text-xs md:text-sm mt-1 text-center">
-              Create your first demo to get started
+          ) : demos.length > 0 ? (
+            <div className="flex flex-col divide-y divide-gray-200">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">
+                  Recent Demos
+                </h3>
+                {demos.length > 5 && (
+                  <button
+                    className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
+                    onClick={() => router.push("/demos")} // or Link
+                  >
+                    View all
+                  </button>
+                )}
+              </div>
+              {demos.slice(0, 4).map((demo: Demo) => (
+                <div key={demo.id}>
+                  <div
+                    className="flex items-center justify-between py-3 hover:bg-gray-50 px-2 rounded-md cursor-pointer transition"
+                    onClick={() => handleEditDemo(demo)}
+                  >
+                    {/* Left: Icon + Title + Description */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center bg-[#F8F6FF] rounded-lg w-10 h-10">
+                        <Image
+                          src="/icons/play-demo.svg"
+                          alt="Play"
+                          width={20}
+                          height={20}
+                        />
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-800">
+                          {demo.title}
+                        </div>
+                        <div className="text-sm text-gray-500 truncate w-40">
+                          {demo.description || "No description"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Middle: Status + Updated Date */}
+                    <div className="hidden md:flex items-center gap-10 text-sm text-gray-500">
+                      <div>Draft</div>
+                      <div>{formatDate(demo.updatedAt)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="mx-auto">
+                <Link href={"/recorder"}>
+                  <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF]  transition-all text-sm md:text-base hover:scale-105 transform items-center gap-2">
+                    <Image
+                      src="/icons/play fill.png"
+                      alt="Play"
+                      width={18}
+                      height={18}
+                      className="inline-block"
+                    />
+                    Create Demo
+                  </button>
+                </Link>
+              </div>
             </div>
-            <Link href={"/recorder"}>
-              <button className="mt-4 md:mt-6 px-4 md:px-6 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform items-center gap-2">
-                <Image
-                  src="/icons/play fill.png"
-                  alt="Play"
-                  width={18}
-                  height={18}
-                  className="inline-block"
-                />
-                Create Demo
-              </button>
-            </Link>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-6">
+              <Image
+                src="/icons/play fill.png"
+                alt="Play"
+                width={40}
+                height={40}
+                className="md:w-12 md:h-12"
+              />
+              <div className="text-base md:text-lg font-semibold text-[#6356D7] mt-4">
+                No demos yet
+              </div>
+              <div className="text-gray-500 text-xs md:text-sm mt-1 text-center">
+                Create your first demo to get started
+              </div>
+              <Link href={"/recorder"}>
+                <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform items-center gap-2">
+                  <Image
+                    src="/icons/play fill.png"
+                    alt="Play"
+                    width={18}
+                    height={18}
+                    className="inline-block"
+                  />
+                  Create Demo
+                </button>
+              </Link>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-4 md:gap-8">
