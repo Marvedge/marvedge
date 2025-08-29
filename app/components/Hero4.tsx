@@ -232,7 +232,7 @@ const ContactForm: React.FC = () => {
         ))}
         <motion.button
           type="submit"
-          className="bg-[#a68cff] text-white font-semibold rounded-lg py-2 mt-2 text-sm sm:text-base hover:bg-[#8a6ec5] transition"
+          className="flex items-center justify-center gap-2 bg-[#a68cff] text-white font-semibold rounded-lg py-2 mt-2 text-sm sm:text-base hover:bg-[#8a6ec5] transition"
           whileHover={{
             scale: 1.05,
             boxShadow: "0 10px 25px rgba(166, 140, 255, 0.3)",
@@ -244,6 +244,13 @@ const ContactForm: React.FC = () => {
           transition={{ duration: 0.5, ease: easeOut, delay: 0.4 }}
         >
           Send Message
+          <Image
+            src="/icons/msg.svg"
+            alt="Notifications"
+            width={20}
+            height={20}
+            className="w-5 h-5 sm:w-6 sm:h-6 invert brightness-0"
+          />
         </motion.button>
       </form>
     </motion.div>

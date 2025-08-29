@@ -173,7 +173,14 @@ const Hero: React.FC = () => {
             transition={{ duration: 0.8, ease: easeOut }}
             aria-label="Demo video placeholder"
           >
-            <div className="w-[90%] sm:w-[85%] h-[85%] rounded-2xl bg-[#b199f2]" />
+            <video
+              src="/icons/1.mp4" // 👉 put your video file path here
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-[90%] sm:w-[85%] h-[85%] rounded-2xl object-cover"
+            />
           </motion.div>
         </div>
       </section>

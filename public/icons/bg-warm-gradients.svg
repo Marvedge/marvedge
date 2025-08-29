@@ -1,0 +1,27 @@
+<svg width="120" height="80" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="warm1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ffa726;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffcc02;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="warm2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff7043;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#ffab40;stop-opacity:0.8" />
+    </linearGradient>
+    <linearGradient id="warm3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff8a65;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#ffcc80;stop-opacity:0.6" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="120" height="80" fill="url(#warm1)"/>
+  
+  <!-- Smooth wavy lines -->
+  <path d="M0,20 Q30,10 60,20 T120,15" stroke="url(#warm2)" stroke-width="4" fill="none"/>
+  <path d="M0,40 Q30,30 60,40 T120,35" stroke="url(#warm3)" stroke-width="6" fill="none"/>
+  <path d="M0,60 Q30,50 60,60 T120,55" stroke="url(#warm2)" stroke-width="3" fill="none"/>
+  <path d="M0,30 Q30,20 60,30 T120,25" stroke="url(#warm3)" stroke-width="5" fill="none"/>
+  <path d="M0,50 Q30,40 60,50 T120,45" stroke="url(#warm2)" stroke-width="4" fill="none"/>
+</svg> 

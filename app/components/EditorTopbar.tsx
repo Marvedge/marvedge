@@ -7,10 +7,7 @@ type EditorTopbarProps = {
   userInitials: string;
 };
 
-const EditorTopbar = ({
-  onBack,
-  userInitials,
-}: EditorTopbarProps) => {
+const EditorTopbar = ({ onBack, userInitials }: EditorTopbarProps) => {
   const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -64,13 +61,7 @@ const EditorTopbar = ({
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
         {/* Remove or adjust hidden classes from siblings to prevent layout issues */}
-        <div className="relative lg:mr-60 hidden sm:block">
-          <input
-            type="text"
-            placeholder="Search"
-            className="rounded-full border border-[#ede7fa] px-4 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#7C5CFC]"
-          />
-        </div>
+
         <span className="hidden sm:block text-[#7C5CFC] font-medium text-base mr-2  items-center gap-1">
           Welcome, {username}
           <span role="img" aria-label="waving hand" className="ml-1">
