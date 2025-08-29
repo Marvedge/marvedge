@@ -17,7 +17,7 @@ import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { useSession } from "next-auth/react";
-import { TimelineSlider } from "@/app/components/MytimeLine";
+// import { TimelineSlider } from "@/app/components/MytimeLine";
 // import { useCallback } from "react";
 import { toast } from "sonner";
 import ReactPlayer from "react-player";
@@ -30,7 +30,7 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
 import axios from "axios";
-import { ErrorResponse } from "resend";
+// import { ErrorResponse } from "resend";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -64,10 +64,10 @@ export default function EditorPage() {
   const [params, setParams] = useState<URLSearchParams | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [timelineStartTime, setTimelineStartTime] = useState();
+  const [timelineStartTime, setTimelineStartTime] = useState<number>(0);
 
   // State to store loaded segments
-  const [loadedSegments, setLoadedSegments] = useState<
+  const [, setLoadedSegments] = useState<
     { start: string; end: string }[] | null
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
@@ -131,13 +131,13 @@ export default function EditorPage() {
 
   // Helper functions for time conversion
 
-  const formatTimeForInput = (seconds: number): string => {
+  const formatTimeForInput = useCallback((seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-  const [isPlaying, setIsPlaying] = useState(false);
+  }, []);
+  // const [isPlaying, setIsPlaying] = useState(false);
   // const [playing, setPlaying] = useState(true);
 
   useEffect(() => {
@@ -206,7 +206,19 @@ export default function EditorPage() {
         }
       }
     }
-  }, [params]);
+  }, [
+    params,
+    setVideoUrl,
+    setInputStartTime,
+    setInputEndTime,
+    setTimelineEndTime,
+    setSidebarTitle,
+    setSidebarDescription,
+    setLoadedSegments,
+    setCurrentSegments,
+    setZoomEffects,
+    formatTimeForInput,
+  ]);
 
   // User initials logic (copied from recorder page)
   const { data: session } = useSession();
@@ -246,13 +258,24 @@ export default function EditorPage() {
         end: initialEndTime,
       });
     }
-  }, [duration, timelineEndTime]);
+  }, [
+    duration,
+    timelineEndTime,
+    setTimelineStartTime,
+    setInputStartTime,
+    setTimelineEndTime,
+    setInputEndTime,
+    formatTimeForInput,
+  ]);
 
   // Simple timeline change handler
-  const handleTimelineChange = useCallback((start: number, end: number) => {
-    setInputStartTime(formatTimeForInput(start));
-    setInputEndTime(formatTimeForInput(end));
-  }, []);
+  const handleTimelineChange = useCallback(
+    (start: number, end: number) => {
+      setInputStartTime(formatTimeForInput(start));
+      setInputEndTime(formatTimeForInput(end));
+    },
+    [formatTimeForInput]
+  );
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -334,31 +357,31 @@ export default function EditorPage() {
     }
   }, [recordingDuration, videoUrl]);
 
-  useEffect(() => {
-    if (duration > 0 || recordingDuration > 0) return;
+  // useEffect(() => {
+  //   if (duration > 0 || recordingDuration > 0) return;
 
-    const tryGetDuration = async () => {
-      // Try ReactPlayer duration
-      if (playerRef.current) {
-        const player = playerRef.current.getInternalPlayer();
-        if (
-          player?.duration &&
-          isFinite(player.duration) &&
-          player.duration > 0
-        ) {
-          setDuration(Math.floor(player.duration));
-          return;
-        }
-      }
-      // Try blob
-      if (blob) {
-        const tempVideo = document.createElement("video");
-        tempVideo.src = URL.createObjectURL(blob);
-        tempVideo.preload = "metadata";
-        await new Promise<void>((resolve) => {});
-      }
-    };
-  }, []);
+  //   const tryGetDuration = async () => {
+  //     // Try ReactPlayer duration
+  //     if (playerRef.current) {
+  //       const player = playerRef.current.getInternalPlayer();
+  //       if (
+  //         player?.duration &&
+  //         isFinite(player.duration) &&
+  //         player.duration > 0
+  //       ) {
+  //         setDuration(Math.floor(player.duration));
+  //         return;
+  //       }
+  //     }
+  //     // Try blob
+  //     if (blob) {
+  //       const tempVideo = document.createElement("video");
+  //       tempVideo.src = URL.createObjectURL(blob);
+  //       tempVideo.preload = "metadata";
+  //       await new Promise<void>((resolve) => {});
+  //     }
+  //   };
+  // }, []);
   // Try to get duration from blob store when video is first loaded
   useEffect(() => {
     if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
@@ -978,73 +1001,6 @@ export default function EditorPage() {
     }
   };
 
-  const videoTrimHandler = async (
-    segments: { start: string; end: string }[]
-  ) => {
-    try {
-      setProgress(1);
-      toast.loading("Uploading and trimming video...");
-
-      // Check if videoUrl exists
-      if (!videoUrl) {
-        toast.error("No video available to trim");
-        return;
-      }
-
-      console.log("Starting trim process...");
-      console.log("Video URL:", videoUrl);
-      console.log("Segments:", segments);
-
-      // Get the current video blob
-      const response = await fetch(videoUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch video: ${response.status}`);
-      }
-      const videoBlob = await response.blob();
-      console.log("Video blob size:", videoBlob.size);
-      // 1. Validate segments
-      if (!segments || segments.length === 0) {
-        throw new Error("No segments provided");
-      }
-
-      // 2. Prepare multipart form data and send to backend
-      console.log("Sending video blob to backend");
-      const formData = new FormData();
-      formData.append("video", videoBlob, "video.mp4");
-      formData.append("segments", JSON.stringify(segments));
-
-      const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
-        formData,
-        {
-          responseType: "blob",
-        }
-      );
-
-      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
-      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
-
-      if (trimmedVideoUrl) {
-        toast.dismiss();
-        toast.success("Video trimmed successfully!");
-        setVideoUrl(trimmedVideoUrl);
-      } else {
-        toast.error("Failed to trim video - no trimmedUrl returned");
-      }
-    } catch (err: unknown) {
-      if (axios.isAxiosError<ErrorResponse>(err)) {
-        const message = err.response?.data?.message || "Unexpected error";
-        toast.dismiss();
-        toast.error(`Error processing video: ${message}`);
-      } else {
-        toast.dismiss();
-        toast.error("Something went wrong");
-      }
-    } finally {
-      setProgress(0);
-    }
-  };
-
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
@@ -1064,9 +1020,9 @@ export default function EditorPage() {
     console.log("Total zoom effects:", [...zoomEffects, effect].length);
   };
 
-  const onZoomEffectRemove = (id: string) => {
-    setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
-  };
+  // const onZoomEffectRemove = (id: string) => {
+  //   setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
+  // };
 
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
@@ -1721,8 +1677,6 @@ function CustomVideoControls({
   recordingDuration,
   setPlaying,
   playing,
-  isPlaying,
-  setIsPlaying,
 }: {
   playerRef: React.RefObject<ReactPlayer>;
   duration: number;
@@ -1731,15 +1685,9 @@ function CustomVideoControls({
   recordingDuration: number;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
-  isPlaying: boolean;
-  setIsPlaying: (p: boolean) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
-
-  useEffect(() => {
-    setPlaying(playing);
-  }, [playing, setPlaying]);
 
   const handlePlayPause = () => {
     setPlaying((prev) => {

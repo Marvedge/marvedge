@@ -34,6 +34,8 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   // description,
   // setDescription,
   // onDownloadWebM,
+  onExportWebM,
+  onDownloadMP4,
   tool,
   setTool,
   handleUndo,
@@ -210,17 +212,13 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       <div className="relative">
         <button
           className="w-full bg-[#A594F9] hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
-          onClick={() => {
-            setExportMenuOpen((v) => !v);
-            onExportWebM(); // 👈 call it here
-          }}
-          // onClick={onExportWebM()}
+          onClick={() => setExportMenuOpen((v) => !v)} // Only toggle the menu
         >
           Export Video
         </button>
         {exportMenuOpen && (
           <div className="absolute left-0 mt-2 w-full bg-white border border-[#ede7fa] rounded-lg shadow z-10">
-            {/* <button
+            <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -228,8 +226,9 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Export WebM
-            </button> */}
-            {/* <button
+            </button>
+            {/* Uncomment onDownloadMP4 if needed */}
+            <button
               className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-b-lg"
               onClick={() => {
                 setExportMenuOpen(false);
@@ -237,7 +236,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               }}
             >
               Download MP4
-            </button> */}
+            </button>
           </div>
         )}
       </div>
