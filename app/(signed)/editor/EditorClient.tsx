@@ -1,29 +1,36 @@
 "use client";
-import React, { useRef, useState, useEffect, MouseEvent } from "react";
+
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  MouseEvent,
+} from "react";
+
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
 import EditorTopbar from "@/app/components/EditorTopbar";
 import Image from "next/image";
-
-import { useSession } from "next-auth/react";
-import { TimelineSlider } from "@/app/components/MytimeLine";
-import { FaExpand } from "react-icons/fa";
-import { useCallback } from "react";
-import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
+import TimelineRuler from "@/app/components/TimeLine";
+import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
+import { Toaster } from "react-hot-toast";
+import { useSession } from "next-auth/react";
+// import { TimelineSlider } from "@/app/components/MytimeLine";
+// import { useCallback } from "react";
 import { toast } from "sonner";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
-
 import { formatTime } from "@/app/lib/dateTimeUtils";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
-import axios from "axios";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
-import { ErrorResponse } from "resend";
+import axios from "axios";
+// import { ErrorResponse } from "resend";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -56,9 +63,11 @@ export default function EditorPage() {
   const router = useRouter();
   const [params, setParams] = useState<URLSearchParams | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [timelineStartTime, setTimelineStartTime] = useState<number>(0);
 
   // State to store loaded segments
-  const [loadedSegments, setLoadedSegments] = useState<
+  const [, setLoadedSegments] = useState<
     { start: string; end: string }[] | null
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
@@ -108,26 +117,27 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
+    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
-
   const blob = useBlobStore((state) => state.blob);
   const { recordingDuration } = useScreenRecorder();
-
   const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   // State for browser bar controls
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper functions for time conversion
-  const formatTimeForInput = (seconds: number): string => {
+
+  const formatTimeForInput = useCallback((seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-  const [isPlaying, setIsPlaying] = useState(false);
+  }, []);
+  // const [isPlaying, setIsPlaying] = useState(false);
   // const [playing, setPlaying] = useState(true);
 
   useEffect(() => {
@@ -148,7 +158,6 @@ export default function EditorPage() {
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
-
       // Set timeline values if provided
       if (urlStartTime && urlEndTime) {
         const startSeconds = parseInt(urlStartTime);
@@ -186,7 +195,6 @@ export default function EditorPage() {
           console.error("Error parsing segments from URL:", error);
         }
       }
-
       // Load zoom effects if provided
       if (urlZoom) {
         try {
@@ -198,7 +206,19 @@ export default function EditorPage() {
         }
       }
     }
-  }, [params]);
+  }, [
+    params,
+    setVideoUrl,
+    setInputStartTime,
+    setInputEndTime,
+    setTimelineEndTime,
+    setSidebarTitle,
+    setSidebarDescription,
+    setLoadedSegments,
+    setCurrentSegments,
+    setZoomEffects,
+    formatTimeForInput,
+  ]);
 
   // User initials logic (copied from recorder page)
   const { data: session } = useSession();
@@ -211,6 +231,12 @@ export default function EditorPage() {
         .slice(0, 2)
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
+  const [selectedBackground, setSelectedBackground] = useState<string | null>(
+    null
+  );
+  const [backgroundType, setBackgroundType] = useState<string>("");
+  const [customBackground, setCustomBackground] = useState<File | null>(null);
+
   // No-op setProgress to satisfy required callback
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const setProgress = (_value?: number) => {};
@@ -221,6 +247,8 @@ export default function EditorPage() {
   // Initialize timeline pointers when video duration is loaded (only once)
   useEffect(() => {
     if (duration > 0 && timelineEndTime === 0) {
+      setTimelineStartTime(0);
+      setInputStartTime(formatTimeForInput(0));
       // Only initialize if not already set
       const initialEndTime = duration; // Use the full video duration
       setTimelineEndTime(initialEndTime);
@@ -230,13 +258,24 @@ export default function EditorPage() {
         end: initialEndTime,
       });
     }
-  }, [duration, timelineEndTime]);
+  }, [
+    duration,
+    timelineEndTime,
+    setTimelineStartTime,
+    setInputStartTime,
+    setTimelineEndTime,
+    setInputEndTime,
+    formatTimeForInput,
+  ]);
 
   // Simple timeline change handler
-  const handleTimelineChange = useCallback((start: number, end: number) => {
-    setInputStartTime(formatTimeForInput(start));
-    setInputEndTime(formatTimeForInput(end));
-  }, []);
+  const handleTimelineChange = useCallback(
+    (start: number, end: number) => {
+      setInputStartTime(formatTimeForInput(start));
+      setInputEndTime(formatTimeForInput(end));
+    },
+    [formatTimeForInput]
+  );
 
   // Fullscreen logic
   const handleFullscreen = useCallback(() => {
@@ -318,6 +357,31 @@ export default function EditorPage() {
     }
   }, [recordingDuration, videoUrl]);
 
+  // useEffect(() => {
+  //   if (duration > 0 || recordingDuration > 0) return;
+
+  //   const tryGetDuration = async () => {
+  //     // Try ReactPlayer duration
+  //     if (playerRef.current) {
+  //       const player = playerRef.current.getInternalPlayer();
+  //       if (
+  //         player?.duration &&
+  //         isFinite(player.duration) &&
+  //         player.duration > 0
+  //       ) {
+  //         setDuration(Math.floor(player.duration));
+  //         return;
+  //       }
+  //     }
+  //     // Try blob
+  //     if (blob) {
+  //       const tempVideo = document.createElement("video");
+  //       tempVideo.src = URL.createObjectURL(blob);
+  //       tempVideo.preload = "metadata";
+  //       await new Promise<void>((resolve) => {});
+  //     }
+  //   };
+  // }, []);
   // Try to get duration from blob store when video is first loaded
   useEffect(() => {
     if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
@@ -537,7 +601,6 @@ export default function EditorPage() {
           const videoBlob = await response.blob();
           const tempVideo = document.createElement("video");
           tempVideo.src = URL.createObjectURL(videoBlob);
-
           tempVideo.onloadedmetadata = () => {
             if (
               tempVideo.duration &&
@@ -620,7 +683,6 @@ export default function EditorPage() {
           tempVideo.preload = "metadata";
           tempVideo.muted = true;
           tempVideo.src = URL.createObjectURL(blob);
-
           tempVideo.onloadedmetadata = () => {
             if (
               tempVideo.duration &&
@@ -749,7 +811,6 @@ export default function EditorPage() {
 
   const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
     if (!drawing || !startPos) return;
-
     const rect = e.currentTarget.getBoundingClientRect();
     const endX = e.clientX - rect.left;
     const endY = e.clientY - rect.top;
@@ -829,7 +890,6 @@ export default function EditorPage() {
             throw new Error("Failed to fetch video blob");
           }
           const videoBlob = await response.blob();
-
           // Create FormData for Cloudinary upload
           const CLOUDINARY_CLOUD_NAME =
             process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
@@ -899,7 +959,6 @@ export default function EditorPage() {
         segments: segmentsToSave,
         zoom: zoomEffects,
       };
-
       try {
         const response = await axios.post("/api/demo", {
           title: data.title,
@@ -929,10 +988,8 @@ export default function EditorPage() {
       // Update the sidebar state with the saved data
       setSidebarTitle(data.title);
       setSidebarDescription(data.description);
-
       toast.dismiss();
       toast.success("Demo saved successfully!");
-
       // Close the modal
       setShowSaveDemoModal(false);
     } catch (error) {
@@ -1032,9 +1089,9 @@ export default function EditorPage() {
     console.log("Total zoom effects:", [...zoomEffects, effect].length);
   };
 
-  const onZoomEffectRemove = (id: string) => {
-    setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
-  };
+  // const onZoomEffectRemove = (id: string) => {
+  //   setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
+  // };
 
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
@@ -1049,13 +1106,28 @@ export default function EditorPage() {
     setCurrentZoomEffect(activeEffect || null);
   }, [currentTime, zoomEffects]);
 
-  const [volume, setVolume] = useState(1); // 1 = 100%, 0 = mute
+  const [volume, setVolume] = useState(1);
 
   return (
     <main className="flex flex-col h-screen w-full bg-gray-50">
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: "#2D2A3A",
+            color: "#fff",
+            fontWeight: "bold",
+            fontSize: "1.1rem",
+            boxShadow: "0 4px 24px 0 #0008",
+            borderRadius: "10px",
+            zIndex: 99999,
+          },
+          success: { iconTheme: { primary: "#7C5CFC", secondary: "#fff" } },
+          error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
+        }}
+      />
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 min-h-0">
-        {/* Desktop Sidebar */}
         <EditorSidebar
           title={sidebarTitle}
           setTitle={setSidebarTitle}
@@ -1081,10 +1153,8 @@ export default function EditorPage() {
               toast.error("No video available to export");
               return;
             }
-
             try {
               toast.loading("Exporting video to Cloudinary...");
-
               // First, upload video to Cloudinary if it's a blob URL
               let cloudinaryVideoUrl = videoUrl;
               if (videoUrl.startsWith("blob:")) {
@@ -1095,14 +1165,11 @@ export default function EditorPage() {
                     throw new Error("Failed to fetch video blob");
                   }
                   const videoBlob = await response.blob();
-
                   // Create FormData for Cloudinary upload
                   const cloudFormData = new FormData();
                   cloudFormData.append("file", videoBlob, "video.webm");
                   cloudFormData.append("upload_preset", "upload_preset_1");
-
                   console.log("Uploading to Cloudinary...");
-
                   // Upload to Cloudinary
                   const cloudRes = await fetch(
                     "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
@@ -1130,7 +1197,6 @@ export default function EditorPage() {
 
                   cloudinaryVideoUrl = cloudData.secure_url;
                   console.log("Cloudinary URL:", cloudinaryVideoUrl);
-
                   toast.dismiss();
                 } catch (cloudError) {
                   console.error("Error uploading to Cloudinary:", cloudError);
@@ -1139,7 +1205,6 @@ export default function EditorPage() {
                   return;
                 }
               }
-
               // Create preview URL with the Cloudinary URL
               const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
@@ -1162,12 +1227,15 @@ export default function EditorPage() {
           handleSaveOverlays={handleSaveOverlays}
           handleLoadOverlays={handleLoadOverlays}
           thumbnailUrl={thumbnailUrl || undefined}
+          selectedBackground={selectedBackground}
+          setSelectedBackground={setSelectedBackground}
+          backgroundType={backgroundType}
+          setBackgroundType={setBackgroundType}
+          customBackground={customBackground}
+          setCustomBackground={setCustomBackground}
         />
-
-        {/* Mobile Sidebar Drawer */}
         {isSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
-            {/* Overlay */}
             <div
               className="fixed inset-0 bg-black bg-opacity-40"
               onClick={() => setIsSidebarOpen(false)}
@@ -1219,7 +1287,6 @@ export default function EditorPage() {
                           throw new Error("Failed to fetch video blob");
                         }
                         const videoBlob = await response.blob();
-
                         // Create FormData for Cloudinary upload
                         const cloudFormData = new FormData();
                         cloudFormData.append("file", videoBlob, "video.webm");
@@ -1229,7 +1296,6 @@ export default function EditorPage() {
                         );
 
                         console.log("Uploading to Cloudinary...");
-
                         // Upload to Cloudinary
                         const cloudRes = await fetch(
                           "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
@@ -1267,7 +1333,6 @@ export default function EditorPage() {
                         return;
                       }
                     }
-
                     // Create preview URL with the Cloudinary URL
                     const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
@@ -1291,11 +1356,16 @@ export default function EditorPage() {
                 handleLoadOverlays={handleLoadOverlays}
                 forceShowMobile={true}
                 thumbnailUrl={thumbnailUrl || undefined}
+                selectedBackground={selectedBackground}
+                setSelectedBackground={setSelectedBackground}
+                backgroundType={backgroundType}
+                setBackgroundType={setBackgroundType}
+                customBackground={customBackground}
+                setCustomBackground={setCustomBackground}
               />
             </div>
           </div>
         )}
-
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
           {/* Restore action buttons row */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">
@@ -1341,257 +1411,214 @@ export default function EditorPage() {
               )}
             </div>
           )}
-
-          <span className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 lg:text-2xl   text-[#7C5CFC] font-semibold  text-base select-none cursor-default mb-4 w-max">
+          <span className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 lg:text-2xl text-[#7C5CFC] font-semibold text-base select-none cursor-default mb-4 w-max">
             <span className="text-xl"></span> Preview
           </span>
-          {/* Center video preview on desktop */}
-          <div>
+          <div
+            ref={videoContainerRef}
+            className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
+            style={{
+              minHeight: "160px",
+              padding: 0,
+              boxShadow: "0 4px 24px 0 #E6E1FA",
+            }}
+          >
             <div
-              ref={videoContainerRef}
-              className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
               style={{
-                minHeight: "160px",
-                padding: 0,
-                boxShadow: "0 4px 24px 0 #E6E1FA",
+                width: "100%",
+                height: "100%",
+                position: "relative",
+                zIndex: 1,
+                borderRadius: "1.25rem",
+                overflow: "hidden",
+                background: "#F6F3FF",
               }}
             >
               <div
                 style={{
                   width: "100%",
                   height: "100%",
-                  position: "relative",
-                  zIndex: 1,
-                  borderRadius: "1.25rem",
-                  overflow: "hidden",
-                  background: "#F6F3FF",
+                  transform: currentZoomEffect
+                    ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
+                    : "scale(1) translate(0%, 0%)",
+                  transformOrigin: "center center",
+                  transition: currentZoomEffect
+                    ? "transform 0.5s ease-in-out"
+                    : "transform 0.3s ease-out",
                 }}
               >
-                <div
+                <ReactPlayer
+                  ref={playerRef}
+                  url={videoUrl || undefined}
+                  playing={playing}
+                  controls={false}
+                  muted={false}
+                  volume={volume}
+                  width="100%"
+                  height="100%"
                   style={{
-                    width: "100%",
-                    height: "100%",
-                    transform: currentZoomEffect
-                      ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
-                      : "scale(1) translate(0%, 0%)",
-                    transformOrigin: "center center",
-                    transition: currentZoomEffect
-                      ? "transform 0.5s ease-in-out"
-                      : "transform 0.3s ease-out",
+                    objectFit: "contain",
+                    borderRadius: "1.25rem",
+                    background: "#F6F3FF",
                   }}
-                >
-                  <ReactPlayer
-                    ref={playerRef}
-                    url={videoUrl || undefined}
-                    playing={isPlaying}
-                    controls={false}
-                    muted={false}
-                    volume={volume}
-                    width="100%"
-                    height="100%"
-                    style={{
-                      objectFit: "contain",
-                      borderRadius: "1.25rem",
-                      background: "#F6F3FF",
-                    }}
-                    onError={(e) => console.error("Video failed to load", e)}
-                    onDuration={(dur) => {
-                      // Only set duration if recordingDuration is not available
-                      if (
-                        recordingDuration === 0 &&
-                        isFinite(dur) &&
-                        !isNaN(dur)
-                      ) {
-                        setDuration(dur);
-                      }
-                    }}
-                    onReady={() => {
-                      console.log("Video loaded");
-                      // Only try to get duration if recordingDuration is not available
-                      if (recordingDuration === 0) {
-                        // Try to get duration again when video is ready - FASTER
-                        setTimeout(() => {
-                          if (playerRef.current) {
-                            const player =
-                              playerRef.current.getInternalPlayer();
-                            if (
-                              player &&
-                              player.duration &&
-                              isFinite(player.duration) &&
-                              player.duration > 0
-                            ) {
-                              setDuration(Math.floor(player.duration));
-                            }
-                          }
-                        }, 10);
-
-                        // Additional attempt after a longer delay - FASTER
-                        setTimeout(() => {
-                          if (playerRef.current) {
-                            const player =
-                              playerRef.current.getInternalPlayer();
-                            if (
-                              player &&
-                              player.duration &&
-                              isFinite(player.duration) &&
-                              player.duration > 0
-                            ) {
-                              setDuration(Math.floor(player.duration));
-                            }
-                          }
-                        }, 100);
-                      }
-                    }}
-                    progressInterval={100}
-                    onProgress={({ playedSeconds }) =>
-                      setCurrentTime(playedSeconds)
+                  onError={(e) => console.error("Video failed to load", e)}
+                  onDuration={(dur) => {
+                    if (
+                      recordingDuration === 0 &&
+                      isFinite(dur) &&
+                      !isNaN(dur)
+                    ) {
+                      setDuration(dur);
                     }
-                    config={{
-                      file: {
-                        attributes: {
-                          preload: "metadata",
-                        },
-                      },
-                    }}
-                  />
-                </div>
-              </div>
-              <CustomVideoControls
-                playerRef={playerRef}
-                duration={duration}
-                currentTime={currentTime}
-                isPlaying={isPlaying}
-                setIsPlaying={setIsPlaying}
-                setCurrentTime={(t: number) => {
-                  setCurrentTime(t);
-
-                  // Force immediate video frame update
-                  if (playerRef.current) {
-                    const player = playerRef.current.getInternalPlayer();
-                    if (player) {
-                      // Set time directly and force a frame update
-                      player.currentTime = t;
-                      // Force the video to update by triggering a seek event
-                      player.dispatchEvent(new Event("seeking"));
-                      playerRef.current.seekTo(t, "seconds");
+                  }}
+                  onReady={() => {
+                    console.log("Video loaded");
+                    if (recordingDuration === 0) {
+                      setTimeout(() => {
+                        if (playerRef.current) {
+                          const player = playerRef.current.getInternalPlayer();
+                          if (
+                            player &&
+                            player.duration &&
+                            isFinite(player.duration) &&
+                            player.duration > 0
+                          ) {
+                            setDuration(Math.floor(player.duration));
+                          }
+                        }
+                      }, 10);
+                      setTimeout(() => {
+                        if (playerRef.current) {
+                          const player = playerRef.current.getInternalPlayer();
+                          if (
+                            player &&
+                            player.duration &&
+                            isFinite(player.duration) &&
+                            player.duration > 0
+                          ) {
+                            setDuration(Math.floor(player.duration));
+                          }
+                        }
+                      }, 100);
                     }
+                  }}
+                  onPlay={() => {
+                    setPlaying(true);
+                  }}
+                  onPause={() => {
+                    setPlaying(false);
+                  }}
+                  progressInterval={100}
+                  onProgress={({ playedSeconds }) =>
+                    setCurrentTime(playedSeconds)
                   }
-                }}
-                recordingDuration={recordingDuration}
-              />
-              {/* Updated Controls Row: 5s buttons left, sound bar center, fullscreen right */}
-              <div className="flex items-center justify-between mt-2 px-2 w-full">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newTime = Math.max(0, currentTime - 5);
-                      setCurrentTime(newTime);
-
-                      // Force immediate video frame update
-                      if (playerRef.current) {
-                        const player = playerRef.current.getInternalPlayer();
-                        if (player) {
-                          // Set time directly and force a frame update
-                          player.currentTime = newTime;
-                          // Force the video to update by triggering a seek event
-                          player.dispatchEvent(new Event("seeking"));
-                          playerRef.current.seekTo(newTime, "seconds");
-                        }
-                      }
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Back 5 seconds"
-                  >
-                    <Image
-                      src="/icons/backward-edit.svg"
-                      alt="Notifications"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4"
-                    />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newTime = Math.min(
-                        displayDuration,
-                        currentTime + 5
-                      );
-                      setCurrentTime(newTime);
-
-                      // Force immediate video frame update
-                      if (playerRef.current) {
-                        const player = playerRef.current.getInternalPlayer();
-                        if (player) {
-                          // Set time directly and force a frame update
-                          player.currentTime = newTime;
-                          // Force the video to update by triggering a seek event
-                          player.dispatchEvent(new Event("seeking"));
-                          playerRef.current.seekTo(newTime, "seconds");
-                        }
-                      }
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Forward 5 seconds"
-                  >
-                    <Image
-                      src="/icons/forward-edit.svg"
-                      alt="Notifications"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4"
-                    />
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 flex-1 justify-center">
-                  <button
-                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                    className="focus:outline-none"
-                    title={volume === 0 ? "Unmute" : "Mute"}
-                  >
-                    {volume === 0 ? (
-                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                    ) : (
-                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                  />
-                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
-                    {Math.round(volume * 100)}%
-                  </span>
-                </div>
-                <div
-                  className="flex items-center justify-end"
-                  style={{ minWidth: 40 }}
-                >
-                  <button
-                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                    title="Fullscreen"
-                    onClick={handleFullscreen}
-                  >
-                    <FaExpand size={22} />
-                  </button>
-                </div>
+                  config={{
+                    file: {
+                      attributes: {
+                        preload: "metadata",
+                      },
+                    },
+                  }}
+                />
               </div>
-              <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
-                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
-                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
-                style={{
-                  pointerEvents: tool !== "none" ? "auto" : "none",
-                  borderRadius: "1.25rem",
-                }}
-              />
-              {/* Custom Video Controls */}
             </div>
+            <CustomVideoControls
+              playerRef={playerRef}
+              duration={duration}
+              currentTime={currentTime}
+              setCurrentTime={(t: number) => {
+                setCurrentTime(t);
+                playerRef.current?.seekTo(t, "seconds");
+              }}
+              recordingDuration={recordingDuration}
+              setPlaying={setPlaying}
+              playing={playing}
+            />
+            <div className="flex items-center justify-between mt-2 px-2 w-full">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const newTime = Math.max(0, currentTime - 5);
+                    setCurrentTime(newTime);
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }}
+                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                  title="Back 5 seconds"
+                >
+                  <Image
+                    src="/icons/replay.svg"
+                    alt="Notifications"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4"
+                  />
+                </button>
+                <button
+                  onClick={() => {
+                    const newTime = Math.min(displayDuration, currentTime + 5);
+                    setCurrentTime(newTime);
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }}
+                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                  title="Forward 5 seconds"
+                >
+                  <Image
+                    src="/icons/forward.svg"
+                    alt="Notifications"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4"
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 flex-1 justify-center">
+                <button
+                  onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                  className="focus:outline-none"
+                  title={volume === 0 ? "Unmute" : "Mute"}
+                >
+                  {volume === 0 ? (
+                    <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                  ) : (
+                    <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                  className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
+                />
+                <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+              <div
+                className="flex items-center justify-end"
+                style={{ minWidth: 40 }}
+              >
+                <button
+                  className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                  title="Fullscreen"
+                  onClick={handleFullscreen}
+                >
+                  <FaExpand size={22} />
+                </button>
+              </div>
+            </div>
+            <canvas
+              ref={canvasRef}
+              className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
+              onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+              onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+              style={{
+                pointerEvents: tool !== "none" ? "auto" : "none",
+                borderRadius: "1.25rem",
+              }}
+            />
           </div>
           {tool === "text" && (
             <div className="flex gap-3 items-center mb-6 sm:mb-0">
@@ -1616,39 +1643,63 @@ export default function EditorPage() {
               </select>
             </div>
           )}
-
           <div className="mt-8 mb-16 mr-2 sm:mr-0">
-            <TimelineSlider
-              duration={duration}
-              processing={processing}
-              playerRef={playerRef}
-              setProgress={setProgress}
-              initialSegments={loadedSegments || undefined}
-              onSegmentsChange={setCurrentSegments}
-              ontrim={videoTrimHandler}
-              currentTime={currentTime}
-              setCurrentTime={(t) => {
-                setCurrentTime(t);
-
-                // Force immediate video frame update
-                if (playerRef.current) {
-                  const player = playerRef.current.getInternalPlayer();
-                  if (player) {
-                    // Set time directly and force a frame update
-                    player.currentTime = t;
-                    // Force the video to update by triggering a seek event
-                    player.dispatchEvent(new Event("seeking"));
-                    playerRef.current.seekTo(t, "seconds");
-                  }
-                }
-              }}
-              onResetVideo={resetVideo}
-              zoomEffects={zoomEffects}
-              onZoomEffectCreate={onZoomEffectCreate}
-              onZoomEffectRemove={onZoomEffectRemove}
-              externalEndTime={timelineEndTime}
-              onExternalTimeChange={handleTimelineChange}
-            />
+            {duration > 0 ? (
+              <TimelineRuler
+                minValue={0}
+                maxValue={duration}
+                currentValue={Math.max(0, currentTime)}
+                onValueChange={(value) => {
+                  const clampedValue = Math.max(0, Math.min(duration, value));
+                  setCurrentTime(clampedValue);
+                  playerRef.current?.seekTo(clampedValue, "seconds");
+                }}
+                step={0.1}
+                majorStep={20}
+                minorStep={5}
+                microStep={1}
+                startTime={timelineStartTime}
+                endTime={timelineEndTime}
+                onStartTimeChange={(value) => {
+                  setTimelineStartTime(value);
+                  handleTimelineChange(value, timelineEndTime);
+                }}
+                onEndTimeChange={(value) => {
+                  setTimelineEndTime(value);
+                  handleTimelineChange(timelineStartTime, value);
+                }}
+                onTrim={async (segments) => {
+                  toast.loading("Trimming and merging segments...");
+                  await trimApplier(
+                    segments,
+                    undefined,
+                    (success: boolean) => {
+                      toast.dismiss();
+                      if (success) {
+                        toast.success("Video trimmed and merged successfully!");
+                        setCurrentSegments(segments);
+                      } else {
+                        toast.error("Failed to trim/merge video.");
+                      }
+                    },
+                    undefined,
+                    zoomEffects
+                  );
+                }}
+                processing={processing}
+                onResetVideo={resetVideo}
+                onZoomEffectCreate={onZoomEffectCreate}
+                initialSegments={currentSegments}
+              />
+            ) : (
+              <div className="w-full max-w-6xl mx-auto p-8">
+                <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg mt-12 flex items-center justify-center">
+                  <span className="text-[#A594F9] font-medium">
+                    Loading timeline...
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1686,7 +1737,6 @@ export default function EditorPage() {
     </main>
   );
 }
-
 // Custom video controls component
 function CustomVideoControls({
   playerRef,
@@ -1694,22 +1744,26 @@ function CustomVideoControls({
   currentTime,
   setCurrentTime,
   recordingDuration,
-  isPlaying,
-  setIsPlaying,
+  setPlaying,
+  playing,
 }: {
   playerRef: React.RefObject<ReactPlayer>;
   duration: number;
   currentTime: number;
   setCurrentTime: (t: number) => void;
   recordingDuration: number;
-  isPlaying: boolean;
-  setIsPlaying: (p: boolean) => void;
+  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+  playing: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
 
   const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
+    setPlaying((prev) => {
+      if (prev) playerRef.current?.getInternalPlayer()?.pause?.();
+      else playerRef.current?.getInternalPlayer()?.play?.();
+      return !prev;
+    });
   };
 
   const handleSeekStart = () => {
@@ -1720,7 +1774,6 @@ function CustomVideoControls({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(e.target.value);
     setDragValue(value);
-
     if (playerRef.current) {
       const player = playerRef.current.getInternalPlayer();
       if (player) {
@@ -1742,7 +1795,6 @@ function CustomVideoControls({
         playerRef.current.seekTo(value, "seconds");
       }
     }
-
     setDragging(false);
   };
 
@@ -1756,14 +1808,24 @@ function CustomVideoControls({
           onClick={handlePlayPause}
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
         >
-          {isPlaying ? (
-            <Image src="/icons/pause.png" alt="Pause" width={24} height={24} />
+          {playing ? (
+            <Image
+              src="/icons/pause.png"
+              alt="Notifications"
+              width={24}
+              height={24}
+              className="w-6 h-6"
+            />
           ) : (
-            <Image src="/icons/play.png" alt="Play" width={24} height={24} />
+            <Image
+              src="/icons/play.png"
+              alt="Notifications"
+              width={24}
+              height={24}
+              className="w-6 h-6"
+            />
           )}
         </button>
-
-        {/* Timeline Slider */}
         <input
           type="range"
           min={0}
@@ -1773,14 +1835,13 @@ function CustomVideoControls({
           onPointerDown={handleSeekStart}
           onChange={handleSeek}
           onPointerUp={handleSeekEnd}
-          className="flex-1 accent-[#A594F9] h-2 rounded-lg"
+          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
           style={{
             background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
             height: 8,
             borderRadius: 8,
           }}
         />
-
         <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
           {formatTime(currentTime)} /{" "}
           {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}

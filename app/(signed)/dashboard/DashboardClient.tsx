@@ -43,7 +43,7 @@ const DashboardPage = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
+  
   if (status === "loading") {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -51,7 +51,6 @@ const DashboardPage = () => {
       </div>
     );
   }
-
   const initials = getInitials(
     (session?.user?.name as string) || (session?.user?.email as string)
   );
@@ -78,13 +77,6 @@ const DashboardPage = () => {
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 md:gap-4 w-full">
-            <div className="hidden md:flex justify-center flex-1">
-              <input
-                type="text"
-                placeholder="Search"
-                className="px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#6356D7] bg-white text-gray-700 w-56 shadow-sm transition-all"
-              />
-            </div>
             <div className="flex flex-col md:flex-row items-start md:items-center ml-4 md:ml-8 w-full md:w-[200px] overflow-hidden">
               <div className="relative w-full md:w-[200px] overflow-hidden">
                 <motion.span
@@ -188,5 +180,6 @@ const DashboardPage = () => {
     </div>
   );
 };
+
 
 export default DashboardPage;

@@ -11,11 +11,13 @@ import {
   useTransform,
 } from "framer-motion";
 import Hero2 from "./Hero2";
+import Image from "next/image"; // Import Next.js Image component
 
 interface TiltCardProps {
   title: string;
   description: string;
-  icon: string;
+  icon: string; // Kept for fallback or alternative use
+  image: string; // New prop for image path
   linkText?: string;
   index: number;
 }
@@ -23,7 +25,8 @@ interface TiltCardProps {
 const TiltCard: React.FC<TiltCardProps> = ({
   title,
   description,
-  icon,
+
+  image,
   linkText = "Learn more →",
   index,
 }) => {
@@ -86,8 +89,9 @@ const TiltCard: React.FC<TiltCardProps> = ({
         delay: index * 0.1,
       }}
     >
+      {/* Replace emoji icon with Image */}
       <motion.div
-        className="relative w-16 h-16 mx-auto mb-4 bg-[#e6e6fa] rounded-lg flex items-center justify-center"
+        className="relative w-16 h-16 mx-auto mb-4 rounded-lg overflow-hidden" // Adjusted height for better icon visibility
         animate={{
           rotate: [0, 5, -5, 0],
           scale: [1, 1.1, 1],
@@ -98,7 +102,14 @@ const TiltCard: React.FC<TiltCardProps> = ({
           ease: "easeInOut",
         }}
       >
-        <span className="text-2xl">{icon}</span>
+        <Image
+          src={image}
+          alt={title}
+          fill
+          className="object-contain" // Use contain to preserve image aspect ratio
+          sizes="64px"
+          priority={index < 3} // Prioritize first three cards
+        />
       </motion.div>
       <div className="relative w-full h-32 mb-4"></div>
       <h3 className="text-2xl font-semibold text-gray-800">{title}</h3>
@@ -132,36 +143,42 @@ const Hero1: React.FC = () => {
       description:
         "Simply paste your product URL and watch our AI create a professional demo video in minutes, not hours.",
       icon: "🔗",
+      image: "/icons/Group.svg",
     },
     {
-      title: "Performance Optimization",
+      title: "Smart Content Analysis",
       description:
-        "Optimize video loading speeds and performance for seamless playback across all devices.",
+        "Our AI understands your product features, benefits, and target audience to create relevant, engaging content.",
       icon: "⚡",
+      image: "/icons/Group1.svg",
     },
     {
       title: "Conversion Optimized",
       description:
         "Every video is designed with proven conversion techniques to turn viewers into customers effectively.",
       icon: "📈",
+      image: "/icons/Group2.svg",
     },
     {
-      title: "Video Quality Enhancement",
+      title: "Brand Customization",
       description:
-        "Improve video resolution and clarity with our AI-driven upscaling technology in real-time.",
+        "Automatically apply your brand colors, fonts, and style guidelines to maintain consistent branding.",
       icon: "🎥",
+      image: "/icons/Group3.svg",
     },
     {
-      title: "Performance Optimization",
+      title: "Multi-Format Export",
       description:
-        "Optimize video loading speeds and performance for seamless playback across all devices.",
+        "Export videos optimized for web, social media, email campaigns, and presentations with one click.",
       icon: "⚡",
+      image: "/icons/Group4.svg",
     },
     {
-      title: "Audience Engagement",
+      title: "Lightning Fast",
       description:
-        "Boost interaction with personalized video content tailored to your audience's preferences.",
+        "Get professional demo videos in under 2 minutes. No more waiting days for video production.",
       icon: "👥",
+      image: "/icons/Group5.svg",
     },
   ];
 
@@ -227,6 +244,7 @@ const Hero1: React.FC = () => {
               title={card.title}
               description={card.description}
               icon={card.icon}
+              image={card.image}
               index={index}
             />
           ))}
@@ -242,6 +260,7 @@ const Hero1: React.FC = () => {
               title={card.title}
               description={card.description}
               icon={card.icon}
+              image={card.image}
               index={index}
             />
           ))}
@@ -292,7 +311,16 @@ const Hero1: React.FC = () => {
               Try it for free
             </button>
           </div>
-          <div className="w-full md:w-1/2 h-[300px] bg-[#c2b3f5] rounded-lg flex items-center justify-center"></div>
+          <div className="w-full md:w-1/2 h-[300px] bg-[#c2b3f5] rounded-lg flex items-center justify-center">
+            <video
+              src="/icons/1.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-[90%] sm:w-[85%] h-[85%] rounded-2xl object-cover"
+            />
+          </div>
         </motion.div>
       </div>
       <Hero2 />

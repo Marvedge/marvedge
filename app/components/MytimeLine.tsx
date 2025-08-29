@@ -13,8 +13,15 @@ interface TrimSegment {
   end: number;
 }
 
+// interface ZoomEffect {
+//   id: string;
+//   startTime: number;
+//   endTime: number;
+//   zoomLevel: number;
+// }
+
 interface TimelineSliderProps {
-  duration: number; // Duration in seconds]
+  duration: number; // Duration in seconds
   formatTime?: (seconds: number) => string; // Custom time formatter
   onTimeChange?: (time: number) => void; // Callback when time changes
   ontrim: (segments: { start: string; end: string }[]) => void;
@@ -27,7 +34,6 @@ interface TimelineSliderProps {
   zoomEffects?: ZoomEffect[];
   onZoomEffectCreate?: (effect: ZoomEffect) => void;
   onZoomEffectRemove?: (id: string) => void;
-  // New props for external trim times
   externalStartTime?: number;
   externalEndTime?: number;
   onExternalTimeChange?: (start: number, end: number) => void;
@@ -56,13 +62,17 @@ export function TimelineSlider({
   onSegmentsChange,
 }: TimelineSliderProps) {
   const [segments, setSegments] = useState<TrimSegment[]>([
-    { start: 0, end: duration },
+    { start: 0, end: duration || 80.0 }, // Dynamic end based on duration
   ]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [zoomed, setzoomed] = useState(false);
   const [dragging, setDragging] = useState<null | "start" | "end">(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [progress] = useState(0);
+
+  // Undo/Redo state management
+  const [removedSegments, setRemovedSegments] = useState<TrimSegment[]>([]);
+  const [removedActiveIdx, setRemovedActiveIdx] = useState<number[]>([]);
 
   // Drag and drop state for segment reordering
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -72,10 +82,31 @@ export function TimelineSlider({
     x: number;
     y: number;
   } | null>(null);
+  const [hasBeenTrimmed, setHasBeenTrimmed] = useState(false);
 
   useEffect(() => {
     if (setProgress) setProgress(progress);
   }, [progress, setProgress]);
+
+  useEffect(() => {
+    console.log(
+      "Current state - segments:",
+      segments.length,
+      "removedSegments:",
+      removedSegments.length
+    );
+    console.log("Segments:", segments);
+  }, [segments.length, removedSegments.length, segments]);
+
+  useEffect(() => {
+    console.log(
+      "Current state - segments:",
+      segments.length,
+      "removedSegments:",
+      removedSegments.length
+    );
+    console.log("Segments:", segments);
+  }, [segments.length, removedSegments.length, segments]);
 
   // Update segments when duration changes or when initialSegments are provided
   useEffect(() => {
@@ -127,7 +158,7 @@ export function TimelineSlider({
   }, [segments, onSegmentsChange, timeFormatter]);
 
   const handleToggleZoom = useCallback(() => {
-    toggleZoom(onZoomEffectCreate, currentTime, duration, setzoomed);
+    toggleZoom(onZoomEffectCreate, currentTime, duration || 80.0, setzoomed);
   }, [onZoomEffectCreate, currentTime, duration, setzoomed]);
 
   const handleTrim = useCallback(() => {
@@ -145,20 +176,18 @@ export function TimelineSlider({
         end: timeFormatter(seg.end),
       }))
     );
+    setHasBeenTrimmed(true);
   }, [segments, duration, ontrim, timeFormatter]);
 
-  // Drag and drop handlers for segment reordering
   const handleDragStart = (e: React.DragEvent, index: number) => {
     // console.log("Drag start:", index);
     setDragIndex(index);
     setIsDragging(true);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/html", index.toString());
-    // Set a drag image for better visual feedback
     if (e.currentTarget instanceof HTMLElement) {
       e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
     }
-    // Prevent the click event from firing
     e.stopPropagation();
   };
 
@@ -188,7 +217,6 @@ export function TimelineSlider({
       return;
     }
 
-    // Reorder segments
     const newSegments = [...segments];
     const draggedSegment = newSegments[dragIndex];
     newSegments.splice(dragIndex, 1);
@@ -196,7 +224,6 @@ export function TimelineSlider({
 
     setSegments(newSegments);
 
-    // Update active index if needed
     if (activeIdx === dragIndex) {
       setActiveIdx(dropIndex);
     } else if (activeIdx > dragIndex && activeIdx <= dropIndex) {
@@ -214,11 +241,9 @@ export function TimelineSlider({
     // console.log("Drag end");
     setDragIndex(null);
     setDragOverIndex(null);
-    // Small delay to prevent click event interference
     setTimeout(() => setIsDragging(false), 100);
   };
 
-  // Mouse event handlers as fallback
   const handleMouseDown = (e: React.MouseEvent) => {
     setMouseStartPos({ x: e.clientX, y: e.clientY });
   };
@@ -227,8 +252,6 @@ export function TimelineSlider({
     if (mouseStartPos && !isDragging) {
       const deltaX = Math.abs(e.clientX - mouseStartPos.x);
       const deltaY = Math.abs(e.clientY - mouseStartPos.y);
-
-      // Start dragging if mouse moved more than 5px
       if (deltaX > 5 || deltaY > 5) {
         // console.log("Mouse drag start:", index);
         setDragIndex(index);
@@ -242,37 +265,35 @@ export function TimelineSlider({
     setMouseStartPos(null);
   };
 
-  // SVG timeline dimensions
-  const [svgWidth, setSvgWidth] = useState(800); // default, will update on mount
+  const [svgWidth, setSvgWidth] = useState(800);
   const height = 90;
   const margin = 40;
   const timelineY = 40;
-  const timelineHeight = 12;
-  const handleWidth = 24;
-  const handleHeight = 28;
-  const rulerColor = "#A594F9";
-  const trimColor = "#E6E1FA";
-  const handleColor = "#A594F9";
+  const timelineHeight = 12; // Matches Figma ruler thickness
+  const handleWidth = 20; // Matches Figma triangle base
+  const handleHeight = 24; // Matches Figma triangle height
+  const rulerColor = "#A594F9"; // Figma purple
+  const trimColor = "#E6E1FA"; // Light background
+  const handleColor = "#A594F9"; // Figma handle color
   const tickColor = "#A594F9";
   const labelColor = "#A594F9";
 
-  // Convert time to X position, guard against NaN
   const timeToX = (t: number) => {
-    if (!duration || isNaN(duration) || isNaN(t)) return margin;
+    if (isNaN(t) || isNaN(duration) || duration === 0) return margin;
     const x = margin + ((svgWidth - 2 * margin) * t) / duration;
-    // console.log("timeToX:", { t, duration, svgWidth, margin, x });
-    return x;
+    return Math.max(margin, Math.min(svgWidth - margin, x));
   };
-  // Convert X position to time
+
   const xToTime = useCallback(
     (x: number) => {
       const clamped = Math.max(margin, Math.min(svgWidth - margin, x));
-      return ((clamped - margin) / (svgWidth - 2 * margin)) * duration;
+      return (
+        ((clamped - margin) / (svgWidth - 2 * margin)) * (duration || 80.0)
+      );
     },
     [duration, margin, svgWidth]
   );
 
-  // Responsive: update svgWidth on mount and resize
   useEffect(() => {
     const updateWidth = () => {
       if (svgRef.current) {
@@ -284,7 +305,6 @@ export function TimelineSlider({
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
 
-  // Update segment
   const updateSegment = useCallback(
     (key: "start" | "end", value: number) => {
       // console.log(
@@ -296,47 +316,18 @@ export function TimelineSlider({
       //   activeIdx
       // );
       setSegments((segs) => {
-        // console.log("Previous segments:", segs);
-        const updated = segs.map((seg, i) => {
-          if (i === activeIdx) {
-            // console.log("Updating segment", i, "from", seg, "to", {
-            //   ...seg,
-            //   [key]: value,
-            // });
-            return { ...seg, [key]: value };
-          }
-          return seg;
-        });
-        // console.log("New segments:", updated);
+        const updated = segs.map((seg, i) =>
+          i === activeIdx ? { ...seg, [key]: value } : seg
+        );
         return updated;
       });
     },
     [activeIdx]
   );
-  // Replace start/end with active segment
+
   const start = segments[activeIdx]?.start ?? 0;
-  const end = segments[activeIdx]?.end ?? duration;
+  const end = segments[activeIdx]?.end ?? (duration || 80.0);
 
-  // console.log("Current segment values:", {
-  //   start,
-  //   end,
-  //   activeIdx,
-  //   segments: segments[activeIdx],
-  // });
-
-  // Special debugging for segment 1
-  if (activeIdx === 0) {
-    // console.log("Segment 1 specific:", {
-    //   start,
-    //   end,
-    //   dragging,
-    //   externalStartTime,
-    //   externalEndTime,
-    //   segmentData: segments[0],
-    // });
-  }
-
-  // Mouse/touch handlers for dragging handles
   useEffect(() => {
     if (!dragging) return;
 
@@ -350,16 +341,13 @@ export function TimelineSlider({
       if (!rect) return;
       const x = clientX - rect.left;
       let newTime = xToTime(x);
-      newTime = Math.max(0, Math.min(duration, newTime));
-
-      // console.log("Dragging:", dragging, "New time:", newTime);
+      newTime = Math.max(0, Math.min(duration || 80.0, newTime));
 
       if (dragging === "start") {
         if (newTime >= end) newTime = end - 0.01;
         updateSegment("start", newTime);
         onTimeChange?.(newTime);
         setCurrentTime(newTime);
-
         // Force immediate video frame update during dragging
         if (playerRef?.current) {
           const player = playerRef.current.getInternalPlayer();
@@ -380,7 +368,6 @@ export function TimelineSlider({
         updateSegment("end", newTime);
         onTimeChange?.(newTime);
         setCurrentTime(newTime);
-
         // Force immediate video frame update during dragging
         if (playerRef?.current) {
           const player = playerRef.current.getInternalPlayer();
@@ -398,10 +385,7 @@ export function TimelineSlider({
         }
       }
     };
-    const onUp = () => {
-      // console.log("Dragging ended");
-      setDragging(null);
-    };
+    const onUp = () => setDragging(null);
     window.addEventListener("mousemove", onMove);
     window.addEventListener("touchmove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -426,7 +410,6 @@ export function TimelineSlider({
     onExternalTimeChange,
   ]);
 
-  // Click to seek on timeline
   const handleTimelineClick = (
     e: React.MouseEvent<SVGSVGElement, MouseEvent>
   ) => {
@@ -434,8 +417,8 @@ export function TimelineSlider({
     if (!rect) return;
     const x = e.clientX - rect.left;
     let seekTime = xToTime(x);
-    seekTime = Math.max(0, Math.min(duration, seekTime));
-
+    seekTime = Math.max(0, Math.min(duration || 80.0, seekTime));
+    playerRef?.current?.seekTo(seekTime, "seconds");
     setCurrentTime(seekTime);
 
     // Force immediate video frame update
@@ -451,7 +434,54 @@ export function TimelineSlider({
     }
   };
 
-  // Keyboard controls for trim handles and video
+  const handleUndo = useCallback(() => {
+    if (segments.length > 1) {
+      const lastSegment = segments[segments.length - 1];
+      setRemovedSegments((prev) => [...prev, lastSegment]);
+      setRemovedActiveIdx((prev) => [...prev, activeIdx]);
+      setSegments((prev) => prev.slice(0, -1));
+      setActiveIdx(Math.min(activeIdx, segments.length - 2));
+    }
+  }, [
+    segments,
+    activeIdx,
+    setRemovedSegments,
+    setRemovedActiveIdx,
+    setSegments,
+    setActiveIdx,
+  ]);
+
+  const handleRedo = useCallback(() => {
+    if (removedSegments.length > 0) {
+      const segmentToRestore = removedSegments[removedSegments.length - 1];
+      const activeIdxToRestore = removedActiveIdx[removedActiveIdx.length - 1];
+      setSegments((prev) => [...prev, segmentToRestore]);
+      setActiveIdx(activeIdxToRestore);
+      setRemovedSegments((prev) => prev.slice(0, -1));
+      setRemovedActiveIdx((prev) => prev.slice(0, -1));
+    }
+  }, [
+    removedSegments,
+    removedActiveIdx,
+    setSegments,
+    setActiveIdx,
+    setRemovedSegments,
+    setRemovedActiveIdx,
+  ]);
+
+  const addSegment = () => {
+    setSegments([...segments, { start: 0, end: duration || 80.0 }]);
+    setActiveIdx(segments.length);
+  };
+
+  const removeSegment = (idx: number) => {
+    if (segments.length > 1) {
+      const newSegments = segments.filter((_, i) => i !== idx);
+      setSegments(newSegments);
+      setActiveIdx(Math.min(activeIdx, newSegments.length - 1));
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (processing) return;
@@ -492,10 +522,23 @@ export function TimelineSlider({
           updateSegment("start", Math.max(0, start - 1));
           break;
         case "]":
-          updateSegment("end", Math.min(duration, end + 1));
+          updateSegment("end", Math.min(duration || 80.0, end + 1));
           break;
         case "Enter":
           handleTrim();
+          break;
+        case "z":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (e.shiftKey) handleRedo();
+            else handleUndo();
+          }
+          break;
+        case "y":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            handleRedo();
+          }
           break;
       }
     };
@@ -511,26 +554,17 @@ export function TimelineSlider({
     currentTime,
     setCurrentTime,
     updateSegment,
+    handleUndo,
+    handleRedo,
   ]);
 
-  // Add segment
-  const addSegment = () => {
-    setSegments([...segments, { start: 0, end: duration }]);
-    setActiveIdx(segments.length);
-  };
-  // Remove segment
-  const removeSegment = (idx: number) => {
-    if (segments.length > 1) {
-      const newSegments = segments.filter((_, i) => i !== idx);
-      setSegments(newSegments);
-      setActiveIdx(Math.min(activeIdx, newSegments.length - 1));
-    }
-  };
+  // Major ticks (every 20 seconds), minor ticks (every 5 seconds), and micro ticks (every 1 second)
+  const majorTickCount = 5; // 0, 20, 40, 60, 80 (or dynamic duration)
+  const minorTickInterval = 5; // Minor ticks every 5 seconds
+  const microTickInterval = 1; // Micro ticks every 1 second for finer granularity
 
-  // Generate tick marks
-  const markerCount = 21;
-  const ticks = Array.from({ length: markerCount }, (_, i) => {
-    const t = (duration * i) / (markerCount - 1);
+  const majorTicks = Array.from({ length: majorTickCount }, (_, i) => {
+    const t = ((duration || 80.0) * i) / (majorTickCount - 1);
     return {
       time: t,
       x: timeToX(t),
@@ -538,10 +572,25 @@ export function TimelineSlider({
     };
   });
 
+  const minorTicks: { time: number; x: number }[] = [];
+  for (let i = 0; i <= (duration || 80.0); i += minorTickInterval) {
+    minorTicks.push({
+      time: i,
+      x: timeToX(i),
+    });
+  }
+
+  const microTicks: { time: number; x: number }[] = [];
+  for (let i = 0; i <= (duration || 80.0); i += microTickInterval) {
+    microTicks.push({
+      time: i,
+      x: timeToX(i),
+    });
+  }
+
   return (
-    <Card className="p-6 w-full max-w-6xl">
+    <Card className="p-6 w-full max-w-6xl border-2 border-[#E6E1FA] shadow-lg">
       <div className="space-y-6">
-        {/* Progress Bar */}
         {progress > 0 && progress < 100 && (
           <div className="w-full h-2 bg-gray-200 rounded mb-2 overflow-hidden">
             <div
@@ -550,94 +599,122 @@ export function TimelineSlider({
             />
           </div>
         )}
-        {/* Controls: Zoom, Trim, Add/Remove Segments */}
         <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mb-4 w-full">
-          <Button
-            variant="outline"
-            onClick={handleToggleZoom}
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
-          >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/zoom-new.png"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-              {zoomed ? "Zoom in" : "Zoom in"}
-            </span>
-          </Button>
-          <Button
-            onClick={handleTrim}
-            disabled={
-              processing || segments.some((seg) => seg.start >= seg.end)
-            }
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800"
-          >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/trim-new.svg"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-              Trim & Merge
-            </span>
-          </Button>
-          <Button
-            onClick={addSegment}
-            className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800"
-          >
-            <span className="flex items-center gap-2">
-              <Image
-                src="/icons/+.svg"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-              Add Segment
-            </span>
-          </Button>
-          {segments.length > 1 && (
+          <div className="flex gap-2 sm:gap-4">
+            <Button
+              variant="outline"
+              onClick={handleToggleZoom}
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <Image
+                  src="/icons/zoom-new.png"
+                  alt="Zoom"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+                {zoomed ? "Zoom in" : "Zoom in"}
+              </span>
+            </Button>
+            <Button
+              onClick={handleTrim}
+              disabled={
+                processing || segments.some((seg) => seg.start >= seg.end)
+              }
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <Image
+                  src="/icons/trim-new.svg"
+                  alt="Trim"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+                Trim & Merge
+              </span>
+            </Button>
+            <Button
+              onClick={addSegment}
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <Image
+                  src="/icons/+.svg"
+                  alt="Add"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
+                Add Segment
+              </span>
+            </Button>
             <Button
               onClick={() => removeSegment(activeIdx)}
-              className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800"
+              disabled={segments.length <= 1}
+              className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               <span className="flex items-center gap-2">
                 <Image
                   src="/icons/-.svg"
-                  alt="Notifications"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
+                  alt="Remove"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
                 />
                 Remove Segment
               </span>
             </Button>
-          )}
-          {onResetVideo && (
+          </div>
+          <div className="flex-1"></div>
+          <div className="flex gap-2 sm:gap-4">
             <Button
-              variant="outline"
-              onClick={onResetVideo}
-              className="min-w-[110px] h-10 px-4 flex items-center gap-2 font-semibold"
+              onClick={handleUndo}
+              disabled={segments.length <= 1}
+              className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="flex items-center gap-2">
-                <Image
-                  src="/icons/reset.png"
-                  alt="Notifications"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
-                />
-                Reset
-              </span>
+              <Image
+                src="/icons/undo.svg"
+                alt="Undo"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
             </Button>
-          )}
+            <Button
+              onClick={handleRedo}
+              disabled={removedSegments.length === 0}
+              className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Image
+                src="/icons/redo.svg"
+                alt="Redo"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </Button>
+            {onResetVideo && hasBeenTrimmed && (
+              <Button
+                variant="outline"
+                onClick={onResetVideo}
+                className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <Image
+                    src="/icons/reset.png"
+                    alt="Reset"
+                    width={20}
+                    height={20}
+                    className="w-5 h-5"
+                  />
+                  Reset Video
+                </span>
+              </Button>
+            )}
+          </div>
         </div>
-        {/* Segment Selector */}
         <div className="mb-2">
           <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
             <span>📋</span>
@@ -656,10 +733,7 @@ export function TimelineSlider({
                 key={idx}
                 variant={idx === activeIdx ? "default" : "outline"}
                 onClick={() => {
-                  // Only handle click if not dragging
-                  if (!isDragging) {
-                    setActiveIdx(idx);
-                  }
+                  if (!isDragging) setActiveIdx(idx);
                 }}
                 draggable
                 onDragStart={(e) => handleDragStart(e, idx)}
@@ -686,10 +760,9 @@ export function TimelineSlider({
             ))}
           </div>
         </div>
-        {/* Timeline Header */}
         <div className="flex items-center justify-between">
           <div className="text-sm font-medium text-muted-foreground">
-            Timeline Duration: {timeFormatter(duration)}
+            Timeline Duration: {timeFormatter(duration || 80.0)}
           </div>
           <div className="text-lg font-mono">
             StartTime : {timeFormatter(start)}
@@ -701,15 +774,11 @@ export function TimelineSlider({
             Active: Segment {activeIdx + 1}
           </div>
         </div>
-        {/* SVG Timeline */}
         <div className="w-full flex justify-center">
           <svg
             ref={svgRef}
             width="100%"
-            style={{
-              maxWidth: 1400,
-              height: height * 1.5,
-            }}
+            style={{ maxWidth: 1400, height: height * 1.5 }}
             viewBox={`0 0 ${svgWidth} ${height}`}
             preserveAspectRatio="none"
             onClick={handleTimelineClick}
@@ -726,7 +795,7 @@ export function TimelineSlider({
               stroke={rulerColor}
               strokeWidth={2}
             />
-            {/* All trim regions */}
+            {/* Trim regions */}
             {segments.map((seg, idx) => (
               <rect
                 key={idx}
@@ -741,11 +810,6 @@ export function TimelineSlider({
                 fill={idx === activeIdx ? trimColor : "#D1C4E9"}
                 opacity={0.7}
                 rx={6}
-                style={{ cursor: "pointer" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveIdx(idx);
-                }}
               />
             ))}
             {/* Current time marker */}
@@ -754,8 +818,8 @@ export function TimelineSlider({
               y1={timelineY - 10}
               x2={isNaN(currentTime) ? margin : timeToX(currentTime)}
               y2={timelineY + timelineHeight + 20}
-              stroke="#7C5CFC"
-              strokeWidth={3}
+              stroke={rulerColor}
+              strokeWidth={2}
               opacity={0.9}
             />
             {/* Zoom effects indicators */}
@@ -782,8 +846,6 @@ export function TimelineSlider({
                     textAnchor="middle"
                     fontSize={12}
                     fill="#7C5CFC"
-                    fontWeight="bold"
-                    style={{ userSelect: "none" }}
                   >
                     🔍 {effect.zoomLevel.toFixed(1)}x
                   </text>
@@ -793,7 +855,6 @@ export function TimelineSlider({
                       y={timelineY - 22}
                       width={20}
                       height={20}
-                      style={{ overflow: "visible" }}
                     >
                       <button
                         style={{
@@ -805,13 +866,11 @@ export function TimelineSlider({
                           borderRadius: "50%",
                           cursor: "pointer",
                           fontSize: "12px",
-                          fontWeight: "bold",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
                         }}
-                        title="Remove zoom effect"
                         onClick={(e) => {
                           e.stopPropagation();
                           // console.log("Removing zoom effect:", effect.id);
@@ -844,8 +903,6 @@ export function TimelineSlider({
                     textAnchor="middle"
                     fontSize={9}
                     fill="#7C5CFC"
-                    fontWeight="bold"
-                    style={{ userSelect: "none" }}
                   >
                     {timeFormatter(effect.startTime)}
                   </text>
@@ -855,132 +912,182 @@ export function TimelineSlider({
                     textAnchor="middle"
                     fontSize={9}
                     fill="#7C5CFC"
-                    fontWeight="bold"
-                    style={{ userSelect: "none" }}
                   >
                     {timeFormatter(effect.endTime)}
                   </text>
                 </g>
               );
             })}
-            {/* Tick marks and labels */}
-            {ticks.map((tick, i) => (
-              <g key={i}>
+            {/* Major and minor tick marks */}
+            {majorTicks.map((tick, i) => (
+              <g key={`major-${i}`}>
                 <line
                   x1={tick.x}
                   y1={timelineY}
                   x2={tick.x}
-                  y2={timelineY + timelineHeight + (i % 5 === 0 ? 18 : 10)}
+                  y2={timelineY + timelineHeight + 20}
                   stroke={tickColor}
-                  strokeWidth={i % 5 === 0 ? 2 : 1}
+                  strokeWidth={2}
                 />
-                {i % 5 === 0 && (
-                  <text
-                    x={tick.x}
-                    y={timelineY + timelineHeight + 28}
-                    textAnchor="middle"
-                    fontSize={14}
-                    fill={labelColor}
-                    fontWeight="bold"
-                  >
-                    {tick.label}
-                  </text>
-                )}
+                <text
+                  x={tick.x}
+                  y={timelineY + timelineHeight + 32}
+                  textAnchor="middle"
+                  fontSize={14}
+                  fill={labelColor}
+                >
+                  {tick.label}
+                </text>
               </g>
             ))}
-            {/* Start handle (triangle pointer) */}
-            <g
-              style={{ cursor: "ew-resize" }}
-              onMouseDown={(e) => {
-                // console.log("Start handle mouse down");
-                e.stopPropagation();
-                setDragging("start");
-              }}
-              onTouchStart={(e) => {
-                // console.log("Start handle touch start");
-                e.stopPropagation();
-                setDragging("start");
-              }}
+            {minorTicks.map((tick, i) => {
+              if (!majorTicks.some((mt) => mt.time === tick.time)) {
+                return (
+                  <line
+                    key={`minor-${i}`}
+                    x1={tick.x}
+                    y1={timelineY}
+                    x2={tick.x}
+                    y2={timelineY + timelineHeight + 10}
+                    stroke={tickColor}
+                    strokeWidth={1}
+                    opacity={0.5}
+                  />
+                );
+              }
+              return null;
+            })}
+            {/* Micro ticks for finer granularity */}
+            {microTicks.map((tick, i) => {
+              if (
+                !majorTicks.some((mt) => mt.time === tick.time) &&
+                !minorTicks.some((mt) => mt.time === tick.time)
+              ) {
+                return (
+                  <line
+                    key={`micro-${i}`}
+                    x1={tick.x}
+                    y1={timelineY}
+                    x2={tick.x}
+                    y2={timelineY + timelineHeight + 6}
+                    stroke={tickColor}
+                    strokeWidth={0.5}
+                    opacity={0.3}
+                  />
+                );
+              }
+              return null;
+            })}
+            {/* Fixed markers at 0.00 and dynamic end (duration) */}
+            <polygon
+              points={trianglePoints(
+                timeToX(0),
+                timelineY + timelineHeight / 2,
+                handleWidth,
+                handleHeight,
+                "up"
+              )}
+              fill={handleColor}
+              stroke={rulerColor}
+              strokeWidth={2}
+              opacity={0.95}
             >
-              {/* Time label above handle */}
-              <text
-                x={isNaN(start) ? margin : timeToX(start)}
-                y={timelineY - handleHeight + 8}
-                textAnchor="middle"
-                fontSize={13}
-                fill="#7C5CFC"
-                fontWeight="bold"
-                style={{ userSelect: "none" }}
-              >
-                {timeFormatter(start)}
-              </text>
-              {/* Triangle pointer */}
-              <polygon
-                points={trianglePoints(
-                  isNaN(start) ? margin : timeToX(start),
-                  timelineY - 4,
-                  handleWidth,
-                  handleHeight,
-                  "up"
-                )}
-                fill={handleColor}
-                stroke="#7C5CFC"
-                strokeWidth={2}
-                opacity={0.95}
-                style={{
-                  transition:
-                    dragging === "start"
-                      ? "none"
-                      : "all 0.18s cubic-bezier(.4,2,.6,1)",
-                }}
-              />
-            </g>
-            {/* End handle (triangle pointer) */}
+              <title>Start: 0.00</title>
+            </polygon>
+            <text
+              x={timeToX(0)}
+              y={timelineY - handleHeight + 8}
+              textAnchor="middle"
+              fontSize={13}
+              fill={labelColor}
+            >
+              0.00
+            </text>
+            <polygon
+              points={trianglePoints(
+                timeToX(duration || 80.0),
+                timelineY + timelineHeight / 2,
+                handleWidth,
+                handleHeight,
+                "up"
+              )}
+              fill={handleColor}
+              stroke={rulerColor}
+              strokeWidth={2}
+              opacity={0.95}
+            >
+              <title>End: {timeFormatter(duration || 80.0)}</title>
+            </polygon>
+            <text
+              x={timeToX(duration || 80.0)}
+              y={timelineY - handleHeight + 8}
+              textAnchor="middle"
+              fontSize={13}
+              fill={labelColor}
+            >
+              {timeFormatter(duration || 80.0)}
+            </text>
+            {/* Start and End handles */}
             <g
               style={{ cursor: "ew-resize" }}
               onMouseDown={(e) => {
                 // console.log("End handle mouse down");
                 e.stopPropagation();
-                setDragging("end");
-              }}
-              onTouchStart={(e) => {
-                // console.log("End handle touch start");
-                e.stopPropagation();
-                setDragging("end");
+                setDragging("start");
               }}
             >
-              {/* Time label above handle */}
-              <text
-                x={isNaN(end) ? margin : timeToX(end)}
-                y={timelineY - handleHeight + 8}
-                textAnchor="middle"
-                fontSize={13}
-                fill="#7C5CFC"
-                fontWeight="bold"
-                style={{ userSelect: "none" }}
-              >
-                {timeFormatter(end)}
-              </text>
-              {/* Triangle pointer */}
               <polygon
                 points={trianglePoints(
-                  isNaN(end) ? margin : timeToX(end),
-                  timelineY - 4,
+                  timeToX(start),
+                  timelineY + timelineHeight / 2,
                   handleWidth,
                   handleHeight,
                   "up"
                 )}
                 fill={handleColor}
-                stroke="#7C5CFC"
+                stroke={rulerColor}
                 strokeWidth={2}
                 opacity={0.95}
-                style={{
-                  transition:
-                    dragging === "end"
-                      ? "none"
-                      : "all 0.18s cubic-bezier(.4,2,.6,1)",
-                }}
               />
+              <text
+                x={timeToX(start)}
+                y={timelineY - handleHeight + 8}
+                textAnchor="middle"
+                fontSize={13}
+                fill={rulerColor}
+              >
+                {timeFormatter(start)}
+              </text>
+            </g>
+            <g
+              style={{ cursor: "ew-resize" }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                setDragging("end");
+              }}
+            >
+              <polygon
+                points={trianglePoints(
+                  timeToX(end),
+                  timelineY + timelineHeight / 2,
+                  handleWidth,
+                  handleHeight,
+                  "up"
+                )}
+                fill={handleColor}
+                stroke={rulerColor}
+                strokeWidth={2}
+                opacity={0.95}
+              />
+              <text
+                x={timeToX(end)}
+                y={timelineY - handleHeight + 8}
+                textAnchor="middle"
+                fontSize={13}
+                fill={rulerColor}
+              >
+                {timeFormatter(end)}
+              </text>
             </g>
           </svg>
         </div>
@@ -988,3 +1095,5 @@ export function TimelineSlider({
     </Card>
   );
 }
+
+// Import trianglePoints from dateUtils.ts instead of defining it here
