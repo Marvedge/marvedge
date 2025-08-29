@@ -978,11 +978,12 @@ export default function EditorPage() {
       const formData = new FormData();
       formData.append("video", videoBlob, "video.mp4");
       formData.append("segments", JSON.stringify(segments));
-
+      console.log(formData);
       const trimRes = await axios.post(
         `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
         formData,
         {
+          headers: { "Content-Type": "multipart/form-data" },
           responseType: "blob",
         }
       );
@@ -992,6 +993,7 @@ export default function EditorPage() {
 
       if (trimmedVideoUrl) {
         toast.dismiss();
+        console.log(trimmedVideoUrl);
         toast.success("Video trimmed successfully!");
         setVideoUrl(trimmedVideoUrl);
       } else {
