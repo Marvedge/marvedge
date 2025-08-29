@@ -1,10 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import { z } from "zod";
-import toast, { Toaster } from "react-hot-toast";
+import { toast } from "sonner";
 
 const signInSchema = z.object({
   email: z
@@ -22,6 +22,7 @@ const SignIn = () => {
   const [animatePanel, setAnimatePanel] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const { update } = useSession();
 
   useEffect(() => {
     const timeout = setTimeout(() => setAnimatePanel(true), 100);
@@ -30,13 +31,68 @@ const SignIn = () => {
 
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
 
+  // const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  //   e.preventDefault();
+  //   const email = emailRef.current?.value ?? "";
+  //   const password = passwordRef.current?.value ?? "";
+  //   setIsLoading(true);
+  //   try {
+  //     signInSchema.parse({ email, password });
+  //   } catch (error) {
+  //     if (error instanceof z.ZodError) {
+  //       toast.error(error.errors[0].message);
+  //       setIsLoading(false);
+  //       return;
+  //     }
+  //   }
+  //   try {
+  //     const res = await signIn("credentials", {
+  //       email,
+  //       password,
+  //       redirect: false,
+  //     });
+  //     if (res?.ok) {
+  //       toast.success("Signed in successfully! from try");
+  //       console.log("Signed in successfully!");
+  //       console.log(status);
+  //       await update();
+  //       // await new Promise((resolve) => setTimeout(resolve, 1000));
+  //       router.push("/dashboard");
+  //       // setTimeout(() => window.location.reload(), 100);
+  //     } else {
+  //       toast.error(res?.error || "Invalid credentials.");
+  //     }
+  //   } catch (err) {
+  //     console.warn(err);
+  //     if (
+  //       err instanceof TypeError &&
+  //       err.message.includes("Failed to construct 'URL'")
+  //     ) {
+  //       toast.success("Signed in successfully! from catch");
+  //       console.log("signed in successfully from catch block");
+  //       await update();
+  //       // setTimeout(() => window.location.reload(), 100);
+  //       router.push("/dashboard");
+  //       return;
+  //     }
+  //     toast.error("Something went wrong. Please try again.");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
     const email = emailRef.current?.value ?? "";
     const password = passwordRef.current?.value ?? "";
+    console.log(email, password, "first");
     setIsLoading(true);
+
     try {
+      // ✅ Validate input
       signInSchema.parse({ email, password });
+      console.log(email, password);
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -44,29 +100,27 @@ const SignIn = () => {
         return;
       }
     }
+
     try {
+      // ✅ Sign in with credentials
       const res = await signIn("credentials", {
         email,
         password,
         redirect: false,
       });
+      console.log(email, password);
+      console.log("Sign-in response:", res);
+
       if (res?.ok) {
         toast.success("Signed in successfully!");
-        router.push("/dashboard");
-        setTimeout(() => window.location.reload(), 500);
+        await update(); // refresh session
+        router.push("/dashboard"); // ✅ only one redirect
       } else {
         toast.error(res?.error || "Invalid credentials.");
       }
     } catch (err) {
-      console.warn(err);
-      if (
-        err instanceof TypeError &&
-        err.message.includes("Failed to construct 'URL'")
-      ) {
-        toast.success("Signed in successfully!");
-        router.push("/dashboard");
-        return;
-      }
+      console.log("error from the new catch block");
+      console.error("Sign-in error:", err);
       toast.error("Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
@@ -75,7 +129,6 @@ const SignIn = () => {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen w-full font-sans bg-[#F1ECFF]">
-      <Toaster position="top-center" />
       <div
         className="md:hidden absolute top-0 left-0 w-full h-20 bg-gradient-to-b from-[#313053] to-[#261753] z-[1000] flex justify-center items-center shadow-lg"
         style={{

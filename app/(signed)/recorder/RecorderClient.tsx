@@ -73,7 +73,7 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        <span className="sm:block text-[#7C5CFC] font-medium text-base mr-2 flex items-center gap-1">
+        <span className="hidden text-[#7C5CFC] font-medium text-base mr-2 sm:flex items-center gap-1">
           Welcome, {username}
           <span role="img" aria-label="waving hand" className="ml-1">
             👋
@@ -120,7 +120,7 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
 }
 
 export default function RecorderPage() {
-  // const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [enableCamera, setEnableCamera] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>("");
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
@@ -138,7 +138,7 @@ export default function RecorderPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // const videoPreview = useRef<HTMLVideoElement>(null);
+  const videoPreview = useRef<HTMLVideoElement>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const videoPlayerRef = useRef<ReactPlayer>(null);
 
@@ -155,14 +155,7 @@ export default function RecorderPage() {
     recordingDuration,
     reset,
   } = useScreenRecorder();
-
   const router = useRouter();
-  // const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const videoPreview = useRef<HTMLVideoElement>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  // const [enableCamera, setEnableCamera] = useState(false);
-
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -196,8 +189,212 @@ export default function RecorderPage() {
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
   // Simple timeline component for recorder
+  const SimpleTimeline = () => {
+    const [dragging, setDragging] = useState(false);
+    const [dragValue, setDragValue] = useState(0);
+
+    // Use recording duration if available, otherwise use detected duration
+    const displayDuration =
+      recordingDuration > 0 ? recordingDuration : videoDuration;
+
+    const handlePlayPause = () => {
+      setVideoPlaying(!videoPlaying);
+    };
+
+    const handleSeekStart = () => {
+      setDragging(true);
+      setDragValue(videoCurrentTime);
+    };
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = Number(e.target.value);
+      setDragValue(value);
+
+      // Update video frame immediately during dragging
+      if (videoPlayerRef.current) {
+        const player = videoPlayerRef.current.getInternalPlayer();
+        if (player) {
+          // Set time directly and force a frame update
+          player.currentTime = value;
+          // Force the video to update by triggering a seek event
+          player.dispatchEvent(new Event("seeking"));
+        }
+      }
+    };
+
+    const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
+      const value = Number((e.target as HTMLInputElement).value);
+      setVideoCurrentTime(value);
+
+      // Force immediate video frame update
+      if (videoPlayerRef.current) {
+        const player = videoPlayerRef.current.getInternalPlayer();
+        if (player) {
+          // Set time directly and force a frame update
+          player.currentTime = value;
+          // Force the video to update by triggering a seek event
+          player.dispatchEvent(new Event("seeking"));
+          videoPlayerRef.current.seekTo(value, "seconds");
+        } else {
+          videoPlayerRef.current.seekTo(value, "seconds");
+        }
+      }
+
+      setDragging(false);
+    };
+
+    return (
+      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePlayPause}
+            className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+          >
+            {videoPlaying ? (
+              <Image
+                src="/icons/pause.png"
+                alt="Pause"
+                width={18}
+                height={18}
+                className="w-4 h-4"
+              />
+            ) : (
+              <Image
+                src="/icons/play.png"
+                alt="Play"
+                width={18}
+                height={18}
+                className="w-4 h-4"
+              />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={displayDuration}
+            step={0.01}
+            value={dragging ? dragValue : videoCurrentTime}
+            onPointerDown={handleSeekStart}
+            onChange={handleSeek}
+            onPointerUp={handleSeekEnd}
+            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+            style={{
+              background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
+              height: 8,
+              borderRadius: 8,
+            }}
+          />
+          <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
+            {formatTime(videoCurrentTime)} /{" "}
+            {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
+          </span>
+        </div>
+
+        {/* 5-second skip buttons */}
+        <div className="flex items-center justify-between mt-2 px-2 w-full">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const newTime = Math.max(0, videoCurrentTime - 5);
+                setVideoCurrentTime(newTime);
+
+                // Force immediate video frame update
+                if (videoPlayerRef.current) {
+                  const player = videoPlayerRef.current.getInternalPlayer();
+                  if (player) {
+                    // Set time directly and force a frame update
+                    player.currentTime = newTime;
+                    // Force the video to update by triggering a seek event
+                    player.dispatchEvent(new Event("seeking"));
+                    videoPlayerRef.current.seekTo(newTime, "seconds");
+                  }
+                }
+              }}
+              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              title="Back 5 seconds"
+            >
+              <Image
+                src="/icons/backward.png"
+                alt="Back 5 seconds"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </button>
+            <button
+              onClick={() => {
+                const newTime = Math.min(displayDuration, videoCurrentTime + 5);
+                setVideoCurrentTime(newTime);
+
+                // Force immediate video frame update
+                if (videoPlayerRef.current) {
+                  const player = videoPlayerRef.current.getInternalPlayer();
+                  if (player) {
+                    // Set time directly and force a frame update
+                    player.currentTime = newTime;
+                    // Force the video to update by triggering a seek event
+                    player.dispatchEvent(new Event("seeking"));
+                    videoPlayerRef.current.seekTo(newTime, "seconds");
+                  }
+                }
+              }}
+              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              title="Forward 5 seconds"
+            >
+              <Image
+                src="/icons/forward.png"
+                alt="Forward 5 seconds"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A594F9] font-mono">Preview</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Recording timeline component for active recording
+  const RecordingTimeline = () => {
+    return (
+      <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+        <div className="flex justify-end items-center gap-3">
+          {/* <div className="rounded-full bg-red-500 text-white p-2 animate-pulse">
+            <div className="w-4 h-4 bg-white rounded-full"></div>
+          </div>
+          <div className="flex-1 bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-red-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+              style={{
+                width: `${Math.min((recordingTimer / 3600) * 100, 100)}%`, // Max 1 hour
+              }}
+            ></div>
+          </div> */}
+          <span className="text-xs text-red-500 font-mono min-w-[60px] text-right font-bold">
+            {formatTime(recordingTimer)}
+          </span>
+        </div>
+
+        {/* Recording status */}
+        <div className="flex items-center justify-between mt-2 px-2 w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-red-500 font-semibold animate-pulse">
+              ⏺ Recording in progress...
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-mono">
+              Live Preview
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const handleSaveAndPublish = () => {
     if (!blob) return;
@@ -425,7 +622,6 @@ export default function RecorderPage() {
       };
     }
   }, [videoUrl, uploadedFileUrl, videoDuration]);
-
   // const { data: session } = useSession();
   // const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -949,7 +1145,7 @@ export default function RecorderPage() {
                         <div>
                           <button
                             onClick={stopRecording}
-                            className=" bg-[#7C5CFC] text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
+                            className=" bg-blue-600 text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
                           >
                             Stop Recording
                           </button>
@@ -966,7 +1162,7 @@ export default function RecorderPage() {
                               }
                             }}
                             className={`${
-                              cameraStream ? "bg-red-600" : "bg-[#7C5CFC]"
+                              cameraStream ? "bg-red-600" : "bg-green-600"
                             } text-white px-4 py-2 rounded text-sm sm:text-base min-w-[150px] transition mr-30`}
                           >
                             {cameraStream ? "Stop Camera" : "Start Camera"}
@@ -1081,50 +1277,50 @@ export default function RecorderPage() {
   }
 
   // UI for when recording is in progress
-  if (recording) {
-    return (
-      <main className="flex h-screen w-full items-center justify-center bg-gray-900 text-white overflow-hidden">
-        <div className="bg-gray-800 p-8 rounded-xl shadow-lg flex flex-col items-center space-y-6 w-full max-w-xl">
-          <h2 className="text-2xl font-bold animate-pulse">⏺ Recording...</h2>
-          <div className="flex flex-col items-center mb-4">
-            <div className="text-5xl font-mono font-bold text-yellow-300 bg-gray-900 px-6 py-2 rounded-lg border-2 border-yellow-400 shadow-lg">
-              {formatTime(recordingTimer)}
-            </div>
-            <div className="mt-2 text-base text-yellow-200 text-center max-w-xs">
-              This timer shows your actual recording duration.
-              <br />
-              The video preview below is what is being recorded.
-            </div>
-          </div>
-          {/* Show the live preview during recording, but hide controls */}
-          <div className="flex justify-center mb-4 sm:mb-8">
-            <VideoPreview
-              videoUrl={null}
-              isRecording={true}
-              screenStream={screenStream}
-              className="mx-auto"
-              showControls={false}
-            />
-          </div>
-          <button
-            onClick={stopRecording}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded w-full text-lg font-semibold"
-          >
-            ⏹ Stop Recording
-          </button>
-          <div className="flex items-center gap-2">
-            <span>🎙️ Mic: {micEnabled ? "On" : "Off"}</span>
-            <button
-              onClick={toggleMic}
-              className={`px-3 py-1 rounded ${micEnabled ? "bg-[#7C5CFC]" : "bg-gray-600"}`}
-            >
-              {micEnabled ? "Mute" : "Unmute"}
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // if (recording) {
+  //   return (
+  //     <main className="flex h-screen w-full items-center justify-center bg-gray-900 text-white overflow-hidden">
+  //       <div className="bg-gray-800 p-8 rounded-xl shadow-lg flex flex-col items-center space-y-6 w-full max-w-xl">
+  //         <h2 className="text-2xl font-bold animate-pulse">⏺ Recording...</h2>
+  //         <div className="flex flex-col items-center mb-4">
+  //           <div className="text-5xl font-mono font-bold text-yellow-300 bg-gray-900 px-6 py-2 rounded-lg border-2 border-yellow-400 shadow-lg">
+  //             {formatTime(recordingTimer)}
+  //           </div>
+  //           <div className="mt-2 text-base text-yellow-200 text-center max-w-xs">
+  //             This timer shows your actual recording duration.
+  //             <br />
+  //             The video preview below is what is being recorded.
+  //           </div>
+  //         </div>
+  //         {/* Show the live preview during recording, but hide controls */}
+  //         <div className="flex justify-center mb-4 sm:mb-8">
+  //           <VideoPreview
+  //             videoUrl={null}
+  //             isRecording={true}
+  //             screenStream={screenStream}
+  //             className="mx-auto"
+  //             showControls={false}
+  //           />
+  //         </div>
+  //         <button
+  //           onClick={stopRecording}
+  //           className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded w-full text-lg font-semibold"
+  //         >
+  //           ⏹ Stop Recording
+  //         </button>
+  //         <div className="flex items-center gap-2">
+  //           <span>🎙️ Mic: {micEnabled ? "On" : "Off"}</span>
+  //           <button
+  //             onClick={toggleMic}
+  //             className={`px-3 py-1 rounded ${micEnabled ? "bg-green-600" : "bg-gray-600"}`}
+  //           >
+  //             {micEnabled ? "Mute" : "Unmute"}
+  //           </button>
+  //         </div>
+  //       </div>
+  //     </main>
+  //   );
+  // }
 
   // Initial UI (no recording or uploaded video)
   return (

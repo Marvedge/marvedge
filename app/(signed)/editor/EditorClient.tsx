@@ -1,14 +1,19 @@
 "use client";
-import React, { useRef, useState, useEffect, useCallback } from "react";
+
+import React, { useRef, useState, useEffect, useCallback, MouseEvent } from "react";
+
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
 import EditorTopbar from "@/app/components/EditorTopbar";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
 import TimelineRuler from "@/app/components/TimeLine";
 import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
+import { useSession } from "next-auth/react";
+import { TimelineSlider } from "@/app/components/MytimeLine";
+import { useCallback } from "react";
+import { toast } from "sonner";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { sanitizeFilename } from "@/app/lib/constants";
@@ -18,6 +23,9 @@ import { formatTime } from "@/app/lib/dateTimeUtils";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import axios from "axios";
+import { ErrorResponse } from "resend";
+
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -51,9 +59,16 @@ export default function EditorPage() {
   const [params, setParams] = useState<URLSearchParams | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+
+  // State to store loaded segments
+  const [loadedSegments, setLoadedSegments] = useState<
+    { start: string; end: string }[] | null
+  >(null);
   const [currentSegments, setCurrentSegments] = useState<
     { start: string; end: string }[]
   >([{ start: "00:00:00", end: "00:00:00" }]);
+
+  // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
     "none"
   );
@@ -64,22 +79,32 @@ export default function EditorPage() {
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
+
+  // Sidebar state
   const [sidebarTitle, setSidebarTitle] = useState("");
   const [sidebarDescription, setSidebarDescription] = useState("");
+
+  // Save Demo Modal state
   const [showSaveDemoModal, setShowSaveDemoModal] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
+
+  // Hamburger sidebar state for mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // --- Add currentTime and duration state for syncing ---
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  // Zoom effects state
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
   const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
     null
-  );
+  )
+  // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
-  const [inputEndTime, setInputEndTime] = useState("00:00:00");
-  const [timelineStartTime, setTimelineStartTime] = useState(0);
+  const [inputEndTime, setInputEndTime] = useState("00:00:00")
   const [timelineEndTime, setTimelineEndTime] = useState(0);
   const {
     videoUrl: recordedVideoUrl,
@@ -94,7 +119,11 @@ export default function EditorPage() {
   const { recordingDuration } = useScreenRecorder();
   const playerRef = useRef<ReactPlayer>(null!);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // State for browser bar controls
   const videoContainerRef = useRef<HTMLDivElement>(null);
+
+  // Helper functions for time conversion
 
   const formatTimeForInput = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -102,11 +131,14 @@ export default function EditorPage() {
     const secs = Math.floor(seconds % 60);
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
+  const [isPlaying, setIsPlaying] = useState(false);
+  // const [playing, setPlaying] = useState(true);
 
   useEffect(() => {
     setParams(new URLSearchParams(window.location.search));
   }, []);
 
+  // Handle URL parameters for editing existing demos
   useEffect(() => {
     if (!params) return;
 
@@ -120,7 +152,7 @@ export default function EditorPage() {
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
-
+      // Set timeline values if provided
       if (urlStartTime && urlEndTime) {
         const startSeconds = parseInt(urlStartTime);
         const endSeconds = parseInt(urlEndTime);
@@ -140,6 +172,7 @@ export default function EditorPage() {
         setSidebarDescription(urlDescription);
       }
 
+      // Load segments if provided
       if (urlSegments) {
         try {
           const segments = JSON.parse(urlSegments);
@@ -150,12 +183,13 @@ export default function EditorPage() {
               end: seg.end,
             })
           );
+          setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);
         } catch (error) {
           console.error("Error parsing segments from URL:", error);
         }
       }
-
+      // Load zoom effects if provided
       if (urlZoom) {
         try {
           const zoom = JSON.parse(urlZoom);
@@ -167,7 +201,8 @@ export default function EditorPage() {
       }
     }
   }, [params]);
-
+  
+  // User initials logic (copied from recorder page)
   const { data: session } = useSession();
   const initials = session?.user?.name
     ? session.user.name
@@ -184,14 +219,21 @@ export default function EditorPage() {
   const [backgroundType, setBackgroundType] = useState<string>("");
   const [customBackground, setCustomBackground] = useState<File | null>(null);
 
-  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+    // No-op setProgress to satisfy required callback
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const setProgress = (_value?: number) => {};
 
+  // Use recording duration if available, otherwise use detected duration
+  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;    
+
+  // Initialize timeline pointers when video duration is loaded (only once)
   useEffect(() => {
     if (duration > 0 && timelineEndTime === 0) {
-      const initialEndTime = duration;
       setTimelineStartTime(0);
-      setTimelineEndTime(initialEndTime);
       setInputStartTime(formatTimeForInput(0));
+      // Only initialize if not already set
+      const initialEndTime = duration; // Use the full video duration
+      setTimelineEndTime(initialEndTime);
       setInputEndTime(formatTimeForInput(initialEndTime));
       console.log("Initialized timeline pointers:", {
         start: 0,
@@ -200,11 +242,13 @@ export default function EditorPage() {
     }
   }, [duration, timelineEndTime]);
 
+  // Simple timeline change handler
   const handleTimelineChange = useCallback((start: number, end: number) => {
     setInputStartTime(formatTimeForInput(start));
     setInputEndTime(formatTimeForInput(end));
   }, []);
 
+  // Fullscreen logic
   const handleFullscreen = useCallback(() => {
     const el = videoContainerRef.current;
     console.log("Fullscreen button clicked", { el });
@@ -212,6 +256,7 @@ export default function EditorPage() {
       alert("Video container not found.");
       return;
     }
+   // Enter fullscreen
     if (
       !document.fullscreenElement &&
       !(
@@ -243,6 +288,7 @@ export default function EditorPage() {
         console.error("Fullscreen API not supported");
       }
     } else {
+// Exit fullscreen
       if (document.exitFullscreen) {
         document.exitFullscreen();
       } else if ("webkitExitFullscreen" in document) {
@@ -269,16 +315,19 @@ export default function EditorPage() {
   useEffect(() => {
     if (!params) return;
 
+// Only set recorded video URL if no URL parameter is provided
     if (recordedVideoUrl && !params.get("video")) {
       setVideoUrl(recordedVideoUrl);
     }
   }, [recordedVideoUrl, params]);
 
+// Use recording duration when available
   useEffect(() => {
     if (recordingDuration > 0 && videoUrl) {
       setDuration(recordingDuration);
     }
   }, [recordingDuration, videoUrl]);
+
 
   useEffect(() => {
     if (duration > 0 || recordingDuration > 0) return;
@@ -301,7 +350,19 @@ export default function EditorPage() {
         const tempVideo = document.createElement("video");
         tempVideo.src = URL.createObjectURL(blob);
         tempVideo.preload = "metadata";
-        await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve) => {})
+      }
+    }
+    },[]);
+  // Try to get duration from blob store when video is first loaded
+  useEffect(() => {
+    if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
+      const getDurationFromBlob = async () => {
+        try {
+          const tempVideo = document.createElement("video");
+          tempVideo.src = URL.createObjectURL(blob);
+          tempVideo.preload = "metadata";
+
           tempVideo.onloadedmetadata = () => {
             if (
               tempVideo.duration &&
@@ -311,22 +372,146 @@ export default function EditorPage() {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
-            resolve();
           };
+
           tempVideo.onerror = () => {
             URL.revokeObjectURL(tempVideo.src);
-            resolve();
           };
+
           tempVideo.load();
-        });
-        if (duration > 0) return;
-      }
-      // Try video URL
-      if (videoUrl) {
-        const tempVideo = document.createElement("video");
-        tempVideo.src = videoUrl;
-        tempVideo.preload = "metadata";
-        await new Promise<void>((resolve) => {
+        } catch (error) {
+          console.error("Error getting duration from blob:", error);
+        }
+      };
+
+      // Try immediately and with delays - FASTER
+      getDurationFromBlob();
+      const timers = [
+        setTimeout(getDurationFromBlob, 10),
+        setTimeout(getDurationFromBlob, 50),
+        setTimeout(getDurationFromBlob, 100),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, blob, recordingDuration]);
+
+  // Force metadata loading for ReactPlayer
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const forceMetadataLoad = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            player.preload = "metadata";
+            player.load();
+          }
+        }
+      };
+
+      // Try to force metadata loading immediately - FASTER
+      forceMetadataLoad();
+      const timers = [
+        setTimeout(forceMetadataLoad, 20),
+        setTimeout(forceMetadataLoad, 60),
+        setTimeout(forceMetadataLoad, 120),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Create hidden video element to force metadata loading
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const createHiddenVideo = () => {
+        const hiddenVideo = document.createElement("video");
+        hiddenVideo.style.display = "none";
+        hiddenVideo.preload = "metadata";
+        hiddenVideo.muted = true;
+        hiddenVideo.src = videoUrl;
+
+        hiddenVideo.onloadedmetadata = () => {
+          if (
+            hiddenVideo.duration &&
+            isFinite(hiddenVideo.duration) &&
+            hiddenVideo.duration > 0
+          ) {
+            setDuration(hiddenVideo.duration);
+          }
+          document.body.removeChild(hiddenVideo);
+        };
+
+        hiddenVideo.onerror = () => {
+          document.body.removeChild(hiddenVideo);
+        };
+
+        document.body.appendChild(hiddenVideo);
+        hiddenVideo.load();
+      };
+
+      // Try multiple times with different delays - FASTER
+      createHiddenVideo();
+      const timers = [
+        setTimeout(createHiddenVideo, 5),
+        setTimeout(createHiddenVideo, 30),
+        setTimeout(createHiddenVideo, 80),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Try to get duration by seeking to end
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationBySeeking = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            // Try to seek to a large time to trigger duration detection
+            player.currentTime = 999999;
+            setTimeout(() => {
+              if (
+                player.duration &&
+                isFinite(player.duration) &&
+                player.duration > 0
+              ) {
+                setDuration(player.duration);
+              }
+              // Reset to beginning
+              player.currentTime = 0;
+            }, 100);
+          }
+        }
+      };
+
+      // Try with delays - FASTER
+      const timers = [
+        setTimeout(getDurationBySeeking, 70),
+        setTimeout(getDurationBySeeking, 140),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Last resort: try to get duration from the video URL directly
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromUrl = async () => {
+        try {
+          const tempVideo = document.createElement("video");
+          tempVideo.src = videoUrl;
+
           tempVideo.onloadedmetadata = () => {
             if (
               tempVideo.duration &&
@@ -335,16 +520,210 @@ export default function EditorPage() {
             ) {
               setDuration(Math.floor(tempVideo.duration));
             }
-            resolve();
           };
-          tempVideo.onerror = () => resolve();
-          tempVideo.load();
-        });
-      }
-    };
 
-    tryGetDuration();
-  }, [videoUrl, blob, recordingDuration, duration]);
+          tempVideo.onerror = () => {
+            console.error("Error loading video from URL");
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from URL:", error);
+        }
+      };
+
+      const timers = [
+        setTimeout(getDurationFromUrl, 800),
+        setTimeout(getDurationFromUrl, 1800),
+        setTimeout(getDurationFromUrl, 2800),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Original duration detection from ReactPlayer
+  useEffect(() => {
+    if (recordingDuration === 0) {
+      const interval = setInterval(() => {
+        const video = playerRef.current?.getInternalPlayer();
+        if (
+          video &&
+          !isNaN(video.duration) &&
+          video.duration > 0 &&
+          duration === 0
+        ) {
+          setDuration(Math.floor(video.duration));
+          clearInterval(interval);
+        }
+      }, 500);
+
+      return () => clearInterval(interval);
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Additional duration detection for recorded videos
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromVideo = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const videoBlob = await response.blob();
+          const tempVideo = document.createElement("video");
+          tempVideo.src = URL.createObjectURL(videoBlob);
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setDuration(Math.floor(tempVideo.duration));
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          // Load the video to trigger metadata loading
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from video:", error);
+        }
+      };
+
+      // Try multiple times with different delays
+      const timers = [
+        setTimeout(getDurationFromVideo, 500),
+        setTimeout(getDurationFromVideo, 1000),
+        setTimeout(getDurationFromVideo, 2000),
+        setTimeout(getDurationFromVideo, 3000),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Additional method: try to get duration from the video element directly
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromVideoElement = () => {
+        const video = playerRef.current?.getInternalPlayer();
+        if (video) {
+          video.load();
+          video.addEventListener(
+            "loadedmetadata",
+            () => {
+              if (
+                video.duration &&
+                isFinite(video.duration) &&
+                video.duration > 0
+              ) {
+                setDuration(Math.floor(video.duration));
+              }
+            },
+            { once: true }
+          );
+        }
+      };
+
+      const timers = [
+        setTimeout(getDurationFromVideoElement, 600),
+        setTimeout(getDurationFromVideoElement, 1500),
+        setTimeout(getDurationFromVideoElement, 2500),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
+
+  // Force duration detection for recorded videos
+  useEffect(() => {
+    if (videoUrl && duration === 0 && recordingDuration === 0) {
+      const getDurationFromVideo = async () => {
+        try {
+          const response = await fetch(videoUrl);
+          const blob = await response.blob();
+          const tempVideo = document.createElement("video");
+          tempVideo.preload = "metadata";
+          tempVideo.muted = true;
+          tempVideo.src = URL.createObjectURL(blob);
+          tempVideo.onloadedmetadata = () => {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
+              setDuration(Math.floor(tempVideo.duration));
+            }
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.onerror = () => {
+            URL.revokeObjectURL(tempVideo.src);
+          };
+
+          tempVideo.load();
+        } catch (error) {
+          console.error("Error getting duration from video:", error);
+        }
+      };
+
+      // Try multiple times with different delays
+      getDurationFromVideo();
+      const timers = [
+        setTimeout(getDurationFromVideo, 50),
+        setTimeout(getDurationFromVideo, 150),
+        setTimeout(getDurationFromVideo, 300),
+      ];
+
+      // Try to get duration by seeking to end of video
+      const getDurationBySeeking = () => {
+        if (playerRef.current) {
+          const player = playerRef.current.getInternalPlayer();
+          if (player) {
+            const wasPlaying = !player.paused;
+            const wasTime = player.currentTime;
+
+            // Try to seek to a large number to trigger duration detection
+            player.currentTime = 999999;
+
+            setTimeout(() => {
+              if (
+                player.duration &&
+                isFinite(player.duration) &&
+                player.duration > 0
+              ) {
+                setDuration(Math.floor(player.duration));
+              }
+              // Restore original state
+              player.currentTime = wasTime;
+              if (wasPlaying) {
+                player.play();
+              }
+            }, 100);
+          }
+        }
+      };
+
+      const seekTimers = [
+        setTimeout(getDurationBySeeking, 70),
+        setTimeout(getDurationBySeeking, 140),
+      ];
+
+      return () => {
+        timers.forEach((timer) => clearTimeout(timer));
+        seekTimers.forEach((timer) => clearTimeout(timer));
+      };
+    }
+  }, [videoUrl, duration, recordingDuration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -396,19 +775,14 @@ export default function EditorPage() {
     draw();
   }, [overlays]);
 
-  const handleMouseDown = (
-    e: React.MouseEvent<HTMLCanvasElement, MouseEvent>
-  ) => {
+const handleMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setStartPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     setDrawing(true);
   };
 
-  const handleMouseUp = (
-    e: React.MouseEvent<HTMLCanvasElement, MouseEvent>
-  ) => {
+const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
     if (!drawing || !startPos) return;
-
     const rect = e.currentTarget.getBoundingClientRect();
     const endX = e.clientX - rect.left;
     const endY = e.clientY - rect.top;
@@ -461,6 +835,7 @@ export default function EditorPage() {
     if (saved) setOverlays(JSON.parse(saved));
   };
 
+  // Save Demo handler
   const handleSaveDemo = async (data: {
     title: string;
     description: string;
@@ -477,47 +852,61 @@ export default function EditorPage() {
       const startTime = inputStartTime;
       const endTime = inputEndTime;
 
+ // First, upload video to Cloudinary if it's a blob URL
       let cloudinaryVideoUrl = videoUrl;
       if (videoUrl.startsWith("blob:")) {
         try {
+          // Get the video blob
           const response = await fetch(videoUrl);
           if (!response.ok) {
             throw new Error("Failed to fetch video blob");
           }
           const videoBlob = await response.blob();
+          // Create FormData for Cloudinary upload
+          const CLOUDINARY_CLOUD_NAME =
+            process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+          const CLOUDINARY_UPLOAD_PRESET =
+            process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+          // const CLOUDINARY_API_BASE =
+          //   process.env.NEXT_PUBLIC_CLOUDINARY_API_BASE!;
 
+          // const CLOUDINARY_API_URL = `/v1_1https://api.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+          // const CLOUDINARY_API_URL = `${CLOUDINARY_API_BASE}/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
           const cloudFormData = new FormData();
           cloudFormData.append("file", videoBlob, "video.webm");
-          cloudFormData.append("upload_preset", "upload_preset_1");
+          cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+          const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
 
           console.log("Uploading to Cloudinary...");
 
-          const cloudRes = await fetch(
-            "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-            {
-              method: "POST",
-              body: cloudFormData,
+          // Upload to Cloudinary
+          // const cloudRes = await fetch(
+          //   "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+          //   {
+          //     method: "POST",
+          //     body: cloudFormData,
+          //   }
+          // );
+
+          try {
+            const cloudRes = await axios.post(
+              CLOUDINARY_API_URL,
+              cloudFormData
+            );
+            console.log("Upload success:", cloudRes.data);
+            cloudinaryVideoUrl = cloudRes.data.secure_url;
+          } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+              console.log("cloudinary failed... ... ");
+              console.error("Cloudinary upload failed:");
+              console.error("Status:", error.response?.status);
+              console.error("Status Text:", error.response?.statusText);
+              console.error("Response Data:", error.response?.data);
+              console.error("Headers:", error.response?.headers);
+            } else {
+              console.error("Unexpected error:", error);
             }
-          );
-
-          if (!cloudRes.ok) {
-            const cloudError = await cloudRes.text();
-            throw new Error(
-              `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-            );
           }
-
-          const cloudData = await cloudRes.json();
-          console.log("Cloudinary response:", cloudData);
-
-          if (!cloudData.secure_url) {
-            throw new Error(
-              "Cloudinary upload failed - no secure_url returned"
-            );
-          }
-
-          cloudinaryVideoUrl = cloudData.secure_url;
-          console.log("Cloudinary URL:", cloudinaryVideoUrl);
         } catch (cloudError) {
           console.error("Error uploading to Cloudinary:", cloudError);
           toast.dismiss();
@@ -526,6 +915,7 @@ export default function EditorPage() {
         }
       }
 
+// Use current segments from the timeline
       const segmentsToSave =
         currentSegments.length > 0
           ? currentSegments
@@ -536,39 +926,43 @@ export default function EditorPage() {
               },
             ];
 
+// Call the API to save demo with editing object
       const editingToSave = {
         segments: segmentsToSave,
         zoom: zoomEffects,
       };
-
-      const response = await fetch("/api/demo", {
-        method: "POST",
-        body: JSON.stringify({
+      try {
+        const response = await axios.post("/api/demo", {
           title: data.title,
           description: data.description,
           videoUrl: cloudinaryVideoUrl,
-          startTime,
-          endTime,
+          // startTime,
+          // endTime,
           editing: editingToSave,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save demo");
+        });
+        console.log("Demo saved:", response.data);
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+          if (error.response) {
+            console.error(
+              `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
+            );
+          } else {
+            console.error("Axios error:", error.message);
+          }
+        } else if (error instanceof Error) {
+          console.error("Unexpected error:", error.message);
+        } else {
+          console.error("Unknown error:", error);
+        }
       }
 
-      const responseData = await response.json();
-
+      // Update the sidebar state with the saved data
       setSidebarTitle(data.title);
       setSidebarDescription(data.description);
-
       toast.dismiss();
       toast.success("Demo saved successfully!");
-      console.log("Demo saved:", responseData);
-
+// Close the modal
       setShowSaveDemoModal(false);
     } catch (error) {
       console.error("Error saving demo:", error);
@@ -579,6 +973,74 @@ export default function EditorPage() {
     }
   };
 
+  const videoTrimHandler = async (
+    segments: { start: string; end: string }[]
+  ) => {
+    try {
+      setProgress(1);
+      toast.loading("Uploading and trimming video...");
+
+      // Check if videoUrl exists
+      if (!videoUrl) {
+        toast.error("No video available to trim");
+        return;
+      }
+
+      console.log("Starting trim process...");
+      console.log("Video URL:", videoUrl);
+      console.log("Segments:", segments);
+
+      // Get the current video blob
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video: ${response.status}`);
+      }
+      const videoBlob = await response.blob();
+      console.log("Video blob size:", videoBlob.size);
+      // 1. Validate segments
+      if (!segments || segments.length === 0) {
+        throw new Error("No segments provided");
+      }
+
+      // 2. Prepare multipart form data and send to backend
+      console.log("Sending video blob to backend");
+      const formData = new FormData();
+      formData.append("video", videoBlob, "video.mp4");
+      formData.append("segments", JSON.stringify(segments));
+
+      const trimRes = await axios.post(
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
+        formData,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
+      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
+
+      if (trimmedVideoUrl) {
+        toast.dismiss();
+        toast.success("Video trimmed successfully!");
+        setVideoUrl(trimmedVideoUrl);
+      } else {
+        toast.error("Failed to trim video - no trimmedUrl returned");
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError<ErrorResponse>(err)) {
+        const message = err.response?.data?.message || "Unexpected error";
+        toast.dismiss();
+        toast.error(`Error processing video: ${message}`);
+      } else {
+        toast.dismiss();
+        toast.error("Something went wrong");
+      }
+    } finally {
+      setProgress(0);
+    }
+  };
+
+  // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
     console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
@@ -597,10 +1059,15 @@ export default function EditorPage() {
     console.log("Total zoom effects:", [...zoomEffects, effect].length);
   };
 
+  const onZoomEffectRemove = (id: string) => {
+    setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
+  };
+                  
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
   };
 
+// Check for active zoom effects based on current time
   useEffect(() => {
     const activeEffect = zoomEffects.find(
       (effect) =>
@@ -656,30 +1123,24 @@ export default function EditorPage() {
               toast.error("No video available to export");
               return;
             }
-
-            if (!sidebarTitle?.trim()) {
-              toast.error("Please enter a title for the video");
-              return;
-            }
-
             try {
               toast.loading("Exporting video to Cloudinary...");
-
+              // First, upload video to Cloudinary if it's a blob URL
               let cloudinaryVideoUrl = videoUrl;
               if (videoUrl.startsWith("blob:")) {
                 try {
+                  // Get the video blob
                   const response = await fetch(videoUrl);
                   if (!response.ok) {
                     throw new Error("Failed to fetch video blob");
                   }
                   const videoBlob = await response.blob();
-
+// Create FormData for Cloudinary upload
                   const cloudFormData = new FormData();
                   cloudFormData.append("file", videoBlob, "video.webm");
                   cloudFormData.append("upload_preset", "upload_preset_1");
-
                   console.log("Uploading to Cloudinary...");
-
+// Upload to Cloudinary
                   const cloudRes = await fetch(
                     "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
                     {
@@ -706,6 +1167,7 @@ export default function EditorPage() {
 
                   cloudinaryVideoUrl = cloudData.secure_url;
                   console.log("Cloudinary URL:", cloudinaryVideoUrl);
+toast.dismiss();
                 } catch (cloudError) {
                   console.error("Error uploading to Cloudinary:", cloudError);
                   toast.dismiss();
@@ -713,11 +1175,12 @@ export default function EditorPage() {
                   return;
                 }
               }
-
+// Create preview URL with the Cloudinary URL
               const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
               toast.dismiss();
               toast.success("Video exported successfully!");
+// Navigate to the preview page
               router.push(previewUrl);
             } catch (error) {
               console.error("Export error:", error);
@@ -747,6 +1210,7 @@ export default function EditorPage() {
               className="fixed inset-0 bg-black bg-opacity-40"
               onClick={() => setIsSidebarOpen(false)}
             />
+{/* Sidebar Drawer */}
             <div className="relative w-4/5 max-w-xs h-full bg-white shadow-lg z-50 animate-slide-in-left">
               <button
                 className="absolute top-4 right-4 text-[#7C5CFC]"
@@ -780,24 +1244,20 @@ export default function EditorPage() {
                     toast.error("No video available to export");
                     return;
                   }
-
-                  if (!sidebarTitle?.trim()) {
-                    toast.error("Please enter a title for the video");
-                    return;
-                  }
-
                   try {
                     toast.loading("Exporting video to Cloudinary...");
 
+                    // First, upload video to Cloudinary if it's a blob URL
                     let cloudinaryVideoUrl = videoUrl;
                     if (videoUrl.startsWith("blob:")) {
                       try {
+                        // Get the video blob
                         const response = await fetch(videoUrl);
                         if (!response.ok) {
                           throw new Error("Failed to fetch video blob");
                         }
                         const videoBlob = await response.blob();
-
+// Create FormData for Cloudinary upload
                         const cloudFormData = new FormData();
                         cloudFormData.append("file", videoBlob, "video.webm");
                         cloudFormData.append(
@@ -806,7 +1266,7 @@ export default function EditorPage() {
                         );
 
                         console.log("Uploading to Cloudinary...");
-
+// Upload to Cloudinary
                         const cloudRes = await fetch(
                           "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
                           {
@@ -843,11 +1303,12 @@ export default function EditorPage() {
                         return;
                       }
                     }
-
+// Create preview URL with the Cloudinary URL
                     const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
                     toast.dismiss();
                     toast.success("Video exported successfully!");
+// Navigate to the preview page
                     router.push(previewUrl);
                   } catch (error) {
                     console.error("Export error:", error);
@@ -876,8 +1337,15 @@ export default function EditorPage() {
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 sm:gap-4 mb-6 sm:mb-6">
-            <div className="flex justify-end gap-2 sm:gap-4 mt-2 sm:mt-0">
+          {/* Restore action buttons row */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">
+            <button
+              onClick={() => router.push("/recorder")}
+              className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow-sm hover:bg-[#5B43C6] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit"
+            >
+              <span className="text-xl"></span> Back to Recorder
+            </button>
+            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0">
               <button
                 className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={() => {
@@ -888,6 +1356,7 @@ export default function EditorPage() {
               </button>
             </div>
           </div>
+{/* Title and Description Display */}
           {(sidebarTitle || sidebarDescription) && (
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200">
               {sidebarTitle && (
@@ -1212,11 +1681,21 @@ export default function EditorPage() {
         currentTime={currentTime}
         duration={duration}
         onSeek={(time) => {
+          // Force immediate video frame update
           if (playerRef.current) {
-            playerRef.current.seekTo(time);
+            const player = playerRef.current.getInternalPlayer();
+            if (player) {
+              // Set time directly and force a frame update
+              player.currentTime = time;
+              // Force the video to update by triggering a seek event
+              player.dispatchEvent(new Event("seeking"));
+              playerRef.current.seekTo(time, "seconds");
+            }
           }
         }}
       />
+
+      {/* Save Demo Modal */}
       <SaveDemoModal
         isOpen={showSaveDemoModal}
         onClose={() => setShowSaveDemoModal(false)}
@@ -1228,7 +1707,7 @@ export default function EditorPage() {
     </main>
   );
 }
-
+// Custom video controls component
 function CustomVideoControls({
   playerRef,
   duration,
@@ -1237,6 +1716,8 @@ function CustomVideoControls({
   recordingDuration,
   setPlaying,
   playing,
+  isPlaying,
+  setIsPlaying,
 }: {
   playerRef: React.RefObject<ReactPlayer>;
   duration: number;
@@ -1245,6 +1726,8 @@ function CustomVideoControls({
   recordingDuration: number;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
+  isPlaying: boolean;
+  setIsPlaying: (p: boolean) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
@@ -1265,13 +1748,31 @@ function CustomVideoControls({
     setDragging(true);
     setDragValue(currentTime);
   };
+                                
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDragValue(Number(e.target.value));
+    const value = Number(e.target.value);
+    setDragValue(value);
+    if (playerRef.current) {
+      const player = playerRef.current.getInternalPlayer();
+      if (player) {
+        player.currentTime = value;
+        player.dispatchEvent(new Event("seeking"));
+      }
+    }
   };
+
   const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
     const value = Number((e.target as HTMLInputElement).value);
     setCurrentTime(value);
-    playerRef.current?.seekTo(value, "seconds");
+
+    if (playerRef.current) {
+      const player = playerRef.current.getInternalPlayer();
+      if (player) {
+        player.currentTime = value;
+        player.dispatchEvent(new Event("seeking"));
+        playerRef.current.seekTo(value, "seconds");
+      }
+    }
     setDragging(false);
   };
 
@@ -1280,6 +1781,7 @@ function CustomVideoControls({
   return (
     <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
       <div className="flex items-center gap-3">
+{/* ✅ Controlled Play/Pause Button */}
         <button
           onClick={handlePlayPause}
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"

@@ -210,7 +210,11 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       <div className="relative">
         <button
           className="w-full bg-[#A594F9] hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
-          onClick={() => setExportMenuOpen((v) => !v)}
+          onClick={() => {
+            setExportMenuOpen((v) => !v);
+            onExportWebM(); // 👈 call it here
+          }}
+          // onClick={onExportWebM()}
         >
           Export Video
         </button>

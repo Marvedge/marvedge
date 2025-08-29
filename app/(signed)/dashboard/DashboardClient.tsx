@@ -13,7 +13,7 @@ const getInitials = (name: string | undefined): string => {
 };
 
 const DashboardPage = () => {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [displayedText, setDisplayedText] = useState("");
@@ -43,6 +43,14 @@ const DashboardPage = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+  
+  if (status === "loading") {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
   const initials = getInitials(
     (session?.user?.name as string) || (session?.user?.email as string)
   );
@@ -172,5 +180,6 @@ const DashboardPage = () => {
     </div>
   );
 };
+
 
 export default DashboardPage;
