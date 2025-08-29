@@ -79,14 +79,29 @@ export const useScreenRecorder = () => {
         video: true,
         audio: true,
       });
+
       screenStreamRef.current = screen;
       setScreenStream(screen);
       toast.success("Screen sharing started!");
-      // Start recording automatically after screen is selected
+
       await startRecording();
-    } catch (err) {
-      console.error("Failed to get screen stream:", err);
-      toast.error("Screen share failed. Please try again.");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        if (
+          err.name === "NotAllowedError" ||
+          err.name === "PermissionDeniedError"
+        ) {
+          // User clicked "Cancel" or denied permissions
+          console.log("User denied screen share.");
+          // toast.error("Screen sharing was denied. Please allow it to continue.");
+        } else {
+          console.warn("Screen share failed:", err);
+          toast.error("Screen share failed. Please try again.");
+        }
+      } else {
+        console.warn("Screen share failed with unknown error:", err);
+        toast.error("Screen share failed. Please try again.");
+      }
     }
   };
 

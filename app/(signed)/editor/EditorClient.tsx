@@ -23,7 +23,7 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import axios from "axios";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
-import { ErrorResponse } from "@/app/interfaces/IErrorResponse";
+import { ErrorResponse } from "resend";
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -835,14 +835,15 @@ export default function EditorPage() {
             process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
           const CLOUDINARY_UPLOAD_PRESET =
             process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-          const CLOUDINARY_API_BASE =
-            process.env.NEXT_PUBLIC_CLOUDINARY_API_BASE!;
+          // const CLOUDINARY_API_BASE =
+          //   process.env.NEXT_PUBLIC_CLOUDINARY_API_BASE!;
 
           // const CLOUDINARY_API_URL = `/v1_1https://api.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-          const CLOUDINARY_API_URL = `${CLOUDINARY_API_BASE}/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+          // const CLOUDINARY_API_URL = `${CLOUDINARY_API_BASE}/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
           const cloudFormData = new FormData();
           cloudFormData.append("file", videoBlob, "video.webm");
           cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+          const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
 
           console.log("Uploading to Cloudinary...");
 
@@ -858,17 +859,13 @@ export default function EditorPage() {
           try {
             const cloudRes = await axios.post(
               CLOUDINARY_API_URL,
-              cloudFormData,
-              {
-                headers: {
-                  "Content-Type": "multipart/form-data",
-                },
-              }
+              cloudFormData
             );
             console.log("Upload success:", cloudRes.data);
             cloudinaryVideoUrl = cloudRes.data.secure_url;
           } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
+              console.log("cloudinary failed... ... ");
               console.error("Cloudinary upload failed:");
               console.error("Status:", error.response?.status);
               console.error("Status Text:", error.response?.statusText);
@@ -1002,7 +999,7 @@ export default function EditorPage() {
       }
     } catch (err: unknown) {
       if (axios.isAxiosError<ErrorResponse>(err)) {
-        const message = err.response?.data?.error || "Unexpected error";
+        const message = err.response?.data?.message || "Unexpected error";
         toast.dismiss();
         toast.error(`Error processing video: ${message}`);
       } else {
