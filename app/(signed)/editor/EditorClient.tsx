@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useCallback, MouseEvent } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  MouseEvent,
+} from "react";
 
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
@@ -12,7 +18,7 @@ import { X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { TimelineSlider } from "@/app/components/MytimeLine";
-import { useCallback } from "react";
+// import { useCallback } from "react";
 import { toast } from "sonner";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
@@ -25,7 +31,6 @@ import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
 import axios from "axios";
 import { ErrorResponse } from "resend";
-
 
 interface RectOverlay {
   type: "blur" | "rect";
@@ -59,6 +64,7 @@ export default function EditorPage() {
   const [params, setParams] = useState<URLSearchParams | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [timelineStartTime, setTimelineStartTime] = useState();
 
   // State to store loaded segments
   const [loadedSegments, setLoadedSegments] = useState<
@@ -101,10 +107,10 @@ export default function EditorPage() {
   const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
   const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
     null
-  )
+  );
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
-  const [inputEndTime, setInputEndTime] = useState("00:00:00")
+  const [inputEndTime, setInputEndTime] = useState("00:00:00");
   const [timelineEndTime, setTimelineEndTime] = useState(0);
   const {
     videoUrl: recordedVideoUrl,
@@ -201,7 +207,7 @@ export default function EditorPage() {
       }
     }
   }, [params]);
-  
+
   // User initials logic (copied from recorder page)
   const { data: session } = useSession();
   const initials = session?.user?.name
@@ -219,12 +225,12 @@ export default function EditorPage() {
   const [backgroundType, setBackgroundType] = useState<string>("");
   const [customBackground, setCustomBackground] = useState<File | null>(null);
 
-    // No-op setProgress to satisfy required callback
+  // No-op setProgress to satisfy required callback
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const setProgress = (_value?: number) => {};
 
   // Use recording duration if available, otherwise use detected duration
-  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;    
+  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
   // Initialize timeline pointers when video duration is loaded (only once)
   useEffect(() => {
@@ -256,7 +262,7 @@ export default function EditorPage() {
       alert("Video container not found.");
       return;
     }
-   // Enter fullscreen
+    // Enter fullscreen
     if (
       !document.fullscreenElement &&
       !(
@@ -288,7 +294,7 @@ export default function EditorPage() {
         console.error("Fullscreen API not supported");
       }
     } else {
-// Exit fullscreen
+      // Exit fullscreen
       if (document.exitFullscreen) {
         document.exitFullscreen();
       } else if ("webkitExitFullscreen" in document) {
@@ -315,19 +321,18 @@ export default function EditorPage() {
   useEffect(() => {
     if (!params) return;
 
-// Only set recorded video URL if no URL parameter is provided
+    // Only set recorded video URL if no URL parameter is provided
     if (recordedVideoUrl && !params.get("video")) {
       setVideoUrl(recordedVideoUrl);
     }
   }, [recordedVideoUrl, params]);
 
-// Use recording duration when available
+  // Use recording duration when available
   useEffect(() => {
     if (recordingDuration > 0 && videoUrl) {
       setDuration(recordingDuration);
     }
   }, [recordingDuration, videoUrl]);
-
 
   useEffect(() => {
     if (duration > 0 || recordingDuration > 0) return;
@@ -350,10 +355,10 @@ export default function EditorPage() {
         const tempVideo = document.createElement("video");
         tempVideo.src = URL.createObjectURL(blob);
         tempVideo.preload = "metadata";
-        await new Promise<void>((resolve) => {})
+        await new Promise<void>((resolve) => {});
       }
-    }
-    },[]);
+    };
+  }, []);
   // Try to get duration from blob store when video is first loaded
   useEffect(() => {
     if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
@@ -775,13 +780,13 @@ export default function EditorPage() {
     draw();
   }, [overlays]);
 
-const handleMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setStartPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     setDrawing(true);
   };
 
-const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
     if (!drawing || !startPos) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const endX = e.clientX - rect.left;
@@ -852,7 +857,7 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
       const startTime = inputStartTime;
       const endTime = inputEndTime;
 
- // First, upload video to Cloudinary if it's a blob URL
+      // First, upload video to Cloudinary if it's a blob URL
       let cloudinaryVideoUrl = videoUrl;
       if (videoUrl.startsWith("blob:")) {
         try {
@@ -915,7 +920,7 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
         }
       }
 
-// Use current segments from the timeline
+      // Use current segments from the timeline
       const segmentsToSave =
         currentSegments.length > 0
           ? currentSegments
@@ -926,7 +931,7 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
               },
             ];
 
-// Call the API to save demo with editing object
+      // Call the API to save demo with editing object
       const editingToSave = {
         segments: segmentsToSave,
         zoom: zoomEffects,
@@ -962,7 +967,7 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
       setSidebarDescription(data.description);
       toast.dismiss();
       toast.success("Demo saved successfully!");
-// Close the modal
+      // Close the modal
       setShowSaveDemoModal(false);
     } catch (error) {
       console.error("Error saving demo:", error);
@@ -1062,12 +1067,12 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
   const onZoomEffectRemove = (id: string) => {
     setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
   };
-                  
+
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
   };
 
-// Check for active zoom effects based on current time
+  // Check for active zoom effects based on current time
   useEffect(() => {
     const activeEffect = zoomEffects.find(
       (effect) =>
@@ -1135,12 +1140,12 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
                     throw new Error("Failed to fetch video blob");
                   }
                   const videoBlob = await response.blob();
-// Create FormData for Cloudinary upload
+                  // Create FormData for Cloudinary upload
                   const cloudFormData = new FormData();
                   cloudFormData.append("file", videoBlob, "video.webm");
                   cloudFormData.append("upload_preset", "upload_preset_1");
                   console.log("Uploading to Cloudinary...");
-// Upload to Cloudinary
+                  // Upload to Cloudinary
                   const cloudRes = await fetch(
                     "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
                     {
@@ -1167,7 +1172,7 @@ const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
 
                   cloudinaryVideoUrl = cloudData.secure_url;
                   console.log("Cloudinary URL:", cloudinaryVideoUrl);
-toast.dismiss();
+                  toast.dismiss();
                 } catch (cloudError) {
                   console.error("Error uploading to Cloudinary:", cloudError);
                   toast.dismiss();
@@ -1175,12 +1180,12 @@ toast.dismiss();
                   return;
                 }
               }
-// Create preview URL with the Cloudinary URL
+              // Create preview URL with the Cloudinary URL
               const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
               toast.dismiss();
               toast.success("Video exported successfully!");
-// Navigate to the preview page
+              // Navigate to the preview page
               router.push(previewUrl);
             } catch (error) {
               console.error("Export error:", error);
@@ -1210,7 +1215,7 @@ toast.dismiss();
               className="fixed inset-0 bg-black bg-opacity-40"
               onClick={() => setIsSidebarOpen(false)}
             />
-{/* Sidebar Drawer */}
+            {/* Sidebar Drawer */}
             <div className="relative w-4/5 max-w-xs h-full bg-white shadow-lg z-50 animate-slide-in-left">
               <button
                 className="absolute top-4 right-4 text-[#7C5CFC]"
@@ -1257,7 +1262,7 @@ toast.dismiss();
                           throw new Error("Failed to fetch video blob");
                         }
                         const videoBlob = await response.blob();
-// Create FormData for Cloudinary upload
+                        // Create FormData for Cloudinary upload
                         const cloudFormData = new FormData();
                         cloudFormData.append("file", videoBlob, "video.webm");
                         cloudFormData.append(
@@ -1266,7 +1271,7 @@ toast.dismiss();
                         );
 
                         console.log("Uploading to Cloudinary...");
-// Upload to Cloudinary
+                        // Upload to Cloudinary
                         const cloudRes = await fetch(
                           "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
                           {
@@ -1303,12 +1308,12 @@ toast.dismiss();
                         return;
                       }
                     }
-// Create preview URL with the Cloudinary URL
+                    // Create preview URL with the Cloudinary URL
                     const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
                     toast.dismiss();
                     toast.success("Video exported successfully!");
-// Navigate to the preview page
+                    // Navigate to the preview page
                     router.push(previewUrl);
                   } catch (error) {
                     console.error("Export error:", error);
@@ -1356,7 +1361,7 @@ toast.dismiss();
               </button>
             </div>
           </div>
-{/* Title and Description Display */}
+          {/* Title and Description Display */}
           {(sidebarTitle || sidebarDescription) && (
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200">
               {sidebarTitle && (
@@ -1748,7 +1753,7 @@ function CustomVideoControls({
     setDragging(true);
     setDragValue(currentTime);
   };
-                                
+
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(e.target.value);
     setDragValue(value);
@@ -1781,7 +1786,7 @@ function CustomVideoControls({
   return (
     <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
       <div className="flex items-center gap-3">
-{/* ✅ Controlled Play/Pause Button */}
+        {/* ✅ Controlled Play/Pause Button */}
         <button
           onClick={handlePlayPause}
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
