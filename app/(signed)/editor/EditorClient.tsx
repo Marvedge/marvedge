@@ -72,7 +72,7 @@ export default function EditorPage() {
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
     { start: string; end: string }[]
-  >([{ start: "00:00:00", end: "00:00:00" }]);
+  >([]);
 
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
@@ -117,7 +117,7 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
+    // trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -1001,6 +1001,107 @@ export default function EditorPage() {
     }
   };
 
+  // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
+  function normalizeTimeFormat(time: string | number): string {
+    let totalSeconds: number;
+
+    if (typeof time === "number") {
+      totalSeconds = time;
+    } else if (time.includes(":")) {
+      // Handle "mm:ss" or "hh:mm:ss"
+      const parts = time.split(":").map(Number);
+      if (parts.length === 2) {
+        totalSeconds = parts[0] * 60 + parts[1];
+      } else if (parts.length === 3) {
+        totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else {
+        throw new Error("Invalid time format: " + time);
+      }
+    } else {
+      totalSeconds = Number(time);
+    }
+
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
+      2,
+      "0"
+    );
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
+  const videoTrimHandler = async (
+    segments: { start: string; end: string }[]
+  ) => {
+    try {
+      setProgress(1);
+      toast.loading("Uploading and trimming video...");
+
+      // Check if videoUrl exists
+      if (!videoUrl) {
+        toast.error("No video available to trim");
+        return;
+      }
+      const normalizedSegments = segments.map((seg) => ({
+        start: normalizeTimeFormat(seg.start),
+        end: normalizeTimeFormat(seg.end),
+      }));
+
+      console.log("Starting trim process...");
+      console.log("Video URL:", videoUrl);
+      console.log("Segments:", segments);
+
+      // Get the current video blob
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video: ${response.status}`);
+      }
+      const videoBlob = await response.blob();
+      console.log("Video blob size:", videoBlob.size);
+      // 1. Validate segments
+      if (!segments || segments.length === 0) {
+        throw new Error("No segments provided");
+      }
+
+      // 2. Prepare multipart form data and send to backend
+      console.log("Sending video blob to backend");
+      const formData = new FormData();
+      formData.append("segments", JSON.stringify(normalizedSegments));
+      formData.append("video", videoBlob, "video.mp4");
+      // formData.append("segments", JSON.stringify(segments));
+
+      const trimRes = await axios.post(
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
+        formData,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
+      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
+
+      if (trimmedVideoUrl) {
+        toast.dismiss();
+        toast.success("Video trimmed successfully!");
+        setVideoUrl(trimmedVideoUrl);
+      } else {
+        toast.error("Failed to trim video - no trimmedUrl returned");
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const message = err.response?.data?.message || "Unexpected error";
+        toast.dismiss();
+        toast.error(`Error processing video: ${message}`);
+      } else {
+        toast.dismiss();
+        toast.error("Something went wrong");
+      }
+    } finally {
+      setProgress(0);
+    }
+  };
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
@@ -1599,28 +1700,29 @@ export default function EditorPage() {
                   setTimelineEndTime(value);
                   handleTimelineChange(timelineStartTime, value);
                 }}
-                onTrim={async (segments) => {
-                  toast.loading("Trimming and merging segments...");
-                  await trimApplier(
-                    segments,
-                    undefined,
-                    (success: boolean) => {
-                      toast.dismiss();
-                      if (success) {
-                        toast.success("Video trimmed and merged successfully!");
-                        setCurrentSegments(segments);
-                      } else {
-                        toast.error("Failed to trim/merge video.");
-                      }
-                    },
-                    undefined,
-                    zoomEffects
-                  );
-                }}
+                // onTrim={async (segments) => {
+                //   toast.loading("Trimming and merging segments...");
+                //   await trimApplier(
+                //     segments,
+                //     undefined,
+                //     (success: boolean) => {
+                //       toast.dismiss();
+                //       if (success) {
+                //         toast.success("Video trimmed and merged successfully!");
+                //         setCurrentSegments(segments);
+                //       } else {
+                //         toast.error("Failed to trim/merge video.");
+                //       }
+                //     },
+                //     undefined,
+                //     zoomEffects
+                //   );
+                // }}
                 processing={processing}
                 onResetVideo={resetVideo}
                 onZoomEffectCreate={onZoomEffectCreate}
                 initialSegments={currentSegments}
+                onTrim={videoTrimHandler}
               />
             ) : (
               <div className="w-full max-w-6xl mx-auto p-8">
