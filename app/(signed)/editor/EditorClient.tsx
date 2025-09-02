@@ -73,7 +73,7 @@ export default function EditorPage() {
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
     { start: string; end: string }[]
-  >([{ start: "00:00:00", end: "00:00:00" }]);
+  >([]);
 
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
@@ -118,7 +118,7 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
+    // trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -1683,28 +1683,29 @@ export default function EditorPage() {
                   setTimelineEndTime(value);
                   handleTimelineChange(timelineStartTime, value);
                 }}
-                onTrim={async (segments) => {
-                  toast.loading("Trimming and merging segments...");
-                  await trimApplier(
-                    segments,
-                    undefined,
-                    (success: boolean) => {
-                      toast.dismiss();
-                      if (success) {
-                        toast.success("Video trimmed and merged successfully!");
-                        setCurrentSegments(segments);
-                      } else {
-                        toast.error("Failed to trim/merge video.");
-                      }
-                    },
-                    undefined,
-                    zoomEffects
-                  );
-                }}
+                // onTrim={async (segments) => {
+                //   toast.loading("Trimming and merging segments...");
+                //   await trimApplier(
+                //     segments,
+                //     undefined,
+                //     (success: boolean) => {
+                //       toast.dismiss();
+                //       if (success) {
+                //         toast.success("Video trimmed and merged successfully!");
+                //         setCurrentSegments(segments);
+                //       } else {
+                //         toast.error("Failed to trim/merge video.");
+                //       }
+                //     },
+                //     undefined,
+                //     zoomEffects
+                //   );
+                // }}
                 processing={processing}
                 onResetVideo={resetVideo}
                 onZoomEffectCreate={onZoomEffectCreate}
                 initialSegments={currentSegments}
+                onTrim={videoTrimHandler}
               />
             ) : (
               <div className="w-full max-w-6xl mx-auto p-8">
