@@ -117,7 +117,7 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
+    // trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -1090,7 +1090,7 @@ export default function EditorPage() {
         toast.error("Failed to trim video - no trimmedUrl returned");
       }
     } catch (err: unknown) {
-      if (axios.isAxiosError<ErrorResponse>(err)) {
+      if (axios.isAxiosError(err)) {
         const message = err.response?.data?.message || "Unexpected error";
         toast.dismiss();
         toast.error(`Error processing video: ${message}`);
@@ -1700,24 +1700,24 @@ export default function EditorPage() {
                   setTimelineEndTime(value);
                   handleTimelineChange(timelineStartTime, value);
                 }}
-                onTrim={async (segments) => {
-                  toast.loading("Trimming and merging segments...");
-                  await trimApplier(
-                    segments,
-                    undefined,
-                    (success: boolean) => {
-                      toast.dismiss();
-                      if (success) {
-                        toast.success("Video trimmed and merged successfully!");
-                        setCurrentSegments(segments);
-                      } else {
-                        toast.error("Failed to trim/merge video.");
-                      }
-                    },
-                    undefined,
-                    zoomEffects
-                  );
-                }}
+                // onTrim={async (segments) => {
+                //   toast.loading("Trimming and merging segments...");
+                //   await trimApplier(
+                //     segments,
+                //     undefined,
+                //     (success: boolean) => {
+                //       toast.dismiss();
+                //       if (success) {
+                //         toast.success("Video trimmed and merged successfully!");
+                //         setCurrentSegments(segments);
+                //       } else {
+                //         toast.error("Failed to trim/merge video.");
+                //       }
+                //     },
+                //     undefined,
+                //     zoomEffects
+                //   );
+                // }}
                 processing={processing}
                 onResetVideo={resetVideo}
                 onZoomEffectCreate={onZoomEffectCreate}
