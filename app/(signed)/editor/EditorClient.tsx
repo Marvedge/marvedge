@@ -72,7 +72,7 @@ export default function EditorPage() {
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
     { start: string; end: string }[]
-  >([{ start: "00:00:00", end: "00:00:00" }]);
+  >([]);
 
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
