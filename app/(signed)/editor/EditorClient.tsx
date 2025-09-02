@@ -1001,6 +1001,36 @@ export default function EditorPage() {
     }
   };
 
+  // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
+  function normalizeTimeFormat(time: string | number): string {
+    let totalSeconds: number;
+
+    if (typeof time === "number") {
+      totalSeconds = time;
+    } else if (time.includes(":")) {
+      // Handle "mm:ss" or "hh:mm:ss"
+      const parts = time.split(":").map(Number);
+      if (parts.length === 2) {
+        totalSeconds = parts[0] * 60 + parts[1];
+      } else if (parts.length === 3) {
+        totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else {
+        throw new Error("Invalid time format: " + time);
+      }
+    } else {
+      totalSeconds = Number(time);
+    }
+
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
+      2,
+      "0"
+    );
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
   const videoTrimHandler = async (
     segments: { start: string; end: string }[]
   ) => {
@@ -1013,6 +1043,10 @@ export default function EditorPage() {
         toast.error("No video available to trim");
         return;
       }
+      const normalizedSegments = segments.map((seg) => ({
+        start: normalizeTimeFormat(seg.start),
+        end: normalizeTimeFormat(seg.end),
+      }));
 
       console.log("Starting trim process...");
       console.log("Video URL:", videoUrl);
@@ -1033,8 +1067,9 @@ export default function EditorPage() {
       // 2. Prepare multipart form data and send to backend
       console.log("Sending video blob to backend");
       const formData = new FormData();
+      formData.append("segments", JSON.stringify(normalizedSegments));
       formData.append("video", videoBlob, "video.mp4");
-      formData.append("segments", JSON.stringify(segments));
+      // formData.append("segments", JSON.stringify(segments));
 
       const trimRes = await axios.post(
         `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
