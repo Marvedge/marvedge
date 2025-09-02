@@ -8,7 +8,7 @@ import Image from "next/image";
 import { formatTime } from "@/app/lib/dateTimeUtils";
 import VideoPreview from "@/app/components/VideoPreview";
 import { sanitizeFilename } from "@/app/lib/constants";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import { Dialog } from "@headlessui/react";
 import { Menu } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
@@ -155,9 +155,7 @@ export default function RecorderPage() {
     recordingDuration,
     reset,
   } = useScreenRecorder();
-
   const router = useRouter();
-
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -624,6 +622,48 @@ export default function RecorderPage() {
       };
     }
   }, [videoUrl, uploadedFileUrl, videoDuration]);
+  // const { data: session } = useSession();
+  // const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Simple timeline component for recorder
+
+  // Recording timeline component for active recording
+  // const RecordingTimeline = () => {
+  //   return (
+  //     <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
+  //       <div className="flex items-center gap-3">
+  //         <div className="rounded-full bg-red-500 text-white p-2 animate-pulse">
+  //           <div className="w-4 h-4 bg-white rounded-full"></div>
+  //         </div>
+  //         <div className="flex-1 bg-gray-200 rounded-full h-2">
+  //           <div
+  //             className="bg-red-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+  //             style={{
+  //               width: `${Math.min((recordingTimer / 3600) * 100, 100)}%`, // Max 1 hour
+  //             }}
+  //           ></div>
+  //         </div>
+  //         <span className="text-xs text-red-500 font-mono min-w-[60px] text-right font-bold">
+  //           {formatTime(recordingTimer)}
+  //         </span>
+  //       </div>
+
+  //       {/* Recording status */}
+  //       <div className="flex items-center justify-between mt-2 px-2 w-full">
+  //         <div className="flex items-center gap-2">
+  //           <span className="text-xs text-red-500 font-semibold animate-pulse">
+  //             ⏺ Recording in progress...
+  //           </span>
+  //         </div>
+  //         <div className="flex items-center gap-2">
+  //           <span className="text-xs text-gray-500 font-mono">
+  //             Live Preview
+  //           </span>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // };
 
   // Enhanced initialization
   useEffect(() => {
@@ -674,6 +714,7 @@ export default function RecorderPage() {
     const isUploaded = uploadedFileUrl && !screenStream;
     return (
       <div className="flex flex-col h-screen w-full overflow-hidden">
+        <Toaster position="top-right" />
         <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
         <div className="flex flex-1 overflow-hidden">
           {/* Right Panel */}
@@ -688,6 +729,21 @@ export default function RecorderPage() {
                   Last saved 2 minutes ago
                 </div>
               </div>
+              {!isUploaded && !recording && videoUrl && (
+                <button
+                  onClick={handleSaveAndPublish}
+                  className="mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition flex items-center gap-2 text-sm sm:text-base"
+                >
+                  <Image
+                    src="/icons/1.png"
+                    alt="Save"
+                    width={20}
+                    height={20}
+                    className="md:w-6 md:h-6"
+                  />
+                  Save & Publish
+                </button>
+              )}
             </div>
             <div className="flex-1 px-2 sm:px-4 pb-2 sm:pb-4 overflow-y-auto">
               <div className="bg-white rounded-2xl shadow p-4 sm:p-8">
@@ -731,9 +787,15 @@ export default function RecorderPage() {
                               borderRadius: "1.25rem",
                               background: "#F6F3FF",
                             }}
-                            onProgress={({ playedSeconds }) =>
-                              setVideoCurrentTime(playedSeconds)
-                            }
+                            progressInterval={50}
+                            onProgress={({ playedSeconds }) => {
+                              // Ensure currentTime starts from 0 immediately
+                              if (playedSeconds === 0) {
+                                setVideoCurrentTime(0);
+                              } else {
+                                setVideoCurrentTime(playedSeconds);
+                              }
+                            }}
                             onDuration={(dur) => {
                               // Only set videoDuration if recordingDuration is not available
                               if (
@@ -744,6 +806,14 @@ export default function RecorderPage() {
                               ) {
                                 setVideoDuration(dur);
                               }
+                            }}
+                            onStart={() => {
+                              // Ensure currentTime starts from 0 when video starts
+                              setVideoCurrentTime(0);
+                            }}
+                            onPlay={() => {
+                              // Ensure currentTime is 0 when video starts playing
+                              setVideoCurrentTime(0);
                             }}
                             onEnded={() => setVideoPlaying(false)}
                             onReady={() => {
@@ -827,13 +897,27 @@ export default function RecorderPage() {
                               borderRadius: "1.25rem",
                               background: "#F6F3FF",
                             }}
-                            onProgress={({ playedSeconds }) =>
-                              setVideoCurrentTime(playedSeconds)
-                            }
+                            progressInterval={50}
+                            onProgress={({ playedSeconds }) => {
+                              // Ensure currentTime starts from 0 immediately
+                              if (playedSeconds === 0) {
+                                setVideoCurrentTime(0);
+                              } else {
+                                setVideoCurrentTime(playedSeconds);
+                              }
+                            }}
                             onDuration={(dur) => {
                               if (isFinite(dur) && !isNaN(dur) && dur > 0) {
                                 setVideoDuration(dur);
                               }
+                            }}
+                            onStart={() => {
+                              // Ensure currentTime starts from 0 when video starts
+                              setVideoCurrentTime(0);
+                            }}
+                            onPlay={() => {
+                              // Ensure currentTime is 0 when video starts playing
+                              setVideoCurrentTime(0);
                             }}
                             onEnded={() => setVideoPlaying(false)}
                             onReady={() => {
@@ -1121,6 +1205,7 @@ export default function RecorderPage() {
   // Initial UI (no recording or uploaded video)
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
+      <Toaster position="top-right" />
       <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
       <div className="flex flex-1 overflow-hidden">
         {/* Mobile sidebar button */}

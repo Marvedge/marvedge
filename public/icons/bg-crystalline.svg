@@ -1,0 +1,27 @@
+<svg width="120" height="80" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="crystal1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b9d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c44569;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="crystal2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4ecdc4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#44a08d;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="crystal3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffeaa7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fdcb6e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="120" height="80" fill="#2d3436"/>
+  
+  <!-- Crystalline shapes -->
+  <polygon points="20,20 35,10 50,20 35,30" fill="url(#crystal1)"/>
+  <polygon points="70,15 85,5 100,15 85,25" fill="url(#crystal2)"/>
+  <polygon points="40,50 55,40 70,50 55,60" fill="url(#crystal3)"/>
+  <polygon points="80,45 95,35 110,45 95,55" fill="url(#crystal1)"/>
+  <polygon points="10,60 25,50 40,60 25,70" fill="url(#crystal2)"/>
+  <polygon points="90,65 105,55 120,65 105,75" fill="url(#crystal3)"/>
+</svg> 
