@@ -30,6 +30,7 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
 import axios from "axios";
+import { ErrorResponse } from "resend";
 // import { ErrorResponse } from "resend";
 
 interface RectOverlay {
@@ -383,6 +384,65 @@ export default function EditorPage() {
   //   };
   // }, []);
   // Try to get duration from blob store when video is first loaded
+  const getBackgroundStyle = useCallback(() => {
+    if (!selectedBackground) return {};
+
+    if (selectedBackground === "hidden") {
+      return { background: "transparent" };
+    }
+
+    if (selectedBackground === "custom" && customBackground) {
+      return {
+        backgroundImage: `url(${URL.createObjectURL(customBackground)})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      };
+    }
+
+    if (selectedBackground.startsWith("gradient:")) {
+      const gradientId = selectedBackground.replace("gradient:", "");
+      const gradientMap: Record<string, string> = {
+        sunset:
+          "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
+        ocean: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        mint: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
+        royal: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        steel: "linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)",
+        candy: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+      };
+      return { background: gradientMap[gradientId] || "" };
+    }
+
+    if (selectedBackground.startsWith("color:")) {
+      const color = selectedBackground.replace("color:", "");
+      return { backgroundColor: color };
+    }
+
+    // Handle image backgrounds
+    const imageMap: Record<string, string> = {
+      bg1: "/icons/bg-mountain-sunset.svg",
+      bg2: "/icons/bg-abstract-circles.svg",
+      bg3: "/icons/bg-crystalline.svg",
+      bg4: "/icons/bg-brushstrokes.svg",
+      bg5: "/icons/bg-warm-gradients.svg",
+      bg6: "/icons/bg-ethereal.svg",
+      bg7: "/icons/bg-fiery.svg",
+      bg8: "/icons/bg-ribbons.svg",
+    };
+
+    if (imageMap[selectedBackground]) {
+      return {
+        backgroundImage: `url(${imageMap[selectedBackground]})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      };
+    }
+
+    return {};
+  }, [selectedBackground, customBackground]);
+
   useEffect(() => {
     if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
       const getDurationFromBlob = async () => {
@@ -1414,37 +1474,32 @@ export default function EditorPage() {
           <span className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 lg:text-2xl text-[#7C5CFC] font-semibold text-base select-none cursor-default mb-4 w-max">
             <span className="text-xl"></span> Preview
           </span>
-          <div
-            ref={videoContainerRef}
-            className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"} flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0`}
-            style={{
-              minHeight: "160px",
-              padding: 0,
-              boxShadow: "0 4px 24px 0 #E6E1FA",
-            }}
-          >
+
+          {/* WRAPPER */}
+          <div className="flex flex-col items-center w-full">
+            {/* 🎥 Video container */}
             <div
+              ref={videoContainerRef}
+              className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${
+                isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
+              } flex flex-col items-center justify-center transition-all duration-300 mb-2`}
               style={{
-                width: "100%",
-                height: "100%",
-                position: "relative",
-                zIndex: 1,
-                borderRadius: "1.25rem",
-                overflow: "hidden",
-                background: "#F6F3FF",
+                minHeight: "160px",
+                padding: selectedBackground ? "20px" : "0px",
+                boxShadow: "0 4px 24px 0 #E6E1FA",
+                ...getBackgroundStyle(),
               }}
             >
               <div
                 style={{
-                  width: "100%",
-                  height: "100%",
-                  transform: currentZoomEffect
-                    ? `scale(${currentZoomEffect.zoomLevel}) translate(${(currentZoomEffect.x - 0.5) * 100}%, ${(currentZoomEffect.y - 0.5) * 100}%)`
-                    : "scale(1) translate(0%, 0%)",
-                  transformOrigin: "center center",
-                  transition: currentZoomEffect
-                    ? "transform 0.5s ease-in-out"
-                    : "transform 0.3s ease-out",
+                  width: selectedBackground ? "90%" : "100%",
+                  height: selectedBackground ? "80%" : "100%",
+                  position: "relative",
+                  zIndex: 1,
+                  borderRadius: "1.25rem",
+                  overflow: "hidden",
+                  background: "#F6F3FF",
+                  transition: "width 0.3s ease, height 0.3s ease",
                 }}
               >
                 <ReactPlayer
@@ -1462,164 +1517,124 @@ export default function EditorPage() {
                     background: "#F6F3FF",
                   }}
                   onError={(e) => console.error("Video failed to load", e)}
-                  onDuration={(dur) => {
-                    if (
-                      recordingDuration === 0 &&
-                      isFinite(dur) &&
-                      !isNaN(dur)
-                    ) {
-                      setDuration(dur);
-                    }
-                  }}
-                  onReady={() => {
-                    console.log("Video loaded");
-                    if (recordingDuration === 0) {
-                      setTimeout(() => {
-                        if (playerRef.current) {
-                          const player = playerRef.current.getInternalPlayer();
-                          if (
-                            player &&
-                            player.duration &&
-                            isFinite(player.duration) &&
-                            player.duration > 0
-                          ) {
-                            setDuration(Math.floor(player.duration));
-                          }
-                        }
-                      }, 10);
-                      setTimeout(() => {
-                        if (playerRef.current) {
-                          const player = playerRef.current.getInternalPlayer();
-                          if (
-                            player &&
-                            player.duration &&
-                            isFinite(player.duration) &&
-                            player.duration > 0
-                          ) {
-                            setDuration(Math.floor(player.duration));
-                          }
-                        }
-                      }, 100);
-                    }
-                  }}
-                  onPlay={() => {
-                    setPlaying(true);
-                  }}
-                  onPause={() => {
-                    setPlaying(false);
-                  }}
-                  progressInterval={100}
                   onProgress={({ playedSeconds }) =>
                     setCurrentTime(playedSeconds)
                   }
-                  config={{
-                    file: {
-                      attributes: {
-                        preload: "metadata",
-                      },
-                    },
-                  }}
                 />
               </div>
+
+              {/* Canvas stays on top of video */}
+              <canvas
+                ref={canvasRef}
+                className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
+                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+                style={{
+                  pointerEvents: tool !== "none" ? "auto" : "none",
+                  borderRadius: "1.25rem",
+                }}
+              />
             </div>
-            <CustomVideoControls
-              playerRef={playerRef}
-              duration={duration}
-              currentTime={currentTime}
-              setCurrentTime={(t: number) => {
-                setCurrentTime(t);
-                playerRef.current?.seekTo(t, "seconds");
-              }}
-              recordingDuration={recordingDuration}
-              setPlaying={setPlaying}
-              playing={playing}
-            />
-            <div className="flex items-center justify-between mt-2 px-2 w-full">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const newTime = Math.max(0, currentTime - 5);
-                    setCurrentTime(newTime);
-                    playerRef.current?.seekTo(newTime, "seconds");
-                  }}
-                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                  title="Back 5 seconds"
-                >
-                  <Image
-                    src="/icons/replay.svg"
-                    alt="Notifications"
-                    width={16}
-                    height={16}
-                    className="w-4 h-4"
+
+            {/* 🎚 Controls aligned with video */}
+            <div className="w-full max-w-[400px] sm:max-w-[900px] flex flex-col">
+              <CustomVideoControls
+                playerRef={playerRef}
+                duration={duration}
+                currentTime={currentTime}
+                setCurrentTime={(t: number) => {
+                  setCurrentTime(t);
+                  playerRef.current?.seekTo(t, "seconds");
+                }}
+                recordingDuration={recordingDuration}
+                setPlaying={setPlaying}
+                playing={playing}
+              />
+
+              <div className="flex items-center justify-between mt-2 px-2 w-full">
+                {/* Skip buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const newTime = Math.max(0, currentTime - 5);
+                      setCurrentTime(newTime);
+                      playerRef.current?.seekTo(newTime, "seconds");
+                    }}
+                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                    title="Back 5 seconds"
+                  >
+                    <Image
+                      src="/icons/replay.svg"
+                      alt="Replay"
+                      width={16}
+                      height={16}
+                    />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newTime = Math.min(
+                        displayDuration,
+                        currentTime + 5
+                      );
+                      setCurrentTime(newTime);
+                      playerRef.current?.seekTo(newTime, "seconds");
+                    }}
+                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                    title="Forward 5 seconds"
+                  >
+                    <Image
+                      src="/icons/forward.svg"
+                      alt="Forward"
+                      width={16}
+                      height={16}
+                    />
+                  </button>
+                </div>
+
+                {/* Volume */}
+                <div className="flex items-center gap-2 flex-1 justify-center">
+                  <button
+                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                    className="focus:outline-none"
+                    title={volume === 0 ? "Unmute" : "Mute"}
+                  >
+                    {volume === 0 ? (
+                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                    ) : (
+                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
                   />
-                </button>
-                <button
-                  onClick={() => {
-                    const newTime = Math.min(displayDuration, currentTime + 5);
-                    setCurrentTime(newTime);
-                    playerRef.current?.seekTo(newTime, "seconds");
-                  }}
-                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                  title="Forward 5 seconds"
+                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                    {Math.round(volume * 100)}%
+                  </span>
+                </div>
+
+                {/* Fullscreen */}
+                <div
+                  className="flex items-center justify-end"
+                  style={{ minWidth: 40 }}
                 >
-                  <Image
-                    src="/icons/forward.svg"
-                    alt="Notifications"
-                    width={16}
-                    height={16}
-                    className="w-4 h-4"
-                  />
-                </button>
-              </div>
-              <div className="flex items-center gap-2 flex-1 justify-center">
-                <button
-                  onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                  className="focus:outline-none"
-                  title={volume === 0 ? "Unmute" : "Mute"}
-                >
-                  {volume === 0 ? (
-                    <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                  ) : (
-                    <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                  )}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={volume}
-                  onChange={(e) => setVolume(Number(e.target.value))}
-                  className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                />
-                <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
-                  {Math.round(volume * 100)}%
-                </span>
-              </div>
-              <div
-                className="flex items-center justify-end"
-                style={{ minWidth: 40 }}
-              >
-                <button
-                  className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                  title="Fullscreen"
-                  onClick={handleFullscreen}
-                >
-                  <FaExpand size={22} />
-                </button>
+                  <button
+                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                    title="Fullscreen"
+                    onClick={handleFullscreen}
+                  >
+                    <FaExpand size={22} />
+                  </button>
+                </div>
               </div>
             </div>
-            <canvas
-              ref={canvasRef}
-              className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
-              onMouseDown={tool !== "none" ? handleMouseDown : undefined}
-              onMouseUp={tool !== "none" ? handleMouseUp : undefined}
-              style={{
-                pointerEvents: tool !== "none" ? "auto" : "none",
-                borderRadius: "1.25rem",
-              }}
-            />
           </div>
+
           {tool === "text" && (
             <div className="flex gap-3 items-center mb-6 sm:mb-0">
               <label className="text-sm">Text Color:</label>
