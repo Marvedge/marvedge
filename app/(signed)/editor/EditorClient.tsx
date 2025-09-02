@@ -1001,6 +1001,72 @@ export default function EditorPage() {
     }
   };
 
+  const videoTrimHandler = async (
+    segments: { start: string; end: string }[]
+  ) => {
+    try {
+      setProgress(1);
+      toast.loading("Uploading and trimming video...");
+
+      // Check if videoUrl exists
+      if (!videoUrl) {
+        toast.error("No video available to trim");
+        return;
+      }
+
+      console.log("Starting trim process...");
+      console.log("Video URL:", videoUrl);
+      console.log("Segments:", segments);
+
+      // Get the current video blob
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video: ${response.status}`);
+      }
+      const videoBlob = await response.blob();
+      console.log("Video blob size:", videoBlob.size);
+      // 1. Validate segments
+      if (!segments || segments.length === 0) {
+        throw new Error("No segments provided");
+      }
+
+      // 2. Prepare multipart form data and send to backend
+      console.log("Sending video blob to backend");
+      const formData = new FormData();
+      formData.append("video", videoBlob, "video.mp4");
+      formData.append("segments", JSON.stringify(segments));
+
+      const trimRes = await axios.post(
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
+        formData,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
+      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
+
+      if (trimmedVideoUrl) {
+        toast.dismiss();
+        toast.success("Video trimmed successfully!");
+        setVideoUrl(trimmedVideoUrl);
+      } else {
+        toast.error("Failed to trim video - no trimmedUrl returned");
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError<ErrorResponse>(err)) {
+        const message = err.response?.data?.message || "Unexpected error";
+        toast.dismiss();
+        toast.error(`Error processing video: ${message}`);
+      } else {
+        toast.dismiss();
+        toast.error("Something went wrong");
+      }
+    } finally {
+      setProgress(0);
+    }
+  };
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
@@ -1621,6 +1687,7 @@ export default function EditorPage() {
                 onResetVideo={resetVideo}
                 onZoomEffectCreate={onZoomEffectCreate}
                 initialSegments={currentSegments}
+                onTrim={videoTrimHandler}
               />
             ) : (
               <div className="w-full max-w-6xl mx-auto p-8">
