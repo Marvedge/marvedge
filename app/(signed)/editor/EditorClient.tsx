@@ -1072,7 +1072,7 @@ export default function EditorPage() {
       // formData.append("segments", JSON.stringify(segments));
 
       const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`,
         formData,
         {
           responseType: "blob",
