@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import Hero from "./Hero";
+// import Hero from "./Hero";
 import { useSession } from "next-auth/react";
 
 const NavButton: React.FC<{
