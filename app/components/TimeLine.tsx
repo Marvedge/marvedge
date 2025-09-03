@@ -399,20 +399,20 @@ export default function TimelineRuler({
                     })
                 : undefined
             }
-            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded"
+            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold border rounded-lg border-purple-500 cursor-pointer text-purple-500 text-sm rounded"
           >
             <Image
-              src="/icons/zoom-new.png"
+              src="/icons/zoooom.svg"
               alt="Zoom"
               width={16}
               height={16}
-              className="w-4 h-4"
+              className="w-7 h-7 translate-y-0.5" // Adjusted to translate-y-0.5 for a smaller shift
             />
             Zoom in
           </button>
           <button
             onClick={addSegment}
-            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded"
+            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold cursor-pointer rounded-lg border border-purple-500 rounded-large text-purple-500 text-sm rounded"
           >
             <Image
               src="/icons/+.svg"
@@ -426,21 +426,21 @@ export default function TimelineRuler({
           <button
             onClick={handleTrim}
             disabled={processing}
-            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-60"
+            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold text-purple-500 border border-purple-500 text-sm rounded-lg disabled:opacity-60"
           >
             <Image
               src="/icons/trim-new.svg"
               alt="Trim"
               width={16}
               height={16}
-              className="w-4 h-4"
+              className="w-5 h-5"
             />
             Trim & Merge
           </button>
           <button
             onClick={handleSmartTrim}
             disabled={processing}
-            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-60"
+            className="min-w-[80px] h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-purple-500 text-purple-500 text-sm rounded-lg disabled:opacity-60"
           >
             <Image
               src="/icons/trim-new.svg"
@@ -454,14 +454,14 @@ export default function TimelineRuler({
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0}
-            className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-[80px] h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/delete-demo.svg"
               alt="Delete"
               width={16}
               height={16}
-              className="w-4 h-4"
+              className="w-5 h-5"
             />
             Delete
           </button>
