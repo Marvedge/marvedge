@@ -123,7 +123,6 @@ const Navbar: React.FC = () => {
           </div>
         )}
       </nav>
-      <Hero />
     </>
   );
 };

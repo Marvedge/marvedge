@@ -2,8 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import "react-toastify/dist/ReactToastify.css";
-import { ToastContainer } from "react-toastify";
-import { toast } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import Image from "next/image";
 import {
   motion,
@@ -51,22 +50,24 @@ const SocialIcon: React.FC<{ path: string; index: number }> = ({
   path,
   index,
 }) => {
+  const iconRef = useRef<HTMLSpanElement>(null);
+  // Set `once: true` to trigger only once when icon enters viewport
+  const isInView = useInView(iconRef, { once: true, margin: "-50px" });
+
   return (
     <motion.span
+      ref={iconRef}
       className="bg-[#3c3160] rounded-full p-2.5 text-white hover:bg-[#a68cff] transition"
       initial={{ opacity: 0, scale: 0.8, y: 20 }}
       animate={{
-        opacity: 1,
-        scale: 1,
-        y: [0, -5, 0],
-        rotate: [0, 5, -5, 0],
+        opacity: isInView ? 1 : 0,
+        scale: isInView ? 1 : 0.8,
+        y: isInView ? 0 : 20,
       }}
       transition={{
         duration: 0.5,
         ease: easeOut,
         delay: index * 0.1,
-        y: { duration: 3, repeat: Infinity, ease: "easeInOut" },
-        rotate: { duration: 4, repeat: Infinity, ease: "easeInOut" },
       }}
       whileHover={{
         scale: 1.1,
@@ -91,13 +92,18 @@ const LinkSection: React.FC<{
   items: string[];
   index: number;
 }> = ({ title, items, index }) => {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  // Set `once: true` to trigger only once when section enters viewport
+  const isInView = useInView(sectionRef, { once: true, margin: "-50px" });
+
   return (
     <motion.div
+      ref={sectionRef}
       className="min-w-[100px]"
       initial={{ opacity: 0, y: 30 }}
       animate={{
-        opacity: 1,
-        y: 0,
+        opacity: isInView ? 1 : 0,
+        y: isInView ? 0 : 30,
       }}
       transition={{
         duration: 0.6,
@@ -115,8 +121,8 @@ const LinkSection: React.FC<{
             className="hover:text-[#a68cff] cursor-pointer transition-colors duration-200"
             initial={{ opacity: 0, x: -10 }}
             animate={{
-              opacity: 1,
-              x: 0,
+              opacity: isInView ? 1 : 0,
+              x: isInView ? 0 : -10,
             }}
             transition={{
               duration: 0.4,
@@ -137,6 +143,9 @@ const LinkSection: React.FC<{
 };
 
 const ContactForm: React.FC = () => {
+  const formRef = useRef<HTMLDivElement>(null);
+  // Set `once: true` to trigger only once when form enters viewport
+  const isInView = useInView(formRef, { once: true, margin: "-50px" });
   const [form, setForm] = useState({
     email: "",
     name: "",
@@ -165,7 +174,7 @@ const ContactForm: React.FC = () => {
     const result = await res.json();
     if (res.ok) {
       toast.success("Message sent successfully!");
-      setForm({ email: "", name: "", message: "" }); // ✅ Reset form
+      setForm({ email: "", name: "", message: "" });
     } else {
       toast.error(result.error || "Failed to send message.");
     }
@@ -173,9 +182,13 @@ const ContactForm: React.FC = () => {
 
   return (
     <motion.div
+      ref={formRef}
       className="bg-[#3c3160] rounded-xl p-6 sm:p-8 shadow-lg w-full"
       initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{
+        opacity: isInView ? 1 : 0,
+        y: isInView ? 0 : 40,
+      }}
       transition={{ duration: 0.8, ease: easeOut }}
       whileHover={{
         y: -5,
@@ -194,7 +207,10 @@ const ContactForm: React.FC = () => {
           <motion.div
             key={index}
             initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            animate={{
+              opacity: isInView ? 1 : 0,
+              x: isInView ? 0 : -20,
+            }}
             transition={{
               duration: 0.5,
               ease: easeOut,
@@ -240,7 +256,10 @@ const ContactForm: React.FC = () => {
           }}
           whileTap={{ scale: 0.95 }}
           initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={{
+            opacity: isInView ? 1 : 0,
+            y: isInView ? 0 : 20,
+          }}
           transition={{ duration: 0.5, ease: easeOut, delay: 0.4 }}
         >
           Send Message
@@ -259,7 +278,8 @@ const ContactForm: React.FC = () => {
 
 const Hero4: React.FC = () => {
   const sectionRef = useRef(null);
-  const isInView = useInView(sectionRef, { once: false, margin: "-100px" });
+  // Set `once: true` to trigger only once when section enters viewport
+  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start end", "end start"],
@@ -287,7 +307,7 @@ const Hero4: React.FC = () => {
         }}
       />
       <motion.div
-        className="absolute bottom-20 right-1/3 w-24 h-24 rounded-full opacity-10"
+        className="absolute bottom-20 right-1/3 w-24 h-24 bg-purple-900 rounded-full opacity-10"
         animate={{
           scale: [1, 1.3, 1],
           y: [0, -40, 0],

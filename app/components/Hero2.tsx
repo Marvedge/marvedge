@@ -4,13 +4,11 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   motion,
   useAnimation,
-  AnimatePresence,
   useInView,
   easeOut,
   useScroll,
   useTransform,
 } from "framer-motion";
-import Hero3 from "./Hero3";
 
 interface ServiceCardProps {
   title: string;
@@ -23,25 +21,40 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
   description,
   icon,
 }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  // Set `once: true` to trigger only once when card enters viewport
+  const isInView = useInView(cardRef, { once: true, margin: "-50px" });
+
   return (
     <motion.div
+      ref={cardRef}
       whileHover={{
         y: -10,
         boxShadow: "0 25px 50px rgba(0, 0, 0, 0.15)",
         scale: 1.02,
       }}
+      initial={{ opacity: 0, y: 60, scale: 0.9 }}
+      animate={{
+        opacity: isInView ? 1 : 0,
+        y: isInView ? 0 : 60,
+        scale: isInView ? 1 : 0.9,
+      }}
+      transition={{
+        duration: 0.8,
+        ease: easeOut,
+      }}
       className="bg-white rounded-lg py-12 px-7 shadow-lg hover:shadow-xl transition-all duration-300 w-96 lg:w-[800px] lg:h-[400px] h-80 flex flex-col items-center justify-center"
     >
       <motion.div
         className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-6"
+        initial={{ rotate: 0, scale: 0.8 }}
         animate={{
-          rotate: [0, 10, -10, 0],
-          scale: [1, 1.1, 1],
+          rotate: isInView ? 0 : 0,
+          scale: isInView ? 1 : 0.8,
         }}
         transition={{
-          duration: 6,
-          repeat: Infinity,
-          ease: "easeInOut",
+          duration: 0.8,
+          ease: easeOut,
         }}
       >
         <span className="text-3xl">{icon}</span>
@@ -54,10 +67,10 @@ const ServiceCard: React.FC<ServiceCardProps> = ({
 
 const Hero2: React.FC = () => {
   const [count, setCount] = useState(0);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const controls = useAnimation();
   const sectionRef = useRef(null);
-  const isInView = useInView(sectionRef, { once: false, margin: "-100px" });
+  // Set `once: true` to trigger only once when section enters viewport
+  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start end", "end start"],
@@ -88,46 +101,34 @@ const Hero2: React.FC = () => {
   ];
 
   useEffect(() => {
-    const animateCount = async () => {
-      await controls.start({
-        opacity: 1,
-        transition: { duration: 0.5 },
-      });
+    if (isInView) {
+      const animateCount = async () => {
+        await controls.start({
+          opacity: 1,
+          transition: { duration: 0.5 },
+        });
 
-      let start = 0;
-      const end = 1000;
-      const duration = 2000;
-      const increment = end / (duration / 16);
+        let start = 0;
+        const end = 1000;
+        const duration = 2000;
+        const increment = end / (duration / 16);
 
-      const timer = setInterval(() => {
-        start += increment;
-        if (start >= end) {
-          setCount(end);
-          clearInterval(timer);
-        } else {
-          setCount(Math.floor(start));
-        }
-      }, 16);
+        const timer = setInterval(() => {
+          start += increment;
+          if (start >= end) {
+            setCount(end);
+            clearInterval(timer);
+          } else {
+            setCount(Math.floor(start));
+          }
+        }, 16);
 
-      return () => clearInterval(timer);
-    };
+        return () => clearInterval(timer);
+      };
 
-    animateCount();
-  }, [controls]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % services.length);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [services.length]);
-
-  const cardVariants = {
-    enter: { x: "100%", opacity: 0, scale: 0.8 },
-    center: { x: 0, opacity: 1, scale: 1 },
-    exit: { x: "-100%", opacity: 0, scale: 0.8 },
-  };
+      animateCount();
+    }
+  }, [isInView, controls]);
 
   return (
     <section ref={sectionRef} className="relative overflow-hidden">
@@ -207,26 +208,14 @@ const Hero2: React.FC = () => {
           }}
           style={{ scale }}
         >
-          <AnimatePresence initial={false}>
-            <motion.div
-              key={currentIndex}
-              variants={cardVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.5, ease: "easeInOut" }}
-              className="absolute"
-            >
-              <ServiceCard
-                title={services[currentIndex].title}
-                description={services[currentIndex].description}
-                icon={services[currentIndex].icon}
-              />
-            </motion.div>
-          </AnimatePresence>
+          {/* Display the first service card only, without cycling */}
+          <ServiceCard
+            title={services[0].title}
+            description={services[0].description}
+            icon={services[0].icon}
+          />
         </motion.div>
       </div>
-      <Hero3 />
     </section>
   );
 };
