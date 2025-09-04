@@ -68,6 +68,11 @@ export default function EditorPage() {
   const [playing, setPlaying] = useState(false);
   const [timelineStartTime, setTimelineStartTime] = useState<number>(0);
 
+  // type ToolType = "none" | "text" | "blur" | "rect" | "arrow";
+
+  // Then update your component state (if not already done)
+  // const [tool, setTool] = useState<ToolType>("none");
+
   // State to store loaded segments
   const [, setLoadedSegments] = useState<
     { start: string; end: string }[] | null
@@ -1167,7 +1172,7 @@ export default function EditorPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Hamburger Icon for Desktop */}
         <div
-          className="hidden md:flex items-center justify-center w-10 h-full bg-gray-300 hover:bg-gray-200 transition-colors fixed top-0 left-0 z-40 shadow-sm"
+          className="hidden md:flex items-center justify-center w-10 h-full bg-gray-100 hover:bg-gray-200 transition-colors fixed top-0 left-0 z-40 shadow-sm"
           onMouseEnter={() => setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
         >
@@ -1182,94 +1187,107 @@ export default function EditorPage() {
           onMouseEnter={() => setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
         >
-          <EditorSidebar
-            title={sidebarTitle}
-            setTitle={setSidebarTitle}
-            description={sidebarDescription}
-            setDescription={setSidebarDescription}
-            onDownloadWebM={() => {
-              const filename = sanitizeFilename(sidebarTitle) || "clip";
-              if (videoUrl) {
-                const a = document.createElement("a");
-                a.href = videoUrl;
-                a.download = `${filename}.webm`;
-                a.click();
-              }
-            }}
-            onDownloadMP4={() => {
-              const filename = sanitizeFilename(sidebarTitle) || "clip";
-              if (mp4Url) {
-                downloadBlob(mp4Url, `${filename}.mp4`);
-              }
-            }}
-            onExportWebM={async () => {
-              if (!videoUrl) {
-                toast.error("No video available to export");
-                return;
-              }
-              try {
-                toast.loading("Exporting video to Cloudinary...");
-                let cloudinaryVideoUrl = videoUrl;
-                if (videoUrl.startsWith("blob:")) {
-                  const response = await fetch(videoUrl);
-                  if (!response.ok) {
-                    throw new Error("Failed to fetch video blob");
-                  }
-                  const videoBlob = await response.blob();
-                  const cloudFormData = new FormData();
-                  cloudFormData.append("file", videoBlob, "video.webm");
-                  cloudFormData.append("upload_preset", "upload_preset_1");
-                  const cloudRes = await fetch(
-                    "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                    {
-                      method: "POST",
-                      body: cloudFormData,
-                    }
-                  );
-                  if (!cloudRes.ok) {
-                    const cloudError = await cloudRes.text();
-                    throw new Error(
-                      `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-                    );
-                  }
-                  const cloudData = await cloudRes.json();
-                  if (!cloudData.secure_url) {
-                    throw new Error(
-                      "Cloudinary upload failed - no secure_url returned"
-                    );
-                  }
-                  cloudinaryVideoUrl = cloudData.secure_url;
-                  toast.dismiss();
+          <div className="w-full mt-15 h-full">
+            <EditorSidebar
+              title={sidebarTitle}
+              setTitle={setSidebarTitle}
+              description={sidebarDescription}
+              setDescription={setSidebarDescription}
+              onDownloadWebM={() => {
+                const filename = sanitizeFilename(sidebarTitle) || "clip";
+                if (videoUrl) {
+                  const a = document.createElement("a");
+                  a.href = videoUrl;
+                  a.download = `${filename}.webm`;
+                  a.click();
                 }
-                const previewUrl = `/preview?video=${encodeURIComponent(
-                  cloudinaryVideoUrl
-                )}&title=${encodeURIComponent(
-                  sidebarTitle
-                )}&description=${encodeURIComponent(sidebarDescription || "")}`;
-                toast.dismiss();
-                toast.success("Video exported successfully!");
-                router.push(previewUrl);
-              } catch (error) {
-                console.error("Export error:", error);
-                toast.dismiss();
-                toast.error("Failed to export video");
-              }
-            }}
-            tool={tool}
-            setTool={(t) => setTool(t)}
-            handleUndo={handleUndo}
-            handleClear={handleClear}
-            handleSaveOverlays={handleSaveOverlays}
-            handleLoadOverlays={handleLoadOverlays}
-            thumbnailUrl={thumbnailUrl || undefined}
-            selectedBackground={selectedBackground}
-            setSelectedBackground={setSelectedBackground}
-            backgroundType={backgroundType}
-            setBackgroundType={setBackgroundType}
-            customBackground={customBackground}
-            setCustomBackground={setCustomBackground}
-            className="w-full h-full"
-          />
+              }}
+              onDownloadMP4={() => {
+                const filename = sanitizeFilename(sidebarTitle) || "clip";
+                if (mp4Url) {
+                  downloadBlob(mp4Url, `${filename}.mp4`);
+                }
+              }}
+              onExportWebM={async () => {
+                if (!videoUrl) {
+                  toast.error("No video available to export");
+                  return;
+                }
+                try {
+                  toast.loading("Exporting video to Cloudinary...");
+                  let cloudinaryVideoUrl = videoUrl;
+                  if (videoUrl.startsWith("blob:")) {
+                    const response = await fetch(videoUrl);
+                    if (!response.ok) {
+                      throw new Error("Failed to fetch video blob");
+                    }
+                    const videoBlob = await response.blob();
+                    const cloudFormData = new FormData();
+                    cloudFormData.append("file", videoBlob, "video.webm");
+                    cloudFormData.append("upload_preset", "upload_preset_1");
+                    const cloudRes = await fetch(
+                      "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                      {
+                        method: "POST",
+                        body: cloudFormData,
+                      }
+                    );
+                    if (!cloudRes.ok) {
+                      const cloudError = await cloudRes.text();
+                      throw new Error(
+                        `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                      );
+                    }
+                    const cloudData = await cloudRes.json();
+                    if (!cloudData.secure_url) {
+                      throw new Error(
+                        "Cloudinary upload failed - no secure_url returned"
+                      );
+                    }
+                    cloudinaryVideoUrl = cloudData.secure_url;
+                    toast.dismiss();
+                  }
+                  const previewUrl = `/preview?video=${encodeURIComponent(
+                    cloudinaryVideoUrl
+                  )}&title=${encodeURIComponent(
+                    sidebarTitle
+                  )}&description=${encodeURIComponent(sidebarDescription || "")}`;
+                  toast.dismiss();
+                  toast.success("Video exported successfully!");
+                  router.push(previewUrl);
+                } catch (error) {
+                  console.error("Export error:", error);
+                  toast.dismiss();
+                  toast.error("Failed to export video");
+                }
+              }}
+              tool={tool}
+              setTool={(t: string) => {
+                // Type guard to ensure only valid tool values are accepted
+                if (
+                  t === "none" ||
+                  t === "text" ||
+                  t === "blur" ||
+                  t === "rect" ||
+                  t === "arrow"
+                ) {
+                  setTool(t);
+                }
+              }}
+              handleUndo={handleUndo}
+              handleClear={handleClear}
+              handleSaveOverlays={handleSaveOverlays}
+              handleLoadOverlays={handleLoadOverlays}
+              thumbnailUrl={thumbnailUrl || undefined}
+              selectedBackground={selectedBackground}
+              setSelectedBackground={setSelectedBackground}
+              backgroundType={backgroundType}
+              setBackgroundType={setBackgroundType}
+              customBackground={customBackground}
+              setCustomBackground={setCustomBackground}
+              // className="w-full h-full"
+            />
+          </div>
         </div>
 
         {/* Mobile Drawer */}
@@ -1349,9 +1367,7 @@ export default function EditorPage() {
                       cloudinaryVideoUrl
                     )}&title=${encodeURIComponent(
                       sidebarTitle
-                    )}&description=${encodeURIComponent(
-                      sidebarDescription || ""
-                    )}`;
+                    )}&description=${encodeURIComponent(sidebarDescription || "")}`;
                     toast.dismiss();
                     toast.success("Video exported successfully!");
                     router.push(previewUrl);
@@ -1361,8 +1377,18 @@ export default function EditorPage() {
                     toast.error("Failed to export video");
                   }
                 }}
-                tool={tool}
-                setTool={(t) => setTool(t)}
+                tool={tool} // ✅ Correct prop
+                setTool={(t: string) => {
+                  if (
+                    t === "none" ||
+                    t === "text" ||
+                    t === "blur" ||
+                    t === "rect" ||
+                    t === "arrow"
+                  ) {
+                    setTool(t);
+                  }
+                }}
                 handleUndo={handleUndo}
                 handleClear={handleClear}
                 handleSaveOverlays={handleSaveOverlays}

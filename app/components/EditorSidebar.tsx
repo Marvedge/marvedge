@@ -23,6 +23,7 @@ interface EditorSidebarProps {
   setBackgroundType?: (type: string) => void;
   customBackground?: File | null;
   setCustomBackground?: (file: File | null) => void;
+  className?: string;
 }
 
 type MainTab = "background" | "tools";
