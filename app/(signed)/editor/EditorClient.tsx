@@ -59,6 +59,16 @@ interface TextOverlay {
 }
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
+const imageMap: Record<string, string> = {
+  bg1: "/icons/bg-mountain-sunset.svg",
+  bg2: "/icons/bg-abstract-circles.svg",
+  bg3: "/icons/bg-crystalline.svg",
+  bg4: "/icons/bg-brushstrokes.svg",
+  bg5: "/icons/bg-warm-gradients.svg",
+  bg6: "/icons/bg-ethereal.svg",
+  bg7: "/icons/bg-fiery.svg",
+  bg8: "/icons/bg-ribbons.svg",
+};
 
 export default function EditorPage() {
   const router = useRouter();
@@ -106,7 +116,7 @@ export default function EditorPage() {
   // Zoom effects state
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
+  const [currenZommEfffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
     null
   );
   // Simple direct two-way sync
@@ -118,7 +128,6 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -131,7 +140,7 @@ export default function EditorPage() {
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper functions for time conversion
-
+  console.log(currenZommEfffect);
   const formatTimeForInput = useCallback((seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -384,16 +393,7 @@ export default function EditorPage() {
   //   };
   // }, []);
   // Try to get duration from blob store when video is first loaded
-  const imageMap: Record<string, string> = {
-    bg1: "/icons/bg-mountain-sunset.svg",
-    bg2: "/icons/bg-abstract-circles.svg",
-    bg3: "/icons/bg-crystalline.svg",
-    bg4: "/icons/bg-brushstrokes.svg",
-    bg5: "/icons/bg-warm-gradients.svg",
-    bg6: "/icons/bg-ethereal.svg",
-    bg7: "/icons/bg-fiery.svg",
-    bg8: "/icons/bg-ribbons.svg",
-  };
+
   const getBackgroundStyle = useCallback(() => {
     if (!selectedBackground) return {};
 
@@ -482,7 +482,7 @@ export default function EditorPage() {
         timers.forEach((timer) => clearTimeout(timer));
       };
     }
-  }, [videoUrl, duration, blob, recordingDuration]);
+  }, [videoUrl, duration, blob, recordingDuration, imageMap]);
 
   // Force metadata loading for ReactPlayer
   useEffect(() => {
