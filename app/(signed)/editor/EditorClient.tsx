@@ -73,7 +73,7 @@ export default function EditorPage() {
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
     { start: string; end: string }[]
-  >([]);
+  >([{ start: "00:00:00", end: "00:00:00" }]);
 
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
@@ -118,7 +118,7 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
-    // trimApplier,
+    trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -384,6 +384,16 @@ export default function EditorPage() {
   //   };
   // }, []);
   // Try to get duration from blob store when video is first loaded
+  const imageMap: Record<string, string> = {
+    bg1: "/icons/bg-mountain-sunset.svg",
+    bg2: "/icons/bg-abstract-circles.svg",
+    bg3: "/icons/bg-crystalline.svg",
+    bg4: "/icons/bg-brushstrokes.svg",
+    bg5: "/icons/bg-warm-gradients.svg",
+    bg6: "/icons/bg-ethereal.svg",
+    bg7: "/icons/bg-fiery.svg",
+    bg8: "/icons/bg-ribbons.svg",
+  };
   const getBackgroundStyle = useCallback(() => {
     if (!selectedBackground) return {};
 
@@ -418,18 +428,6 @@ export default function EditorPage() {
       const color = selectedBackground.replace("color:", "");
       return { backgroundColor: color };
     }
-
-    // Handle image backgrounds
-    const imageMap: Record<string, string> = {
-      bg1: "/icons/bg-mountain-sunset.svg",
-      bg2: "/icons/bg-abstract-circles.svg",
-      bg3: "/icons/bg-crystalline.svg",
-      bg4: "/icons/bg-brushstrokes.svg",
-      bg5: "/icons/bg-warm-gradients.svg",
-      bg6: "/icons/bg-ethereal.svg",
-      bg7: "/icons/bg-fiery.svg",
-      bg8: "/icons/bg-ribbons.svg",
-    };
 
     if (imageMap[selectedBackground]) {
       return {
@@ -1213,69 +1211,90 @@ export default function EditorPage() {
               toast.error("No video available to export");
               return;
             }
+
             try {
-              toast.loading("Exporting video to Cloudinary...");
-              // First, upload video to Cloudinary if it's a blob URL
-              let cloudinaryVideoUrl = videoUrl;
-              if (videoUrl.startsWith("blob:")) {
-                try {
-                  // Get the video blob
-                  const response = await fetch(videoUrl);
-                  if (!response.ok) {
-                    throw new Error("Failed to fetch video blob");
-                  }
-                  const videoBlob = await response.blob();
-                  // Create FormData for Cloudinary upload
-                  const cloudFormData = new FormData();
-                  cloudFormData.append("file", videoBlob, "video.webm");
-                  cloudFormData.append("upload_preset", "upload_preset_1");
-                  console.log("Uploading to Cloudinary...");
-                  // Upload to Cloudinary
-                  const cloudRes = await fetch(
-                    "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                    {
-                      method: "POST",
-                      body: cloudFormData,
-                    }
-                  );
+              console.log("sending from here #linex 1228");
+              toast.loading("Processing video...");
+              console.log(selectedBackground);
 
-                  if (!cloudRes.ok) {
-                    const cloudError = await cloudRes.text();
-                    throw new Error(
-                      `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-                    );
+              // Fetch blob from ReactPlayer video
+              const res = await fetch(videoUrl);
+              const videoBlob = await res.blob();
+
+              const formData = new FormData();
+              formData.append("video", videoBlob, "video.webm");
+
+              // Handle background
+              if (selectedBackground) {
+                const backgroundPath = imageMap[selectedBackground];
+                console.log(backgroundPath);
+                if (backgroundPath) {
+                  const bgUrl = `${window.location.origin}${backgroundPath}`;
+                  console.log("Fetching background from:", bgUrl);
+
+                  const bgRes = await fetch(bgUrl);
+                  if (!bgRes.ok) {
+                    throw new Error(`Failed to fetch background: ${bgUrl}`);
                   }
 
-                  const cloudData = await cloudRes.json();
-                  console.log("Cloudinary response:", cloudData);
+                  const bgBlob = await bgRes.blob();
+                  console.log("Background blob:", bgBlob);
 
-                  if (!cloudData.secure_url) {
-                    throw new Error(
-                      "Cloudinary upload failed - no secure_url returned"
-                    );
-                  }
-
-                  cloudinaryVideoUrl = cloudData.secure_url;
-                  console.log("Cloudinary URL:", cloudinaryVideoUrl);
-                  toast.dismiss();
-                } catch (cloudError) {
-                  console.error("Error uploading to Cloudinary:", cloudError);
-                  toast.dismiss();
-                  toast.error("Failed to upload video to Cloudinary");
-                  return;
+                  formData.append("background", bgBlob, "background.svg");
                 }
               }
-              // Create preview URL with the Cloudinary URL
-              const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
+              // Call backend FFmpeg server with axios
+              const serverRes = await axios.post(
+                "http://localhost:4000/process-video",
+                formData,
+                {
+                  headers: { "Content-Type": "multipart/form-data" },
+                }
+              );
+
+              const { url } = serverRes.data; // backend returns { url }
+
+              // Fetch processed video (mp4) from backend
+              const processedRes = await axios.get(
+                `http://localhost:4000${url}`,
+                {
+                  responseType: "blob", // important
+                }
+              );
+              const processedBlob = processedRes.data;
+
+              // Upload processed video to Cloudinary with axios
+              const cloudFormData = new FormData();
+              cloudFormData.append("file", processedBlob, "final.mp4");
+              cloudFormData.append("upload_preset", "upload_preset_1");
+
+              const cloudRes = await axios.post(
+                "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                cloudFormData,
+                {
+                  headers: { "Content-Type": "multipart/form-data" },
+                }
+              );
+
+              const cloudData = cloudRes.data;
+
+              console.log("backend url is ", cloudData.secure_url);
               toast.dismiss();
-              toast.success("Video exported successfully!");
-              // Navigate to the preview page
-              router.push(previewUrl);
-            } catch (error) {
-              console.error("Export error:", error);
+              toast.success("Video exported with background!");
+
+              // Navigate to preview page
+              router.push(
+                `/preview?video=${encodeURIComponent(
+                  cloudData.secure_url
+                )}&title=${encodeURIComponent(
+                  sidebarTitle
+                )}&description=${encodeURIComponent(sidebarDescription || "")}`
+              );
+            } catch (err) {
+              console.error(err);
               toast.dismiss();
-              toast.error("Failed to export video");
+              toast.error("Export failed");
             }
           }}
           tool={tool}
@@ -1334,76 +1353,92 @@ export default function EditorPage() {
                     toast.error("No video available to export");
                     return;
                   }
+
                   try {
-                    toast.loading("Exporting video to Cloudinary...");
+                    console.log("sending from here #linex 1228");
+                    toast.loading("Processing video...");
+                    console.log(selectedBackground);
 
-                    // First, upload video to Cloudinary if it's a blob URL
-                    let cloudinaryVideoUrl = videoUrl;
-                    if (videoUrl.startsWith("blob:")) {
-                      try {
-                        // Get the video blob
-                        const response = await fetch(videoUrl);
-                        if (!response.ok) {
-                          throw new Error("Failed to fetch video blob");
-                        }
-                        const videoBlob = await response.blob();
-                        // Create FormData for Cloudinary upload
-                        const cloudFormData = new FormData();
-                        cloudFormData.append("file", videoBlob, "video.webm");
-                        cloudFormData.append(
-                          "upload_preset",
-                          "upload_preset_1"
-                        );
+                    // Fetch blob from ReactPlayer video
+                    const res = await fetch(videoUrl);
+                    const videoBlob = await res.blob();
 
-                        console.log("Uploading to Cloudinary...");
-                        // Upload to Cloudinary
-                        const cloudRes = await fetch(
-                          "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                          {
-                            method: "POST",
-                            body: cloudFormData,
-                          }
-                        );
+                    const formData = new FormData();
+                    formData.append("video", videoBlob, "video.webm");
 
-                        if (!cloudRes.ok) {
-                          const cloudError = await cloudRes.text();
+                    // Handle background
+                    if (selectedBackground) {
+                      const backgroundPath = imageMap[selectedBackground];
+                      console.log(backgroundPath);
+                      if (backgroundPath) {
+                        const bgUrl = `${window.location.origin}${backgroundPath}`;
+                        console.log("Fetching background from:", bgUrl);
+
+                        const bgRes = await fetch(bgUrl);
+                        if (!bgRes.ok) {
                           throw new Error(
-                            `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                            `Failed to fetch background: ${bgUrl}`
                           );
                         }
 
-                        const cloudData = await cloudRes.json();
-                        console.log("Cloudinary response:", cloudData);
+                        const bgBlob = await bgRes.blob();
+                        console.log("Background blob:", bgBlob);
 
-                        if (!cloudData.secure_url) {
-                          throw new Error(
-                            "Cloudinary upload failed - no secure_url returned"
-                          );
-                        }
-
-                        cloudinaryVideoUrl = cloudData.secure_url;
-                        console.log("Cloudinary URL:", cloudinaryVideoUrl);
-                      } catch (cloudError) {
-                        console.error(
-                          "Error uploading to Cloudinary:",
-                          cloudError
-                        );
-                        toast.dismiss();
-                        toast.error("Failed to upload video to Cloudinary");
-                        return;
+                        formData.append("background", bgBlob, "background.svg");
                       }
                     }
-                    // Create preview URL with the Cloudinary URL
-                    const previewUrl = `/preview?video=${encodeURIComponent(cloudinaryVideoUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`;
 
+                    // Call backend FFmpeg server with axios
+                    const serverRes = await axios.post(
+                      "http://localhost:4000/process-video",
+                      formData,
+                      {
+                        headers: { "Content-Type": "multipart/form-data" },
+                      }
+                    );
+
+                    const { url } = serverRes.data; // backend returns { url }
+
+                    // Fetch processed video (mp4) from backend
+                    const processedRes = await axios.get(
+                      `http://localhost:4000${url}`,
+                      {
+                        responseType: "blob", // important
+                      }
+                    );
+                    const processedBlob = processedRes.data;
+
+                    // Upload processed video to Cloudinary with axios
+                    const cloudFormData = new FormData();
+                    cloudFormData.append("file", processedBlob, "final.mp4");
+                    cloudFormData.append("upload_preset", "upload_preset_1");
+
+                    const cloudRes = await axios.post(
+                      "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                      cloudFormData,
+                      {
+                        headers: { "Content-Type": "multipart/form-data" },
+                      }
+                    );
+
+                    const cloudData = cloudRes.data;
+
+                    console.log("backend url is ", cloudData.secure_url);
                     toast.dismiss();
-                    toast.success("Video exported successfully!");
-                    // Navigate to the preview page
-                    router.push(previewUrl);
-                  } catch (error) {
-                    console.error("Export error:", error);
+                    toast.success("Video exported with background!");
+
+                    // Navigate to preview page
+                    router.push(
+                      `/preview?video=${encodeURIComponent(
+                        cloudData.secure_url
+                      )}&title=${encodeURIComponent(
+                        sidebarTitle
+                      )}&description=${encodeURIComponent(sidebarDescription || "")}`
+                    );
+                  } catch (err) {
+                    console.error(err);
                     toast.dismiss();
-                    toast.error("Failed to export video");
+                    toast.error("Export failed");
                   }
                 }}
                 tool={tool}
@@ -1476,13 +1511,16 @@ export default function EditorPage() {
           </span>
 
           {/* WRAPPER */}
-          <div className="flex flex-col items-center w-full">
-            {/* 🎥 Video container */}
+          <div
+            className={`flex flex-col items-center w-full max-w-[900px] mx-auto rounded-2xl shadow-lg bg-white`}
+            style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
+          >
+            {/* Video container */}
             <div
               ref={videoContainerRef}
-              className={`relative ml-2 w-full max-w-[400px] h-[260px] sm:ml-32 sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${
+              className={`relative w-full h-[260px] sm:h-auto sm:aspect-video rounded-2xl border ${
                 isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
-              } flex flex-col items-center justify-center transition-all duration-300 mb-2`}
+              } flex items-center justify-center transition-all duration-300 mb-4`}
               style={{
                 minHeight: "160px",
                 padding: selectedBackground ? "20px" : "0px",
@@ -1536,13 +1574,13 @@ export default function EditorPage() {
               />
             </div>
 
-            {/* 🎚 Controls aligned with video */}
-            <div className="w-full max-w-[400px] sm:max-w-[900px] flex flex-col">
+            {/* Controls container */}
+            <div className="w-full flex flex-col gap-3">
               <CustomVideoControls
                 playerRef={playerRef}
                 duration={duration}
                 currentTime={currentTime}
-                setCurrentTime={(t: number) => {
+                setCurrentTime={(t) => {
                   setCurrentTime(t);
                   playerRef.current?.seekTo(t, "seconds");
                 }}
@@ -1551,7 +1589,7 @@ export default function EditorPage() {
                 playing={playing}
               />
 
-              <div className="flex items-center justify-between mt-2 px-2 w-full">
+              <div className="flex items-center justify-between px-2">
                 {/* Skip buttons */}
                 <div className="flex items-center gap-2">
                   <button
@@ -1701,11 +1739,11 @@ export default function EditorPage() {
                 //     zoomEffects
                 //   );
                 // }}
+                onTrim={videoTrimHandler}
                 processing={processing}
                 onResetVideo={resetVideo}
                 onZoomEffectCreate={onZoomEffectCreate}
                 initialSegments={currentSegments}
-                onTrim={videoTrimHandler}
               />
             ) : (
               <div className="w-full max-w-6xl mx-auto p-8">
