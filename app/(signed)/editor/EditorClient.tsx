@@ -1095,7 +1095,7 @@ export default function EditorPage() {
       formData.append("segments", JSON.stringify(segments));
       console.log(formData);
       const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -1464,13 +1464,15 @@ export default function EditorPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
           {/* Restore action buttons row */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">
-            <button
-              onClick={() => router.push("/recorder")}
-              className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow-sm hover:bg-[#5B43C6] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit"
-            >
-              <span className="text-xl"></span> Back to Recorder
-            </button>
-            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0">
+            {/* 
+  <button
+    onClick={() => router.push("/recorder")}
+    className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow-sm hover:bg-[#5B43C6] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit"
+  >
+    <span className="text-xl"></span> Back to Recorder
+  </button>
+  */}
+            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0 ml-auto">
               <button
                 className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={() => {
@@ -1481,6 +1483,7 @@ export default function EditorPage() {
               </button>
             </div>
           </div>
+
           {/* Title and Description Display */}
           {(sidebarTitle || sidebarDescription) && (
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200">

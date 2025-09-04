@@ -10,14 +10,13 @@ import {
   useScroll,
   useTransform,
 } from "framer-motion";
-import Hero2 from "./Hero2";
-import Image from "next/image"; // Import Next.js Image component
+import Image from "next/image";
 
 interface TiltCardProps {
   title: string;
   description: string;
-  icon: string; // Kept for fallback or alternative use
-  image: string; // New prop for image path
+  icon: string;
+  image: string;
   linkText?: string;
   index: number;
 }
@@ -25,7 +24,6 @@ interface TiltCardProps {
 const TiltCard: React.FC<TiltCardProps> = ({
   title,
   description,
-
   image,
   linkText = "Learn more →",
   index,
@@ -36,7 +34,8 @@ const TiltCard: React.FC<TiltCardProps> = ({
   const springConfig = { stiffness: 300, damping: 30 };
   const rotateX = useSpring(x, springConfig);
   const rotateY = useSpring(y, springConfig);
-  const isInView = useInView(cardRef, { once: false, margin: "-50px" });
+  // Set `once: true` to trigger only once when card enters viewport
+  const isInView = useInView(cardRef, { once: true, margin: "-50px" });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
@@ -89,26 +88,26 @@ const TiltCard: React.FC<TiltCardProps> = ({
         delay: index * 0.1,
       }}
     >
-      {/* Replace emoji icon with Image */}
       <motion.div
-        className="relative w-16 h-16 mx-auto mb-4 rounded-lg overflow-hidden" // Adjusted height for better icon visibility
+        className="relative w-16 h-16 mx-auto mb-4 rounded-lg overflow-hidden"
+        // Changed to one-time animation triggered by isInView
+        initial={{ rotate: 0, scale: 0.8 }}
         animate={{
-          rotate: [0, 5, -5, 0],
-          scale: [1, 1.1, 1],
+          rotate: isInView ? 0 : 0,
+          scale: isInView ? 1 : 0.8,
         }}
         transition={{
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut",
+          duration: 0.8,
+          ease: easeOut,
         }}
       >
         <Image
           src={image}
           alt={title}
           fill
-          className="object-contain" // Use contain to preserve image aspect ratio
+          className="object-contain"
           sizes="64px"
-          priority={index < 3} // Prioritize first three cards
+          priority={index < 3}
         />
       </motion.div>
       <div className="relative w-full h-32 mb-4"></div>
@@ -128,7 +127,8 @@ const TiltCard: React.FC<TiltCardProps> = ({
 
 const Hero1: React.FC = () => {
   const sectionRef = useRef(null);
-  const isInView = useInView(sectionRef, { once: false, margin: "-100px" });
+  // Set `once: true` to trigger only once when section enters viewport
+  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start end", "end start"],
@@ -261,7 +261,7 @@ const Hero1: React.FC = () => {
               description={card.description}
               icon={card.icon}
               image={card.image}
-              index={index}
+              index={index + 3} // Adjust index for staggered delay
             />
           ))}
         </motion.div>
@@ -323,7 +323,6 @@ const Hero1: React.FC = () => {
           </div>
         </motion.div>
       </div>
-      <Hero2 />
     </section>
   );
 };
