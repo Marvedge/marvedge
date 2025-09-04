@@ -406,7 +406,7 @@ export default function TimelineRuler({
               alt="Zoom"
               width={16}
               height={16}
-              className="w-7 h-7 translate-y-0.5" // Adjusted to translate-y-0.5 for a smaller shift
+              className="w-7 h-7 translate-y-0.5"
             />
             Zoom in
           </button>
@@ -454,7 +454,7 @@ export default function TimelineRuler({
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0}
-            className="min-w-[80px] h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-[80px] h-11 px-7 flex items-center justify-center gap-1 font-semibold rounded-lg bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/delete-demo.svg"

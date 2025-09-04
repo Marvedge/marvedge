@@ -1,11 +1,7 @@
 import "./globals.css";
 import { SonnerToaster } from "./components/sonner-toaster";
 import { Providers } from "./providers";
-import Hero from "./components/Hero";
-import Hero1 from "./components/Hero1";
-import Hero2 from "./components/Hero2";
-import Hero3 from "./components/Hero3";
-import Hero4 from "./components/Hero4";
+import HeroSection from "./components/HeroSection";
 
 export const metadata = {
   title: "Marvedge",
@@ -24,12 +20,8 @@ export default function RootLayout({
       <body className="overflow-x-hidden">
         <Providers>
           {children}
+          <HeroSection />
           <SonnerToaster />
-          <Hero />
-          <Hero1 />
-          <Hero2 />
-          <Hero3 />
-          <Hero4 />
         </Providers>
       </body>
     </html>
