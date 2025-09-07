@@ -1,15 +1,9 @@
-"use client"; 
+"use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Menu,
-  X,
-  Play,
-  Users,
-  Settings,
-} from "lucide-react";
+import { Menu, X, Play, Users, Settings } from "lucide-react";
 import Image from "next/image";
 
 const SidemenuDashboard = () => {

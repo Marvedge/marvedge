@@ -32,8 +32,8 @@ export const useBlobStore = create<{
     const dataUrl = localStorage.getItem("uploadedVideo");
     if (dataUrl) {
       fetch(dataUrl)
-        .then(res => res.blob())
-        .then(blob => {
+        .then((res) => res.blob())
+        .then((blob) => {
           set({ blob });
         });
     }

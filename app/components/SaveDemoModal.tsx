@@ -37,13 +37,13 @@ export default function SaveDemoModal({
   // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
 
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
@@ -56,7 +56,7 @@ export default function SaveDemoModal({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 transform transition-all duration-300 scale-100">
         {/* Header */}
@@ -118,16 +118,11 @@ export default function SaveDemoModal({
             disabled={!title.trim() || processing}
             className="flex-1 bg-[#7C5CFC] hover:bg-[#8A76FC] text-white flex items-center gap-2"
           >
-            <Image
-              src="/icons/1.png"
-              alt="Save"
-              width={16}
-              height={16}
-            />
+            <Image src="/icons/1.png" alt="Save" width={16} height={16} />
             {processing ? "Saving..." : "Save Demo"}
           </Button>
         </div>
       </div>
     </div>
   );
-} 
+}

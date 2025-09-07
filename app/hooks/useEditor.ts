@@ -59,7 +59,11 @@ export const useEditor = () => {
       try {
         let trimmedBlob: Blob;
         if (Array.isArray(startOrSegments)) {
-          trimmedBlob = await multiSegmentTrimmer(blob, startOrSegments, onProgress);
+          trimmedBlob = await multiSegmentTrimmer(
+            blob,
+            startOrSegments,
+            onProgress
+          );
         } else {
           trimmedBlob = await videoTrimmer(blob, startOrSegments, end!);
         }
@@ -72,14 +76,19 @@ export const useEditor = () => {
         if (zoomEffects && zoomEffects.length > 0) {
           console.log("Processing zoom effects:", zoomEffects);
           console.log("Original blob size:", trimmedBlob.size);
-          
+
           // Use enhanced zoom processor
-          const { createEnhancedZoomProcessor } = await import("../lib/enhancedZoomProcessor");
-          processedBlob = await createEnhancedZoomProcessor(trimmedBlob, zoomEffects);
-          
+          const { createEnhancedZoomProcessor } = await import(
+            "../lib/enhancedZoomProcessor"
+          );
+          processedBlob = await createEnhancedZoomProcessor(
+            trimmedBlob,
+            zoomEffects
+          );
+
           console.log("Zoom effects processing completed");
           console.log("Processed blob size:", processedBlob.size);
-          
+
           // Update the video URL to show the processed video with zoom effects
           const processedUrl = URL.createObjectURL(processedBlob);
           setVideoUrl(processedUrl);

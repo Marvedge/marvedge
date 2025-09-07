@@ -13,7 +13,10 @@ type TeamsMainProps = {
   teams: Team[];
 };
 
-export default function TeamsMain({ onCreateTeamClick, teams }: TeamsMainProps) {
+export default function TeamsMain({
+  onCreateTeamClick,
+  teams,
+}: TeamsMainProps) {
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#F5F3FF] overflow-hidden">
       <main className="flex-grow bg-[#EDE9FE] flex items-center justify-center p-6 md:p-8 rounded-none md:rounded-tr-3xl">

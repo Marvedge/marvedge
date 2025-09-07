@@ -43,7 +43,7 @@ const DashboardPage = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-  
+
   if (status === "loading") {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -180,6 +180,5 @@ const DashboardPage = () => {
     </div>
   );
 };
-
 
 export default DashboardPage;

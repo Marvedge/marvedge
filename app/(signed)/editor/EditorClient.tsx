@@ -482,7 +482,7 @@ export default function EditorPage() {
         timers.forEach((timer) => clearTimeout(timer));
       };
     }
-  }, [videoUrl, duration, blob, recordingDuration, imageMap]);
+  }, [videoUrl, duration, blob, recordingDuration]);
 
   // Force metadata loading for ReactPlayer
   useEffect(() => {
@@ -1246,7 +1246,7 @@ export default function EditorPage() {
 
               // Call backend FFmpeg server with axios
               const serverRes = await axios.post(
-                "http://localhost:4000/process-video",
+                `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/process-video`,
                 formData,
                 {
                   headers: { "Content-Type": "multipart/form-data" },

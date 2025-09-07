@@ -14,7 +14,10 @@ export async function POST(req: Request) {
   });
 
   if (!resetRequest) {
-    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid or expired OTP" },
+      { status: 400 }
+    );
   }
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
