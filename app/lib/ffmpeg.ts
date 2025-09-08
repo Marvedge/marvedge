@@ -197,7 +197,9 @@ export const videoWithZoomEffects = async (
   zoomEffects: ZoomEffect[]
 ): Promise<Blob> => {
   // Use the enhanced zoom processor
-  const { createEnhancedZoomProcessor } = await import("./enhancedZoomProcessor");
+  const { createEnhancedZoomProcessor } = await import(
+    "./enhancedZoomProcessor"
+  );
   return await createEnhancedZoomProcessor(inputBlob, zoomEffects);
 };
 
@@ -217,8 +219,6 @@ function generateFFmpegFilters(overlays: Overlay[]): string {
     })
     .join(",");
 }
-
-
 
 export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
@@ -265,7 +265,11 @@ export const multiSegmentTrimmer = async (
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
   const inputName = "input.webm";
-  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
+  ffmpeg.FS(
+    "writeFile",
+    inputName,
+    new Uint8Array(await inputBlob.arrayBuffer())
+  );
 
   // For each segment, trim and output to a temp file
   const segmentFiles: string[] = [];
@@ -273,27 +277,41 @@ export const multiSegmentTrimmer = async (
     const seg = segments[i];
     const outName = `seg${i}.webm`;
     await ffmpeg.run(
-      "-i", inputName,
-      "-ss", seg.start,
-      "-to", seg.end,
-      "-c:v", "libvpx",
-      "-c:a", "libvorbis",
+      "-i",
+      inputName,
+      "-ss",
+      seg.start,
+      "-to",
+      seg.end,
+      "-c:v",
+      "libvpx",
+      "-c:a",
+      "libvorbis",
       outName
     );
     segmentFiles.push(outName);
-    if (onProgress) onProgress(Math.round(((i + 1) / (segments.length + 1)) * 80));
+    if (onProgress)
+      onProgress(Math.round(((i + 1) / (segments.length + 1)) * 80));
   }
 
   // Create a concat list file
-  const concatList = segmentFiles.map(f => `file '${f}'`).join("\n");
-  ffmpeg.FS("writeFile", "concat_list.txt", new Uint8Array(Buffer.from(concatList)));
+  const concatList = segmentFiles.map((f) => `file '${f}'`).join("\n");
+  ffmpeg.FS(
+    "writeFile",
+    "concat_list.txt",
+    new Uint8Array(Buffer.from(concatList))
+  );
 
   const outputName = "output_merged.webm";
   await ffmpeg.run(
-    "-f", "concat",
-    "-safe", "0",
-    "-i", "concat_list.txt",
-    "-c", "copy",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    "concat_list.txt",
+    "-c",
+    "copy",
     outputName
   );
   if (onProgress) onProgress(95);

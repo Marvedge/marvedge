@@ -8,6 +8,8 @@ import React, {
   MouseEvent,
 } from "react";
 
+import { FaBars } from "react-icons/fa6";
+
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
 import EditorTopbar from "@/app/components/EditorTopbar";
@@ -30,7 +32,6 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
 import axios from "axios";
-import { ErrorResponse } from "resend";
 // import { ErrorResponse } from "resend";
 
 interface RectOverlay {
@@ -59,16 +60,6 @@ interface TextOverlay {
 }
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
-const imageMap: Record<string, string> = {
-  bg1: "/icons/bg-mountain-sunset.svg",
-  bg2: "/icons/bg-abstract-circles.svg",
-  bg3: "/icons/bg-crystalline.svg",
-  bg4: "/icons/bg-brushstrokes.svg",
-  bg5: "/icons/bg-warm-gradients.svg",
-  bg6: "/icons/bg-ethereal.svg",
-  bg7: "/icons/bg-fiery.svg",
-  bg8: "/icons/bg-ribbons.svg",
-};
 
 export default function EditorPage() {
   const router = useRouter();
@@ -77,13 +68,18 @@ export default function EditorPage() {
   const [playing, setPlaying] = useState(false);
   const [timelineStartTime, setTimelineStartTime] = useState<number>(0);
 
+  // type ToolType = "none" | "text" | "blur" | "rect" | "arrow";
+
+  // Then update your component state (if not already done)
+  // const [tool, setTool] = useState<ToolType>("none");
+
   // State to store loaded segments
   const [, setLoadedSegments] = useState<
     { start: string; end: string }[] | null
   >(null);
   const [currentSegments, setCurrentSegments] = useState<
     { start: string; end: string }[]
-  >([{ start: "00:00:00", end: "00:00:00" }]);
+  >([]);
 
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
@@ -116,7 +112,7 @@ export default function EditorPage() {
   // Zoom effects state
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  const [currenZommEfffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
+  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
     null
   );
   // Simple direct two-way sync
@@ -128,6 +124,7 @@ export default function EditorPage() {
     mp4Url,
     thumbnailUrl,
     processing,
+    // trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
@@ -140,7 +137,7 @@ export default function EditorPage() {
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper functions for time conversion
-  console.log(currenZommEfffect);
+
   const formatTimeForInput = useCallback((seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -229,6 +226,9 @@ export default function EditorPage() {
     setZoomEffects,
     formatTimeForInput,
   ]);
+
+  // State for sidebar visibility
+  const [isHovering, setIsHovering] = useState(false);
 
   // User initials logic (copied from recorder page)
   const { data: session } = useSession();
@@ -393,54 +393,6 @@ export default function EditorPage() {
   //   };
   // }, []);
   // Try to get duration from blob store when video is first loaded
-
-  const getBackgroundStyle = useCallback(() => {
-    if (!selectedBackground) return {};
-
-    if (selectedBackground === "hidden") {
-      return { background: "transparent" };
-    }
-
-    if (selectedBackground === "custom" && customBackground) {
-      return {
-        backgroundImage: `url(${URL.createObjectURL(customBackground)})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      };
-    }
-
-    if (selectedBackground.startsWith("gradient:")) {
-      const gradientId = selectedBackground.replace("gradient:", "");
-      const gradientMap: Record<string, string> = {
-        sunset:
-          "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
-        ocean: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        mint: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
-        royal: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        steel: "linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)",
-        candy: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-      };
-      return { background: gradientMap[gradientId] || "" };
-    }
-
-    if (selectedBackground.startsWith("color:")) {
-      const color = selectedBackground.replace("color:", "");
-      return { backgroundColor: color };
-    }
-
-    if (imageMap[selectedBackground]) {
-      return {
-        backgroundImage: `url(${imageMap[selectedBackground]})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      };
-    }
-
-    return {};
-  }, [selectedBackground, customBackground]);
-
   useEffect(() => {
     if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
       const getDurationFromBlob = async () => {
@@ -482,7 +434,7 @@ export default function EditorPage() {
         timers.forEach((timer) => clearTimeout(timer));
       };
     }
-  }, [videoUrl, duration, blob, recordingDuration, imageMap]);
+  }, [videoUrl, duration, blob, recordingDuration]);
 
   // Force metadata loading for ReactPlayer
   useEffect(() => {
@@ -1059,6 +1011,36 @@ export default function EditorPage() {
     }
   };
 
+  // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
+  function normalizeTimeFormat(time: string | number): string {
+    let totalSeconds: number;
+
+    if (typeof time === "number") {
+      totalSeconds = time;
+    } else if (time.includes(":")) {
+      // Handle "mm:ss" or "hh:mm:ss"
+      const parts = time.split(":").map(Number);
+      if (parts.length === 2) {
+        totalSeconds = parts[0] * 60 + parts[1];
+      } else if (parts.length === 3) {
+        totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else {
+        throw new Error("Invalid time format: " + time);
+      }
+    } else {
+      totalSeconds = Number(time);
+    }
+
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
+      2,
+      "0"
+    );
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
   const videoTrimHandler = async (
     segments: { start: string; end: string }[]
   ) => {
@@ -1071,6 +1053,10 @@ export default function EditorPage() {
         toast.error("No video available to trim");
         return;
       }
+      const normalizedSegments = segments.map((seg) => ({
+        start: normalizeTimeFormat(seg.start),
+        end: normalizeTimeFormat(seg.end),
+      }));
 
       console.log("Starting trim process...");
       console.log("Video URL:", videoUrl);
@@ -1091,14 +1077,14 @@ export default function EditorPage() {
       // 2. Prepare multipart form data and send to backend
       console.log("Sending video blob to backend");
       const formData = new FormData();
+      formData.append("segments", JSON.stringify(normalizedSegments));
       formData.append("video", videoBlob, "video.mp4");
-      formData.append("segments", JSON.stringify(segments));
-      console.log(formData);
+      // formData.append("segments", JSON.stringify(segments));
+
       const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`,
+        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
         formData,
         {
-          headers: { "Content-Type": "multipart/form-data" },
           responseType: "blob",
         }
       );
@@ -1108,14 +1094,13 @@ export default function EditorPage() {
 
       if (trimmedVideoUrl) {
         toast.dismiss();
-        console.log(trimmedVideoUrl);
         toast.success("Video trimmed successfully!");
         setVideoUrl(trimmedVideoUrl);
       } else {
         toast.error("Failed to trim video - no trimmedUrl returned");
       }
     } catch (err: unknown) {
-      if (axios.isAxiosError<ErrorResponse>(err)) {
+      if (axios.isAxiosError(err)) {
         const message = err.response?.data?.message || "Unexpected error";
         toast.dismiss();
         toast.error(`Error processing video: ${message}`);
@@ -1127,7 +1112,6 @@ export default function EditorPage() {
       setProgress(0);
     }
   };
-
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
@@ -1139,7 +1123,7 @@ export default function EditorPage() {
     );
 
     if (effect.zoomLevel <= 1.0) {
-      console.warn("⚠ Zoom level is too low, forcing to 2.0");
+      console.warn("ΓÜá Zoom level is too low, forcing to 2.0");
       effect.zoomLevel = 2.0;
     }
 
@@ -1167,7 +1151,7 @@ export default function EditorPage() {
   const [volume, setVolume] = useState(1);
 
   return (
-    <main className="flex flex-col h-screen w-full bg-gray-50">
+    <main className="flex flex-col min-h-screen w-full bg-gray-50 overflow-hidden">
       <Toaster
         position="top-center"
         toastOptions={{
@@ -1185,142 +1169,135 @@ export default function EditorPage() {
         }}
       />
       <EditorTopbar onBack={() => router.back()} userInitials={initials} />
-      <div className="flex flex-1 min-h-0">
-        <EditorSidebar
-          title={sidebarTitle}
-          setTitle={setSidebarTitle}
-          description={sidebarDescription}
-          setDescription={setSidebarDescription}
-          onDownloadWebM={() => {
-            const filename = sanitizeFilename(sidebarTitle) || "clip";
-            if (videoUrl) {
-              const a = document.createElement("a");
-              a.href = videoUrl;
-              a.download = `${filename}.webm`;
-              a.click();
-            }
-          }}
-          onDownloadMP4={() => {
-            const filename = sanitizeFilename(sidebarTitle) || "clip";
-            if (mp4Url) {
-              downloadBlob(mp4Url, `${filename}.mp4`);
-            }
-          }}
-          onExportWebM={async () => {
-            if (!videoUrl) {
-              toast.error("No video available to export");
-              return;
-            }
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        {/* Hamburger Icon for Desktop */}
+        <div
+          className="hidden md:flex items-center justify-center w-10 h-full bg-gray-100 hover:bg-gray-200 transition-colors fixed top-0 left-0 z-40 shadow-sm"
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
+        >
+          <FaBars className="text-gray-600 text-xl" />
+        </div>
 
-            try {
-              console.log("sending from here #linex 1228");
-              toast.loading("Processing video...");
-              console.log(selectedBackground);
-
-              // Fetch blob from ReactPlayer video
-              const res = await fetch(videoUrl);
-              const videoBlob = await res.blob();
-
-              const formData = new FormData();
-              formData.append("video", videoBlob, "video.webm");
-
-              // Handle background
-              if (selectedBackground) {
-                const backgroundPath = imageMap[selectedBackground];
-                console.log(backgroundPath);
-                if (backgroundPath) {
-                  const bgUrl = `${window.location.origin}${backgroundPath}`;
-                  console.log("Fetching background from:", bgUrl);
-
-                  const bgRes = await fetch(bgUrl);
-                  if (!bgRes.ok) {
-                    throw new Error(`Failed to fetch background: ${bgUrl}`);
+        {/* Sidebar for Desktop (shown on hover) */}
+        <div
+          className={`hidden md:block fixed top-0 left-0 h-full bg-white shadow-lg z-50 transition-transform duration-300 transform ${
+            isHovering ? "translate-x-0" : "-translate-x-full"
+          } w-80`}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
+        >
+          <div className="w-full mt-15 h-full">
+            <EditorSidebar
+              title={sidebarTitle}
+              setTitle={setSidebarTitle}
+              description={sidebarDescription}
+              setDescription={setSidebarDescription}
+              onDownloadWebM={() => {
+                const filename = sanitizeFilename(sidebarTitle) || "clip";
+                if (videoUrl) {
+                  const a = document.createElement("a");
+                  a.href = videoUrl;
+                  a.download = `${filename}.webm`;
+                  a.click();
+                }
+              }}
+              onDownloadMP4={() => {
+                const filename = sanitizeFilename(sidebarTitle) || "clip";
+                if (mp4Url) {
+                  downloadBlob(mp4Url, `${filename}.mp4`);
+                }
+              }}
+              onExportWebM={async () => {
+                if (!videoUrl) {
+                  toast.error("No video available to export");
+                  return;
+                }
+                try {
+                  toast.loading("Exporting video to Cloudinary...");
+                  let cloudinaryVideoUrl = videoUrl;
+                  if (videoUrl.startsWith("blob:")) {
+                    const response = await fetch(videoUrl);
+                    if (!response.ok) {
+                      throw new Error("Failed to fetch video blob");
+                    }
+                    const videoBlob = await response.blob();
+                    const cloudFormData = new FormData();
+                    cloudFormData.append("file", videoBlob, "video.webm");
+                    cloudFormData.append("upload_preset", "upload_preset_1");
+                    const cloudRes = await fetch(
+                      "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                      {
+                        method: "POST",
+                        body: cloudFormData,
+                      }
+                    );
+                    if (!cloudRes.ok) {
+                      const cloudError = await cloudRes.text();
+                      throw new Error(
+                        `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                      );
+                    }
+                    const cloudData = await cloudRes.json();
+                    if (!cloudData.secure_url) {
+                      throw new Error(
+                        "Cloudinary upload failed - no secure_url returned"
+                      );
+                    }
+                    cloudinaryVideoUrl = cloudData.secure_url;
+                    toast.dismiss();
                   }
-
-                  const bgBlob = await bgRes.blob();
-                  console.log("Background blob:", bgBlob);
-
-                  formData.append("background", bgBlob, "background.svg");
+                  const previewUrl = `/preview?video=${encodeURIComponent(
+                    cloudinaryVideoUrl
+                  )}&title=${encodeURIComponent(
+                    sidebarTitle
+                  )}&description=${encodeURIComponent(sidebarDescription || "")}`;
+                  toast.dismiss();
+                  toast.success("Video exported successfully!");
+                  router.push(previewUrl);
+                } catch (error) {
+                  console.error("Export error:", error);
+                  toast.dismiss();
+                  toast.error("Failed to export video");
                 }
-              }
-
-              // Call backend FFmpeg server with axios
-              const serverRes = await axios.post(
-                "http://localhost:4000/process-video",
-                formData,
-                {
-                  headers: { "Content-Type": "multipart/form-data" },
+              }}
+              tool={tool}
+              setTool={(t: string) => {
+                // Type guard to ensure only valid tool values are accepted
+                if (
+                  t === "none" ||
+                  t === "text" ||
+                  t === "blur" ||
+                  t === "rect" ||
+                  t === "arrow"
+                ) {
+                  setTool(t);
                 }
-              );
+              }}
+              handleUndo={handleUndo}
+              handleClear={handleClear}
+              handleSaveOverlays={handleSaveOverlays}
+              handleLoadOverlays={handleLoadOverlays}
+              thumbnailUrl={thumbnailUrl || undefined}
+              selectedBackground={selectedBackground}
+              setSelectedBackground={setSelectedBackground}
+              backgroundType={backgroundType}
+              setBackgroundType={setBackgroundType}
+              customBackground={customBackground}
+              setCustomBackground={setCustomBackground}
+              // className="w-full h-full"
+            />
+          </div>
+        </div>
 
-              const { url } = serverRes.data; // backend returns { url }
-
-              // Fetch processed video (mp4) from backend
-              const processedRes = await axios.get(
-                `http://localhost:4000${url}`,
-                {
-                  responseType: "blob", // important
-                }
-              );
-              const processedBlob = processedRes.data;
-
-              // Upload processed video to Cloudinary with axios
-              const cloudFormData = new FormData();
-              cloudFormData.append("file", processedBlob, "final.mp4");
-              cloudFormData.append("upload_preset", "upload_preset_1");
-
-              const cloudRes = await axios.post(
-                "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                cloudFormData,
-                {
-                  headers: { "Content-Type": "multipart/form-data" },
-                }
-              );
-
-              const cloudData = cloudRes.data;
-
-              console.log("backend url is ", cloudData.secure_url);
-              toast.dismiss();
-              toast.success("Video exported with background!");
-
-              // Navigate to preview page
-              router.push(
-                `/preview?video=${encodeURIComponent(
-                  cloudData.secure_url
-                )}&title=${encodeURIComponent(
-                  sidebarTitle
-                )}&description=${encodeURIComponent(sidebarDescription || "")}`
-              );
-            } catch (err) {
-              console.error(err);
-              toast.dismiss();
-              toast.error("Export failed");
-            }
-          }}
-          tool={tool}
-          setTool={(t: string) =>
-            setTool(t as "none" | "blur" | "rect" | "arrow" | "text")
-          }
-          handleUndo={handleUndo}
-          handleClear={handleClear}
-          handleSaveOverlays={handleSaveOverlays}
-          handleLoadOverlays={handleLoadOverlays}
-          thumbnailUrl={thumbnailUrl || undefined}
-          selectedBackground={selectedBackground}
-          setSelectedBackground={setSelectedBackground}
-          backgroundType={backgroundType}
-          setBackgroundType={setBackgroundType}
-          customBackground={customBackground}
-          setCustomBackground={setCustomBackground}
-        />
+        {/* Mobile Drawer */}
         {isSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
             <div
               className="fixed inset-0 bg-black bg-opacity-40"
               onClick={() => setIsSidebarOpen(false)}
             />
-            {/* Sidebar Drawer */}
-            <div className="relative w-4/5 max-w-xs h-full bg-white shadow-lg z-50 animate-slide-in-left">
+            <div className="relative w-full max-w-xs h-full bg-white shadow-lg z-50 animate-slide-in-left">
               <button
                 className="absolute top-4 right-4 text-[#7C5CFC]"
                 onClick={() => setIsSidebarOpen(false)}
@@ -1353,98 +1330,65 @@ export default function EditorPage() {
                     toast.error("No video available to export");
                     return;
                   }
-
                   try {
-                    console.log("sending from here #linex 1228");
-                    toast.loading("Processing video...");
-                    console.log(selectedBackground);
-
-                    // Fetch blob from ReactPlayer video
-                    const res = await fetch(videoUrl);
-                    const videoBlob = await res.blob();
-
-                    const formData = new FormData();
-                    formData.append("video", videoBlob, "video.webm");
-
-                    // Handle background
-                    if (selectedBackground) {
-                      const backgroundPath = imageMap[selectedBackground];
-                      console.log(backgroundPath);
-                      if (backgroundPath) {
-                        const bgUrl = `${window.location.origin}${backgroundPath}`;
-                        console.log("Fetching background from:", bgUrl);
-
-                        const bgRes = await fetch(bgUrl);
-                        if (!bgRes.ok) {
-                          throw new Error(
-                            `Failed to fetch background: ${bgUrl}`
-                          );
+                    toast.loading("Exporting video to Cloudinary...");
+                    let cloudinaryVideoUrl = videoUrl;
+                    if (videoUrl.startsWith("blob:")) {
+                      const response = await fetch(videoUrl);
+                      if (!response.ok) {
+                        throw new Error("Failed to fetch video blob");
+                      }
+                      const videoBlob = await response.blob();
+                      const cloudFormData = new FormData();
+                      cloudFormData.append("file", videoBlob, "video.webm");
+                      cloudFormData.append("upload_preset", "upload_preset_1");
+                      const cloudRes = await fetch(
+                        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
+                        {
+                          method: "POST",
+                          body: cloudFormData,
                         }
-
-                        const bgBlob = await bgRes.blob();
-                        console.log("Background blob:", bgBlob);
-
-                        formData.append("background", bgBlob, "background.svg");
+                      );
+                      if (!cloudRes.ok) {
+                        const cloudError = await cloudRes.text();
+                        throw new Error(
+                          `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
+                        );
                       }
+                      const cloudData = await cloudRes.json();
+                      if (!cloudData.secure_url) {
+                        throw new Error(
+                          "Cloudinary upload failed - no secure_url returned"
+                        );
+                      }
+                      cloudinaryVideoUrl = cloudData.secure_url;
                     }
-
-                    // Call backend FFmpeg server with axios
-                    const serverRes = await axios.post(
-                      "http://localhost:4000/process-video",
-                      formData,
-                      {
-                        headers: { "Content-Type": "multipart/form-data" },
-                      }
-                    );
-
-                    const { url } = serverRes.data; // backend returns { url }
-
-                    // Fetch processed video (mp4) from backend
-                    const processedRes = await axios.get(
-                      `http://localhost:4000${url}`,
-                      {
-                        responseType: "blob", // important
-                      }
-                    );
-                    const processedBlob = processedRes.data;
-
-                    // Upload processed video to Cloudinary with axios
-                    const cloudFormData = new FormData();
-                    cloudFormData.append("file", processedBlob, "final.mp4");
-                    cloudFormData.append("upload_preset", "upload_preset_1");
-
-                    const cloudRes = await axios.post(
-                      "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                      cloudFormData,
-                      {
-                        headers: { "Content-Type": "multipart/form-data" },
-                      }
-                    );
-
-                    const cloudData = cloudRes.data;
-
-                    console.log("backend url is ", cloudData.secure_url);
+                    const previewUrl = `/preview?video=${encodeURIComponent(
+                      cloudinaryVideoUrl
+                    )}&title=${encodeURIComponent(
+                      sidebarTitle
+                    )}&description=${encodeURIComponent(sidebarDescription || "")}`;
                     toast.dismiss();
-                    toast.success("Video exported with background!");
-
-                    // Navigate to preview page
-                    router.push(
-                      `/preview?video=${encodeURIComponent(
-                        cloudData.secure_url
-                      )}&title=${encodeURIComponent(
-                        sidebarTitle
-                      )}&description=${encodeURIComponent(sidebarDescription || "")}`
-                    );
-                  } catch (err) {
-                    console.error(err);
+                    toast.success("Video exported successfully!");
+                    router.push(previewUrl);
+                  } catch (error) {
+                    console.error("Export error:", error);
                     toast.dismiss();
-                    toast.error("Export failed");
+                    toast.error("Failed to export video");
                   }
                 }}
-                tool={tool}
-                setTool={(t: string) =>
-                  setTool(t as "none" | "blur" | "rect" | "arrow" | "text")
-                }
+                tool={tool} // Γ£à Correct prop
+                setTool={(t: string) => {
+                  if (
+                    t === "none" ||
+                    t === "text" ||
+                    t === "blur" ||
+                    t === "rect" ||
+                    t === "arrow"
+                  ) {
+                    setTool(t);
+                  }
+                }}
                 handleUndo={handleUndo}
                 handleClear={handleClear}
                 handleSaveOverlays={handleSaveOverlays}
@@ -1457,36 +1401,33 @@ export default function EditorPage() {
                 setBackgroundType={setBackgroundType}
                 customBackground={customBackground}
                 setCustomBackground={setCustomBackground}
+                className="w-full h-full"
               />
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
-          {/* Restore action buttons row */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6">
-            {/* 
-  <button
-    onClick={() => router.push("/recorder")}
-    className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow-sm hover:bg-[#5B43C6] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit"
-  >
-    <span className="text-xl"></span> Back to Recorder
-  </button>
-  */}
+
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6 px-4 sm:px-8">
             <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0 ml-auto">
+              {/* Mobile Hamburger Button */}
               <button
-                className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => {
-                  setShowSaveDemoModal(true);
-                }}
+                className="md:hidden flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <FaBars className="text-xl" />
+                Menu
+              </button>
+              <button
+                className="flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                onClick={() => setShowSaveDemoModal(true)}
               >
                 <span className="text-xl"></span> Save Demo
               </button>
             </div>
           </div>
-
-          {/* Title and Description Display */}
           {(sidebarTitle || sidebarDescription) && (
-            <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200">
+            <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
               {sidebarTitle && (
                 <div className="mb-3">
                   <span className="text-sm font-medium text-gray-500">
@@ -1509,38 +1450,41 @@ export default function EditorPage() {
               )}
             </div>
           )}
-          <span className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 lg:text-2xl text-[#7C5CFC] font-semibold text-base select-none cursor-default mb-4 w-max">
-            <span className="text-xl"></span> Preview
-          </span>
-
-          {/* WRAPPER */}
           <div
-            className={`flex flex-col items-center w-full max-w-[900px] mx-auto rounded-2xl shadow-lg bg-white`}
-            style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
+            ref={videoContainerRef}
+            className={`relative w-full max-w-[1100px] mx-auto h-[260px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border ${
+              isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
+            } flex flex-col items-center justify-center transition-all duration-300 mb-6 sm:mb-0 lg:w-[1100px] lg:max-w-[1100px]`}
+            style={{
+              minHeight: "160px",
+              padding: 0,
+              boxShadow: "0 4px 24px 0 #E6E1FA",
+            }}
           >
-            {/* Video container */}
             <div
-              ref={videoContainerRef}
-              className={`relative w-full h-[260px] sm:h-auto sm:aspect-video rounded-2xl border ${
-                isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
-              } flex items-center justify-center transition-all duration-300 mb-4`}
               style={{
-                minHeight: "160px",
-                padding: selectedBackground ? "20px" : "0px",
-                boxShadow: "0 4px 24px 0 #E6E1FA",
-                ...getBackgroundStyle(),
+                width: "100%",
+                height: "100%",
+                position: "relative",
+                zIndex: 1,
+                borderRadius: "1.25rem",
+                overflow: "hidden",
+                background: "#F6F3FF",
               }}
             >
               <div
                 style={{
-                  width: selectedBackground ? "90%" : "100%",
-                  height: selectedBackground ? "80%" : "100%",
-                  position: "relative",
-                  zIndex: 1,
-                  borderRadius: "1.25rem",
-                  overflow: "hidden",
-                  background: "#F6F3FF",
-                  transition: "width 0.3s ease, height 0.3s ease",
+                  width: "100%",
+                  height: "100%",
+                  transform: currentZoomEffect
+                    ? `scale(${currentZoomEffect.zoomLevel}) translate(${
+                        (currentZoomEffect.x - 0.5) * 100
+                      }%, ${(currentZoomEffect.y - 0.5) * 100}%)`
+                    : "scale(1) translate(0%, 0%)",
+                  transformOrigin: "center center",
+                  transition: currentZoomEffect
+                    ? "transform 0.5s ease-in-out"
+                    : "transform 0.3s ease-out",
                 }}
               >
                 <ReactPlayer
@@ -1558,126 +1502,162 @@ export default function EditorPage() {
                     background: "#F6F3FF",
                   }}
                   onError={(e) => console.error("Video failed to load", e)}
+                  onDuration={(dur) => {
+                    if (
+                      recordingDuration === 0 &&
+                      isFinite(dur) &&
+                      !isNaN(dur)
+                    ) {
+                      setDuration(dur);
+                    }
+                  }}
+                  onReady={() => {
+                    console.log("Video loaded");
+                    if (recordingDuration === 0) {
+                      setTimeout(() => {
+                        if (playerRef.current) {
+                          const player = playerRef.current.getInternalPlayer();
+                          if (
+                            player &&
+                            player.duration &&
+                            isFinite(player.duration) &&
+                            player.duration > 0
+                          ) {
+                            setDuration(Math.floor(player.duration));
+                          }
+                        }
+                      }, 10);
+                      setTimeout(() => {
+                        if (playerRef.current) {
+                          const player = playerRef.current.getInternalPlayer();
+                          if (
+                            player &&
+                            player.duration &&
+                            isFinite(player.duration) &&
+                            player.duration > 0
+                          ) {
+                            setDuration(Math.floor(player.duration));
+                          }
+                        }
+                      }, 100);
+                    }
+                  }}
+                  onPlay={() => setPlaying(true)}
+                  onPause={() => setPlaying(false)}
+                  progressInterval={100}
                   onProgress={({ playedSeconds }) =>
                     setCurrentTime(playedSeconds)
                   }
+                  config={{
+                    file: {
+                      attributes: {
+                        preload: "metadata",
+                      },
+                    },
+                  }}
                 />
               </div>
-
-              {/* Canvas stays on top of video */}
-              <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
-                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
-                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
-                style={{
-                  pointerEvents: tool !== "none" ? "auto" : "none",
-                  borderRadius: "1.25rem",
-                }}
-              />
             </div>
-
-            {/* Controls container */}
-            <div className="w-full flex flex-col gap-3">
-              <CustomVideoControls
-                playerRef={playerRef}
-                duration={duration}
-                currentTime={currentTime}
-                setCurrentTime={(t) => {
-                  setCurrentTime(t);
-                  playerRef.current?.seekTo(t, "seconds");
-                }}
-                recordingDuration={recordingDuration}
-                setPlaying={setPlaying}
-                playing={playing}
-              />
-
-              <div className="flex items-center justify-between px-2">
-                {/* Skip buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newTime = Math.max(0, currentTime - 5);
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Back 5 seconds"
-                  >
-                    <Image
-                      src="/icons/replay.svg"
-                      alt="Replay"
-                      width={16}
-                      height={16}
-                    />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newTime = Math.min(
-                        displayDuration,
-                        currentTime + 5
-                      );
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Forward 5 seconds"
-                  >
-                    <Image
-                      src="/icons/forward.svg"
-                      alt="Forward"
-                      width={16}
-                      height={16}
-                    />
-                  </button>
-                </div>
-
-                {/* Volume */}
-                <div className="flex items-center gap-2 flex-1 justify-center">
-                  <button
-                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                    className="focus:outline-none"
-                    title={volume === 0 ? "Unmute" : "Mute"}
-                  >
-                    {volume === 0 ? (
-                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                    ) : (
-                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                  />
-                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
-                    {Math.round(volume * 100)}%
-                  </span>
-                </div>
-
-                {/* Fullscreen */}
-                <div
-                  className="flex items-center justify-end"
-                  style={{ minWidth: 40 }}
+            <CustomVideoControls
+              playerRef={playerRef}
+              duration={duration}
+              currentTime={currentTime}
+              setCurrentTime={(t) => {
+                setCurrentTime(t);
+                playerRef.current?.seekTo(t, "seconds");
+              }}
+              recordingDuration={recordingDuration}
+              setPlaying={setPlaying}
+              playing={playing}
+            />
+            <div className="flex items-center justify-between mt-2 px-2 w-full">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const newTime = Math.max(0, currentTime - 5);
+                    setCurrentTime(newTime);
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }}
+                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                  title="Back 5 seconds"
                 >
-                  <button
-                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                    title="Fullscreen"
-                    onClick={handleFullscreen}
-                  >
-                    <FaExpand size={22} />
-                  </button>
-                </div>
+                  <Image
+                    src="/icons/replay.svg"
+                    alt="Notifications"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4"
+                  />
+                </button>
+                <button
+                  onClick={() => {
+                    const newTime = Math.min(displayDuration, currentTime + 5);
+                    setCurrentTime(newTime);
+                    playerRef.current?.seekTo(newTime, "seconds");
+                  }}
+                  className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                  title="Forward 5 seconds"
+                >
+                  <Image
+                    src="/icons/forward.svg"
+                    alt="Notifications"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4"
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 flex-1 justify-center">
+                <button
+                  onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                  className="focus:outline-none"
+                  title={volume === 0 ? "Unmute" : "Mute"}
+                >
+                  {volume === 0 ? (
+                    <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                  ) : (
+                    <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                  className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
+                />
+                <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+              <div
+                className="flex items-center justify-end"
+                style={{ minWidth: 40 }}
+              >
+                <button
+                  className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                  title="Fullscreen"
+                  onClick={handleFullscreen}
+                >
+                  <FaExpand size={22} />
+                </button>
               </div>
             </div>
+            <canvas
+              ref={canvasRef}
+              className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
+              onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+              onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+              style={{
+                pointerEvents: tool !== "none" ? "auto" : "none",
+                borderRadius: "1.25rem",
+              }}
+            />
           </div>
-
           {tool === "text" && (
-            <div className="flex gap-3 items-center mb-6 sm:mb-0">
+            <div className="flex gap-3 items-center mb-6 sm:mb-0 mx-4 sm:mx-8">
               <label className="text-sm">Text Color:</label>
               <input
                 type="color"
@@ -1699,7 +1679,7 @@ export default function EditorPage() {
               </select>
             </div>
           )}
-          <div className="mt-8 mb-16 mr-2 sm:mr-0">
+          <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
             {duration > 0 ? (
               <TimelineRuler
                 minValue={0}
@@ -1724,33 +1704,15 @@ export default function EditorPage() {
                   setTimelineEndTime(value);
                   handleTimelineChange(timelineStartTime, value);
                 }}
-                // onTrim={async (segments) => {
-                //   toast.loading("Trimming and merging segments...");
-                //   await trimApplier(
-                //     segments,
-                //     undefined,
-                //     (success: boolean) => {
-                //       toast.dismiss();
-                //       if (success) {
-                //         toast.success("Video trimmed and merged successfully!");
-                //         setCurrentSegments(segments);
-                //       } else {
-                //         toast.error("Failed to trim/merge video.");
-                //       }
-                //     },
-                //     undefined,
-                //     zoomEffects
-                //   );
-                // }}
-                onTrim={videoTrimHandler}
                 processing={processing}
                 onResetVideo={resetVideo}
                 onZoomEffectCreate={onZoomEffectCreate}
                 initialSegments={currentSegments}
+                onTrim={videoTrimHandler}
               />
             ) : (
-              <div className="w-full max-w-6xl mx-auto p-8">
-                <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg mt-12 flex items-center justify-center">
+              <div className="w-full max-w-6xl mx-auto">
+                <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
                   <span className="text-[#A594F9] font-medium">
                     Loading timeline...
                   </span>
@@ -1768,21 +1730,16 @@ export default function EditorPage() {
         currentTime={currentTime}
         duration={duration}
         onSeek={(time) => {
-          // Force immediate video frame update
           if (playerRef.current) {
             const player = playerRef.current.getInternalPlayer();
             if (player) {
-              // Set time directly and force a frame update
               player.currentTime = time;
-              // Force the video to update by triggering a seek event
               player.dispatchEvent(new Event("seeking"));
               playerRef.current.seekTo(time, "seconds");
             }
           }
         }}
       />
-
-      {/* Save Demo Modal */}
       <SaveDemoModal
         isOpen={showSaveDemoModal}
         onClose={() => setShowSaveDemoModal(false)}
@@ -1860,7 +1817,7 @@ function CustomVideoControls({
   return (
     <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
       <div className="flex items-center gap-3">
-        {/* ✅ Controlled Play/Pause Button */}
+        {/* Γ£à Controlled Play/Pause Button */}
         <button
           onClick={handlePlayPause}
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"

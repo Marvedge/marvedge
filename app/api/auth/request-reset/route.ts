@@ -14,17 +14,26 @@ export async function POST(req: Request) {
     // Check for Resend API key early
     if (!process.env.RESEND_API_KEY) {
       console.error("Missing RESEND_API_KEY");
-      return NextResponse.json({ error: "Email service not configured" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Email service not configured" },
+        { status: 500 }
+      );
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return NextResponse.json({ error: "No user found with this email" }, { status: 404 });
+      return NextResponse.json(
+        { error: "No user found with this email" },
+        { status: 404 }
+      );
     }
 
     // Optional: block users without passwords (OAuth accounts)
     if (!user.password) {
-      return NextResponse.json({ error: "This account does not support password reset" }, { status: 400 });
+      return NextResponse.json(
+        { error: "This account does not support password reset" },
+        { status: 400 }
+      );
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -56,12 +65,18 @@ export async function POST(req: Request) {
     // Optional: Check for delivery failure
     if (result.error) {
       console.error("Email send error:", result.error);
-      return NextResponse.json({ error: "Failed to send OTP email" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to send OTP email" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ message: "OTP sent to your email" });
   } catch (err) {
     console.error("Unexpected error in password reset handler:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

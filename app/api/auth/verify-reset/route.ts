@@ -7,11 +7,17 @@ export async function POST(req: Request) {
     const { email, otp, password, confirmPassword } = await req.json();
 
     if (!email || !otp || !password || !confirmPassword) {
-      return NextResponse.json({ error: "All fields are required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "All fields are required." },
+        { status: 400 }
+      );
     }
 
     if (password !== confirmPassword) {
-      return NextResponse.json({ error: "Passwords do not match." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Passwords do not match." },
+        { status: 400 }
+      );
     }
 
     const resetRequest = await prisma.passwordReset.findFirst({
@@ -22,11 +28,17 @@ export async function POST(req: Request) {
     });
 
     if (!resetRequest) {
-      return NextResponse.json({ error: "Invalid OTP or email." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid OTP or email." },
+        { status: 400 }
+      );
     }
 
     if (new Date() > resetRequest.expiresAt) {
-      return NextResponse.json({ error: "OTP expired. Please request again." }, { status: 400 });
+      return NextResponse.json(
+        { error: "OTP expired. Please request again." },
+        { status: 400 }
+      );
     }
 
     const user = await prisma.user.findUnique({
@@ -59,6 +71,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Password reset successfully." });
   } catch (err) {
     console.error("Error verifying OTP:", err);
-    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went wrong." },
+      { status: 500 }
+    );
   }
 }

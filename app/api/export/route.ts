@@ -5,20 +5,25 @@ export async function POST(req: NextRequest) {
     const { videoUrl, title, description } = await req.json();
 
     if (!videoUrl) {
-      return NextResponse.json({ error: "No video URL provided" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No video URL provided" },
+        { status: 400 }
+      );
     }
 
     // Create preview URL
-    const previewUrl = `/preview?video=${encodeURIComponent(videoUrl)}&title=${encodeURIComponent(title || '')}&description=${encodeURIComponent(description || '')}`;
+    const previewUrl = `/preview?video=${encodeURIComponent(videoUrl)}&title=${encodeURIComponent(title || "")}&description=${encodeURIComponent(description || "")}`;
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       cloudinaryUrl: videoUrl,
-      previewUrl
+      previewUrl,
     });
-
   } catch (err) {
     console.error("Export API Error:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
-} 
+}

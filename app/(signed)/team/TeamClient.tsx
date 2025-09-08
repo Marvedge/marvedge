@@ -80,7 +80,10 @@ const TeamPage = () => {
   };
 
   return (
-    <div className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto" style={{ minHeight: 'calc(100vh - 80px)' }}>
+    <div
+      className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
+      style={{ minHeight: "calc(100vh - 80px)" }}
+    >
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

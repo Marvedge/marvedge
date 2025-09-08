@@ -16,7 +16,7 @@ export function getPageMetadata(key: string): Metadata {
   return {
     title: key === "home" ? "Marvedge" : `${title} - Marvedge`,
     icons: {
-      icon: "/icons/Transparent logo.png", 
+      icon: "/icons/Transparent logo.png",
     },
   };
 }

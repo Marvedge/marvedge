@@ -10,10 +10,6 @@ type EditorControlsProps = {
   duration: number;
 };
 
-
-
-
-
 const EditorControls = ({
   onTrim,
   processing,
@@ -49,8 +45,6 @@ const EditorControls = ({
     }
     setZoomed((z) => !z);
   }, [videoRef, zoomed]);
-
-
 
   const handleTrim = useCallback(() => {
     if (isNaN(duration) || duration === 0) {
@@ -110,9 +104,7 @@ const EditorControls = ({
 
           <Button
             onClick={handleTrim}
-            disabled={
-              processing || start >= end
-            }
+            disabled={processing || start >= end}
             className={` text-white transition ${
               processing || start >= end
                 ? "bg-blue-300 cursor-not-allowed"
@@ -126,7 +118,7 @@ const EditorControls = ({
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             ⏱ Start Time:{" "}
-                            <span className="font-mono">{formatTimeFull(start)}</span>
+            <span className="font-mono">{formatTimeFull(start)}</span>
           </label>
 
           {/* Manual input for start time */}
@@ -168,7 +160,8 @@ const EditorControls = ({
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            ⏲ End Time: <span className="font-mono">{formatTimeFull(end)}</span>
+            ⏲ End Time:{" "}
+            <span className="font-mono">{formatTimeFull(end)}</span>
           </label>
 
           {/* Manual input for end time */}
@@ -226,7 +219,8 @@ const EditorControls = ({
           <li>🖱️ Click on video to toggle zoom</li>
         </ul>
         <p className="mt-2 text-xs">
-          💡 <strong>Tip:</strong> Use the sliders above to adjust the trim range. Input fields are read-only and update automatically.
+          💡 <strong>Tip:</strong> Use the sliders above to adjust the trim
+          range. Input fields are read-only and update automatically.
         </p>
       </div>
     </div>

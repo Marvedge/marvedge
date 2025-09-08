@@ -3,7 +3,6 @@ import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 
-
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -28,7 +27,10 @@ export async function GET() {
     return NextResponse.json({ success: true, demos });
   } catch (error) {
     console.error("Error fetching demos:", error);
-    return NextResponse.json({ error: "Failed to fetch demos" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch demos" },
+      { status: 500 }
+    );
   }
 }
 
@@ -66,10 +68,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { title, description, videoUrl, editing } =
-      await req.json();
+    const { title, description, videoUrl, editing } = await req.json();
 
-    if (!title || !videoUrl ) {
+    if (!title || !videoUrl) {
       return NextResponse.json(
         { error: "Title, videoUrl are required" },
         { status: 400 }
@@ -102,6 +103,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Demo save error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
