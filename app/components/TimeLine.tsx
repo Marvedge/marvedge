@@ -542,6 +542,35 @@ export default function TimelineRuler({
             />
             Delete
           </button>
+          {/* Zoom In/Out Slider */}
+          <div className="flex items-center gap-2 min-w-[160px] px-2">
+            {/* Minus button */}
+            <button
+              onClick={() => setZoomLevel((prev) => Math.max(1, prev * 0.8))}
+              className="w-6 h-6 flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+            >
+              –
+            </button>
+
+            {/* Slider */}
+            <input
+              type="range"
+              min="1"
+              max="20"
+              step="0.1"
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+              className="w-32 accent-purple-500"
+            />
+
+            {/* Plus button */}
+            <button
+              onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
+              className="w-6 h-6 flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+            >
+              +
+            </button>
+          </div>
         </div>
         <div className="flex gap-2 sm:gap-4">
           <button
@@ -696,6 +725,9 @@ export default function TimelineRuler({
                 width: `${zoomedTimelineWidth}px`,
                 minWidth: `${baseTimelineWidth}px`,
                 height: "173px",
+                paddingLeft: "20px",
+                paddingRight: "20px",
+                boxSizing: "border-box",
               }}
               onMouseDown={(e) => {
                 if (!draggingScissor) {
@@ -708,7 +740,8 @@ export default function TimelineRuler({
               {generateTicks().map((tick, index) => {
                 const positionPx =
                   ((tick.value - minValue) / (maxValue - minValue)) *
-                  zoomedTimelineWidth;
+                    (zoomedTimelineWidth - 40) + // reduce for both sides
+                  20;
 
                 return (
                   <div

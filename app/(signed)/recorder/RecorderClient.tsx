@@ -714,7 +714,7 @@ export default function RecorderPage() {
     const isUploaded = uploadedFileUrl && !screenStream;
     return (
       <div className="flex flex-col h-screen w-full overflow-hidden">
-        <Toaster position="top-right" />
+        {/* <Toaster position="top-right" /> */}
         <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
         <div className="flex flex-1 overflow-hidden">
           {/* Right Panel */}
