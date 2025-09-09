@@ -73,7 +73,7 @@ export default function TimelineRuler({
   const [zoomLevel, setZoomLevel] = useState(1); // Start with no zoom
   const [scrollLeft, setScrollLeft] = useState(0);
 
-  const baseTimelineWidth = 910; // Fixed base width for the timeline
+  const baseTimelineWidth = 1050; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
   const scissorWidth = 48; // Fixed width for scissors (12 * 4 = 48px)
   const totalContainerWidth = baseTimelineWidth + scissorWidth * 2; // Total container width
@@ -399,58 +399,41 @@ export default function TimelineRuler({
   const generateTicks = () => {
     const ticks: { value: number; type: string; label?: string }[] = [];
 
-    const targetTickCount = 8 * zoomLevel; // more ticks as you zoom in
-    const rawStep = Math.max(1, (maxValue - minValue) / targetTickCount);
+    const totalRange = maxValue - minValue;
+    const targetTickCount = 8 * zoomLevel; // Increase with zoom
+    let roughStep = totalRange / targetTickCount;
 
-    // round step to "nice" values
-    const pow10 = Math.pow(10, Math.floor(Math.log10(rawStep)));
-    let major = pow10;
-    if (rawStep / pow10 > 5) major = 10 * pow10;
-    else if (rawStep / pow10 > 2) major = 5 * pow10;
-    else if (rawStep / pow10 > 1) major = 2 * pow10;
+    // Round major step to nearest integer second >= 1
+    let majorStep = Math.max(1, Math.round(roughStep));
 
-    major = Math.max(1, Math.round(major)); // enforce >= 1 second
-    const minor = Math.max(1, Math.floor(major / 5));
-    const micro = Math.max(1, Math.floor(minor / 2));
+    // Always keep an odd number of subdivisions
+    let divisions = 5; // default = 5 ticks (1 major + 4 minors)
+    if (zoomLevel > 3) divisions = 7;
+    if (zoomLevel > 6) divisions = 9;
+    if (zoomLevel > 10) divisions = 11;
 
-    // Major ticks (with labels)
-    for (
-      let v = Math.ceil(minValue / major) * major;
-      v <= maxValue;
-      v += major
-    ) {
-      ticks.push({
-        value: Math.round(v),
-        type: "major",
-        label: formatTime(Math.round(v)),
-      });
-    }
+    const minorStep = majorStep / (divisions - 1);
+    const midIndex = Math.floor(divisions / 2); // middle tick index
 
-    // Minor ticks
-    for (
-      let v = Math.ceil(minValue / minor) * minor;
-      v <= maxValue;
-      v += minor
-    ) {
-      const val = Math.round(v);
-      if (val % major !== 0) {
-        ticks.push({ value: val, type: "minor" });
+    // Start from nearest major tick
+    const startMajorTick = Math.ceil(minValue / majorStep) * majorStep;
+
+    for (let v = startMajorTick; v <= maxValue; v += majorStep) {
+      ticks.push({ value: v, type: "major", label: formatTime(v) });
+
+      // Add subdivisions
+      for (let i = 1; i < divisions; i++) {
+        const tickVal = v + i * minorStep;
+        if (tickVal < v + majorStep && tickVal < maxValue) {
+          ticks.push({
+            value: tickVal,
+            type: i === midIndex ? "middle" : "minor",
+          });
+        }
       }
     }
 
-    // Micro ticks
-    for (
-      let v = Math.ceil(minValue / micro) * micro;
-      v <= maxValue;
-      v += micro
-    ) {
-      const val = Math.round(v);
-      if (val % minor !== 0) {
-        ticks.push({ value: val, type: "micro" });
-      }
-    }
-
-    return ticks.sort((a, b) => a.value - b.value);
+    return ticks;
   };
 
   const currentPosition =
@@ -543,13 +526,22 @@ export default function TimelineRuler({
             Delete
           </button>
           {/* Zoom In/Out Slider */}
-          <div className="flex items-center gap-2 min-w-[160px] px-2">
+          {/* Zoom Slider */}
+          <div className="relative w-56">
             {/* Minus button */}
             <button
               onClick={() => setZoomLevel((prev) => Math.max(1, prev * 0.8))}
-              className="w-6 h-6 flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+              className="absolute -top-5 left-0 text-purple-400 hover:text-purple-600"
             >
               –
+            </button>
+
+            {/* Plus button */}
+            <button
+              onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
+              className="absolute -top-5 right-0 text-purple-400 hover:text-purple-600"
+            >
+              +
             </button>
 
             {/* Slider */}
@@ -560,16 +552,41 @@ export default function TimelineRuler({
               step="0.1"
               value={zoomLevel}
               onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
-              className="w-32 accent-purple-500"
-            />
+              style={{
+                background: `linear-gradient(to right, #8A76FC ${
+                  ((zoomLevel - 1) / (20 - 1)) * 100
+                }%, #E9D8FD ${((zoomLevel - 1) / (20 - 1)) * 100}%)`,
+              }}
+              className="
+                w-full h-2 mt-2
+                rounded-full appearance-none
 
-            {/* Plus button */}
-            <button
-              onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
-              className="w-6 h-6 flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
-            >
-              +
-            </button>
+            [&::-webkit-slider-runnable-track]:h-2
+            [&::-webkit-slider-runnable-track]:rounded-full
+
+            [&::-webkit-slider-thumb]:appearance-none
+            [&::-webkit-slider-thumb]:h-5 
+            [&::-webkit-slider-thumb]:w-5 
+            [&::-webkit-slider-thumb]:rounded-full 
+            [&::-webkit-slider-thumb]:bg-white
+            [&::-webkit-slider-thumb]:border
+            [&::-webkit-slider-thumb]:border-[#8A76FC]
+            [&::-webkit-slider-thumb]:shadow
+            [&::-webkit-slider-thumb]:relative
+            [&::-webkit-slider-thumb]:z-10
+            [&::-webkit-slider-thumb]:-mt-1.5 
+
+            [&::-moz-range-track]:h-2
+            [&::-moz-range-track]:rounded-full
+            [&::-moz-range-track]:bg-purple-200
+
+            [&::-moz-range-progress]:h-2
+            [&::-moz-range-progress]:rounded-full
+            [&::-moz-range-progress]:bg-[#8A76FC]
+
+            accent-[#8A76FC]
+          "
+            />
           </div>
         </div>
         <div className="flex gap-2 sm:gap-4">
@@ -654,37 +671,28 @@ export default function TimelineRuler({
       {/* Timeline Container - Fixed width */}
       <div
         className="relative mx-auto flex items-center bg-transparent"
-        style={{ width: `${totalContainerWidth}px` }}
+        style={{ width: `${totalContainerWidth}px`, height: "123px" }}
       >
         {/* Left Scissor - Fixed position and size */}
         <div
-          className="flex flex-col items-center justify-between "
-          style={{
-            height: "173px",
-            width: "32px",
-            backgroundColor: "#8A76FC",
-            borderTopLeftRadius: "0.5rem",
-            borderBottomLeftRadius: "0.5rem",
-            cursor: "ew-resize",
-            zIndex: 30,
-            flexShrink: 0,
-            userSelect: "none",
-            padding: "12px 0",
-          }}
+          className="
+          flex flex-col items-center justify-between
+          h-full w-8
+          bg-[#8A76FC]
+          rounded-l-lg
+          cursor-ew-resize
+          z-30
+          flex-shrink-0
+          select-none
+          py-3
+        "
           onMouseDown={() => {
             setDraggingScissor("left");
             setScissorPreview(null);
           }}
         >
           {/* Top Line */}
-          <div
-            style={{
-              width: "1px",
-              height: "50px",
-              backgroundColor: "white",
-              opacity: 0.8,
-            }}
-          />
+          <div className="w-px h-12 bg-white/80" />
 
           {/* Scissor Icon */}
           <Image
@@ -696,20 +704,13 @@ export default function TimelineRuler({
           />
 
           {/* Bottom Line */}
-          <div
-            style={{
-              width: "1px",
-              height: "50px",
-              backgroundColor: "white",
-              opacity: 0.8,
-            }}
-          />
+          <div className="w-px h-12 bg-white/80" />
         </div>
 
         {/* Scrollable Timeline Container - Fixed width */}
         <div
           className="relative flex-shrink-0"
-          style={{ width: `${baseTimelineWidth}px`, height: "173px" }}
+          style={{ width: `${baseTimelineWidth}px`, height: "100%" }}
         >
           <div
             ref={scrollContainerRef}
@@ -724,7 +725,7 @@ export default function TimelineRuler({
               style={{
                 width: `${zoomedTimelineWidth}px`,
                 minWidth: `${baseTimelineWidth}px`,
-                height: "173px",
+                height: "100%",
                 paddingLeft: "20px",
                 paddingRight: "20px",
                 boxSizing: "border-box",
@@ -740,7 +741,7 @@ export default function TimelineRuler({
               {generateTicks().map((tick, index) => {
                 const positionPx =
                   ((tick.value - minValue) / (maxValue - minValue)) *
-                    (zoomedTimelineWidth - 40) + // reduce for both sides
+                    (zoomedTimelineWidth - 40) +
                   20;
 
                 return (
@@ -753,11 +754,10 @@ export default function TimelineRuler({
                       className={`bg-[#A594F9] mx-auto ${
                         tick.type === "major"
                           ? "w-0.5 h-6"
-                          : tick.type === "minor"
-                            ? "w-0.5 h-4"
-                            : "w-px h-2"
+                          : tick.type === "middle"
+                            ? "w-0.5 h-5"
+                            : "w-px h-3"
                       }`}
-                      style={{ opacity: tick.type === "micro" ? 0.4 : 0.7 }}
                     />
                     {tick.type === "major" && (
                       <div className="absolute top-7 -translate-x-1/2 left-1/2">
@@ -770,12 +770,23 @@ export default function TimelineRuler({
                 );
               })}
 
-              {/* Current position line */}
+              {/* Current position line + triangle */}
               <div
-                className="absolute top-0 w-0.5 h-full bg-green-500 z-10"
-                style={{ left: `${currentPositionPx}px` }}
+                className="absolute top-0 h-full z-40 pointer-events-none"
+                style={{
+                  left: `${32 + currentPositionPx - scrollLeft}px`,
+                }}
               >
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-b-[6px] border-l-transparent border-r-transparent border-b-green-500" />
+                {/* Triangle head */}
+                <div
+                  className="absolute -top-0 left-1/2 -translate-x-1/2
+               w-0 h-0 
+               border-l-[9px] border-r-[9px] border-t-[9px]
+               border-l-transparent border-r-transparent border-t-green-500"
+                />
+
+                {/* Vertical line */}
+                <div className="w-[2px] h-full bg-green-500 mx-auto" />
               </div>
 
               {/* Segments */}
@@ -810,33 +821,24 @@ export default function TimelineRuler({
 
         {/* Right Scissor - Fixed position and size */}
         <div
-          className="flex flex-col items-center justify-between"
-          style={{
-            height: "173px",
-            width: "32px",
-            backgroundColor: "#8A76FC",
-            borderTopRightRadius: "0.5rem",
-            borderBottomRightRadius: "0.5rem",
-            cursor: "ew-resize",
-            zIndex: 30,
-            flexShrink: 0,
-            userSelect: "none",
-            padding: "12px 0", // spacing inside the bar
-          }}
+          className="
+            flex flex-col items-center justify-between
+            h-full w-8
+            bg-[#8A76FC]
+            rounded-r-lg
+            cursor-ew-resize
+            z-30
+            flex-shrink-0
+            select-none
+            py-3
+          "
           onMouseDown={() => {
             setDraggingScissor("left");
             setScissorPreview(null);
           }}
         >
           {/* Top Line */}
-          <div
-            style={{
-              width: "1px",
-              height: "50px",
-              backgroundColor: "white",
-              opacity: 0.8,
-            }}
-          />
+          <div className="w-px h-12 bg-white/80" />
 
           {/* Scissor Icon */}
           <Image
@@ -848,14 +850,7 @@ export default function TimelineRuler({
           />
 
           {/* Bottom Line */}
-          <div
-            style={{
-              width: "1px",
-              height: "50px",
-              backgroundColor: "white",
-              opacity: 0.8,
-            }}
-          />
+          <div className="w-px h-12 bg-white/80" />
         </div>
       </div>
 
