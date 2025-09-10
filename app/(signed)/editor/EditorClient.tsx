@@ -62,6 +62,17 @@ interface TextOverlay {
 
 type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
 
+const imageMap: Record<string, string> = {
+  bg1: "/icons/bg-mountain-sunset.svg",
+  bg2: "/icons/bg-abstract-circles.svg",
+  bg3: "/icons/bg-crystalline.svg",
+  bg4: "/icons/bg-brushstrokes.svg",
+  bg5: "/icons/bg-warm-gradients.svg",
+  bg6: "/icons/bg-ethereal.svg",
+  bg7: "/icons/bg-fiery.svg",
+  bg8: "/icons/bg-ribbons.svg",
+};
+
 export default function EditorPage() {
   const router = useRouter();
   const [params, setParams] = useState<URLSearchParams | null>(null);
@@ -113,9 +124,9 @@ export default function EditorPage() {
   // Zoom effects state
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
-    null
-  );
+  // const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
+  //   null
+  // );
   const closeDashboardMenu = () => {
     setIsDashboardMenuOpen(false); // Function to close the dashboard menu
   };
@@ -1149,24 +1160,11 @@ export default function EditorPage() {
 
   // Check for active zoom effects based on current time
   useEffect(() => {
-    const activeEffect = zoomEffects.find(
-      (effect) =>
-        currentTime >= effect.startTime && currentTime <= effect.endTime
-    );
-    setCurrentZoomEffect(activeEffect || null);
+    // setCurrentZoomEffect(activeEffect || null);
   }, [currentTime, zoomEffects]);
 
   const [volume, setVolume] = useState(1);
-  const imageMap: Record<string, string> = {
-    bg1: "/icons/bg-mountain-sunset.svg",
-    bg2: "/icons/bg-abstract-circles.svg",
-    bg3: "/icons/bg-crystalline.svg",
-    bg4: "/icons/bg-brushstrokes.svg",
-    bg5: "/icons/bg-warm-gradients.svg",
-    bg6: "/icons/bg-ethereal.svg",
-    bg7: "/icons/bg-fiery.svg",
-    bg8: "/icons/bg-ribbons.svg",
-  };
+
   const getBackgroundStyle = useCallback(() => {
     if (!selectedBackground) return {};
 
@@ -1212,7 +1210,7 @@ export default function EditorPage() {
     }
 
     return {};
-  }, [selectedBackground, customBackground]);
+  }, [selectedBackground, customBackground, imageMap]);
 
   const exportVideo = async () => {
     if (!videoUrl) {
