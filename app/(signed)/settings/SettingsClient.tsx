@@ -271,20 +271,10 @@ const SettingsPage = () => {
             </div>
           </div>
         </div>
-        {/* Main header row: logo, search, user actions (hidden on mobile) */}
+        {/* Main header row: logo, user actions (hidden on mobile) */}
         <div className="hidden sm:flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
-            <FaPlayCircle className="text-[#A594F9] text-2xl" />
-            <span className="text-lg text-gray-400 font-medium">My Demos</span>
-          </div>
-          <div className="flex-1 flex justify-center w-full sm:w-auto">
-            <input
-              type="text"
-              placeholder="Search"
-              value={topSearch}
-              onChange={(e) => setTopSearch(e.target.value)}
-              className="px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#6356D7] bg-white text-gray-700 w-full max-w-xs shadow-sm transition-all"
-            />
+            <span className="text-lg text-gray-400 font-medium">Settings</span>
           </div>
           <div className="flex items-center gap-6 justify-end">
             <span className="text-gray-500 text-lg">
@@ -497,14 +487,14 @@ const SettingsPage = () => {
               <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 mt-8">
                 <button
                   type="button"
-                  className="px-8 py-3 rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
+                  className="px-8 py-3 cursor-pointer rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
                   onClick={handleCancel}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-8 py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
+                  className="px-8 py-3 cursor-pointer rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
                 >
                   {isSaving ? "Saving..." : "Save Changes"}
                 </button>

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 
 import { FaBars } from "react-icons/fa6";
+import SidemenuDashboard from "@/app/components/SidemenuDashboard";
 
 import { useEditor } from "@/app/hooks/useEditor";
 import EditorSidebar from "@/app/components/EditorSidebar";
@@ -115,6 +116,14 @@ export default function EditorPage() {
   const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
     null
   );
+  const closeDashboardMenu = () => {
+    setIsDashboardMenuOpen(false); // Function to close the dashboard menu
+  };
+  // const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDashboardMenuOpen, setIsDashboardMenuOpen] = useState(false);
+  const toggleDashboardMenu = () => {
+    setIsDashboardMenuOpen(!isDashboardMenuOpen);
+  };
   // Simple direct two-way sync
   const [inputStartTime, setInputStartTime] = useState("00:00:00");
   const [inputEndTime, setInputEndTime] = useState("00:00:00");
@@ -1168,26 +1177,15 @@ export default function EditorPage() {
           error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
         }}
       />
-      <EditorTopbar onBack={() => router.back()} userInitials={initials} />
+      <EditorTopbar
+        onBack={() => router.back()}
+        userInitials={initials}
+        onToggleMenu={toggleDashboardMenu} // Pass the toggle function
+      />{" "}
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
-        {/* Hamburger Icon for Desktop */}
-        <div
-          className="hidden md:flex items-center justify-center w-10 h-full bg-gray-100 hover:bg-gray-200 transition-colors fixed top-0 left-0 z-40 shadow-sm"
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
-        >
-          <FaBars className="text-gray-600 text-xl" />
-        </div>
-
-        {/* Sidebar for Desktop (shown on hover) */}
-        <div
-          className={`hidden md:block fixed top-0 left-0 h-full bg-white shadow-lg z-50 transition-transform duration-300 transform ${
-            isHovering ? "translate-x-0" : "-translate-x-full"
-          } w-80`}
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
-        >
-          <div className="w-full mt-15 h-full">
+        {/* Sidebar for Desktop (EditorSidebar, always visible) */}
+        <div className="hidden md:block w-80 bg-white shadow-lg z-40">
+          <div className="w-full h-full">
             <EditorSidebar
               title={sidebarTitle}
               setTitle={setSidebarTitle}
@@ -1263,7 +1261,6 @@ export default function EditorPage() {
               }}
               tool={tool}
               setTool={(t: string) => {
-                // Type guard to ensure only valid tool values are accepted
                 if (
                   t === "none" ||
                   t === "text" ||
@@ -1285,12 +1282,11 @@ export default function EditorPage() {
               setBackgroundType={setBackgroundType}
               customBackground={customBackground}
               setCustomBackground={setCustomBackground}
-              // className="w-full h-full"
             />
           </div>
         </div>
 
-        {/* Mobile Drawer */}
+        {/* Mobile Drawer for EditorSidebar */}
         {isSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
             <div
@@ -1377,7 +1373,7 @@ export default function EditorPage() {
                     toast.error("Failed to export video");
                   }
                 }}
-                tool={tool} // Γ£à Correct prop
+                tool={tool}
                 setTool={(t: string) => {
                   if (
                     t === "none" ||
@@ -1407,22 +1403,55 @@ export default function EditorPage() {
           </div>
         )}
 
+        {/* Mobile Drawer for SidemenuDashboard */}
+        {isDashboardMenuOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            <div
+              className="fixed inset-0 bg-black bg-opacity-40"
+              onClick={closeDashboardMenu}
+            />
+            <SidemenuDashboard />
+          </div>
+        )}
+
         <div className="flex-1 min-h-0 overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6 px-4 sm:px-8">
             <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0 ml-auto">
-              {/* Mobile Hamburger Button */}
+              {/* Mobile Hamburger Button for SidemenuDashboard */}
+              <div className="relative md:hidden group">
+                <button
+                  className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                  onClick={toggleDashboardMenu}
+                  aria-label="Toggle dashboard menu"
+                >
+                  <FaBars className="text-xl" />
+                  Menu
+                </button>
+                {/* Mobile Drawer for SidemenuDashboard */}
+                {isDashboardMenuOpen && (
+                  <div className="fixed inset-0 z-50 flex md:hidden">
+                    <div
+                      className="fixed inset-0 bg-black bg-opacity-40"
+                      onClick={() => setIsDashboardMenuOpen(false)}
+                    />
+                    <SidemenuDashboard />
+                  </div>
+                )}
+              </div>
+
               <button
-                className="md:hidden flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setIsSidebarOpen(true)}
-              >
-                <FaBars className="text-xl" />
-                Menu
-              </button>
-              <button
-                className="flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={() => setShowSaveDemoModal(true)}
               >
                 <span className="text-xl"></span> Save Demo
+              </button>
+              {/* Editor Sidebar Toggle for Mobile */}
+              <button
+                className="md:hidden cursor-pointer flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <FaBars className="text-xl" />
+                Editor
               </button>
             </div>
           </div>

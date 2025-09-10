@@ -64,6 +64,7 @@ const AnalyticsPage = () => {
         transition={{ duration: 0.6 }}
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white/80 rounded-lg p-3 md:p-4 shadow relative z-10"
       >
+        {/* Left Side: Analytics Title and Logo */}
         <div className="flex items-center gap-2 ml-4 mr-6">
           <Image
             src="/icons/dash-analytics.svg"
@@ -77,100 +78,91 @@ const AnalyticsPage = () => {
           </span>
         </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between w-full px-4 gap-2 md:gap-3">
-          <div className="hidden md:flex flex-1 justify-center">
-            <input
-              type="text"
-              placeholder="Search"
-              className="px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#6356D7] bg-white text-gray-700 w-56 shadow-sm transition-all"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="relative overflow-hidden">
+        {/* Right Side: Welcome Text, Bell Icon, and User Initials */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative overflow-hidden">
+            <motion.span
+              className="text-gray-500 text-base sm:text-lg mr-1"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              {displayedText}
+            </motion.span>
+            <motion.span
+              className="text-[#6356D7] font-semibold text-lg sm:text-xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: ((welcomeText.length + 1) * intervalMs) / 1000,
+              }}
+            >
+              {session?.user?.name
+                ? session.user.name.split(" ")[0]
+                : session?.user?.email || "User"}{" "}
               <motion.span
-                className="text-gray-500 text-base sm:text-lg mr-1"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                {displayedText}
-              </motion.span>
-              <motion.span
-                className="text-[#6356D7] font-semibold text-lg sm:text-xl"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                role="img"
+                aria-label="waving hand"
+                style={{
+                  display: "inline-block",
+                  originX: 0.7,
+                  originY: 0.7,
+                }}
+                animate={{ rotate: [0, 20, -10, 20, 0] }}
                 transition={{
-                  delay: ((welcomeText.length + 1) * intervalMs) / 1000,
+                  duration: 1.5,
+                  repeat: 7,
+                  repeatType: "loop",
+                  ease: "easeInOut",
+                  delay: ((welcomeText.length + 1) * intervalMs) / 1000 + 0.5,
                 }}
               >
-                {session?.user?.name
-                  ? session.user.name.split(" ")[0]
-                  : session?.user?.email || "User"}{" "}
-                <motion.span
-                  role="img"
-                  aria-label="waving hand"
-                  style={{
-                    display: "inline-block",
-                    originX: 0.7,
-                    originY: 0.7,
-                  }}
-                  animate={{ rotate: [0, 20, -10, 20, 0] }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: 7,
-                    repeatType: "loop",
-                    ease: "easeInOut",
-                    delay: ((welcomeText.length + 1) * intervalMs) / 1000 + 0.5,
-                  }}
-                >
-                  👋
-                </motion.span>
+                👋
               </motion.span>
-            </div>
+            </motion.span>
+          </div>
 
+          <button
+            className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
+            title="Notifications"
+          >
+            <Image
+              src="/icons/bell.png"
+              alt="Notifications"
+              width={20}
+              height={20}
+              className="w-5 h-5 sm:w-6 sm:h-6"
+            />
+          </button>
+
+          <div className="relative" ref={dropdownRef}>
             <button
-              className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
-              title="Notifications"
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#6356D7] text-white flex items-center justify-center text-md sm:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
+              onClick={() => setShowDropdown((v) => !v)}
+              title={session?.user?.name || session?.user?.email || undefined}
             >
-              <Image
-                src="/icons/bell.png"
-                alt="Notifications"
-                width={20}
-                height={20}
-                className="w-5 h-5 sm:w-6 sm:h-6"
-              />
+              {initials}
             </button>
-
-            <div className="relative" ref={dropdownRef}>
-              <button
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#6356D7] text-white flex items-center justify-center text-md sm:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
-                onClick={() => setShowDropdown((v) => !v)}
-                title={session?.user?.name || session?.user?.email || undefined}
+            {showDropdown && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2 }}
+                className="absolute right-0 mt-2 w-56 md:w-64 bg-white rounded-lg shadow-lg p-3 md:p-4 z-50 border border-gray-200"
               >
-                {initials}
-              </button>
-              {showDropdown && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-2 w-56 md:w-64 bg-white rounded-lg shadow-lg p-3 md:p-4 z-50 border border-gray-200"
+                <div className="mb-2 text-base md:text-lg font-bold text-[#6356D7]">
+                  {session?.user?.name || "User"}
+                </div>
+                <div className="mb-1 text-gray-700 text-xs md:text-sm font-semibold">
+                  {session?.user?.email}
+                </div>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="mt-3 w-full px-4 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm md:text-base"
                 >
-                  <div className="mb-2 text-base md:text-lg font-bold text-[#6356D7]">
-                    {session?.user?.name || "User"}
-                  </div>
-                  <div className="mb-1 text-gray-700 text-xs md:text-sm font-semibold">
-                    {session?.user?.email}
-                  </div>
-                  <button
-                    onClick={() => signOut({ callbackUrl: "/" })}
-                    className="mt-3 w-full px-4 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm md:text-base"
-                  >
-                    Sign out
-                  </button>
-                </motion.div>
-              )}
-            </div>
+                  Sign out
+                </button>
+              </motion.div>
+            )}
           </div>
         </div>
       </motion.div>

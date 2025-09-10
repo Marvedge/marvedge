@@ -1,21 +1,32 @@
 import { useSession, signOut } from "next-auth/react";
 import { useRef, useState, useEffect } from "react";
 import Image from "next/image";
+import { FaBars, FaXmark } from "react-icons/fa6"; // Updated to FaXmark
+import SidemenuDashboard from "./SidemenuDashboard";
 
 type EditorTopbarProps = {
   onBack: () => void;
   userInitials: string;
+  onToggleMenu: () => void; // Prop to toggle the menu (for mobile)
 };
 
-const EditorTopbar = ({ onBack, userInitials }: EditorTopbarProps) => {
+const EditorTopbar = ({
+  onBack,
+  userInitials,
+  onToggleMenu,
+}: EditorTopbarProps) => {
   const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isDashboardMenuOpen, setIsDashboardMenuOpen] = useState(false); // Local state for hover
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const hamburgerRef = useRef<HTMLDivElement>(null); // Changed to div ref for wrapper
+
   // Get first name or fallback
   const username =
     session?.user?.name?.split(" ")[0] ||
     session?.user?.email?.split("@")?.[0] ||
     "User";
+
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -25,17 +36,39 @@ const EditorTopbar = ({ onBack, userInitials }: EditorTopbarProps) => {
       ) {
         setShowDropdown(false);
       }
+      if (
+        hamburgerRef.current &&
+        !hamburgerRef.current.contains(event.target as Node) &&
+        !isDashboardMenuOpen
+      ) {
+        setIsDashboardMenuOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isDashboardMenuOpen]);
+
+  // Delay closing the sidebar to prevent flicker
+  const handleMouseLeave = () => {
+    if (window.innerWidth >= 768) {
+      setTimeout(() => {
+        if (
+          !hamburgerRef.current?.matches(":hover") &&
+          !document.querySelector(".sidebar-hover-menu")?.matches(":hover")
+        ) {
+          setIsDashboardMenuOpen(false);
+        }
+      }, 200); // 200ms delay
+    }
+  };
+
   return (
     <div className="w-full flex items-center justify-between px-4 sm:px-8 py-2 sm:py-4 bg-white border-b border-[#ede7fa] shadow-sm">
       <div className="flex items-center gap-2 sm:gap-6">
         {/* Mobile: left arrow at the left edge */}
         <button
           onClick={onBack}
-          className="text-[#7C5CFC] text-xl sm:text-2xl hover:bg-[#ede7fa] rounded-full p-1 mr-2 sm:ml-4 sm:order-2 order-1"
+          className="text-[#7C5CFC] text-xl sm:text-2xl hover:bg-[#ede7fa] rounded-full p-1 mr-2 sm:mr-4 order-1"
           style={{ order: 1 }}
         >
           <Image
@@ -46,8 +79,42 @@ const EditorTopbar = ({ onBack, userInitials }: EditorTopbarProps) => {
             className="md:w-6 md:h-6"
           />
         </button>
+        {/* Hamburger Icon with Hover */}
+        <div
+          className="relative"
+          ref={hamburgerRef}
+          onMouseEnter={() =>
+            window.innerWidth >= 768 && setIsDashboardMenuOpen(true)
+          }
+          onMouseLeave={handleMouseLeave}
+        >
+          <button
+            className="flex items-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base  max-w-xs min-w-fit whitespace-nowrap"
+            onClick={onToggleMenu} // Toggle for mobile
+            aria-label="Toggle dashboard menu"
+          >
+            <FaBars className="text-xl" />
+          </button>
+          {/* Desktop Hover Menu with Close Button */}
+          {isDashboardMenuOpen && window.innerWidth >= 768 && (
+            <div
+              className="absolute top-12 left-0 w-64 bg-white shadow-lg p-4 border border-gray-200 rounded-lg z-50 sidebar-hover-menu"
+              onMouseEnter={() => setIsDashboardMenuOpen(true)} // Keep open while hovering over sidebar
+              onMouseLeave={handleMouseLeave}
+            >
+              <button
+                onClick={() => setIsDashboardMenuOpen(false)}
+                className="absolute top-2 right-2 text-[#7C5CFC] hover:text-[#6356D7] text-xl"
+                aria-label="Close menu"
+              >
+                <FaXmark />
+              </button>
+              <SidemenuDashboard />
+            </div>
+          )}
+        </div>
         {/* Logo and title */}
-        <span className="ml-2 sm:ml-0 text-lg sm:text-2xl font-extrabold text-[#7C5CFC] tracking-widest flex items-center gap-2 sm:order-1 order-2">
+        <span className="ml-2 sm:ml-0 text-lg sm:text-2xl font-extrabold text-[#7C5CFC] tracking-widest flex items-center gap-2 order-3">
           <Image
             src="/images/Transparent logo.png"
             alt="Marvedge logo"
@@ -61,8 +128,7 @@ const EditorTopbar = ({ onBack, userInitials }: EditorTopbarProps) => {
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
         {/* Remove or adjust hidden classes from siblings to prevent layout issues */}
-
-        <span className="hidden sm:block text-[#7C5CFC] font-medium text-base mr-2  items-center gap-1">
+        <span className="hidden sm:block text-[#7C5CFC] font-medium text-base mr-2 items-center gap-1">
           Welcome, {username}
           <span role="img" aria-label="waving hand" className="ml-1">
             👋
@@ -110,5 +176,8 @@ const EditorTopbar = ({ onBack, userInitials }: EditorTopbarProps) => {
     </div>
   );
 };
+
+// Note: SidemenuDashboard should be imported if used
+// import SidemenuDashboard from './SidemenuDashboard'; // Uncomment and adjust path as needed
 
 export default EditorTopbar;
