@@ -11,7 +11,6 @@ import { useSession, signOut } from "next-auth/react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { toast } from "sonner";
-import { FaPlayCircle } from "react-icons/fa";
 import Image from "next/image";
 import {
   TABS,
@@ -35,7 +34,7 @@ const SettingsPage = () => {
   });
   const [avatar, setAvatar] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [topSearch, setTopSearch] = useState("");
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isUploading, setIsUploading] = useState(false);

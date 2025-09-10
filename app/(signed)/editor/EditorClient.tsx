@@ -237,7 +237,6 @@ export default function EditorPage() {
   ]);
 
   // State for sidebar visibility
-  const [isHovering, setIsHovering] = useState(false);
 
   // User initials logic (copied from recorder page)
   const { data: session } = useSession();

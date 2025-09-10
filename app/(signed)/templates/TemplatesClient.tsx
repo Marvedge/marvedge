@@ -116,7 +116,6 @@ const sortOptions = [
 ];
 
 export default function TemplatesPage() {
-  const [topSearch, setTopSearch] = useState("");
   const [search, setSearch] = useState("");
   const [levelDropdownOpen, setLevelDropdownOpen] = useState(false);
   const levelDropdownRef = useRef<HTMLDivElement>(null);
