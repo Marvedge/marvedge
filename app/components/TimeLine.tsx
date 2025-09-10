@@ -29,9 +29,6 @@ export default function TimelineRuler({
   currentValue = 0.07,
   onValueChange,
   step = 0.002,
-  majorStep = 0.05,
-  minorStep = 0.01,
-  microStep = 0.002,
   startTime,
   endTime,
   onStartTimeChange,
@@ -401,10 +398,10 @@ export default function TimelineRuler({
 
     const totalRange = maxValue - minValue;
     const targetTickCount = 8 * zoomLevel; // Increase with zoom
-    let roughStep = totalRange / targetTickCount;
+    const roughStep = totalRange / targetTickCount;
 
     // Round major step to nearest integer second >= 1
-    let majorStep = Math.max(1, Math.round(roughStep));
+    const majorStep = Math.max(1, Math.round(roughStep));
 
     // Always keep an odd number of subdivisions
     let divisions = 5; // default = 5 ticks (1 major + 4 minors)
@@ -437,8 +434,6 @@ export default function TimelineRuler({
   };
 
   const currentPosition =
-    ((localValue - minValue) / (maxValue - minValue)) * 100;
-  const currentPositionPx =
     ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
 
   return (
@@ -459,7 +454,7 @@ export default function TimelineRuler({
                     })
                 : undefined
             }
-            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold border rounded-lg border-purple-500 cursor-pointer text-purple-500 text-sm rounded"
+            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold border border-purple-500 cursor-pointer text-purple-500 text-sm rounded"
           >
             <Image
               src="/icons/zoooom.svg"
@@ -472,7 +467,7 @@ export default function TimelineRuler({
           </button>
           <button
             onClick={addSegment}
-            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold cursor-pointer rounded-lg border border-purple-500 rounded-large text-purple-500 text-sm rounded"
+            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold cursor-pointer border border-purple-500 rounded-large text-purple-500 text-sm rounded"
           >
             <Image
               src="/icons/+.svg"
@@ -773,7 +768,7 @@ export default function TimelineRuler({
               <div
                 className="absolute top-0 h-full z-40 pointer-events-none"
                 style={{
-                  left: `${0 + currentPositionPx - scrollLeft}px`,
+                  left: `${0 + currentPosition - scrollLeft}px`,
                 }}
               >
                 {/* Triangle head */}
