@@ -531,7 +531,7 @@ export default function TimelineRuler({
             {/* Minus button */}
             <button
               onClick={() => setZoomLevel((prev) => Math.max(1, prev * 0.8))}
-              className="absolute -top-5 left-0 text-purple-400 hover:text-purple-600"
+              className="absolute -top-3 left-0 text-purple-400 hover:text-purple-600"
             >
               –
             </button>
@@ -539,7 +539,7 @@ export default function TimelineRuler({
             {/* Plus button */}
             <button
               onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
-              className="absolute -top-5 right-0 text-purple-400 hover:text-purple-600"
+              className="absolute -top-3 right-0 text-purple-400 hover:text-purple-600"
             >
               +
             </button>
@@ -565,8 +565,8 @@ export default function TimelineRuler({
             [&::-webkit-slider-runnable-track]:rounded-full
 
             [&::-webkit-slider-thumb]:appearance-none
-            [&::-webkit-slider-thumb]:h-5 
-            [&::-webkit-slider-thumb]:w-5 
+            [&::-webkit-slider-thumb]:h-3.5 
+            [&::-webkit-slider-thumb]:w-3.5 
             [&::-webkit-slider-thumb]:rounded-full 
             [&::-webkit-slider-thumb]:bg-white
             [&::-webkit-slider-thumb]:border
@@ -574,7 +574,7 @@ export default function TimelineRuler({
             [&::-webkit-slider-thumb]:shadow
             [&::-webkit-slider-thumb]:relative
             [&::-webkit-slider-thumb]:z-10
-            [&::-webkit-slider-thumb]:-mt-1.5 
+            [&::-webkit-slider-thumb]:-mt-[3.2px] 
 
             [&::-moz-range-track]:h-2
             [&::-moz-range-track]:rounded-full
@@ -714,20 +714,20 @@ export default function TimelineRuler({
         >
           <div
             ref={scrollContainerRef}
-            className={`w-full h-full overflow-y-hidden ${
+            className={`w-full h-full  overflow-y-hidden ${
               zoomLevel > 1 ? "overflow-x-auto" : "overflow-x-hidden"
             }`}
             onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
           >
             <div
               ref={rulerRef}
-              className="relative bg-white border border-[#A594F9] cursor-pointer"
+              className="relative  bg-white border border-[#A594F9] cursor-pointer"
               style={{
                 width: `${zoomedTimelineWidth}px`,
                 minWidth: `${baseTimelineWidth}px`,
                 height: "100%",
-                paddingLeft: "20px",
-                paddingRight: "20px",
+                // paddingLeft: "20px",
+                // paddingRight: "20px",
                 boxSizing: "border-box",
               }}
               onMouseDown={(e) => {
@@ -741,8 +741,7 @@ export default function TimelineRuler({
               {generateTicks().map((tick, index) => {
                 const positionPx =
                   ((tick.value - minValue) / (maxValue - minValue)) *
-                    (zoomedTimelineWidth - 40) +
-                  20;
+                  zoomedTimelineWidth;
 
                 return (
                   <div
@@ -774,7 +773,7 @@ export default function TimelineRuler({
               <div
                 className="absolute top-0 h-full z-40 pointer-events-none"
                 style={{
-                  left: `${32 + currentPositionPx - scrollLeft}px`,
+                  left: `${0 + currentPositionPx - scrollLeft}px`,
                 }}
               >
                 {/* Triangle head */}

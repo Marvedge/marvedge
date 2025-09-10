@@ -1206,6 +1206,94 @@ export default function EditorPage() {
     return {};
   }, [selectedBackground, customBackground]);
 
+  const exportVideo = async () => {
+    if (!videoUrl) {
+      toast.error("No video available to export");
+      return;
+    }
+
+    try {
+      console.log("sending from here #linex 1228");
+      toast.loading("Processing video...");
+      console.log(selectedBackground);
+
+      // Fetch blob from ReactPlayer video
+      const res = await fetch(videoUrl);
+      const videoBlob = await res.blob();
+
+      const formData = new FormData();
+      formData.append("video", videoBlob, "video.webm");
+
+      // Handle background
+      if (selectedBackground) {
+        const backgroundPath = imageMap[selectedBackground];
+        console.log(backgroundPath);
+        if (backgroundPath) {
+          const bgUrl = `${window.location.origin}${backgroundPath}`;
+          console.log("Fetching background from:", bgUrl);
+
+          const bgRes = await fetch(bgUrl);
+          if (!bgRes.ok) {
+            throw new Error(`Failed to fetch background: ${bgUrl}`);
+          }
+
+          const bgBlob = await bgRes.blob();
+          console.log("Background blob:", bgBlob);
+
+          formData.append("background", bgBlob, "background.svg");
+        }
+      }
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+      const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
+      const cloudinaryPreset = process.env
+        .NEXT_PUBLIC_CLOUDINARY_PRESET as string;
+      // Call backend FFmpeg server with axios
+      const serverRes = await axios.post(
+        `${backendUrl}/process-video`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      const { url } = serverRes.data; // backend returns { url }
+
+      // Fetch processed video (mp4) from backend
+      const processedRes = await axios.get(`${backendUrl}${url}`, {
+        responseType: "blob",
+      });
+      const processedBlob = processedRes.data;
+
+      // Upload processed video to Cloudinary with axios
+      const cloudFormData = new FormData();
+      cloudFormData.append("file", processedBlob, "final.mp4");
+      cloudFormData.append("upload_preset", cloudinaryPreset);
+
+      const cloudRes = await axios.post(cloudinaryUrl, cloudFormData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const cloudData = cloudRes.data;
+
+      console.log("backend url is ", cloudData.secure_url);
+      toast.dismiss();
+      toast.success("Video exported with background!");
+
+      // Navigate to preview page
+      router.push(
+        `/preview?video=${encodeURIComponent(
+          cloudData.secure_url
+        )}&title=${encodeURIComponent(
+          sidebarTitle
+        )}&description=${encodeURIComponent(sidebarDescription || "")}`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error("Export failed");
+    }
+  };
+
   return (
     <main className="flex flex-col min-h-screen w-full bg-gray-50 overflow-hidden">
       <Toaster
@@ -1264,59 +1352,7 @@ export default function EditorPage() {
                   downloadBlob(mp4Url, `${filename}.mp4`);
                 }
               }}
-              onExportWebM={async () => {
-                if (!videoUrl) {
-                  toast.error("No video available to export");
-                  return;
-                }
-                try {
-                  toast.loading("Exporting video to Cloudinary...");
-                  let cloudinaryVideoUrl = videoUrl;
-                  if (videoUrl.startsWith("blob:")) {
-                    const response = await fetch(videoUrl);
-                    if (!response.ok) {
-                      throw new Error("Failed to fetch video blob");
-                    }
-                    const videoBlob = await response.blob();
-                    const cloudFormData = new FormData();
-                    cloudFormData.append("file", videoBlob, "video.webm");
-                    cloudFormData.append("upload_preset", "upload_preset_1");
-                    const cloudRes = await fetch(
-                      "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                      {
-                        method: "POST",
-                        body: cloudFormData,
-                      }
-                    );
-                    if (!cloudRes.ok) {
-                      const cloudError = await cloudRes.text();
-                      throw new Error(
-                        `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-                      );
-                    }
-                    const cloudData = await cloudRes.json();
-                    if (!cloudData.secure_url) {
-                      throw new Error(
-                        "Cloudinary upload failed - no secure_url returned"
-                      );
-                    }
-                    cloudinaryVideoUrl = cloudData.secure_url;
-                    toast.dismiss();
-                  }
-                  const previewUrl = `/preview?video=${encodeURIComponent(
-                    cloudinaryVideoUrl
-                  )}&title=${encodeURIComponent(
-                    sidebarTitle
-                  )}&description=${encodeURIComponent(sidebarDescription || "")}`;
-                  toast.dismiss();
-                  toast.success("Video exported successfully!");
-                  router.push(previewUrl);
-                } catch (error) {
-                  console.error("Export error:", error);
-                  toast.dismiss();
-                  toast.error("Failed to export video");
-                }
-              }}
+              onExportWebM={exportVideo}
               tool={tool}
               setTool={(t: string) => {
                 // Type guard to ensure only valid tool values are accepted
@@ -1381,58 +1417,7 @@ export default function EditorPage() {
                     downloadBlob(mp4Url, `${filename}.mp4`);
                   }
                 }}
-                onExportWebM={async () => {
-                  if (!videoUrl) {
-                    toast.error("No video available to export");
-                    return;
-                  }
-                  try {
-                    toast.loading("Exporting video to Cloudinary...");
-                    let cloudinaryVideoUrl = videoUrl;
-                    if (videoUrl.startsWith("blob:")) {
-                      const response = await fetch(videoUrl);
-                      if (!response.ok) {
-                        throw new Error("Failed to fetch video blob");
-                      }
-                      const videoBlob = await response.blob();
-                      const cloudFormData = new FormData();
-                      cloudFormData.append("file", videoBlob, "video.webm");
-                      cloudFormData.append("upload_preset", "upload_preset_1");
-                      const cloudRes = await fetch(
-                        "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-                        {
-                          method: "POST",
-                          body: cloudFormData,
-                        }
-                      );
-                      if (!cloudRes.ok) {
-                        const cloudError = await cloudRes.text();
-                        throw new Error(
-                          `Cloudinary upload failed: ${cloudRes.status} - ${cloudError}`
-                        );
-                      }
-                      const cloudData = await cloudRes.json();
-                      if (!cloudData.secure_url) {
-                        throw new Error(
-                          "Cloudinary upload failed - no secure_url returned"
-                        );
-                      }
-                      cloudinaryVideoUrl = cloudData.secure_url;
-                    }
-                    const previewUrl = `/preview?video=${encodeURIComponent(
-                      cloudinaryVideoUrl
-                    )}&title=${encodeURIComponent(
-                      sidebarTitle
-                    )}&description=${encodeURIComponent(sidebarDescription || "")}`;
-                    toast.dismiss();
-                    toast.success("Video exported successfully!");
-                    router.push(previewUrl);
-                  } catch (error) {
-                    console.error("Export error:", error);
-                    toast.dismiss();
-                    toast.error("Failed to export video");
-                  }
-                }}
+                onExportWebM={exportVideo}
                 tool={tool} // Γ£à Correct prop
                 setTool={(t: string) => {
                   if (
