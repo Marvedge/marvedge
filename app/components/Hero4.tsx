@@ -248,7 +248,7 @@ const ContactForm: React.FC = () => {
         ))}
         <motion.button
           type="submit"
-          className="flex items-center justify-center gap-2 bg-[#a68cff] text-white font-semibold rounded-lg py-2 mt-2 text-sm sm:text-base hover:bg-[#8a6ec5] transition"
+          className="flex cursor-pointer items-center justify-center gap-2 bg-[#a68cff] text-white font-semibold rounded-lg py-2 mt-2 text-sm sm:text-base hover:bg-[#8a6ec5] transition"
           whileHover={{
             scale: 1.05,
             boxShadow: "0 10px 25px rgba(166, 140, 255, 0.3)",

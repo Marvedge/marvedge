@@ -212,7 +212,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       {/* Export Section */}
       <div className="relative">
         <button
-          className="w-full bg-[#A594F9] hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
+          className="w-full bg-[#A594F9] cursor-pointer hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
           onClick={() => setExportMenuOpen((v) => !v)} // Only toggle the menu
         >
           Export Video
@@ -247,7 +247,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       {/* Main Tabs */}
       <div className="flex justify-between bg-[#F6F3FF] rounded-xl p-1">
         <button
-          className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+          className={`flex-1 cursor-pointer py-2 rounded-lg text-sm font-semibold ${
             activeTab === "background"
               ? "bg-white text-[#7C5CFC] shadow"
               : "text-gray-600"
@@ -257,7 +257,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
           Background
         </button>
         <button
-          className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+          className={`flex-1 cursor-pointer py-2 rounded-lg text-sm font-semibold ${
             activeTab === "tools"
               ? "bg-white text-[#7C5CFC] shadow"
               : "text-gray-600"
@@ -347,7 +347,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                     setLocalBackgroundType(e.target.value);
                     setBackgroundType?.(e.target.value);
                   }}
-                  className="w-full border border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] text-[#7C5CFC]"
+                  className="w-full border cursor-pointer border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] text-[#7C5CFC]"
                 >
                   <option value="">Select Type</option>
                   <option value="static">Static Background</option>

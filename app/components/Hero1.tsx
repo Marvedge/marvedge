@@ -307,7 +307,7 @@ const Hero1: React.FC = () => {
                 call-to-action integration
               </li>
             </ul>
-            <button className="mt-6 bg-[#8a6ec5] text-white px-6 py-3 rounded-lg hover:bg-[#6B46C1] transition">
+            <button className="mt-6 cursor-pointer bg-[#8a6ec5] text-white px-6 py-3 rounded-lg hover:bg-[#6B46C1] transition">
               Try it for free
             </button>
           </div>

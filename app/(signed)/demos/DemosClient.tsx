@@ -48,7 +48,6 @@ export default function DemosPage() {
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
-  const [topSearch, setTopSearch] = useState("");
   const [demos, setDemos] = useState<Demo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -178,15 +177,7 @@ export default function DemosPage() {
           <span className="text-lg text-gray-400 font-medium">My Demos</span>
         </div>
 
-        <div className="hidden md:flex justify-center flex-1">
-          <input
-            type="text"
-            placeholder="Search"
-            value={topSearch}
-            onChange={(e) => setTopSearch(e.target.value)}
-            className="px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#6356D7] bg-white text-gray-700 w-56 shadow-sm transition-all"
-          />
-        </div>
+        {/* Removed search bar block */}
 
         <div className="flex items-center gap-6">
           <span className="text-gray-500 text-lg">
@@ -228,7 +219,7 @@ export default function DemosPage() {
                 </div>
                 <button
                   onClick={() => signOut({ callbackUrl: "/" })}
-                  className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
+                  className="mt-3 w-full px-3 py-2 bg-[#7C5CFC] text-white rounded hover:bg-[#6356D7] font-semibold transition-all text-sm"
                 >
                   Sign out
                 </button>

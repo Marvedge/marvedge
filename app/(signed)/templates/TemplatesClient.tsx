@@ -116,7 +116,6 @@ const sortOptions = [
 ];
 
 export default function TemplatesPage() {
-  const [topSearch, setTopSearch] = useState("");
   const [search, setSearch] = useState("");
   const [levelDropdownOpen, setLevelDropdownOpen] = useState(false);
   const levelDropdownRef = useRef<HTMLDivElement>(null);
@@ -178,15 +177,9 @@ export default function TemplatesPage() {
             Explore Templates
           </span>
         </div>
-        <div className="hidden md:flex justify-center flex-1">
-          <input
-            type="text"
-            placeholder="Search"
-            value={topSearch}
-            onChange={(e) => setTopSearch(e.target.value)}
-            className="px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#6356D7] bg-white text-gray-700 w-56 shadow-sm transition-all"
-          />
-        </div>
+
+        {/* Removed search bar block */}
+
         <div className="flex items-center gap-6">
           <span className="text-gray-500 text-lg">
             Welcome{" "}

@@ -62,8 +62,9 @@ const DashboardPage = () => {
     >
       <div className="flex flex-col gap-3 md:gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white/80 rounded-lg p-3 md:p-4 shadow mb-2 relative">
-          <div className="flex items-center gap-2 md:gap-4">
-            <div className="hidden md:flex items-center gap-2 ml-4 mr-6">
+          {/* Left Side: Title and Logo */}
+          <div className="flex items-center gap-2 md:gap-4 mb-2 sm:mb-0">
+            <div className="flex items-center gap-2 ml-4 mr-6">
               <Image
                 src="/icons/Vector (1).svg"
                 alt="Notifications"
@@ -76,7 +77,9 @@ const DashboardPage = () => {
               </span>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 md:gap-4 w-full">
+
+          {/* Right Side: Welcome Text, Bell Icon, and User Initials */}
+          <div className="flex items-center justify-between gap-2 md:gap-4 w-full sm:w-auto">
             <div className="flex flex-col md:flex-row items-start md:items-center ml-4 md:ml-8 w-full md:w-[200px] overflow-hidden">
               <div className="relative w-full md:w-[200px] overflow-hidden">
                 <motion.span
@@ -156,7 +159,7 @@ const DashboardPage = () => {
                   {initials}
                 </button>
                 {showDropdown && (
-                  <div className="absolute right-0 mt-2 w-56 md:w-64 bg白 rounded-lg shadow-lg p-3 md:p-4 z-50 border border-gray-200 animate-fade-in">
+                  <div className="absolute right-0 mt-2 w-56 md:w-64 bg-white rounded-lg shadow-lg p-3 md:p-4 z-50 border border-gray-200 animate-fade-in">
                     <div className="mb-2 text-base md:text-lg font-bold text-[#6356D7]">
                       {session?.user?.name || "User"}
                     </div>
