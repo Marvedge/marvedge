@@ -45,16 +45,20 @@ export default function TimelineRuler({
   const [isDragging, setIsDragging] = useState(false);
   const [draggingHandle] = useState<"current" | "start" | "end" | null>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [localValue, setLocalValue] = useState(currentValue || 0);
-  const [localStartTime, setLocalStartTime] = useState(startTime || minValue);
-  const [localEndTime, setLocalEndTime] = useState(endTime || maxValue);
+
+  // Initialize with full duration by default
+  const [localStartTime, setLocalStartTime] = useState(startTime ?? minValue);
+  const [localEndTime, setLocalEndTime] = useState(endTime ?? maxValue);
+
   const [segments, setSegments] = useState<{ start: number; end: number }[]>(
     initialSegments
       ? initialSegments.map((seg) => ({
           start: parseFloat(seg.start),
           end: parseFloat(seg.end),
         }))
-      : []
+      : [{ start: minValue, end: maxValue }] // Initialize with full duration segment
   );
   const [activeSegment, setActiveSegment] = useState(0);
   const [removedSegments, setRemovedSegments] = useState<
@@ -66,6 +70,75 @@ export default function TimelineRuler({
   >(null);
   const [scissorPreview, setScissorPreview] = useState<number | null>(null);
   const [draggingCurrentTime, setDraggingCurrentTime] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1); // Start with no zoom
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const baseTimelineWidth = 1050; // Fixed base width for the timeline
+  const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
+  const scissorWidth = 48; // Fixed width for scissors (12 * 4 = 48px)
+  const totalContainerWidth = baseTimelineWidth + scissorWidth * 2; // Total container width
+
+  // Keep scrollLeft in range when zoom changes
+  useEffect(() => {
+    if (!scrollContainerRef.current) return;
+
+    const newTimelineWidth = baseTimelineWidth * zoomLevel;
+    const maxScroll = Math.max(0, newTimelineWidth - baseTimelineWidth);
+
+    const clampedScrollLeft = Math.min(scrollLeft, maxScroll);
+    if (clampedScrollLeft !== scrollLeft) {
+      setScrollLeft(clampedScrollLeft);
+      scrollContainerRef.current.scrollLeft = clampedScrollLeft;
+    }
+  }, [zoomLevel, baseTimelineWidth, scrollLeft]);
+
+  useEffect(() => {
+    const el = rulerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+
+        const rect = el.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left;
+        const cursorRatio = cursorX / baseTimelineWidth; // Use base width for ratio calculation
+
+        setZoomLevel((prev) => {
+          const factor = e.deltaY < 0 ? 1.25 : 0.8;
+          const newZoom = Math.max(1, Math.min(prev * factor, 20));
+
+          // Only adjust scroll if zoomed in beyond 1x
+          if (newZoom > 1 && scrollContainerRef.current) {
+            const newTimelineWidth = baseTimelineWidth * newZoom;
+            const maxScroll = Math.max(0, newTimelineWidth - baseTimelineWidth);
+            const targetScrollLeft = cursorRatio * newTimelineWidth - cursorX;
+            const clampedScrollLeft = Math.max(
+              0,
+              Math.min(targetScrollLeft, maxScroll)
+            );
+
+            setScrollLeft(clampedScrollLeft);
+            scrollContainerRef.current.scrollLeft = clampedScrollLeft;
+          }
+
+          return newZoom;
+        });
+      }
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [baseTimelineWidth]);
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+
+    return `${minutes.toString().padStart(2, "0")}:${seconds
+      .toString()
+      .padStart(2, "0")}`;
+  };
 
   useEffect(() => {
     setLocalValue(currentValue);
@@ -238,7 +311,7 @@ export default function TimelineRuler({
   }, [isDragging, updateValueFromMouse]);
 
   const addSegment = () => {
-    const newSegment = { start: 0, end: maxValue };
+    const newSegment = { start: minValue, end: maxValue };
     setSegments([...segments, newSegment]);
     setActiveSegment(segments.length);
     setLocalStartTime(newSegment.start);
@@ -246,10 +319,26 @@ export default function TimelineRuler({
   };
 
   const removeSegment = (idx: number) => {
-    if (segments.length > 0) {
+    if (segments.length > 1) {
+      // Keep at least one segment
       const newSegments = segments.filter((_, i) => i !== idx);
       setSegments(newSegments);
-      if (newSegments.length > 0) {
+      const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
+      setActiveSegment(newActiveSegment);
+      if (newSegments[newActiveSegment]) {
+        setLocalStartTime(newSegments[newActiveSegment].start);
+        setLocalEndTime(newSegments[newActiveSegment].end);
+      }
+    }
+  };
+
+  const handleUndo = () => {
+    if (segments.length > 1) {
+      // Keep at least one segment
+      const lastSegment = segments[segments.length - 1];
+      setRemovedSegments((prev) => [...prev, lastSegment]);
+      setSegments((prev) => {
+        const newSegments = prev.slice(0, -1);
         const newActiveSegment = Math.min(
           activeSegment,
           newSegments.length - 1
@@ -258,35 +347,6 @@ export default function TimelineRuler({
         if (newSegments[newActiveSegment]) {
           setLocalStartTime(newSegments[newActiveSegment].start);
           setLocalEndTime(newSegments[newActiveSegment].end);
-        }
-      } else {
-        setActiveSegment(0);
-        setLocalStartTime(minValue);
-        setLocalEndTime(maxValue);
-      }
-    }
-  };
-
-  const handleUndo = () => {
-    if (segments.length > 0) {
-      const lastSegment = segments[segments.length - 1];
-      setRemovedSegments((prev) => [...prev, lastSegment]);
-      setSegments((prev) => {
-        const newSegments = prev.slice(0, -1);
-        if (newSegments.length > 0) {
-          const newActiveSegment = Math.min(
-            activeSegment,
-            newSegments.length - 1
-          );
-          setActiveSegment(newActiveSegment);
-          if (newSegments[newActiveSegment]) {
-            setLocalStartTime(newSegments[newActiveSegment].start);
-            setLocalEndTime(newSegments[newActiveSegment].end);
-          }
-        } else {
-          setActiveSegment(0);
-          setLocalStartTime(minValue);
-          setLocalEndTime(maxValue);
         }
         return newSegments;
       });
@@ -337,49 +397,49 @@ export default function TimelineRuler({
   };
 
   const generateTicks = () => {
-    const ticks = [];
+    const ticks: { value: number; type: string; label?: string }[] = [];
+
     const totalRange = maxValue - minValue;
+    const targetTickCount = 8 * zoomLevel; // Increase with zoom
+    let roughStep = totalRange / targetTickCount;
 
-    for (let i = 0; i <= totalRange / majorStep; i++) {
-      const value = minValue + i * majorStep;
-      ticks.push({
-        value,
-        type: "major",
-        label: value.toFixed(2),
-        height: 20,
-      });
-    }
+    // Round major step to nearest integer second >= 1
+    let majorStep = Math.max(1, Math.round(roughStep));
 
-    for (let i = 0; i <= totalRange / minorStep; i++) {
-      const value = minValue + i * minorStep;
-      if (value % majorStep !== 0) {
-        ticks.push({
-          value,
-          type: "minor",
-          label: "",
-          height: 12,
-        });
+    // Always keep an odd number of subdivisions
+    let divisions = 5; // default = 5 ticks (1 major + 4 minors)
+    if (zoomLevel > 3) divisions = 7;
+    if (zoomLevel > 6) divisions = 9;
+    if (zoomLevel > 10) divisions = 11;
+
+    const minorStep = majorStep / (divisions - 1);
+    const midIndex = Math.floor(divisions / 2); // middle tick index
+
+    // Start from nearest major tick
+    const startMajorTick = Math.ceil(minValue / majorStep) * majorStep;
+
+    for (let v = startMajorTick; v <= maxValue; v += majorStep) {
+      ticks.push({ value: v, type: "major", label: formatTime(v) });
+
+      // Add subdivisions
+      for (let i = 1; i < divisions; i++) {
+        const tickVal = v + i * minorStep;
+        if (tickVal < v + majorStep && tickVal < maxValue) {
+          ticks.push({
+            value: tickVal,
+            type: i === midIndex ? "middle" : "minor",
+          });
+        }
       }
     }
 
-    for (let i = 0; i <= totalRange / microStep; i++) {
-      const value = minValue + i * microStep;
-      if (value % minorStep !== 0) {
-        ticks.push({
-          value,
-          type: "micro",
-          label: "",
-          height: 6,
-        });
-      }
-    }
-
-    return ticks.sort((a, b) => a.value - b.value);
+    return ticks;
   };
 
-  // const ticks = generateTicks();
   const currentPosition =
     ((localValue - minValue) / (maxValue - minValue)) * 100;
+  const currentPositionPx =
+    ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
 
   return (
     <div className="w-full max-w-6xl mx-auto p-8">
@@ -453,8 +513,8 @@ export default function TimelineRuler({
           </button>
           <button
             onClick={() => removeSegment(activeSegment)}
-            disabled={segments.length === 0}
-            className="min-w-[80px] cursor-pointer h-11 px-7 flex items-center justify-center gap-1 font-semibold rounded-lg bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={segments.length <= 1}
+            className="min-w-[80px] cursor-pointer h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/delete-demo.svg"
@@ -465,6 +525,69 @@ export default function TimelineRuler({
             />
             Delete
           </button>
+          {/* Zoom In/Out Slider */}
+          {/* Zoom Slider */}
+          <div className="relative w-56">
+            {/* Minus button */}
+            <button
+              onClick={() => setZoomLevel((prev) => Math.max(1, prev * 0.8))}
+              className="absolute -top-3 left-0 text-purple-400 hover:text-purple-600"
+            >
+              –
+            </button>
+
+            {/* Plus button */}
+            <button
+              onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
+              className="absolute -top-3 right-0 text-purple-400 hover:text-purple-600"
+            >
+              +
+            </button>
+
+            {/* Slider */}
+            <input
+              type="range"
+              min="1"
+              max="20"
+              step="0.1"
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+              style={{
+                background: `linear-gradient(to right, #8A76FC ${
+                  ((zoomLevel - 1) / (20 - 1)) * 100
+                }%, #E9D8FD ${((zoomLevel - 1) / (20 - 1)) * 100}%)`,
+              }}
+              className="
+                w-full h-2 mt-2
+                rounded-full appearance-none
+
+            [&::-webkit-slider-runnable-track]:h-2
+            [&::-webkit-slider-runnable-track]:rounded-full
+
+            [&::-webkit-slider-thumb]:appearance-none
+            [&::-webkit-slider-thumb]:h-3.5 
+            [&::-webkit-slider-thumb]:w-3.5 
+            [&::-webkit-slider-thumb]:rounded-full 
+            [&::-webkit-slider-thumb]:bg-white
+            [&::-webkit-slider-thumb]:border
+            [&::-webkit-slider-thumb]:border-[#8A76FC]
+            [&::-webkit-slider-thumb]:shadow
+            [&::-webkit-slider-thumb]:relative
+            [&::-webkit-slider-thumb]:z-10
+            [&::-webkit-slider-thumb]:-mt-[3.2px] 
+
+            [&::-moz-range-track]:h-2
+            [&::-moz-range-track]:rounded-full
+            [&::-moz-range-track]:bg-purple-200
+
+            [&::-moz-range-progress]:h-2
+            [&::-moz-range-progress]:rounded-full
+            [&::-moz-range-progress]:bg-[#8A76FC]
+
+            accent-[#8A76FC]
+          "
+            />
+          </div>
         </div>
         <div className="flex gap-2 sm:gap-4">
           <button
@@ -510,6 +633,7 @@ export default function TimelineRuler({
           )}
         </div>
       </div>
+
       {segments && segments.length > 0 ? (
         <div className="mb-2">
           <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
@@ -537,142 +661,203 @@ export default function TimelineRuler({
           <div className="text-xs text-gray-500 mb-2 flex items-center gap-1"></div>
         </div>
       )}
-      <div className="relative">
-        <div className="absolute top-0 left-12 right-12 h-12 z-20">
-          {generateTicks().map((tick, index) => {
-            const position =
-              ((tick.value - minValue) / (maxValue - minValue)) * 100;
-            return (
-              <div
-                key={`${tick.type}-${index}`}
-                className="absolute top-0"
-                style={{ left: `${position}%` }}
-              >
-                <div
-                  className={`bg-[#A594F9] ${
-                    tick.type === "major"
-                      ? "w-1 h-8"
-                      : tick.type === "minor"
-                        ? "w-0.5 h-5"
-                        : "w-0.5 h-2"
-                  }`}
-                  style={{
-                    opacity: tick.type === "micro" ? 0.4 : 0.7,
-                  }}
-                />
-                {tick.type === "major" && (
-                  <div
-                    className={`absolute top-10 ${
-                      tick.value === minValue
-                        ? "left-1/2 transform translate-x-2"
-                        : tick.value === maxValue
-                          ? "left-1/2 transform -translate-x-10"
-                          : "left-1/2 transform -translate-x-1/2"
-                    }`}
-                  >
-                    <span className="text-sm text-[#A594F9] font-medium">
-                      {tick.label}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+
+      {/* {zoomLevel > 1 && (
+        <div className="mb-2 text-sm text-gray-600">
+          Zoom: {zoomLevel.toFixed(1)}x (Ctrl+Scroll to zoom)
         </div>
+      )} */}
+
+      {/* Timeline Container - Fixed width */}
+      <div
+        className="relative mx-auto flex items-center bg-transparent"
+        style={{ width: `${totalContainerWidth}px`, height: "123px" }}
+      >
+        {/* Left Scissor - Fixed position and size */}
         <div
-          ref={rulerRef}
-          className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg cursor-pointer mt-12"
-          onMouseDown={(e) => {
-            if (!draggingScissor) {
-              setDraggingCurrentTime(true);
-              updateCurrentTimeFromMouse(e);
-            }
+          className="
+          flex flex-col items-center justify-between
+          h-full w-8
+          bg-[#8A76FC]
+          rounded-l-lg
+          cursor-ew-resize
+          z-30
+          flex-shrink-0
+          select-none
+          py-3
+        "
+          onMouseDown={() => {
+            setDraggingScissor("left");
+            setScissorPreview(null);
           }}
         >
+          {/* Top Line */}
+          <div className="w-px h-12 bg-white/80" />
+
+          {/* Scissor Icon */}
+          <Image
+            src="/icons/trim-new.svg"
+            alt="Trim"
+            width={20}
+            height={20}
+            style={{ filter: "brightness(0) invert(1)" }}
+          />
+
+          {/* Bottom Line */}
+          <div className="w-px h-12 bg-white/80" />
+        </div>
+
+        {/* Scrollable Timeline Container - Fixed width */}
+        <div
+          className="relative flex-shrink-0"
+          style={{ width: `${baseTimelineWidth}px`, height: "100%" }}
+        >
           <div
-            className="absolute left-0 top-0 w-12 h-full bg-[#A594F9] rounded-l-lg flex items-center justify-center cursor-ew-resize z-30"
-            onMouseDown={() => {
-              setDraggingScissor("left");
-              setScissorPreview(null);
-            }}
-            style={{ userSelect: "none" }}
+            ref={scrollContainerRef}
+            className={`w-full h-full  overflow-y-hidden ${
+              zoomLevel > 1 ? "overflow-x-auto" : "overflow-x-hidden"
+            }`}
+            onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
           >
-            <Image
-              src="/icons/trim-new.svg"
-              alt="Trim"
-              width={20}
-              height={20}
-              className="w-5 h-5 text-white"
-            />
-          </div>
-          <div
-            className="absolute right-0 top-0 w-12 h-full bg-[#A594F9] rounded-r-lg flex items-center justify-center cursor-ew-resize z-30"
-            onMouseDown={() => {
-              setDraggingScissor("right");
-              setScissorPreview(null);
-            }}
-            style={{ userSelect: "none" }}
-          >
-            <Image
-              src="/icons/trim-new.svg"
-              alt="Trim"
-              width={20}
-              height={20}
-              className="w-5 h-5 text-white"
-            />
-          </div>
-          <div
-            className="absolute top-0 w-1 h-full bg-green-500 z-10"
-            style={{ left: `${currentPosition}%` }}
-          >
-            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-6 border-r-6 border-b-6 border-l-transparent border-r-transparent border-b-green-500" />
-          </div>
-          {segments.map((segment, idx) => {
-            const startPosition =
-              ((segment.start - minValue) / (maxValue - minValue)) * 100;
-            const endPosition =
-              ((segment.end - minValue) / (maxValue - minValue)) * 100;
-            const width = endPosition - startPosition;
-            return (
+            <div
+              ref={rulerRef}
+              className="relative  bg-white border border-[#A594F9] cursor-pointer"
+              style={{
+                width: `${zoomedTimelineWidth}px`,
+                minWidth: `${baseTimelineWidth}px`,
+                height: "100%",
+                // paddingLeft: "20px",
+                // paddingRight: "20px",
+                boxSizing: "border-box",
+              }}
+              onMouseDown={(e) => {
+                if (!draggingScissor) {
+                  setDraggingCurrentTime(true);
+                  updateCurrentTimeFromMouse(e);
+                }
+              }}
+            >
+              {/* Tick marks */}
+              {generateTicks().map((tick, index) => {
+                const positionPx =
+                  ((tick.value - minValue) / (maxValue - minValue)) *
+                  zoomedTimelineWidth;
+
+                return (
+                  <div
+                    key={`${tick.type}-${index}`}
+                    className="absolute"
+                    style={{ left: `${positionPx}px`, top: "0" }}
+                  >
+                    <div
+                      className={`bg-[#A594F9] mx-auto ${
+                        tick.type === "major"
+                          ? "w-0.5 h-6"
+                          : tick.type === "middle"
+                            ? "w-0.5 h-5"
+                            : "w-px h-3"
+                      }`}
+                    />
+                    {tick.type === "major" && (
+                      <div className="absolute top-7 -translate-x-1/2 left-1/2">
+                        <span className="text-xs text-[#A594F9] font-medium">
+                          {tick.label}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Current position line + triangle */}
               <div
-                key={`segment-${idx}`}
-                className={`absolute top-0 h-full z-5 ${
-                  idx === activeSegment
-                    ? "bg-blue-400 opacity-60"
-                    : "bg-blue-200 opacity-40"
-                }`}
+                className="absolute top-0 h-full z-40 pointer-events-none"
                 style={{
-                  left: `${startPosition}%`,
-                  width: `${width}%`,
+                  left: `${0 + currentPositionPx - scrollLeft}px`,
                 }}
               >
-                <div className="absolute top-2 left-2 text-xs font-bold text-blue-800 bg-white bg-opacity-80 px-1 rounded">
-                  S{idx + 1}
-                </div>
+                {/* Triangle head */}
+                <div
+                  className="absolute -top-0 left-1/2 -translate-x-1/2
+               w-0 h-0 
+               border-l-[9px] border-r-[9px] border-t-[9px]
+               border-l-transparent border-r-transparent border-t-green-500"
+                />
+
+                {/* Vertical line */}
+                <div className="w-[2px] h-full bg-green-500 mx-auto" />
               </div>
-            );
-          })}
-          {draggingScissor && scissorPreview !== null && (
-            <div
-              className="absolute top-0 h-full bg-yellow-300 opacity-40 z-20"
-              style={{
-                left:
-                  draggingScissor === "left"
-                    ? "0%"
-                    : `${((scissorPreview - minValue) / (maxValue - minValue)) * 100}%`,
-                width:
-                  draggingScissor === "left"
-                    ? `${((scissorPreview - minValue) / (maxValue - minValue)) * 100}%`
-                    : `${((maxValue - scissorPreview) / (maxValue - minValue)) * 100}%`,
-              }}
-            />
-          )}
+
+              {/* Segments */}
+              {segments.map((segment, idx) => {
+                const startPosition =
+                  ((segment.start - minValue) / (maxValue - minValue)) * 100;
+                const endPosition =
+                  ((segment.end - minValue) / (maxValue - minValue)) * 100;
+                const width = endPosition - startPosition;
+                return (
+                  <div
+                    key={`segment-${idx}`}
+                    className={`absolute top-0 h-full z-5 ${
+                      idx === activeSegment
+                        ? "bg-blue-400 opacity-60"
+                        : "bg-blue-200 opacity-40"
+                    }`}
+                    style={{
+                      left: `${startPosition}%`,
+                      width: `${width}%`,
+                    }}
+                  >
+                    <div className="absolute top-1 left-1 text-[10px] font-bold text-blue-800 bg-white bg-opacity-80 px-1 rounded">
+                      S{idx + 1}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <div className="mt-4 text-center">
-          <span className="text-base font-medium text-[#A594F9]">
-            Current: {localValue.toFixed(2)}
-          </span>
+
+        {/* Right Scissor - Fixed position and size */}
+        <div
+          className="
+            flex flex-col items-center justify-between
+            h-full w-8
+            bg-[#8A76FC]
+            rounded-r-lg
+            cursor-ew-resize
+            z-30
+            flex-shrink-0
+            select-none
+            py-3
+          "
+          onMouseDown={() => {
+            setDraggingScissor("left");
+            setScissorPreview(null);
+          }}
+        >
+          {/* Top Line */}
+          <div className="w-px h-12 bg-white/80" />
+
+          {/* Scissor Icon */}
+          <Image
+            src="/icons/trim-new.svg"
+            alt="Trim"
+            width={20}
+            height={20}
+            style={{ filter: "brightness(0) invert(1)" }}
+          />
+
+          {/* Bottom Line */}
+          <div className="w-px h-12 bg-white/80" />
         </div>
+      </div>
+
+      {/* Current value display */}
+      <div className="mt-2 text-center">
+        <span className="text-sm font-medium text-[#A594F9]">
+          Current: {localValue.toFixed(2)}s
+        </span>
       </div>
     </div>
   );

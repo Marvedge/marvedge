@@ -1,40 +1,57 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
 
-NProgress.configure({ showSpinner: false });
+NProgress.configure({ showSpinner: false, trickleSpeed: 100 });
 
 export default function TopLoader() {
   const pathname = usePathname();
-  const [isPending] = useTransition();
+  const router = useRouter();
 
+  // Intercept programmatic navigations (router.push, router.replace)
   useEffect(() => {
-    // Add a global click listener for <a>/<Link>
+    const originalPush = router.push;
+    const originalReplace = router.replace;
+
+    router.push = (...args: Parameters<typeof router.push>) => {
+      NProgress.start();
+      return originalPush.apply(router, args);
+    };
+
+    router.replace = (...args: Parameters<typeof router.replace>) => {
+      NProgress.start();
+      return originalReplace.apply(router, args);
+    };
+
+    return () => {
+      router.push = originalPush;
+      router.replace = originalReplace;
+    };
+  }, [router]);
+
+  // Normal <a>/<Link> clicks → start progress
+  useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       const target = (e.target as HTMLElement).closest("a");
       if (target && target.href?.startsWith(window.location.origin)) {
-        // Start progress immediately on link click
         NProgress.start();
       }
     };
-
     document.addEventListener("click", handleClick);
-
-    return () => {
-      document.removeEventListener("click", handleClick);
-    };
+    return () => document.removeEventListener("click", handleClick);
   }, []);
 
+  // Stop when route actually changes (after render)
   useEffect(() => {
-    if (isPending) {
-      NProgress.start();
-    } else {
+    if (!pathname) return;
+    const timer = setTimeout(() => {
       NProgress.done();
-    }
-  }, [isPending, pathname]);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [pathname]);
 
   return null;
 }
