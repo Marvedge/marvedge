@@ -486,7 +486,7 @@ export default function TimelineRuler({
           <button
             onClick={handleTrim}
             disabled={processing}
-            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold text-purple-500 border border-purple-500 text-sm rounded-lg disabled:opacity-60"
+            className="min-w-[80px] cursor-pointer h-11 px-5 flex items-center justify-center gap-1 font-semibold text-purple-500 border border-purple-500 text-sm rounded-lg disabled:opacity-60"
           >
             <Image
               src="/icons/trim-new.svg"
@@ -500,7 +500,7 @@ export default function TimelineRuler({
           <button
             onClick={handleSmartTrim}
             disabled={processing}
-            className="min-w-[80px] h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-purple-500 text-purple-500 text-sm rounded-lg disabled:opacity-60"
+            className="min-w-[80px] cursor-pointer h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-purple-500 text-purple-500 text-sm rounded-lg disabled:opacity-60"
           >
             <Image
               src="/icons/trim-new.svg"
@@ -514,7 +514,7 @@ export default function TimelineRuler({
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length <= 1}
-            className="min-w-[80px] h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-[80px] cursor-pointer h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/delete-demo.svg"
@@ -592,8 +592,8 @@ export default function TimelineRuler({
         <div className="flex gap-2 sm:gap-4">
           <button
             onClick={handleUndo}
-            disabled={segments.length <= 1}
-            className="min-w-[40px] h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={segments.length === 0}
+            className="min-w-[40px] cursor-pointer h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/undo.svg"
@@ -606,7 +606,7 @@ export default function TimelineRuler({
           <button
             onClick={handleRedo}
             disabled={removedSegments.length === 0}
-            className="min-w-[40px] h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-[40px] cursor-pointer h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
               src="/icons/redo.svg"

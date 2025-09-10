@@ -310,11 +310,11 @@ export default function RecorderPage() {
                   }
                 }
               }}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              className="rounded-full bg-[#F6F3FF] bg-purple-500 text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
               title="Back 5 seconds"
             >
               <Image
-                src="/icons/backward.png"
+                src="/icons/replay.svg"
                 alt="Back 5 seconds"
                 width={20}
                 height={20}
@@ -338,11 +338,11 @@ export default function RecorderPage() {
                   }
                 }
               }}
-              className="rounded-full bg-[#F6F3FF] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
+              className="rounded-full bg-[#F6F3FF] bg-purple-500 text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
               title="Forward 5 seconds"
             >
               <Image
-                src="/icons/forward.png"
+                src="/icons/forward.svg"
                 alt="Forward 5 seconds"
                 width={20}
                 height={20}

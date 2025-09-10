@@ -260,7 +260,7 @@ const Hero3: React.FC = () => {
           />
           <motion.button
             type="submit"
-            className="w-full py-4 bg-white text-purple-600 font-semibold rounded-lg flex items-center justify-center gap-2 hover:bg-purple-100 transition"
+            className="w-full cursor-pointer py-4 bg-white text-purple-600 font-semibold rounded-lg flex items-center justify-center gap-2 hover:bg-purple-100 transition"
             whileHover={{
               scale: 1.05,
               boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
