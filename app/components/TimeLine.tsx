@@ -69,6 +69,13 @@ export default function TimelineRuler({
   const [draggingCurrentTime, setDraggingCurrentTime] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1); // Start with no zoom
   const [scrollLeft, setScrollLeft] = useState(0);
+  const [resizingSegmentIdx, setResizingSegmentIdx] = useState<number | null>(
+    null
+  );
+  const [resizingHandle, setResizingHandle] = useState<"start" | "end" | null>(
+    null
+  );
+  const FIXED_TRIM_DURATION = 4; // Fixed duration in seconds for initial trim
 
   const baseTimelineWidth = 1050; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
@@ -211,11 +218,28 @@ export default function TimelineRuler({
         rect.left;
       const width = rect.width;
       const percentage = Math.max(0, Math.min(1, x / width));
-      const value = minValue + (maxValue - minValue) * percentage;
+      let value = minValue + (maxValue - minValue) * percentage;
+
+      // Skip over trimmed sections
+      if (isPositionInTrimmedSection(value)) {
+        // Determine which direction we should go
+        const nextValidPos = getNextValidPosition(value, "forward");
+        const prevValidPos = getNextValidPosition(value, "backward");
+
+        // Choose the closest valid position
+        if (
+          Math.abs(value - nextValidPos) < Math.abs(value - prevValidPos)
+        ) {
+          value = nextValidPos;
+        } else {
+          value = prevValidPos;
+        }
+      }
+
       setLocalValue(value);
       if (onValueChange) onValueChange(value);
     },
-    [minValue, maxValue, onValueChange]
+    [minValue, maxValue, onValueChange, segments]
   );
 
   useEffect(() => {
@@ -374,9 +398,21 @@ export default function TimelineRuler({
 
   const handleSmartTrim = () => {
     const currentTime = localValue;
-    const segmentDuration = 4;
-    const startTime = currentTime;
-    const endTime = Math.min(maxValue, currentTime + segmentDuration);
+    const startTime = Math.max(minValue, currentTime);
+    const endTime = Math.min(maxValue, currentTime + FIXED_TRIM_DURATION);
+
+    // Check if this trim position overlaps with existing trimmed sections
+    const overlapsWithExisting = segments.some(
+      (seg) =>
+        (startTime >= seg.start && startTime < seg.end) ||
+        (endTime > seg.start && endTime <= seg.end) ||
+        (startTime <= seg.start && endTime >= seg.end)
+    );
+
+    if (overlapsWithExisting) {
+      alert("Trim section overlaps with existing trimmed section");
+      return;
+    }
 
     const newSegment = { start: startTime, end: endTime };
     setSegments((prev) => {
@@ -391,6 +427,95 @@ export default function TimelineRuler({
     console.log(
       `Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`
     );
+  };
+
+  // Handle segment resize
+  useEffect(() => {
+    if (resizingSegmentIdx === null || resizingHandle === null) return;
+
+    const onMove = (e: MouseEvent) => {
+      if (!rulerRef.current) return;
+      const rect = rulerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const width = rect.width;
+      const percentage = Math.max(0, Math.min(1, x / width));
+      const value = minValue + (maxValue - minValue) * percentage;
+
+      setSegments((prev) => {
+        const updated = [...prev];
+        const segment = updated[resizingSegmentIdx];
+
+        if (resizingHandle === "start") {
+          // Don't let start go past end, maintain minimum duration
+          segment.start = Math.min(value, segment.end - 0.1);
+        } else if (resizingHandle === "end") {
+          // Don't let end go before start, maintain minimum duration
+          segment.end = Math.max(value, segment.start + 0.1);
+        }
+
+        return updated;
+      });
+    };
+
+    const onUp = () => {
+      setResizingSegmentIdx(null);
+      setResizingHandle(null);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [resizingSegmentIdx, resizingHandle, minValue, maxValue]);
+
+  // Function to check if a position is within any trimmed section
+  const isPositionInTrimmedSection = (position: number): boolean => {
+    return segments.some((seg) => position >= seg.start && position <= seg.end);
+  };
+
+  // Function to get next valid position after trimmed sections
+  const getNextValidPosition = (
+    currentPos: number,
+    direction: "forward" | "backward"
+  ): number => {
+    const step = 0.01;
+
+    if (direction === "forward") {
+      let pos = currentPos;
+      // Move forward and skip any trimmed sections
+      while (pos <= maxValue) {
+        if (!isPositionInTrimmedSection(pos)) {
+          return pos;
+        }
+        // Find the next segment boundary
+        const nextSegment = segments.find((seg) => seg.start >= pos);
+        if (nextSegment) {
+          pos = nextSegment.end + step;
+        } else {
+          break;
+        }
+      }
+      return Math.min(maxValue, pos);
+    } else {
+      let pos = currentPos;
+      // Move backward and skip any trimmed sections
+      while (pos >= minValue) {
+        if (!isPositionInTrimmedSection(pos)) {
+          return pos;
+        }
+        // Find the previous segment boundary
+        const prevSegment = [...segments].reverse().find((seg) => seg.end <= pos);
+        if (prevSegment) {
+          pos = prevSegment.start - step;
+        } else {
+          break;
+        }
+      }
+      return Math.max(minValue, pos);
+    }
   };
 
   const generateTicks = () => {
@@ -495,7 +620,7 @@ export default function TimelineRuler({
           <button
             onClick={handleSmartTrim}
             disabled={processing}
-            className="min-w-[80px] cursor-pointer h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-purple-500 text-purple-500 text-sm rounded-lg disabled:opacity-60"
+            className="min-w-[100px] cursor-pointer h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-green-500 text-green-600 text-sm rounded-lg disabled:opacity-60 hover:bg-green-50"
           >
             <Image
               src="/icons/trim-new.svg"
@@ -504,7 +629,7 @@ export default function TimelineRuler({
               height={16}
               className="w-4 h-4"
             />
-            Trim Part
+            Add Trim
           </button>
           <button
             onClick={() => removeSegment(activeSegment)}
@@ -786,26 +911,53 @@ export default function TimelineRuler({
               {/* Segments */}
               {segments.map((segment, idx) => {
                 const startPosition =
-                  ((segment.start - minValue) / (maxValue - minValue)) * 100;
+                  ((segment.start - minValue) / (maxValue - minValue)) *
+                  zoomedTimelineWidth;
                 const endPosition =
-                  ((segment.end - minValue) / (maxValue - minValue)) * 100;
+                  ((segment.end - minValue) / (maxValue - minValue)) *
+                  zoomedTimelineWidth;
                 const width = endPosition - startPosition;
+
                 return (
                   <div
                     key={`segment-${idx}`}
-                    className={`absolute top-0 h-full z-5 ${
+                    className={`absolute top-0 h-full z-10 group cursor-pointer transition-opacity ${
                       idx === activeSegment
-                        ? "bg-blue-400 opacity-60"
-                        : "bg-blue-200 opacity-40"
+                        ? "bg-green-400 opacity-70"
+                        : "bg-green-300 opacity-50 hover:opacity-65"
                     }`}
                     style={{
-                      left: `${startPosition}%`,
-                      width: `${width}%`,
+                      left: `${startPosition}px`,
+                      width: `${width}px`,
                     }}
+                    onClick={() => setActiveSegment(idx)}
                   >
-                    <div className="absolute top-1 left-1 text-[10px] font-bold text-blue-800 bg-white bg-opacity-80 px-1 rounded">
-                      S{idx + 1}
+                    {/* Segment Label */}
+                    <div className="absolute top-2 left-2 text-[11px] font-bold text-green-900 bg-white bg-opacity-80 px-2 py-1 rounded pointer-events-none">
+                      Trim {idx + 1}
                     </div>
+
+                    {/* Left Resize Handle */}
+                    <div
+                      className="absolute top-0 -left-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setResizingSegmentIdx(idx);
+                        setResizingHandle("start");
+                      }}
+                      title="Drag to resize start"
+                    />
+
+                    {/* Right Resize Handle */}
+                    <div
+                      className="absolute top-0 -right-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setResizingSegmentIdx(idx);
+                        setResizingHandle("end");
+                      }}
+                      title="Drag to resize end"
+                    />
                   </div>
                 );
               })}
