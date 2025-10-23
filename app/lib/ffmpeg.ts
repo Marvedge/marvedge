@@ -10,7 +10,7 @@ export const videoTrimmer = async (
   start: string,
   end: string
 ): Promise<Blob> => {
-  const { createFFmpeg, FFmpeg } = await import("@ffmpeg/ffmpeg");
+  const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
     corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
@@ -251,5 +251,3 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   const data = ffmpeg.FS("readFile", outputName);
   return new Blob([data.slice(0).buffer], { type: "audio/mp3" });
 };
-
-

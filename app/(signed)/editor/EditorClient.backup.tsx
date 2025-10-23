@@ -1210,7 +1210,7 @@ export default function EditorPage() {
     }
 
     return {};
-  }, [selectedBackground, customBackground, imageMap]);
+  }, [selectedBackground, customBackground]);
 
   const exportVideo = async () => {
     if (!videoUrl) {
@@ -1658,7 +1658,7 @@ export default function EditorPage() {
                     onChange={(e) => setVolume(Number(e.target.value))}
                     className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
                   />
-                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                  <span className="text-xs text-[#7C5CFC] font-mono min-w-10">
                     {Math.round(volume * 100)}%
                   </span>
                 </div>
@@ -1872,7 +1872,7 @@ function CustomVideoControls({
           onPointerDown={handleSeekStart}
           onChange={handleSeek}
           onPointerUp={handleSeekEnd}
-          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-linear-to-r from-[#A594F9] to-[#7C5CFC]"
           style={{
             background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
             height: 8,

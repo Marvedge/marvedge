@@ -23,9 +23,7 @@ export default function RecordingTimeline({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 font-mono">
-            Live Preview
-          </span>
+          <span className="text-xs text-gray-500 font-mono">Live Preview</span>
         </div>
       </div>
     </div>

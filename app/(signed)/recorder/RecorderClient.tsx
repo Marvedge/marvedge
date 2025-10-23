@@ -1,5 +1,5 @@
 "use client";
-import { useRef } from "react";
+import { useRef, useCallback } from "react";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { useBlobStore } from "@/app/store/blobStore";
@@ -25,6 +25,22 @@ import InitialRecorderView from "./components/InitialRecorderView";
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
   const router = useRouter();
+
+  const handleBack = useCallback(() => {
+    try {
+      router.back();
+    } catch (error) {
+      console.error("Navigation error:", error);
+    }
+  }, [router]);
+
+  const handleEditVideo = useCallback(() => {
+    try {
+      router.push("/editor");
+    } catch (error) {
+      console.error("Navigation error:", error);
+    }
+  }, [router]);
 
   // Use custom hooks for state management
   const {
@@ -142,7 +158,7 @@ export default function RecorderPage() {
     const isUploaded = !!uploadedFileUrl && !screenStream;
     return (
       <div className="flex flex-col h-screen w-full overflow-hidden">
-        <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
+        <RecorderTopbar onBack={handleBack} userInitials={initials} />
         <div className="flex flex-1 overflow-hidden">
           {/* Right Panel */}
           <main className="flex-1 flex flex-col h-full overflow-hidden">
@@ -214,6 +230,7 @@ export default function RecorderPage() {
                   setBlob={setBlob}
                   reset={reset}
                   handleSaveAndPublish={handleSaveAndPublish}
+                  onEditVideo={handleEditVideo}
                 />
               </div>
             </div>
@@ -236,7 +253,7 @@ export default function RecorderPage() {
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
       <Toaster position="top-right" />
-      <RecorderTopbar onBack={() => router.back()} userInitials={initials} />
+      <RecorderTopbar onBack={handleBack} userInitials={initials} />
       <InitialRecorderView
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}

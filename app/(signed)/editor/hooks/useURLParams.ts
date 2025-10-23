@@ -42,7 +42,7 @@ export function useURLParams({
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
-      
+
       // Set timeline values if provided
       if (urlStartTime && urlEndTime) {
         const startSeconds = parseInt(urlStartTime);

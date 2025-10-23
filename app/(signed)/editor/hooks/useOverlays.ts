@@ -44,7 +44,9 @@ export function useOverlays({
   textFont,
 }: UseOverlaysProps) {
   const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [overlays, setOverlays] = useState<Overlay[]>([]);
 
   // Canvas drawing effect

@@ -83,13 +83,13 @@ export async function handleSaveDemo(
           throw new Error("Failed to fetch video blob");
         }
         const videoBlob = await response.blob();
-        
+
         // Create FormData for Cloudinary upload
         const CLOUDINARY_CLOUD_NAME =
           process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
         const CLOUDINARY_UPLOAD_PRESET =
           process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-        
+
         const cloudFormData = new FormData();
         cloudFormData.append("file", videoBlob, "video.webm");
         cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
@@ -98,10 +98,7 @@ export async function handleSaveDemo(
         console.log("Uploading to Cloudinary...");
 
         try {
-          const cloudRes = await axios.post(
-            CLOUDINARY_API_URL,
-            cloudFormData
-          );
+          const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
           console.log("Upload success:", cloudRes.data);
           cloudinaryVideoUrl = cloudRes.data.secure_url;
         } catch (error: unknown) {
@@ -140,7 +137,7 @@ export async function handleSaveDemo(
       segments: segmentsToSave,
       zoom: zoomEffects,
     };
-    
+
     try {
       const response = await axios.post("/api/demo", {
         title: data.title,
@@ -202,7 +199,7 @@ export async function videoTrimHandler(
       toast.error("No video available to trim");
       return;
     }
-    
+
     const normalizedSegments = segments.map((seg) => ({
       start: normalizeTimeFormat(seg.start),
       end: normalizeTimeFormat(seg.end),
@@ -228,7 +225,7 @@ export async function videoTrimHandler(
     // Use client-side WASM FFmpeg trimmer
     console.log("Processing trim on client side...");
     const { videoTrimmer } = await import("@/app/lib/ffmpeg");
-    
+
     // Use only the first segment for trimming
     const firstSegment = normalizedSegments[0];
     const trimmedBlob = await videoTrimmer(
@@ -323,12 +320,12 @@ export async function exportVideo(params: ExportVideoParams) {
         formData.append("background", bgBlob, "background.svg");
       }
     }
-    
+
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
     const cloudinaryPreset = process.env
       .NEXT_PUBLIC_CLOUDINARY_PRESET as string;
-      
+
     // Call backend FFmpeg server with axios
     const serverRes = await axios.post(
       `${backendUrl}/process-video`,

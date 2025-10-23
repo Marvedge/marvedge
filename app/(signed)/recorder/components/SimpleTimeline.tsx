@@ -129,7 +129,7 @@ export default function SimpleTimeline({
           onPointerDown={handleSeekStart}
           onChange={handleSeek}
           onPointerUp={handleSeekEnd}
-          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-linear-to-r from-[#A594F9] to-[#7C5CFC]"
           style={{
             background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
             height: 8,

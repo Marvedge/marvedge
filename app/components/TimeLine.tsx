@@ -16,11 +16,11 @@ interface TimelineRulerProps {
   endTime?: number;
   onStartTimeChange?: (value: number) => void;
   onEndTimeChange?: (value: number) => void;
-  onTrim?: (segments: { start: string; end: string }[]) => void;
   processing?: boolean;
   onResetVideo?: () => void;
   onZoomEffectCreate?: (effect: ZoomEffect) => void;
   initialSegments?: { start: string; end: string }[];
+  onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
 }
 
 export default function TimelineRuler({
@@ -33,7 +33,6 @@ export default function TimelineRuler({
   endTime,
   onStartTimeChange,
   onEndTimeChange,
-  onTrim,
   processing = false,
   onResetVideo,
   onZoomEffectCreate,
@@ -61,7 +60,6 @@ export default function TimelineRuler({
   const [removedSegments, setRemovedSegments] = useState<
     { start: number; end: number }[]
   >([]);
-  const [hasBeenTrimmed, setHasBeenTrimmed] = useState(false);
   const [draggingScissor, setDraggingScissor] = useState<
     "left" | "right" | null
   >(null);
@@ -75,8 +73,10 @@ export default function TimelineRuler({
   const [resizingHandle, setResizingHandle] = useState<"start" | "end" | null>(
     null
   );
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [playheadMode, setPlayheadMode] = useState<"trim" | "non-trim">("non-trim");
+  const [isAutoPlaying] = useState(true);
+  const [playheadMode, setPlayheadMode] = useState<"trim" | "non-trim">(
+    "non-trim"
+  );
   const [selectedTrimIdx, setSelectedTrimIdx] = useState<number | null>(null);
   const FIXED_TRIM_DURATION = 4; // Fixed duration in seconds for initial trim
   const PLAYHEAD_SPEED = 0.005; // Speed in seconds per frame (increased for visible movement)
@@ -86,37 +86,39 @@ export default function TimelineRuler({
   const playheadModeRef = useRef(playheadMode);
   const selectedTrimIdxRef = useRef(selectedTrimIdx);
   const onValueChangeRef = useRef(onValueChange);
-  
+  const onStartTimeChangeRef = useRef(onStartTimeChange);
+  const onEndTimeChangeRef = useRef(onEndTimeChange);
+  const isUpdatingFromPropRef = useRef(false);
+
   // Helper function to immediately switch to trim mode
   const switchToTrimMode = (trimIdx: number) => {
-    console.log(`[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`);
+    console.log(
+      `[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`
+    );
     playheadModeRef.current = "trim";
     selectedTrimIdxRef.current = trimIdx;
     setPlayheadMode("trim");
     setSelectedTrimIdx(trimIdx);
     setLocalValue(segments[trimIdx].start);
   };
-  
+
   // Helper function to immediately switch to non-trim mode
   const switchToNonTrimMode = () => {
     playheadModeRef.current = "non-trim";
     selectedTrimIdxRef.current = null;
     setPlayheadMode("non-trim");
     setSelectedTrimIdx(null);
-    
+
     // Snap playhead to the gap it's in (or nearest gap)
     setLocalValue((currentPos) => {
-      // Find the gap boundaries for the current position
-      let gapStart = minValue;
-      let gapEnd = maxValue;
-      
       const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
-      
+
       // Check if currentPos is inside a trimmed section
-      let isInTrimmedSection = false;
       for (let i = 0; i < sortedSegments.length; i++) {
-        if (currentPos >= sortedSegments[i].start && currentPos < sortedSegments[i].end) {
-          isInTrimmedSection = true;
+        if (
+          currentPos >= sortedSegments[i].start &&
+          currentPos < sortedSegments[i].end
+        ) {
           // Jump to the next gap after this segment
           if (i + 1 < sortedSegments.length) {
             return sortedSegments[i].end;
@@ -125,7 +127,7 @@ export default function TimelineRuler({
           }
         }
       }
-      
+
       // If we're already in a gap, keep current position
       return currentPos;
     });
@@ -147,6 +149,21 @@ export default function TimelineRuler({
   useEffect(() => {
     onValueChangeRef.current = onValueChange;
   }, [onValueChange]);
+
+  useEffect(() => {
+    onStartTimeChangeRef.current = onStartTimeChange;
+  }, [onStartTimeChange]);
+
+  useEffect(() => {
+    onEndTimeChangeRef.current = onEndTimeChange;
+  }, [onEndTimeChange]);
+
+  // Check if video has been trimmed (multiple segments or segment doesn't span full duration)
+  const hasBeenTrimmed =
+    segments.length > 1 ||
+    (segments.length === 1 &&
+      (Math.abs(segments[0].start - minValue) > 0.001 ||
+        Math.abs(segments[0].end - maxValue) > 0.001));
 
   const baseTimelineWidth = 1050; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
@@ -216,6 +233,7 @@ export default function TimelineRuler({
   };
 
   useEffect(() => {
+    isUpdatingFromPropRef.current = true;
     setLocalValue(currentValue);
   }, [currentValue]);
 
@@ -293,9 +311,8 @@ export default function TimelineRuler({
 
       // Allow clicking anywhere - no skipping logic
       setLocalValue(value);
-      if (onValueChange) onValueChange(value);
     },
-    [minValue, maxValue, onValueChange]
+    [minValue, maxValue]
   );
 
   useEffect(() => {
@@ -337,7 +354,7 @@ export default function TimelineRuler({
           };
           setSegments(updatedSegments);
         }
-        onStartTimeChange?.(newStartTime);
+        onStartTimeChangeRef.current?.(newStartTime);
       } else if (draggingHandle === "end") {
         const newEndTime = Math.max(clampedValue, localStartTime + step);
         setLocalEndTime(newEndTime);
@@ -349,10 +366,9 @@ export default function TimelineRuler({
           };
           setSegments(updatedSegments);
         }
-        onEndTimeChange?.(newEndTime);
+        onEndTimeChangeRef.current?.(newEndTime);
       } else {
         setLocalValue(clampedValue);
-        onValueChange?.(clampedValue);
       }
     },
     [
@@ -364,9 +380,6 @@ export default function TimelineRuler({
       draggingHandle,
       segments,
       activeSegment,
-      onStartTimeChange,
-      onEndTimeChange,
-      onValueChange,
     ]
   );
 
@@ -404,7 +417,6 @@ export default function TimelineRuler({
       setLocalStartTime(newSegments[newActiveSegment].start);
       setLocalEndTime(newSegments[newActiveSegment].end);
     }
-    
     // If all segments are deleted, switch to NON-TRIM mode for continuous playback
     if (newSegments.length === 0) {
       switchToNonTrimMode();
@@ -426,12 +438,12 @@ export default function TimelineRuler({
           setLocalStartTime(newSegments[newActiveSegment].start);
           setLocalEndTime(newSegments[newActiveSegment].end);
         }
-        
+
         // If all segments are deleted, switch to NON-TRIM mode for continuous playback
         if (newSegments.length === 0) {
           switchToNonTrimMode();
         }
-        
+
         return newSegments;
       });
     }
@@ -443,20 +455,6 @@ export default function TimelineRuler({
       setSegments((prev) => [...prev, segmentToRestore]);
       setRemovedSegments((prev) => prev.slice(0, -1));
     }
-  };
-
-  const handleTrim = () => {
-    if (segments.some((seg) => seg.start >= seg.end)) {
-      alert("Invalid trim range in one or more segments.");
-      return;
-    }
-    onTrim?.(
-      segments.map((seg) => ({
-        start: seg.start.toFixed(2),
-        end: seg.end.toFixed(2),
-      }))
-    );
-    setHasBeenTrimmed(true);
   };
 
   const handleSmartTrim = () => {
@@ -531,7 +529,7 @@ export default function TimelineRuler({
 
     const animationInterval = setInterval(() => {
       setLocalValue((currentVal) => {
-        let nextValue = currentVal + PLAYHEAD_SPEED;
+        const nextValue = currentVal + PLAYHEAD_SPEED;
         const currentMode = playheadModeRef.current;
         const currentSegments = segmentsRef.current;
         const currentSelectedIdx = selectedTrimIdxRef.current;
@@ -557,12 +555,17 @@ export default function TimelineRuler({
           let currentGapIndex = -1; // Track which gap we're in
 
           // Sort segments by start position
-          const sortedSegments = [...currentSegments].sort((a, b) => a.start - b.start);
+          const sortedSegments = [...currentSegments].sort(
+            (a, b) => a.start - b.start
+          );
 
           // First, check if currentVal is already inside a trimmed section
           let isInTrimmedSection = false;
           for (let i = 0; i < sortedSegments.length; i++) {
-            if (currentVal >= sortedSegments[i].start && currentVal < sortedSegments[i].end) {
+            if (
+              currentVal >= sortedSegments[i].start &&
+              currentVal < sortedSegments[i].end
+            ) {
               isInTrimmedSection = true;
               break;
             }
@@ -591,7 +594,7 @@ export default function TimelineRuler({
             // Gap 1: segment[0].end to segment[1].start
             // Gap 2: segment[1].end to segment[2].start
             // ... and so on
-            
+
             for (let i = 0; i < sortedSegments.length; i++) {
               if (currentVal < sortedSegments[i].start) {
                 // We're in a gap before this segment
@@ -611,16 +614,18 @@ export default function TimelineRuler({
 
           // DEBUG
           if (currentMode === "non-trim" && currentVal !== 0) {
-            console.log(`Non-trim: currentVal=${currentVal.toFixed(4)}, gap=[${gapStart.toFixed(4)}, ${gapEnd.toFixed(4)}], nextValue=${nextValue.toFixed(4)}, gapIdx=${currentGapIndex}`);
+            console.log(
+              `Non-trim: currentVal=${currentVal.toFixed(4)}, gap=[${gapStart.toFixed(4)}, ${gapEnd.toFixed(4)}], nextValue=${nextValue.toFixed(4)}, gapIdx=${currentGapIndex}`
+            );
           }
 
           // Move within the gap or jump to next gap when current gap ends
           if (nextValue >= gapEnd) {
             // Current gap is ending, find the next gap
-            const sortedSegments = [...currentSegments].sort((a, b) => a.start - b.start);
-            let nextGapStart = minValue;
-            let nextGapEnd = maxValue;
-            
+            const sortedSegments = [...currentSegments].sort(
+              (a, b) => a.start - b.start
+            );
+
             // Calculate all gap boundaries
             const gaps: Array<{ start: number; end: number }> = [];
             if (sortedSegments.length === 0) {
@@ -633,15 +638,21 @@ export default function TimelineRuler({
               // Gaps between segments
               for (let i = 0; i < sortedSegments.length - 1; i++) {
                 if (sortedSegments[i].end < sortedSegments[i + 1].start) {
-                  gaps.push({ start: sortedSegments[i].end, end: sortedSegments[i + 1].start });
+                  gaps.push({
+                    start: sortedSegments[i].end,
+                    end: sortedSegments[i + 1].start,
+                  });
                 }
               }
               // Gap after last segment
               if (sortedSegments[sortedSegments.length - 1].end < maxValue) {
-                gaps.push({ start: sortedSegments[sortedSegments.length - 1].end, end: maxValue });
+                gaps.push({
+                  start: sortedSegments[sortedSegments.length - 1].end,
+                  end: maxValue,
+                });
               }
             }
-            
+
             // Find which gap we're in
             let currentGapIdx = -1;
             for (let i = 0; i < gaps.length; i++) {
@@ -650,7 +661,7 @@ export default function TimelineRuler({
                 break;
               }
             }
-            
+
             // Jump to next gap if available
             if (currentGapIdx !== -1 && currentGapIdx + 1 < gaps.length) {
               finalValue = gaps[currentGapIdx + 1].start;
@@ -669,11 +680,6 @@ export default function TimelineRuler({
           }
         }
 
-        // Call onValueChange callback
-        if (onValueChangeRef.current && finalValue !== currentVal) {
-          onValueChangeRef.current(finalValue);
-        }
-
         return finalValue;
       });
     }, 33); // ~30fps
@@ -681,52 +687,15 @@ export default function TimelineRuler({
     return () => clearInterval(animationInterval);
   }, [isAutoPlaying, minValue, maxValue]);
 
-  // Function to check if a position is within any trimmed section
-  const isPositionInTrimmedSection = (position: number): boolean => {
-    return segments.some((seg) => position >= seg.start && position <= seg.end);
-  };
-
-  // Function to get next valid position after trimmed sections
-  const getNextValidPosition = (
-    currentPos: number,
-    direction: "forward" | "backward"
-  ): number => {
-    const step = 0.01;
-
-    if (direction === "forward") {
-      let pos = currentPos;
-      // Move forward and skip any trimmed sections
-      while (pos <= maxValue) {
-        if (!isPositionInTrimmedSection(pos)) {
-          return pos;
-        }
-        // Find the next segment boundary
-        const nextSegment = segments.find((seg) => seg.start >= pos);
-        if (nextSegment) {
-          pos = nextSegment.end + step;
-        } else {
-          break;
-        }
-      }
-      return Math.min(maxValue, pos);
-    } else {
-      let pos = currentPos;
-      // Move backward and skip any trimmed sections
-      while (pos >= minValue) {
-        if (!isPositionInTrimmedSection(pos)) {
-          return pos;
-        }
-        // Find the previous segment boundary
-        const prevSegment = [...segments].reverse().find((seg) => seg.end <= pos);
-        if (prevSegment) {
-          pos = prevSegment.start - step;
-        } else {
-          break;
-        }
-      }
-      return Math.max(minValue, pos);
+  // Separate effect to call onValueChange callback after localValue updates
+  // But skip if the update came from a prop change
+  useEffect(() => {
+    if (isUpdatingFromPropRef.current) {
+      isUpdatingFromPropRef.current = false;
+      return;
     }
-  };
+    onValueChangeRef.current?.(localValue);
+  }, [localValue]);
 
   const generateTicks = () => {
     const ticks: { value: number; type: string; label?: string }[] = [];
@@ -772,9 +741,9 @@ export default function TimelineRuler({
     ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-8">
-      <div className="flex flex-row items-center justify-between w-full mb-4 gap-2 sm:gap-4">
-        <div className="flex gap-2 sm:gap-4">
+    <div className="w-full max-w-6xl mx-auto p-6">
+      <div className="flex flex-row items-center justify-between w-full mb-6 gap-3 sm:gap-6">
+        <div className="flex gap-3 sm:gap-4 items-center flex-wrap">
           <button
             onClick={
               onZoomEffectCreate
@@ -789,107 +758,81 @@ export default function TimelineRuler({
                     })
                 : undefined
             }
-            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold border border-purple-500 cursor-pointer text-purple-500 text-sm rounded"
+            className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           >
             <Image
               src="/icons/zoooom.svg"
               alt="Zoom"
               width={16}
               height={16}
-              className="w-7 h-7 translate-y-0.5"
+              className="w-5 h-5 brightness-0 invert"
             />
             Zoom in
           </button>
           <button
             onClick={addSegment}
-            className="min-w-[80px] h-11 px-5 flex items-center justify-center gap-1 font-semibold cursor-pointer border border-purple-500 rounded-large text-purple-500 text-sm rounded"
+            className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           >
             <Image
               src="/icons/+.svg"
               alt="Add"
               width={16}
               height={16}
-              className="w-4 h-4"
+              className="w-5 h-5 brightness-0 invert"
             />
             Add Segment
           </button>
-          <button
-            onClick={handleTrim}
-            disabled={processing}
-            className="min-w-[80px] cursor-pointer h-11 px-5 flex items-center justify-center gap-1 font-semibold text-purple-500 border border-purple-500 text-sm rounded-lg disabled:opacity-60"
-          >
-            <Image
-              src="/icons/trim-new.svg"
-              alt="Trim"
-              width={16}
-              height={16}
-              className="w-5 h-5"
-            />
-            Trim & Merge
-          </button>
+
           <button
             onClick={handleSmartTrim}
             disabled={processing}
-            className="min-w-[100px] cursor-pointer h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-green-500 text-green-600 text-sm rounded-lg disabled:opacity-60 hover:bg-green-50"
+            className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:from-green-400 disabled:to-green-500"
           >
             <Image
               src="/icons/trim-new.svg"
               alt="Trim"
               width={16}
               height={16}
-              className="w-4 h-4"
+              className="w-5 h-5 brightness-0 invert"
             />
             Add Trim
           </button>
-          <button
-            onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-            className="min-w-[80px] cursor-pointer h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-blue-500 text-blue-600 text-sm rounded-lg hover:bg-blue-50"
-          >
-            {isAutoPlaying ? "⏸ Pause" : "▶ Play"}
-          </button>
-          
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
-            <span className="text-xs font-semibold text-gray-600">Mode:</span>
-            <span className={`text-xs font-bold px-2 py-1 rounded ${
-              playheadMode === "trim" 
-                ? "bg-green-200 text-green-800" 
-                : "bg-blue-200 text-blue-800"
-            }`}>
-              {playheadMode === "trim" ? `Trim Section #${selectedTrimIdx !== null ? selectedTrimIdx + 1 : "—"}` : "All Trims (Skip Non-Trim)"}
-            </span>
-          </div>
 
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0}
-            className="min-w-[80px] cursor-pointer h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:from-red-400 disabled:to-red-500"
           >
             <Image
               src="/icons/delete-demo.svg"
               alt="Delete"
               width={16}
               height={16}
-              className="w-5 h-5"
+              className="w-5 h-5 brightness-0 invert"
             />
             Delete
           </button>
-          {/* Zoom In/Out Slider */}
           {/* Zoom Slider */}
-          <div className="relative w-56">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-100/80 rounded-lg backdrop-blur-sm">
             {/* Minus button */}
             <button
               onClick={() => setZoomLevel((prev) => Math.max(1, prev * 0.8))}
-              className="absolute -top-3 left-0 text-purple-400 hover:text-purple-600"
+              className="text-gray-600 hover:text-purple-600 hover:bg-white rounded p-1 transition-colors"
+              title="Zoom out"
             >
-              –
-            </button>
-
-            {/* Plus button */}
-            <button
-              onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
-              className="absolute -top-3 right-0 text-purple-400 hover:text-purple-600"
-            >
-              +
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 12H4"
+                />
+              </svg>
             </button>
 
             {/* Slider */}
@@ -906,23 +849,24 @@ export default function TimelineRuler({
                 }%, #E9D8FD ${((zoomLevel - 1) / (20 - 1)) * 100}%)`,
               }}
               className="
-                w-full h-2 mt-2
-                rounded-full appearance-none
+                w-32 h-2
+                rounded-full appearance-none cursor-pointer
 
             [&::-webkit-slider-runnable-track]:h-2
             [&::-webkit-slider-runnable-track]:rounded-full
 
             [&::-webkit-slider-thumb]:appearance-none
-            [&::-webkit-slider-thumb]:h-3.5 
-            [&::-webkit-slider-thumb]:w-3.5 
+            [&::-webkit-slider-thumb]:h-4 
+            [&::-webkit-slider-thumb]:w-4 
             [&::-webkit-slider-thumb]:rounded-full 
             [&::-webkit-slider-thumb]:bg-white
-            [&::-webkit-slider-thumb]:border
+            [&::-webkit-slider-thumb]:border-2
             [&::-webkit-slider-thumb]:border-[#8A76FC]
             [&::-webkit-slider-thumb]:shadow
+            [&::-webkit-slider-thumb]:cursor-pointer
             [&::-webkit-slider-thumb]:relative
             [&::-webkit-slider-thumb]:z-10
-            [&::-webkit-slider-thumb]:-mt-[3.2px] 
+            [&::-webkit-slider-thumb]:-mt-1
 
             [&::-moz-range-track]:h-2
             [&::-moz-range-track]:rounded-full
@@ -935,84 +879,82 @@ export default function TimelineRuler({
             accent-[#8A76FC]
           "
             />
+
+            {/* Plus button */}
+            <button
+              onClick={() => setZoomLevel((prev) => Math.min(20, prev * 1.25))}
+              className="text-gray-600 hover:text-purple-600 hover:bg-white rounded p-1 transition-colors"
+              title="Zoom in"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </button>
+
+            {/* Zoom level display */}
+            <span className="text-xs font-medium text-gray-700 ml-1 w-10 text-right">
+              {zoomLevel.toFixed(1)}x
+            </span>
           </div>
         </div>
-        <div className="flex gap-2 sm:gap-4">
-          <button
-            onClick={handleUndo}
-            disabled={segments.length === 0}
-            className="min-w-[40px] cursor-pointer h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Image
-              src="/icons/undo.svg"
-              alt="Undo"
-              width={16}
-              height={16}
-              className="w-4 h-4"
-            />
-          </button>
-          <button
-            onClick={handleRedo}
-            disabled={removedSegments.length === 0}
-            className="min-w-[40px] cursor-pointer h-8 px-2 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Image
-              src="/icons/redo.svg"
-              alt="Redo"
-              width={16}
-              height={16}
-              className="w-4 h-4"
-            />
-          </button>
+        <div className="flex gap-2 sm:gap-3 items-center">
+          <div className="flex gap-2 px-2 py-1 bg-gray-100/80 rounded-lg backdrop-blur-sm">
+            <button
+              onClick={handleUndo}
+              disabled={segments.length === 0}
+              className="h-9 px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Undo"
+            >
+              <Image
+                src="/icons/undo.svg"
+                alt="Undo"
+                width={16}
+                height={16}
+                className="w-4 h-4"
+              />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={removedSegments.length === 0}
+              className="h-9 px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Redo"
+            >
+              <Image
+                src="/icons/redo.svg"
+                alt="Redo"
+                width={16}
+                height={16}
+                className="w-4 h-4"
+              />
+            </button>
+          </div>
           {onResetVideo && hasBeenTrimmed && (
             <button
               onClick={onResetVideo}
-              className="min-w-[80px] h-8 px-2 flex items-center justify-center gap-1 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm rounded"
+              className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
             >
               <Image
                 src="/icons/reset.png"
                 alt="Reset"
                 width={16}
                 height={16}
-                className="w-4 h-4"
+                className="w-4 h-4 brightness-0 invert"
               />
               Reset video
             </button>
           )}
         </div>
       </div>
-
-      {segments && segments.length > 0 ? (
-        <div className="mb-2">
-          <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-            <span>📋</span>
-            <span>Click segments to select them</span>
-          </div>
-          <div className="flex gap-2">
-            {segments.map((seg, idx) => (
-              <button
-                key={idx}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveSegment(idx);
-                  switchToTrimMode(idx);
-                }}
-                className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-200 cursor-pointer hover:scale-105 ${
-                  idx === activeSegment
-                    ? "bg-[#7C5CFC] text-white shadow-lg"
-                    : "bg-white text-[#7C5CFC] border border-[#7C5CFC] hover:bg-[#F6F3FF] hover:text-[#7C5CFC] hover:shadow-md"
-                }`}
-              >
-                Segment {idx + 1} ({seg.start.toFixed(1)}-{seg.end.toFixed(1)}s)
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="mb-2">
-          <div className="text-xs text-gray-500 mb-2 flex items-center gap-1"></div>
-        </div>
-      )}
 
       {/* {zoomLevel > 1 && (
         <div className="mb-2 text-sm text-gray-600">
@@ -1034,7 +976,7 @@ export default function TimelineRuler({
           rounded-l-lg
           cursor-ew-resize
           z-30
-          flex-shrink-0
+          shrink-0
           select-none
           py-3
         "
@@ -1061,7 +1003,7 @@ export default function TimelineRuler({
 
         {/* Scrollable Timeline Container - Fixed width */}
         <div
-          className="relative flex-shrink-0"
+          className="relative shrink-0"
           style={{ width: `${baseTimelineWidth}px`, height: "100%" }}
         >
           <div
@@ -1139,14 +1081,14 @@ export default function TimelineRuler({
               >
                 {/* Triangle head */}
                 <div
-                  className="absolute -top-0 left-1/2 -translate-x-1/2
+                  className="absolute top-0 left-1/2 -translate-x-1/2
                w-0 h-0 
                border-l-[9px] border-r-[9px] border-t-[9px]
                border-l-transparent border-r-transparent border-t-green-500"
                 />
 
                 {/* Vertical line */}
-                <div className="w-[2px] h-full bg-green-500 mx-auto" />
+                <div className="w-0.5 h-full bg-green-500 mx-auto" />
               </div>
 
               {/* Segments */}
@@ -1219,7 +1161,7 @@ export default function TimelineRuler({
             rounded-r-lg
             cursor-ew-resize
             z-30
-            flex-shrink-0
+            shrink-0
             select-none
             py-3
           "

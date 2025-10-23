@@ -33,12 +33,16 @@ import { useTimelineInit } from "./hooks/useTimelineInit";
 
 // Utils
 import { sanitizeFilename } from "@/app/lib/constants";
-import { handleSaveDemo, videoTrimHandler, exportVideo } from "./utils/videoHandlers";
+import {
+  handleSaveDemo,
+  videoTrimHandler,
+  exportVideo,
+} from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
 
 export default function EditorPage() {
   const router = useRouter();
-  
+
   // Custom hooks for state management
   const editorState = useEditorState();
   const {
@@ -109,7 +113,7 @@ export default function EditorPage() {
     resetVideo,
     downloadBlob,
   } = useEditor();
-  
+
   const blob = useBlobStore((state) => state.blob);
   const { recordingDuration } = useScreenRecorder();
   const { data: session } = useSession();
@@ -155,7 +159,6 @@ export default function EditorPage() {
 
   // Overlays handling
   const {
-    overlays,
     handleMouseDown,
     handleMouseUp,
     handleUndo,
@@ -307,13 +310,13 @@ export default function EditorPage() {
           error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
         }}
       />
-      
+
       <EditorTopbar
         onBack={() => router.back()}
         userInitials={initials}
         onToggleMenu={toggleDashboardMenu}
       />
-      
+
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Sidebar for Desktop */}
         <div className="hidden md:block w-80 bg-white shadow-lg z-40">
@@ -473,7 +476,7 @@ export default function EditorPage() {
               >
                 <span className="text-xl"></span> Save Demo
               </button>
-              
+
               {/* Editor Sidebar Toggle for Mobile */}
               <button
                 className="md:hidden cursor-pointer flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
@@ -484,7 +487,7 @@ export default function EditorPage() {
               </button>
             </div>
           </div>
-          
+
           {(sidebarTitle || sidebarDescription) && (
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
               {sidebarTitle && (
@@ -509,7 +512,7 @@ export default function EditorPage() {
               )}
             </div>
           )}
-          
+
           {/* Video Wrapper */}
           <div
             className={`flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl shadow-lg bg-white`}
@@ -563,27 +566,45 @@ export default function EditorPage() {
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-8">
                     <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
-                      <svg className="w-8 h-8 text-[#7C5CFC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <svg
+                        className="w-8 h-8 text-[#7C5CFC]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">No Video Selected</h3>
+                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
+                      No Video Selected
+                    </h3>
                     <p className="text-sm text-gray-600 mb-4">
                       To start editing, please:
                     </p>
                     <div className="space-y-2 text-sm text-gray-500">
-                      <p>• Go to <strong>Dashboard</strong> and edit an existing demo</p>
-                      <p>• Or go to <strong>Recorder</strong> to record/upload a new video</p>
+                      <p>
+                        • Go to <strong>Dashboard</strong> and edit an existing
+                        demo
+                      </p>
+                      <p>
+                        • Or go to <strong>Recorder</strong> to record/upload a
+                        new video
+                      </p>
                     </div>
                     <div className="mt-6 flex gap-3">
                       <button
-                        onClick={() => router.push('/dashboard')}
+                        onClick={() => router.push("/dashboard")}
                         className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
                       >
                         Go to Dashboard
                       </button>
                       <button
-                        onClick={() => router.push('/recorder')}
+                        onClick={() => router.push("/recorder")}
                         className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
                       >
                         Go to Recorder
@@ -684,7 +705,7 @@ export default function EditorPage() {
                       onChange={(e) => setVolume(Number(e.target.value))}
                       className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
                     />
-                    <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                    <span className="text-xs text-[#7C5CFC] font-mono min-w-10">
                       {Math.round(volume * 100)}%
                     </span>
                   </div>
@@ -706,7 +727,7 @@ export default function EditorPage() {
               </div>
             )}
           </div>
-          
+
           {tool === "text" && (
             <div className="flex gap-3 items-center mb-6 sm:mb-0 mx-4 sm:mx-8">
               <label className="text-sm">Text Color:</label>
@@ -730,7 +751,7 @@ export default function EditorPage() {
               </select>
             </div>
           )}
-          
+
           {/* Timeline - only show when video is available */}
           {videoUrl && (
             <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
@@ -777,7 +798,7 @@ export default function EditorPage() {
           )}
         </div>
       </div>
-      
+
       <ZoomEffectsPopup
         isOpen={isZoomPopupOpen}
         onClose={() => setIsZoomPopupOpen(false)}
@@ -796,7 +817,7 @@ export default function EditorPage() {
           }
         }}
       />
-      
+
       <SaveDemoModal
         isOpen={showSaveDemoModal}
         onClose={() => setShowSaveDemoModal(false)}

@@ -1,7 +1,6 @@
-import { useState,useEffect,useRef } from "react";
-import { useSession ,signOut} from "next-auth/react";
+import { useState, useEffect, useRef } from "react";
+import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
-
 
 type RecorderTopbarProps = {
   onBack: () => void;
@@ -107,4 +106,4 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
   );
 }
 
-export default RecorderTopbar
+export default RecorderTopbar;

@@ -206,5 +206,11 @@ export function useVideoDuration({
         playTimers.forEach((timer) => clearTimeout(timer));
       };
     }
-  }, [videoUrl, uploadedFileUrl, videoDuration, setVideoDuration, videoPlayerRef]);
+  }, [
+    videoUrl,
+    uploadedFileUrl,
+    videoDuration,
+    setVideoDuration,
+    videoPlayerRef,
+  ]);
 }

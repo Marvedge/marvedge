@@ -1,5 +1,5 @@
 "use client";
-import { useRef,useState } from "react";
+import { useRef, useState } from "react";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/router";
 import { useBlobStore } from "@/app/store/blobStore";
@@ -14,7 +14,7 @@ import { sanitizeFilename } from "@/app/lib/constants";
 import { toast, Toaster } from "sonner";
 import { Dialog } from "@headlessui/react";
 import { Menu } from "lucide-react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import SavePopupForm from "@/app/components/SavePopupForm";
 
 export default function RecorderPage() {
@@ -175,7 +175,7 @@ export default function RecorderPage() {
             onPointerDown={handleSeekStart}
             onChange={handleSeek}
             onPointerUp={handleSeekEnd}
-            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
+            className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-linear-to-r from-[#A594F9] to-[#7C5CFC]"
             style={{
               background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
               height: 8,
@@ -519,7 +519,6 @@ export default function RecorderPage() {
       };
     }
   }, [videoUrl, uploadedFileUrl, videoDuration]);
- 
 
   // Enhanced initialization
   useEffect(() => {
@@ -1011,8 +1010,6 @@ export default function RecorderPage() {
       </div>
     );
   }
-
-
 
   // Initial UI (no recording or uploaded video)
   return (

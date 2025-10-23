@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ["@radix-ui/react-slider", "@headlessui/react"],
+  },
+  
   async headers() {
     return [
       {
@@ -30,7 +34,7 @@ const nextConfig: NextConfig = {
         ...config.externals,
         "fluent-ffmpeg": "fluent-ffmpeg",
         "ffmpeg-static": "ffmpeg-static",
-        "@ffmpeg/ffmpeg": "@ffmpeg/ffmpeg",
+        "@ffmpeg/ffmpeg": "commonjs @ffmpeg/ffmpeg",
       };
     } else {
       // For server, mark these as external to avoid module resolution issues

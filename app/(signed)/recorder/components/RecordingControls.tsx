@@ -1,6 +1,3 @@
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-
 interface RecordingControlsProps {
   screenStream: MediaStream | null;
   recording: boolean;
@@ -22,6 +19,7 @@ interface RecordingControlsProps {
   setBlob: (blob: Blob | null) => void;
   reset: () => void;
   handleSaveAndPublish: () => void;
+  onEditVideo?: () => void;
 }
 
 export default function RecordingControls({
@@ -45,8 +43,8 @@ export default function RecordingControls({
   setBlob,
   reset,
   handleSaveAndPublish,
+  onEditVideo,
 }: RecordingControlsProps) {
-  const router = useRouter();
 
   return (
     <>
@@ -156,7 +154,7 @@ export default function RecordingControls({
             )}
             {isUploaded && (
               <button
-                onClick={() => router.push("/editor")}
+                onClick={onEditVideo}
                 className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
               >
                 Edit Video
@@ -165,7 +163,7 @@ export default function RecordingControls({
             {!isUploaded && (
               <>
                 <button
-                  onClick={() => router.push("/editor")}
+                  onClick={onEditVideo}
                   className="px-6 py-3 rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
                 >
                   Edit Video

@@ -73,7 +73,12 @@ export default function VideoPlayerSection({
                 dur > 0
               ) {
                 setVideoDuration(dur);
-              } else if (!isUploaded && isFinite(dur) && !isNaN(dur) && dur > 0) {
+              } else if (
+                !isUploaded &&
+                isFinite(dur) &&
+                !isNaN(dur) &&
+                dur > 0
+              ) {
                 setVideoDuration(dur);
               }
             }}

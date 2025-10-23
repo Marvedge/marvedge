@@ -56,9 +56,11 @@ export const useEditor = () => {
       setProcessing(true);
       setError(null);
       try {
-        let trimmedBlob: Blob;
-        // Only single-segment trimming is supported
-        trimmedBlob = await videoTrimmer(blob, startOrSegments as string, end!);
+        const trimmedBlob = await videoTrimmer(
+          blob,
+          startOrSegments as string,
+          end!
+        );
         const trimmedUrl = URL.createObjectURL(trimmedBlob);
         setVideoUrl(trimmedUrl);
 

@@ -42,7 +42,7 @@ const Navbar: React.FC = () => {
 
   return (
     <>
-      <nav className="fixed top-0 left-0 w-full z-[1002] bg-gradient-to-tr from-white via-[#f9fef4] to-[#e9f8c5] min-h-[80px] flex flex-col justify-start">
+      <nav className="fixed top-0 left-0 w-full z-1002 bg-linear-to-tr from-white via-[#f9fef4] to-[#e9f8c5] min-h-20 flex flex-col justify-start">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
           {/* Top Row: Logo, Marvedge text, Hamburger */}
           <div className="flex items-center justify-between w-full pt-2">
@@ -86,7 +86,7 @@ const Navbar: React.FC = () => {
         </div>
         {/* Mobile menu (unchanged) */}
         {isMenuOpen && (
-          <div className="md:hidden absolute top-[80px] left-0 w-full bg-gradient-to-tr from-gray-100 via-[#e6f0e1] to-[#d1e8a3] z-[1001] flex flex-col items-start p-4 space-y-3 shadow-md">
+          <div className="md:hidden absolute top-20 left-0 w-full bg-linear-to-tr from-gray-100 via-[#e6f0e1] to-[#d1e8a3] z-1001 flex flex-col items-start p-4 space-y-3 shadow-md">
             <NavButton
               onClick={() => {
                 router.push("/features");
