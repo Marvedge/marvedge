@@ -75,7 +75,78 @@ export default function TimelineRuler({
   const [resizingHandle, setResizingHandle] = useState<"start" | "end" | null>(
     null
   );
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [playheadMode, setPlayheadMode] = useState<"trim" | "non-trim">("non-trim");
+  const [selectedTrimIdx, setSelectedTrimIdx] = useState<number | null>(null);
   const FIXED_TRIM_DURATION = 4; // Fixed duration in seconds for initial trim
+  const PLAYHEAD_SPEED = 0.005; // Speed in seconds per frame (increased for visible movement)
+
+  // Use refs to avoid animation interruption when segments change
+  const segmentsRef = useRef(segments);
+  const playheadModeRef = useRef(playheadMode);
+  const selectedTrimIdxRef = useRef(selectedTrimIdx);
+  const onValueChangeRef = useRef(onValueChange);
+  
+  // Helper function to immediately switch to trim mode
+  const switchToTrimMode = (trimIdx: number) => {
+    console.log(`[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`);
+    playheadModeRef.current = "trim";
+    selectedTrimIdxRef.current = trimIdx;
+    setPlayheadMode("trim");
+    setSelectedTrimIdx(trimIdx);
+    setLocalValue(segments[trimIdx].start);
+  };
+  
+  // Helper function to immediately switch to non-trim mode
+  const switchToNonTrimMode = () => {
+    playheadModeRef.current = "non-trim";
+    selectedTrimIdxRef.current = null;
+    setPlayheadMode("non-trim");
+    setSelectedTrimIdx(null);
+    
+    // Snap playhead to the gap it's in (or nearest gap)
+    setLocalValue((currentPos) => {
+      // Find the gap boundaries for the current position
+      let gapStart = minValue;
+      let gapEnd = maxValue;
+      
+      const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
+      
+      // Check if currentPos is inside a trimmed section
+      let isInTrimmedSection = false;
+      for (let i = 0; i < sortedSegments.length; i++) {
+        if (currentPos >= sortedSegments[i].start && currentPos < sortedSegments[i].end) {
+          isInTrimmedSection = true;
+          // Jump to the next gap after this segment
+          if (i + 1 < sortedSegments.length) {
+            return sortedSegments[i].end;
+          } else {
+            return sortedSegments[i].end;
+          }
+        }
+      }
+      
+      // If we're already in a gap, keep current position
+      return currentPos;
+    });
+  };
+
+  // Update refs whenever they change
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
+    playheadModeRef.current = playheadMode;
+  }, [playheadMode]);
+
+  useEffect(() => {
+    selectedTrimIdxRef.current = selectedTrimIdx;
+  }, [selectedTrimIdx]);
+
+  useEffect(() => {
+    onValueChangeRef.current = onValueChange;
+  }, [onValueChange]);
 
   const baseTimelineWidth = 1050; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
@@ -218,28 +289,13 @@ export default function TimelineRuler({
         rect.left;
       const width = rect.width;
       const percentage = Math.max(0, Math.min(1, x / width));
-      let value = minValue + (maxValue - minValue) * percentage;
+      const value = minValue + (maxValue - minValue) * percentage;
 
-      // Skip over trimmed sections
-      if (isPositionInTrimmedSection(value)) {
-        // Determine which direction we should go
-        const nextValidPos = getNextValidPosition(value, "forward");
-        const prevValidPos = getNextValidPosition(value, "backward");
-
-        // Choose the closest valid position
-        if (
-          Math.abs(value - nextValidPos) < Math.abs(value - prevValidPos)
-        ) {
-          value = nextValidPos;
-        } else {
-          value = prevValidPos;
-        }
-      }
-
+      // Allow clicking anywhere - no skipping logic
       setLocalValue(value);
       if (onValueChange) onValueChange(value);
     },
-    [minValue, maxValue, onValueChange, segments]
+    [minValue, maxValue, onValueChange]
   );
 
   useEffect(() => {
@@ -340,22 +396,23 @@ export default function TimelineRuler({
   };
 
   const removeSegment = (idx: number) => {
-    if (segments.length > 1) {
-      // Keep at least one segment
-      const newSegments = segments.filter((_, i) => i !== idx);
-      setSegments(newSegments);
-      const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
-      setActiveSegment(newActiveSegment);
-      if (newSegments[newActiveSegment]) {
-        setLocalStartTime(newSegments[newActiveSegment].start);
-        setLocalEndTime(newSegments[newActiveSegment].end);
-      }
+    const newSegments = segments.filter((_, i) => i !== idx);
+    setSegments(newSegments);
+    const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
+    setActiveSegment(newActiveSegment);
+    if (newSegments[newActiveSegment]) {
+      setLocalStartTime(newSegments[newActiveSegment].start);
+      setLocalEndTime(newSegments[newActiveSegment].end);
+    }
+    
+    // If all segments are deleted, switch to NON-TRIM mode for continuous playback
+    if (newSegments.length === 0) {
+      switchToNonTrimMode();
     }
   };
 
   const handleUndo = () => {
-    if (segments.length > 1) {
-      // Keep at least one segment
+    if (segments.length > 0) {
       const lastSegment = segments[segments.length - 1];
       setRemovedSegments((prev) => [...prev, lastSegment]);
       setSegments((prev) => {
@@ -369,6 +426,12 @@ export default function TimelineRuler({
           setLocalStartTime(newSegments[newActiveSegment].start);
           setLocalEndTime(newSegments[newActiveSegment].end);
         }
+        
+        // If all segments are deleted, switch to NON-TRIM mode for continuous playback
+        if (newSegments.length === 0) {
+          switchToNonTrimMode();
+        }
+        
         return newSegments;
       });
     }
@@ -400,19 +463,6 @@ export default function TimelineRuler({
     const currentTime = localValue;
     const startTime = Math.max(minValue, currentTime);
     const endTime = Math.min(maxValue, currentTime + FIXED_TRIM_DURATION);
-
-    // Check if this trim position overlaps with existing trimmed sections
-    const overlapsWithExisting = segments.some(
-      (seg) =>
-        (startTime >= seg.start && startTime < seg.end) ||
-        (endTime > seg.start && endTime <= seg.end) ||
-        (startTime <= seg.start && endTime >= seg.end)
-    );
-
-    if (overlapsWithExisting) {
-      alert("Trim section overlaps with existing trimmed section");
-      return;
-    }
 
     const newSegment = { start: startTime, end: endTime };
     setSegments((prev) => {
@@ -470,6 +520,166 @@ export default function TimelineRuler({
       window.removeEventListener("mouseup", onUp);
     };
   }, [resizingSegmentIdx, resizingHandle, minValue, maxValue]);
+
+  // Auto-play playhead movement
+  useEffect(() => {
+    if (!isAutoPlaying) {
+      console.log("[ANIMATION] isAutoPlaying is FALSE, not starting");
+      return;
+    }
+    console.log("[ANIMATION] Starting animation loop, isAutoPlaying=true");
+
+    const animationInterval = setInterval(() => {
+      setLocalValue((currentVal) => {
+        let nextValue = currentVal + PLAYHEAD_SPEED;
+        const currentMode = playheadModeRef.current;
+        const currentSegments = segmentsRef.current;
+        const currentSelectedIdx = selectedTrimIdxRef.current;
+        let finalValue = currentVal;
+
+        if (currentMode === "trim" && currentSelectedIdx !== null) {
+          // TRIM MODE: Move within trim section, loop back to start when reaching end
+          const selectedSegment = currentSegments[currentSelectedIdx];
+          if (selectedSegment) {
+            // Check if we've reached the end of the segment
+            if (nextValue >= selectedSegment.end) {
+              // Loop back to the start of the segment
+              finalValue = selectedSegment.start;
+            } else {
+              // Move within the segment
+              finalValue = nextValue;
+            }
+          }
+        } else {
+          // NON-TRIM MODE: Move through gaps only, skip trimmed sections, jump to next gap when current gap ends
+          let gapStart = minValue;
+          let gapEnd = maxValue;
+          let currentGapIndex = -1; // Track which gap we're in
+
+          // Sort segments by start position
+          const sortedSegments = [...currentSegments].sort((a, b) => a.start - b.start);
+
+          // First, check if currentVal is already inside a trimmed section
+          let isInTrimmedSection = false;
+          for (let i = 0; i < sortedSegments.length; i++) {
+            if (currentVal >= sortedSegments[i].start && currentVal < sortedSegments[i].end) {
+              isInTrimmedSection = true;
+              break;
+            }
+          }
+
+          // If we're inside a trimmed section, jump to the next gap after it
+          if (isInTrimmedSection) {
+            for (let i = 0; i < sortedSegments.length; i++) {
+              if (currentVal < sortedSegments[i].end) {
+                // Found the segment we're in, set gap after it
+                if (i + 1 < sortedSegments.length) {
+                  gapStart = sortedSegments[i].end;
+                  gapEnd = sortedSegments[i + 1].start;
+                  currentGapIndex = i + 1; // Gap after segment i
+                } else {
+                  gapStart = sortedSegments[i].end;
+                  gapEnd = maxValue;
+                  currentGapIndex = sortedSegments.length; // Gap after last segment
+                }
+                break;
+              }
+            }
+          } else {
+            // We're in a gap, find which one
+            // Gap 0: minValue to segment[0].start
+            // Gap 1: segment[0].end to segment[1].start
+            // Gap 2: segment[1].end to segment[2].start
+            // ... and so on
+            
+            for (let i = 0; i < sortedSegments.length; i++) {
+              if (currentVal < sortedSegments[i].start) {
+                // We're in a gap before this segment
+                gapEnd = sortedSegments[i].start;
+                currentGapIndex = i; // Gap before segment i
+                break;
+              } else {
+                // We passed this segment, update gapStart for next iteration
+                gapStart = sortedSegments[i].end;
+              }
+            }
+            // If we didn't break, we're in the gap after the last segment
+            if (currentGapIndex === -1) {
+              currentGapIndex = sortedSegments.length;
+            }
+          }
+
+          // DEBUG
+          if (currentMode === "non-trim" && currentVal !== 0) {
+            console.log(`Non-trim: currentVal=${currentVal.toFixed(4)}, gap=[${gapStart.toFixed(4)}, ${gapEnd.toFixed(4)}], nextValue=${nextValue.toFixed(4)}, gapIdx=${currentGapIndex}`);
+          }
+
+          // Move within the gap or jump to next gap when current gap ends
+          if (nextValue >= gapEnd) {
+            // Current gap is ending, find the next gap
+            const sortedSegments = [...currentSegments].sort((a, b) => a.start - b.start);
+            let nextGapStart = minValue;
+            let nextGapEnd = maxValue;
+            
+            // Calculate all gap boundaries
+            const gaps: Array<{ start: number; end: number }> = [];
+            if (sortedSegments.length === 0) {
+              gaps.push({ start: minValue, end: maxValue });
+            } else {
+              // Gap before first segment
+              if (sortedSegments[0].start > minValue) {
+                gaps.push({ start: minValue, end: sortedSegments[0].start });
+              }
+              // Gaps between segments
+              for (let i = 0; i < sortedSegments.length - 1; i++) {
+                if (sortedSegments[i].end < sortedSegments[i + 1].start) {
+                  gaps.push({ start: sortedSegments[i].end, end: sortedSegments[i + 1].start });
+                }
+              }
+              // Gap after last segment
+              if (sortedSegments[sortedSegments.length - 1].end < maxValue) {
+                gaps.push({ start: sortedSegments[sortedSegments.length - 1].end, end: maxValue });
+              }
+            }
+            
+            // Find which gap we're in
+            let currentGapIdx = -1;
+            for (let i = 0; i < gaps.length; i++) {
+              if (currentVal >= gaps[i].start && currentVal < gaps[i].end) {
+                currentGapIdx = i;
+                break;
+              }
+            }
+            
+            // Jump to next gap if available
+            if (currentGapIdx !== -1 && currentGapIdx + 1 < gaps.length) {
+              finalValue = gaps[currentGapIdx + 1].start;
+            } else if (gaps.length > 0) {
+              // No more gaps, loop back to the first gap
+              finalValue = gaps[0].start;
+            } else {
+              // No gaps available, stop at the end of current gap
+              finalValue = gapEnd;
+            }
+          } else if (nextValue < gapStart) {
+            // Shouldn't happen, but just in case
+            finalValue = gapStart;
+          } else {
+            finalValue = nextValue;
+          }
+        }
+
+        // Call onValueChange callback
+        if (onValueChangeRef.current && finalValue !== currentVal) {
+          onValueChangeRef.current(finalValue);
+        }
+
+        return finalValue;
+      });
+    }, 33); // ~30fps
+
+    return () => clearInterval(animationInterval);
+  }, [isAutoPlaying, minValue, maxValue]);
 
   // Function to check if a position is within any trimmed section
   const isPositionInTrimmedSection = (position: number): boolean => {
@@ -632,8 +842,26 @@ export default function TimelineRuler({
             Add Trim
           </button>
           <button
+            onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+            className="min-w-[80px] cursor-pointer h-11 px-6 flex items-center justify-center gap-1 font-semibold border border-blue-500 text-blue-600 text-sm rounded-lg hover:bg-blue-50"
+          >
+            {isAutoPlaying ? "⏸ Pause" : "▶ Play"}
+          </button>
+          
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
+            <span className="text-xs font-semibold text-gray-600">Mode:</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded ${
+              playheadMode === "trim" 
+                ? "bg-green-200 text-green-800" 
+                : "bg-blue-200 text-blue-800"
+            }`}>
+              {playheadMode === "trim" ? `Trim Section #${selectedTrimIdx !== null ? selectedTrimIdx + 1 : "—"}` : "All Trims (Skip Non-Trim)"}
+            </span>
+          </div>
+
+          <button
             onClick={() => removeSegment(activeSegment)}
-            disabled={segments.length <= 1}
+            disabled={segments.length === 0}
             className="min-w-[80px] cursor-pointer h-11 px-7 flex items-center justify-center gap-1 font-semibold bg-red-200 hover:bg-red-300 text-red-800 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Image
@@ -764,7 +992,11 @@ export default function TimelineRuler({
             {segments.map((seg, idx) => (
               <button
                 key={idx}
-                onClick={() => setActiveSegment(idx)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveSegment(idx);
+                  switchToTrimMode(idx);
+                }}
                 className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-200 cursor-pointer hover:scale-105 ${
                   idx === activeSegment
                     ? "bg-[#7C5CFC] text-white shadow-lg"
@@ -854,6 +1086,15 @@ export default function TimelineRuler({
                 if (!draggingScissor) {
                   setDraggingCurrentTime(true);
                   updateCurrentTimeFromMouse(e);
+                  // Switch to non-trim mode when clicking on timeline
+                  switchToNonTrimMode();
+                }
+              }}
+              onClick={(e) => {
+                // Also switch to non-trim mode on click if not on a segment
+                const target = e.target as HTMLElement;
+                if (!target.closest('[class*="segment"]')) {
+                  switchToNonTrimMode();
                 }
               }}
             >
@@ -930,7 +1171,11 @@ export default function TimelineRuler({
                       left: `${startPosition}px`,
                       width: `${width}px`,
                     }}
-                    onClick={() => setActiveSegment(idx)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveSegment(idx);
+                      switchToTrimMode(idx);
+                    }}
                   >
                     {/* Segment Label */}
                     <div className="absolute top-2 left-2 text-[11px] font-bold text-green-900 bg-white bg-opacity-80 px-2 py-1 rounded pointer-events-none">

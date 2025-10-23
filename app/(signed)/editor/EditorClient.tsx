@@ -540,25 +540,57 @@ export default function EditorPage() {
                   transition: "width 0.3s ease, height 0.3s ease",
                 }}
               >
-                <ReactPlayer
-                  ref={playerRef}
-                  url={videoUrl || undefined}
-                  playing={playing}
-                  controls={false}
-                  muted={false}
-                  volume={volume}
-                  width="100%"
-                  height="100%"
-                  style={{
-                    objectFit: "contain",
-                    borderRadius: "1.25rem",
-                    background: "#F6F3FF",
-                  }}
-                  onError={(e) => console.error("Video failed to load", e)}
-                  onProgress={({ playedSeconds }) =>
-                    setCurrentTime(playedSeconds)
-                  }
-                />
+                {videoUrl ? (
+                  <ReactPlayer
+                    ref={playerRef}
+                    url={videoUrl}
+                    playing={playing}
+                    controls={false}
+                    muted={false}
+                    volume={volume}
+                    width="100%"
+                    height="100%"
+                    style={{
+                      objectFit: "contain",
+                      borderRadius: "1.25rem",
+                      background: "#F6F3FF",
+                    }}
+                    onError={(e) => console.error("Video failed to load", e)}
+                    onProgress={({ playedSeconds }) =>
+                      setCurrentTime(playedSeconds)
+                    }
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                    <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-[#7C5CFC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">No Video Selected</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      To start editing, please:
+                    </p>
+                    <div className="space-y-2 text-sm text-gray-500">
+                      <p>• Go to <strong>Dashboard</strong> and edit an existing demo</p>
+                      <p>• Or go to <strong>Recorder</strong> to record/upload a new video</p>
+                    </div>
+                    <div className="mt-6 flex gap-3">
+                      <button
+                        onClick={() => router.push('/dashboard')}
+                        className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
+                      >
+                        Go to Dashboard
+                      </button>
+                      <button
+                        onClick={() => router.push('/recorder')}
+                        className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
+                      >
+                        Go to Recorder
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Canvas stays on top of video */}
@@ -574,103 +606,105 @@ export default function EditorPage() {
               />
             </div>
 
-            {/* Controls container */}
-            <div className="w-full flex flex-col gap-3">
-              <CustomVideoControls
-                playerRef={playerRef}
-                duration={duration}
-                currentTime={currentTime}
-                setCurrentTime={(t) => {
-                  setCurrentTime(t);
-                  playerRef.current?.seekTo(t, "seconds");
-                }}
-                recordingDuration={recordingDuration}
-                setPlaying={setPlaying}
-                playing={playing}
-              />
+            {/* Controls container - only show when video is available */}
+            {videoUrl && (
+              <div className="w-full flex flex-col gap-3">
+                <CustomVideoControls
+                  playerRef={playerRef}
+                  duration={duration}
+                  currentTime={currentTime}
+                  setCurrentTime={(t) => {
+                    setCurrentTime(t);
+                    playerRef.current?.seekTo(t, "seconds");
+                  }}
+                  recordingDuration={recordingDuration}
+                  setPlaying={setPlaying}
+                  playing={playing}
+                />
 
-              <div className="flex items-center justify-between px-2">
-                {/* Skip buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newTime = Math.max(0, currentTime - 5);
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Back 5 seconds"
-                  >
-                    <Image
-                      src="/icons/replay.svg"
-                      alt="Replay"
-                      width={16}
-                      height={16}
+                <div className="flex items-center justify-between px-2">
+                  {/* Skip buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const newTime = Math.max(0, currentTime - 5);
+                        setCurrentTime(newTime);
+                        playerRef.current?.seekTo(newTime, "seconds");
+                      }}
+                      className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                      title="Back 5 seconds"
+                    >
+                      <Image
+                        src="/icons/replay.svg"
+                        alt="Replay"
+                        width={16}
+                        height={16}
+                      />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newTime = Math.min(
+                          displayDuration,
+                          currentTime + 5
+                        );
+                        setCurrentTime(newTime);
+                        playerRef.current?.seekTo(newTime, "seconds");
+                      }}
+                      className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                      title="Forward 5 seconds"
+                    >
+                      <Image
+                        src="/icons/forward.svg"
+                        alt="Forward"
+                        width={16}
+                        height={16}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Volume */}
+                  <div className="flex items-center gap-2 flex-1 justify-center">
+                    <button
+                      onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                      className="focus:outline-none"
+                      title={volume === 0 ? "Unmute" : "Mute"}
+                    >
+                      {volume === 0 ? (
+                        <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                      ) : (
+                        <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                      )}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={volume}
+                      onChange={(e) => setVolume(Number(e.target.value))}
+                      className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
                     />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newTime = Math.min(
-                        displayDuration,
-                        currentTime + 5
-                      );
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Forward 5 seconds"
-                  >
-                    <Image
-                      src="/icons/forward.svg"
-                      alt="Forward"
-                      width={16}
-                      height={16}
-                    />
-                  </button>
-                </div>
+                    <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
+                      {Math.round(volume * 100)}%
+                    </span>
+                  </div>
 
-                {/* Volume */}
-                <div className="flex items-center gap-2 flex-1 justify-center">
-                  <button
-                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                    className="focus:outline-none"
-                    title={volume === 0 ? "Unmute" : "Mute"}
+                  {/* Fullscreen */}
+                  <div
+                    className="flex items-center justify-end"
+                    style={{ minWidth: 40 }}
                   >
-                    {volume === 0 ? (
-                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                    ) : (
-                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                  />
-                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
-                    {Math.round(volume * 100)}%
-                  </span>
-                </div>
-
-                {/* Fullscreen */}
-                <div
-                  className="flex items-center justify-end"
-                  style={{ minWidth: 40 }}
-                >
-                  <button
-                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                    title="Fullscreen"
-                    onClick={handleFullscreen}
-                  >
-                    <FaExpand size={22} />
-                  </button>
+                    <button
+                      className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                      title="Fullscreen"
+                      onClick={handleFullscreen}
+                    >
+                      <FaExpand size={22} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
           
           {tool === "text" && (
@@ -697,47 +731,50 @@ export default function EditorPage() {
             </div>
           )}
           
-          <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
-            {duration > 0 ? (
-              <TimelineRuler
-                minValue={0}
-                maxValue={duration}
-                currentValue={Math.max(0, currentTime)}
-                onValueChange={(value) => {
-                  const clampedValue = Math.max(0, Math.min(duration, value));
-                  setCurrentTime(clampedValue);
-                  playerRef.current?.seekTo(clampedValue, "seconds");
-                }}
-                step={0.1}
-                majorStep={20}
-                minorStep={5}
-                microStep={1}
-                startTime={timelineStartTime}
-                endTime={timelineEndTime}
-                onStartTimeChange={(value) => {
-                  setTimelineStartTime(value);
-                  handleTimelineChange(value, timelineEndTime);
-                }}
-                onEndTimeChange={(value) => {
-                  setTimelineEndTime(value);
-                  handleTimelineChange(timelineStartTime, value);
-                }}
-                processing={processing}
-                onResetVideo={resetVideo}
-                onZoomEffectCreate={onZoomEffectCreate}
-                initialSegments={currentSegments}
-                onTrim={onVideoTrim}
-              />
-            ) : (
-              <div className="w-full max-w-6xl mx-auto">
-                <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
-                  <span className="text-[#A594F9] font-medium">
-                    Loading timeline...
-                  </span>
+          {/* Timeline - only show when video is available */}
+          {videoUrl && (
+            <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
+              {duration > 0 ? (
+                <TimelineRuler
+                  minValue={0}
+                  maxValue={duration}
+                  currentValue={Math.max(0, currentTime)}
+                  onValueChange={(value) => {
+                    const clampedValue = Math.max(0, Math.min(duration, value));
+                    setCurrentTime(clampedValue);
+                    playerRef.current?.seekTo(clampedValue, "seconds");
+                  }}
+                  step={0.1}
+                  majorStep={20}
+                  minorStep={5}
+                  microStep={1}
+                  startTime={timelineStartTime}
+                  endTime={timelineEndTime}
+                  onStartTimeChange={(value) => {
+                    setTimelineStartTime(value);
+                    handleTimelineChange(value, timelineEndTime);
+                  }}
+                  onEndTimeChange={(value) => {
+                    setTimelineEndTime(value);
+                    handleTimelineChange(timelineStartTime, value);
+                  }}
+                  processing={processing}
+                  onResetVideo={resetVideo}
+                  onZoomEffectCreate={onZoomEffectCreate}
+                  initialSegments={currentSegments}
+                  onTrim={onVideoTrim}
+                />
+              ) : (
+                <div className="w-full max-w-6xl mx-auto">
+                  <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
+                    <span className="text-[#A594F9] font-medium">
+                      Loading timeline...
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       

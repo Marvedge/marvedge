@@ -195,7 +195,7 @@ export async function videoTrimHandler(
 
   try {
     setProgress(1);
-    toast.loading("Uploading and trimming video...");
+    toast.loading("Trimming video...");
 
     // Check if videoUrl exists
     if (!videoUrl) {
@@ -212,6 +212,11 @@ export async function videoTrimHandler(
     console.log("Video URL:", videoUrl);
     console.log("Segments:", segments);
 
+    // Validate segments
+    if (!segments || segments.length === 0) {
+      throw new Error("No segments provided");
+    }
+
     // Get the current video blob
     const response = await fetch(videoUrl);
     if (!response.ok) {
@@ -219,41 +224,39 @@ export async function videoTrimHandler(
     }
     const videoBlob = await response.blob();
     console.log("Video blob size:", videoBlob.size);
+
+    // Use client-side WASM FFmpeg trimmer
+    console.log("Processing trim on client side...");
+    const { videoTrimmer } = await import("@/app/lib/ffmpeg");
     
-    // 1. Validate segments
-    if (!segments || segments.length === 0) {
-      throw new Error("No segments provided");
-    }
-
-    // 2. Prepare multipart form data and send to backend
-    console.log("Sending video blob to backend");
-    const formData = new FormData();
-    formData.append("segments", JSON.stringify(normalizedSegments));
-    formData.append("video", videoBlob, "video.mp4");
-
-    const trimRes = await axios.post(
-      `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
-      formData,
-      {
-        responseType: "blob",
-      }
+    // Use only the first segment for trimming
+    const firstSegment = normalizedSegments[0];
+    const trimmedBlob = await videoTrimmer(
+      videoBlob,
+      firstSegment.start,
+      firstSegment.end
     );
+    setProgress(95);
 
-    const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
     const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
 
     if (trimmedVideoUrl) {
       toast.dismiss();
       toast.success("Video trimmed successfully!");
       setVideoUrl(trimmedVideoUrl);
+      setProgress(100);
     } else {
       toast.error("Failed to trim video - no trimmedUrl returned");
     }
   } catch (err: unknown) {
+    console.error("Trim handler error:", err);
     if (axios.isAxiosError(err)) {
       const message = err.response?.data?.message || "Unexpected error";
       toast.dismiss();
       toast.error(`Error processing video: ${message}`);
+    } else if (err instanceof Error) {
+      toast.dismiss();
+      toast.error(`Error: ${err.message}`);
     } else {
       toast.dismiss();
       toast.error("Something went wrong");

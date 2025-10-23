@@ -4,7 +4,6 @@ import {
   videoTrimmer,
   videoToMP4WithOverlays,
   videoToThumbnail,
-  multiSegmentTrimmer,
 } from "../lib/ffmpeg";
 import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
@@ -58,15 +57,8 @@ export const useEditor = () => {
       setError(null);
       try {
         let trimmedBlob: Blob;
-        if (Array.isArray(startOrSegments)) {
-          trimmedBlob = await multiSegmentTrimmer(
-            blob,
-            startOrSegments,
-            onProgress
-          );
-        } else {
-          trimmedBlob = await videoTrimmer(blob, startOrSegments, end!);
-        }
+        // Only single-segment trimming is supported
+        trimmedBlob = await videoTrimmer(blob, startOrSegments as string, end!);
         const trimmedUrl = URL.createObjectURL(trimmedBlob);
         setVideoUrl(trimmedUrl);
 
@@ -162,6 +154,5 @@ export const useEditor = () => {
     setOverlays,
     loadOverlays,
     error, // <-- return error state
-    multiSegmentTrimmer,
   };
 };
