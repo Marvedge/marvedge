@@ -526,7 +526,7 @@ const DashboardMain = () => {
             </h3>
             <div className="flex flex-col gap-3 md:gap-4">
               <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#C6F7D0] p-2 rounded-lg flex-shrink-0">
+                <span className="bg-[#C6F7D0] p-2 rounded-lg shrink-0">
                   <Image
                     src="/icons/dash-users.svg"
                     alt="Google"
@@ -546,7 +546,7 @@ const DashboardMain = () => {
               </div>
 
               <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#D0F0FF] p-2 rounded-lg flex-shrink-0">
+                <span className="bg-[#D0F0FF] p-2 rounded-lg shrink-0">
                   <Image
                     src="/icons/dash-rocket.svg"
                     alt="Google"
@@ -566,7 +566,7 @@ const DashboardMain = () => {
               </div>
 
               <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#E6E1FA] p-2 rounded-lg flex-shrink-0">
+                <span className="bg-[#E6E1FA] p-2 rounded-lg shrink-0">
                   <Image
                     src="/icons/play fill.png"
                     alt="Google"

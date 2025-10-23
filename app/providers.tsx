@@ -5,9 +5,12 @@ import TopLoader from "./components/TopLoader";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
-      <TopLoader />
+    <SessionProvider
+      refetchInterval={5 * 60} // Refetch session every 5 minutes
+      refetchOnWindowFocus={true}
+    >
       {children}
+      <TopLoader />
     </SessionProvider>
   );
 }

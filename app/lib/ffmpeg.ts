@@ -13,7 +13,7 @@ export const videoTrimmer = async (
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
@@ -97,7 +97,7 @@ export const videoToMP4 = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
@@ -128,7 +128,7 @@ export const videoToThumbnail = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
@@ -160,7 +160,7 @@ export const videoToMP4WithOverlays = async (
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
@@ -224,7 +224,7 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
   if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
@@ -250,78 +250,4 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
 
   const data = ffmpeg.FS("readFile", outputName);
   return new Blob([data.slice(0).buffer], { type: "audio/mp3" });
-};
-
-export const multiSegmentTrimmer = async (
-  inputBlob: Blob,
-  segments: { start: string; end: string }[],
-  onProgress?: (progress: number) => void
-): Promise<Blob> => {
-  const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
-  const ffmpeg = createFFmpeg({
-    log: true,
-    corePath: "/ffmpeg/ffmpeg-core.js",
-  });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
-
-  const inputName = "input.webm";
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
-
-  // For each segment, trim and output to a temp file
-  const segmentFiles: string[] = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    const outName = `seg${i}.webm`;
-    await ffmpeg.run(
-      "-i",
-      inputName,
-      "-ss",
-      seg.start,
-      "-to",
-      seg.end,
-      "-c:v",
-      "libvpx",
-      "-c:a",
-      "libvorbis",
-      outName
-    );
-    segmentFiles.push(outName);
-    if (onProgress)
-      onProgress(Math.round(((i + 1) / (segments.length + 1)) * 80));
-  }
-
-  // Create a concat list file
-  const concatList = segmentFiles.map((f) => `file '${f}'`).join("\n");
-  ffmpeg.FS(
-    "writeFile",
-    "concat_list.txt",
-    new Uint8Array(Buffer.from(concatList))
-  );
-
-  const outputName = "output_merged.webm";
-  await ffmpeg.run(
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    "concat_list.txt",
-    "-c",
-    "copy",
-    outputName
-  );
-  if (onProgress) onProgress(95);
-
-  try {
-    const data = ffmpeg.FS("readFile", outputName);
-    if (onProgress) onProgress(100);
-    return new Blob([new Uint8Array(data)], { type: "video/webm" });
-  } catch (e) {
-    console.error("FFmpeg output read error", e);
-    throw new Error("Output file not found");
-  }
 };

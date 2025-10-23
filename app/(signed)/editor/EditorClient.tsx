@@ -1,239 +1,133 @@
 "use client";
 
-import React, {
-  useRef,
-  useState,
-  useEffect,
-  useCallback,
-  MouseEvent,
-} from "react";
-
+import React, { useEffect, useCallback } from "react";
 import { FaBars } from "react-icons/fa6";
-import SidemenuDashboard from "@/app/components/SidemenuDashboard";
-
-import { useEditor } from "@/app/hooks/useEditor";
-import EditorSidebar from "@/app/components/EditorSidebar";
-import EditorTopbar from "@/app/components/EditorTopbar";
-import Image from "next/image";
-import TimelineRuler from "@/app/components/TimeLine";
 import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { useSession } from "next-auth/react";
-// import { TimelineSlider } from "@/app/components/MytimeLine";
-// import { useCallback } from "react";
-import { toast } from "sonner";
-import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
-import { sanitizeFilename } from "@/app/lib/constants";
+import ReactPlayer from "react-player";
+import Image from "next/image";
+
+// Components
+import SidemenuDashboard from "@/app/components/SidemenuDashboard";
+import EditorSidebar from "@/app/components/EditorSidebar";
+import EditorTopbar from "@/app/components/EditorTopbar";
+import TimelineRuler from "@/app/components/TimeLine";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
-import { formatTime } from "@/app/lib/dateTimeUtils";
+import CustomVideoControls from "./components/CustomVideoControls";
+
+// Hooks
+import { useEditor } from "@/app/hooks/useEditor";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
+import { useEditorState } from "./hooks/useEditorState";
+import { useURLParams, useFormatTime } from "./hooks/useURLParams";
+import { useVideoDuration } from "./hooks/useVideoDuration";
+import { useFullscreen } from "./hooks/useFullscreen";
+import { useOverlays } from "./hooks/useOverlays";
+import { useBackgroundStyle } from "./hooks/useBackgroundStyle";
+import { useTimelineInit } from "./hooks/useTimelineInit";
+
+// Utils
+import { sanitizeFilename } from "@/app/lib/constants";
+import {
+  handleSaveDemo,
+  videoTrimHandler,
+  exportVideo,
+} from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
-import axios from "axios";
-// import { ErrorResponse } from "resend";
-
-interface RectOverlay {
-  type: "blur" | "rect";
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-interface ArrowOverlay {
-  type: "arrow";
-  x: number;
-  y: number;
-  x2: number;
-  y2: number;
-}
-
-interface TextOverlay {
-  type: "text";
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  font: string;
-}
-
-type Overlay = RectOverlay | ArrowOverlay | TextOverlay;
-
-const imageMap: Record<string, string> = {
-  bg1: "/icons/bg-mountain-sunset.svg",
-  bg2: "/icons/bg-abstract-circles.svg",
-  bg3: "/icons/bg-crystalline.svg",
-  bg4: "/icons/bg-brushstrokes.svg",
-  bg5: "/icons/bg-warm-gradients.svg",
-  bg6: "/icons/bg-ethereal.svg",
-  bg7: "/icons/bg-fiery.svg",
-  bg8: "/icons/bg-ribbons.svg",
-};
 
 export default function EditorPage() {
   const router = useRouter();
-  const [params, setParams] = useState<URLSearchParams | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [timelineStartTime, setTimelineStartTime] = useState<number>(0);
 
-  // type ToolType = "none" | "text" | "blur" | "rect" | "arrow";
+  // Custom hooks for state management
+  const editorState = useEditorState();
+  const {
+    params,
+    setParams,
+    videoUrl,
+    setVideoUrl,
+    playing,
+    setPlaying,
+    timelineStartTime,
+    setTimelineStartTime,
+    timelineEndTime,
+    setTimelineEndTime,
+    currentSegments,
+    setCurrentSegments,
+    tool,
+    setTool,
+    textColor,
+    setTextColor,
+    textFont,
+    setTextFont,
+    sidebarTitle,
+    setSidebarTitle,
+    sidebarDescription,
+    setSidebarDescription,
+    showSaveDemoModal,
+    setShowSaveDemoModal,
+    savingDemo,
+    setSavingDemo,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    isDashboardMenuOpen,
+    setIsDashboardMenuOpen,
+    isFullscreen,
+    setIsFullscreen,
+    currentTime,
+    setCurrentTime,
+    duration,
+    setDuration,
+    volume,
+    setVolume,
+    zoomEffects,
+    setZoomEffects,
+    isZoomPopupOpen,
+    setIsZoomPopupOpen,
+    inputStartTime,
+    setInputStartTime,
+    inputEndTime,
+    setInputEndTime,
+    selectedBackground,
+    setSelectedBackground,
+    backgroundType,
+    setBackgroundType,
+    customBackground,
+    setCustomBackground,
+    playerRef,
+    canvasRef,
+    videoContainerRef,
+    setLoadedSegments,
+  } = editorState;
 
-  // Then update your component state (if not already done)
-  // const [tool, setTool] = useState<ToolType>("none");
-
-  // State to store loaded segments
-  const [, setLoadedSegments] = useState<
-    { start: string; end: string }[] | null
-  >(null);
-  const [currentSegments, setCurrentSegments] = useState<
-    { start: string; end: string }[]
-  >([]);
-
-  // Update tool state to include 'none' and set as default
-  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
-    "none"
-  );
-  const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null
-  );
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
-  const [textColor, setTextColor] = useState("#000000");
-  const [textFont, setTextFont] = useState("16px sans-serif");
-
-  // Sidebar state
-  const [sidebarTitle, setSidebarTitle] = useState("");
-  const [sidebarDescription, setSidebarDescription] = useState("");
-
-  // Save Demo Modal state
-  const [showSaveDemoModal, setShowSaveDemoModal] = useState(false);
-  const [savingDemo, setSavingDemo] = useState(false);
-
-  // Hamburger sidebar state for mobile
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // --- Add currentTime and duration state for syncing ---
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-
-  // Zoom effects state
-  const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
-  const [isZoomPopupOpen, setIsZoomPopupOpen] = useState(false);
-  // const [currentZoomEffect, setCurrentZoomEffect] = useState<ZoomEffect | null>(
-  //   null
-  // );
-  const closeDashboardMenu = () => {
-    setIsDashboardMenuOpen(false); // Function to close the dashboard menu
-  };
-  // const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isDashboardMenuOpen, setIsDashboardMenuOpen] = useState(false);
-  const toggleDashboardMenu = () => {
-    setIsDashboardMenuOpen(!isDashboardMenuOpen);
-  };
-  // Simple direct two-way sync
-  const [inputStartTime, setInputStartTime] = useState("00:00:00");
-  const [inputEndTime, setInputEndTime] = useState("00:00:00");
-  const [timelineEndTime, setTimelineEndTime] = useState(0);
+  // External hooks
   const {
     videoUrl: recordedVideoUrl,
     mp4Url,
     thumbnailUrl,
     processing,
-    // trimApplier,
     resetVideo,
     downloadBlob,
   } = useEditor();
+
   const blob = useBlobStore((state) => state.blob);
   const { recordingDuration } = useScreenRecorder();
-  const playerRef = useRef<ReactPlayer>(null!);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const { data: session } = useSession();
 
-  // State for browser bar controls
-  const videoContainerRef = useRef<HTMLDivElement>(null);
+  // Format time helper
+  const { formatTimeForInput } = useFormatTime();
 
-  // Helper functions for time conversion
-
-  const formatTimeForInput = useCallback((seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  }, []);
-  // const [isPlaying, setIsPlaying] = useState(false);
-  // const [playing, setPlaying] = useState(true);
-
+  // Initialize params
   useEffect(() => {
     setParams(new URLSearchParams(window.location.search));
-  }, []);
+  }, [setParams]);
 
-  // Handle URL parameters for editing existing demos
-  useEffect(() => {
-    if (!params) return;
-
-    const urlVideo = params.get("video");
-    const urlStartTime = params.get("startTime");
-    const urlEndTime = params.get("endTime");
-    const urlSegments = params.get("segments");
-    const urlZoom = params.get("zoom");
-    const urlTitle = params.get("title");
-    const urlDescription = params.get("description");
-
-    if (urlVideo) {
-      setVideoUrl(urlVideo);
-      // Set timeline values if provided
-      if (urlStartTime && urlEndTime) {
-        const startSeconds = parseInt(urlStartTime);
-        const endSeconds = parseInt(urlEndTime);
-
-        if (!isNaN(startSeconds) && !isNaN(endSeconds)) {
-          setInputStartTime(formatTimeForInput(startSeconds));
-          setInputEndTime(formatTimeForInput(endSeconds));
-          setTimelineEndTime(endSeconds);
-        }
-      }
-
-      if (urlTitle) {
-        setSidebarTitle(urlTitle);
-      }
-
-      if (urlDescription) {
-        setSidebarDescription(urlDescription);
-      }
-
-      // Load segments if provided
-      if (urlSegments) {
-        try {
-          const segments = JSON.parse(urlSegments);
-          console.log("Loaded segments from URL:", segments);
-          const convertedSegments = segments.map(
-            (seg: { start: string; end: string }) => ({
-              start: seg.start,
-              end: seg.end,
-            })
-          );
-          setLoadedSegments(convertedSegments);
-          setCurrentSegments(convertedSegments);
-        } catch (error) {
-          console.error("Error parsing segments from URL:", error);
-        }
-      }
-      // Load zoom effects if provided
-      if (urlZoom) {
-        try {
-          const zoom = JSON.parse(urlZoom);
-          console.log("Loaded zoom effects from URL:", zoom);
-          setZoomEffects(zoom);
-        } catch (error) {
-          console.error("Error parsing zoom from URL:", error);
-        }
-      }
-    }
-  }, [
+  // URL params handling
+  useURLParams({
     params,
     setVideoUrl,
     setInputStartTime,
@@ -245,12 +139,66 @@ export default function EditorPage() {
     setCurrentSegments,
     setZoomEffects,
     formatTimeForInput,
-  ]);
+  });
 
-  // State for sidebar visibility
+  // Video duration detection
+  useVideoDuration({
+    videoUrl,
+    duration,
+    recordingDuration,
+    blob,
+    playerRef,
+    setDuration,
+  });
 
-  // User initials logic (copied from recorder page)
-  const { data: session } = useSession();
+  // Fullscreen handling
+  const { handleFullscreen } = useFullscreen({
+    videoContainerRef,
+    setIsFullscreen,
+  });
+
+  // Overlays handling
+  const {
+    handleMouseDown,
+    handleMouseUp,
+    handleUndo,
+    handleClear,
+    handleSaveOverlays,
+    handleLoadOverlays,
+  } = useOverlays({
+    canvasRef,
+    playerRef,
+    tool,
+    textColor,
+    textFont,
+  });
+
+  // Background style
+  const { getBackgroundStyle, imageMap } = useBackgroundStyle({
+    selectedBackground,
+    customBackground,
+  });
+
+  // Timeline initialization
+  useTimelineInit({
+    duration,
+    timelineEndTime,
+    setTimelineStartTime,
+    setInputStartTime,
+    setTimelineEndTime,
+    setInputEndTime,
+    formatTimeForInput,
+  });
+
+  // Set recorded video URL if no URL parameter is provided
+  useEffect(() => {
+    if (!params) return;
+    if (recordedVideoUrl && !params.get("video")) {
+      setVideoUrl(recordedVideoUrl);
+    }
+  }, [recordedVideoUrl, params, setVideoUrl]);
+
+  // User initials
   const initials = session?.user?.name
     ? session.user.name
         .split(" ")
@@ -260,12 +208,6 @@ export default function EditorPage() {
         .slice(0, 2)
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
-  const [selectedBackground, setSelectedBackground] = useState<string | null>(
-    null
-  );
-  const [backgroundType, setBackgroundType] = useState<string>("");
-  const [customBackground, setCustomBackground] = useState<File | null>(null);
-
   // No-op setProgress to satisfy required callback
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const setProgress = (_value?: number) => {};
@@ -273,864 +215,60 @@ export default function EditorPage() {
   // Use recording duration if available, otherwise use detected duration
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
-  // Initialize timeline pointers when video duration is loaded (only once)
-  useEffect(() => {
-    if (duration > 0 && timelineEndTime === 0) {
-      setTimelineStartTime(0);
-      setInputStartTime(formatTimeForInput(0));
-      // Only initialize if not already set
-      const initialEndTime = duration; // Use the full video duration
-      setTimelineEndTime(initialEndTime);
-      setInputEndTime(formatTimeForInput(initialEndTime));
-      console.log("Initialized timeline pointers:", {
-        start: 0,
-        end: initialEndTime,
-      });
-    }
-  }, [
-    duration,
-    timelineEndTime,
-    setTimelineStartTime,
-    setInputStartTime,
-    setTimelineEndTime,
-    setInputEndTime,
-    formatTimeForInput,
-  ]);
-
-  // Simple timeline change handler
+  // Timeline change handler
   const handleTimelineChange = useCallback(
     (start: number, end: number) => {
       setInputStartTime(formatTimeForInput(start));
       setInputEndTime(formatTimeForInput(end));
     },
-    [formatTimeForInput]
+    [formatTimeForInput, setInputStartTime, setInputEndTime]
   );
 
-  // Fullscreen logic
-  const handleFullscreen = useCallback(() => {
-    const el = videoContainerRef.current;
-    console.log("Fullscreen button clicked", { el });
-    if (!el) {
-      alert("Video container not found.");
-      return;
-    }
-    // Enter fullscreen
-    if (
-      !document.fullscreenElement &&
-      !(
-        "webkitFullscreenElement" in document &&
-        (document as Document & { webkitFullscreenElement?: Element })
-          .webkitFullscreenElement
-      ) &&
-      !(
-        "msFullscreenElement" in document &&
-        (document as Document & { msFullscreenElement?: Element })
-          .msFullscreenElement
-      )
-    ) {
-      if (el.requestFullscreen) {
-        el.requestFullscreen().catch((err) => {
-          alert("Failed to enter fullscreen: " + err.message);
-          console.error("Fullscreen error:", err);
-        });
-      } else if ("webkitRequestFullscreen" in el) {
-        (
-          el as HTMLElement & { webkitRequestFullscreen?: () => void }
-        ).webkitRequestFullscreen?.();
-      } else if ("msRequestFullscreen" in el) {
-        (
-          el as HTMLElement & { msRequestFullscreen?: () => void }
-        ).msRequestFullscreen?.();
-      } else {
-        alert("Fullscreen API is not supported in this browser.");
-        console.error("Fullscreen API not supported");
-      }
-    } else {
-      // Exit fullscreen
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if ("webkitExitFullscreen" in document) {
-        (
-          document as Document & { webkitExitFullscreen?: () => void }
-        ).webkitExitFullscreen?.();
-      } else if ("msExitFullscreen" in document) {
-        (
-          document as Document & { msExitFullscreen?: () => void }
-        ).msExitFullscreen?.();
-      } else {
-        alert("Cannot exit fullscreen: API not supported.");
-        console.error("Exit Fullscreen API not supported");
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, []);
-
-  useEffect(() => {
-    if (!params) return;
-
-    // Only set recorded video URL if no URL parameter is provided
-    if (recordedVideoUrl && !params.get("video")) {
-      setVideoUrl(recordedVideoUrl);
-    }
-  }, [recordedVideoUrl, params]);
-
-  // Use recording duration when available
-  useEffect(() => {
-    if (recordingDuration > 0 && videoUrl) {
-      setDuration(recordingDuration);
-    }
-  }, [recordingDuration, videoUrl]);
-
-  // useEffect(() => {
-  //   if (duration > 0 || recordingDuration > 0) return;
-
-  //   const tryGetDuration = async () => {
-  //     // Try ReactPlayer duration
-  //     if (playerRef.current) {
-  //       const player = playerRef.current.getInternalPlayer();
-  //       if (
-  //         player?.duration &&
-  //         isFinite(player.duration) &&
-  //         player.duration > 0
-  //       ) {
-  //         setDuration(Math.floor(player.duration));
-  //         return;
-  //       }
-  //     }
-  //     // Try blob
-  //     if (blob) {
-  //       const tempVideo = document.createElement("video");
-  //       tempVideo.src = URL.createObjectURL(blob);
-  //       tempVideo.preload = "metadata";
-  //       await new Promise<void>((resolve) => {});
-  //     }
-  //   };
-  // }, []);
-  // Try to get duration from blob store when video is first loaded
-  useEffect(() => {
-    if (videoUrl && duration === 0 && blob && recordingDuration === 0) {
-      const getDurationFromBlob = async () => {
-        try {
-          const tempVideo = document.createElement("video");
-          tempVideo.src = URL.createObjectURL(blob);
-          tempVideo.preload = "metadata";
-
-          tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
-              setDuration(Math.floor(tempVideo.duration));
-            }
-            URL.revokeObjectURL(tempVideo.src);
-          };
-
-          tempVideo.onerror = () => {
-            URL.revokeObjectURL(tempVideo.src);
-          };
-
-          tempVideo.load();
-        } catch (error) {
-          console.error("Error getting duration from blob:", error);
-        }
-      };
-
-      // Try immediately and with delays - FASTER
-      getDurationFromBlob();
-      const timers = [
-        setTimeout(getDurationFromBlob, 10),
-        setTimeout(getDurationFromBlob, 50),
-        setTimeout(getDurationFromBlob, 100),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, blob, recordingDuration]);
-
-  // Force metadata loading for ReactPlayer
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const forceMetadataLoad = () => {
-        if (playerRef.current) {
-          const player = playerRef.current.getInternalPlayer();
-          if (player) {
-            player.preload = "metadata";
-            player.load();
-          }
-        }
-      };
-
-      // Try to force metadata loading immediately - FASTER
-      forceMetadataLoad();
-      const timers = [
-        setTimeout(forceMetadataLoad, 20),
-        setTimeout(forceMetadataLoad, 60),
-        setTimeout(forceMetadataLoad, 120),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Create hidden video element to force metadata loading
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const createHiddenVideo = () => {
-        const hiddenVideo = document.createElement("video");
-        hiddenVideo.style.display = "none";
-        hiddenVideo.preload = "metadata";
-        hiddenVideo.muted = true;
-        hiddenVideo.src = videoUrl;
-
-        hiddenVideo.onloadedmetadata = () => {
-          if (
-            hiddenVideo.duration &&
-            isFinite(hiddenVideo.duration) &&
-            hiddenVideo.duration > 0
-          ) {
-            setDuration(hiddenVideo.duration);
-          }
-          document.body.removeChild(hiddenVideo);
-        };
-
-        hiddenVideo.onerror = () => {
-          document.body.removeChild(hiddenVideo);
-        };
-
-        document.body.appendChild(hiddenVideo);
-        hiddenVideo.load();
-      };
-
-      // Try multiple times with different delays - FASTER
-      createHiddenVideo();
-      const timers = [
-        setTimeout(createHiddenVideo, 5),
-        setTimeout(createHiddenVideo, 30),
-        setTimeout(createHiddenVideo, 80),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Try to get duration by seeking to end
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const getDurationBySeeking = () => {
-        if (playerRef.current) {
-          const player = playerRef.current.getInternalPlayer();
-          if (player) {
-            // Try to seek to a large time to trigger duration detection
-            player.currentTime = 999999;
-            setTimeout(() => {
-              if (
-                player.duration &&
-                isFinite(player.duration) &&
-                player.duration > 0
-              ) {
-                setDuration(player.duration);
-              }
-              // Reset to beginning
-              player.currentTime = 0;
-            }, 100);
-          }
-        }
-      };
-
-      // Try with delays - FASTER
-      const timers = [
-        setTimeout(getDurationBySeeking, 70),
-        setTimeout(getDurationBySeeking, 140),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Last resort: try to get duration from the video URL directly
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const getDurationFromUrl = async () => {
-        try {
-          const tempVideo = document.createElement("video");
-          tempVideo.src = videoUrl;
-
-          tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
-              setDuration(Math.floor(tempVideo.duration));
-            }
-          };
-
-          tempVideo.onerror = () => {
-            console.error("Error loading video from URL");
-          };
-
-          tempVideo.load();
-        } catch (error) {
-          console.error("Error getting duration from URL:", error);
-        }
-      };
-
-      const timers = [
-        setTimeout(getDurationFromUrl, 800),
-        setTimeout(getDurationFromUrl, 1800),
-        setTimeout(getDurationFromUrl, 2800),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Original duration detection from ReactPlayer
-  useEffect(() => {
-    if (recordingDuration === 0) {
-      const interval = setInterval(() => {
-        const video = playerRef.current?.getInternalPlayer();
-        if (
-          video &&
-          !isNaN(video.duration) &&
-          video.duration > 0 &&
-          duration === 0
-        ) {
-          setDuration(Math.floor(video.duration));
-          clearInterval(interval);
-        }
-      }, 500);
-
-      return () => clearInterval(interval);
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Additional duration detection for recorded videos
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const getDurationFromVideo = async () => {
-        try {
-          const response = await fetch(videoUrl);
-          const videoBlob = await response.blob();
-          const tempVideo = document.createElement("video");
-          tempVideo.src = URL.createObjectURL(videoBlob);
-          tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
-              setDuration(Math.floor(tempVideo.duration));
-            }
-            URL.revokeObjectURL(tempVideo.src);
-          };
-
-          tempVideo.onerror = () => {
-            URL.revokeObjectURL(tempVideo.src);
-          };
-
-          // Load the video to trigger metadata loading
-          tempVideo.load();
-        } catch (error) {
-          console.error("Error getting duration from video:", error);
-        }
-      };
-
-      // Try multiple times with different delays
-      const timers = [
-        setTimeout(getDurationFromVideo, 500),
-        setTimeout(getDurationFromVideo, 1000),
-        setTimeout(getDurationFromVideo, 2000),
-        setTimeout(getDurationFromVideo, 3000),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Additional method: try to get duration from the video element directly
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const getDurationFromVideoElement = () => {
-        const video = playerRef.current?.getInternalPlayer();
-        if (video) {
-          video.load();
-          video.addEventListener(
-            "loadedmetadata",
-            () => {
-              if (
-                video.duration &&
-                isFinite(video.duration) &&
-                video.duration > 0
-              ) {
-                setDuration(Math.floor(video.duration));
-              }
-            },
-            { once: true }
-          );
-        }
-      };
-
-      const timers = [
-        setTimeout(getDurationFromVideoElement, 600),
-        setTimeout(getDurationFromVideoElement, 1500),
-        setTimeout(getDurationFromVideoElement, 2500),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  // Force duration detection for recorded videos
-  useEffect(() => {
-    if (videoUrl && duration === 0 && recordingDuration === 0) {
-      const getDurationFromVideo = async () => {
-        try {
-          const response = await fetch(videoUrl);
-          const blob = await response.blob();
-          const tempVideo = document.createElement("video");
-          tempVideo.preload = "metadata";
-          tempVideo.muted = true;
-          tempVideo.src = URL.createObjectURL(blob);
-          tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
-              setDuration(Math.floor(tempVideo.duration));
-            }
-            URL.revokeObjectURL(tempVideo.src);
-          };
-
-          tempVideo.onerror = () => {
-            URL.revokeObjectURL(tempVideo.src);
-          };
-
-          tempVideo.load();
-        } catch (error) {
-          console.error("Error getting duration from video:", error);
-        }
-      };
-
-      // Try multiple times with different delays
-      getDurationFromVideo();
-      const timers = [
-        setTimeout(getDurationFromVideo, 50),
-        setTimeout(getDurationFromVideo, 150),
-        setTimeout(getDurationFromVideo, 300),
-      ];
-
-      // Try to get duration by seeking to end of video
-      const getDurationBySeeking = () => {
-        if (playerRef.current) {
-          const player = playerRef.current.getInternalPlayer();
-          if (player) {
-            const wasPlaying = !player.paused;
-            const wasTime = player.currentTime;
-
-            // Try to seek to a large number to trigger duration detection
-            player.currentTime = 999999;
-
-            setTimeout(() => {
-              if (
-                player.duration &&
-                isFinite(player.duration) &&
-                player.duration > 0
-              ) {
-                setDuration(Math.floor(player.duration));
-              }
-              // Restore original state
-              player.currentTime = wasTime;
-              if (wasPlaying) {
-                player.play();
-              }
-            }, 100);
-          }
-        }
-      };
-
-      const seekTimers = [
-        setTimeout(getDurationBySeeking, 70),
-        setTimeout(getDurationBySeeking, 140),
-      ];
-
-      return () => {
-        timers.forEach((timer) => clearTimeout(timer));
-        seekTimers.forEach((timer) => clearTimeout(timer));
-      };
-    }
-  }, [videoUrl, duration, recordingDuration]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const video = playerRef.current?.getInternalPlayer();
-    if (!canvas || !video) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const draw = () => {
-      const width = video.clientWidth;
-      const height = video.clientHeight;
-
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      for (const item of overlays) {
-        ctx.strokeStyle = "#f87171";
-        ctx.lineWidth = 2;
-        switch (item.type) {
-          case "blur":
-            ctx.fillStyle = "rgba(0,0,0,0.4)";
-            ctx.fillRect(item.x, item.y, item.w, item.h);
-            break;
-          case "rect":
-            ctx.strokeRect(item.x, item.y, item.w, item.h);
-            break;
-          case "arrow":
-            ctx.beginPath();
-            ctx.moveTo(item.x, item.y);
-            ctx.lineTo(item.x2, item.y2);
-            ctx.stroke();
-            break;
-          case "text":
-            ctx.font = item.font;
-            ctx.fillStyle = item.color;
-            ctx.fillText(item.text, item.x, item.y);
-            break;
-        }
-      }
-
-      requestAnimationFrame(draw);
-    };
-
-    draw();
-  }, [overlays]);
-
-  const handleMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setStartPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    setDrawing(true);
+  // Dashboard menu handlers
+  const closeDashboardMenu = () => {
+    setIsDashboardMenuOpen(false);
   };
 
-  const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing || !startPos) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const endX = e.clientX - rect.left;
-    const endY = e.clientY - rect.top;
-
-    let newOverlay: Overlay;
-
-    if (tool === "arrow") {
-      newOverlay = {
-        type: "arrow",
-        x: startPos.x,
-        y: startPos.y,
-        x2: endX,
-        y2: endY,
-      };
-    } else if (tool === "text") {
-      const text = prompt("Enter text:", "Sample text") || "";
-      newOverlay = {
-        type: "text",
-        x: endX,
-        y: endY,
-        text,
-        color: textColor,
-        font: textFont,
-      };
-    } else if (tool === "blur" || tool === "rect") {
-      newOverlay = {
-        type: tool,
-        x: Math.min(startPos.x, endX),
-        y: Math.min(startPos.y, endY),
-        w: Math.abs(endX - startPos.x),
-        h: Math.abs(endY - startPos.y),
-      };
-    } else {
-      setDrawing(false);
-      setStartPos(null);
-      return;
-    }
-
-    setOverlays((prev) => [...prev, newOverlay]);
-    setDrawing(false);
-    setStartPos(null);
+  const toggleDashboardMenu = () => {
+    setIsDashboardMenuOpen(!isDashboardMenuOpen);
   };
 
-  const handleUndo = () => setOverlays((prev) => prev.slice(0, -1));
-  const handleClear = () => setOverlays([]);
-  const handleSaveOverlays = () =>
-    localStorage.setItem("videoOverlays", JSON.stringify(overlays));
-  const handleLoadOverlays = () => {
-    const saved = localStorage.getItem("videoOverlays");
-    if (saved) setOverlays(JSON.parse(saved));
+  // Save demo handler
+  const onSaveDemo = async (data: { title: string; description: string }) => {
+    await handleSaveDemo(data, {
+      videoUrl: videoUrl!,
+      inputStartTime,
+      inputEndTime,
+      currentSegments,
+      zoomEffects,
+      setSavingDemo,
+      setSidebarTitle,
+      setSidebarDescription,
+      setShowSaveDemoModal,
+    });
   };
 
-  // Save Demo handler
-  const handleSaveDemo = async (data: {
-    title: string;
-    description: string;
-  }) => {
-    if (!videoUrl) {
-      toast.error("No video available to save");
-      return;
-    }
-
-    try {
-      setSavingDemo(true);
-      toast.loading("Saving demo...");
-
-      const startTime = inputStartTime;
-      const endTime = inputEndTime;
-
-      // First, upload video to Cloudinary if it's a blob URL
-      let cloudinaryVideoUrl = videoUrl;
-      if (videoUrl.startsWith("blob:")) {
-        try {
-          // Get the video blob
-          const response = await fetch(videoUrl);
-          if (!response.ok) {
-            throw new Error("Failed to fetch video blob");
-          }
-          const videoBlob = await response.blob();
-          // Create FormData for Cloudinary upload
-          const CLOUDINARY_CLOUD_NAME =
-            process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-          const CLOUDINARY_UPLOAD_PRESET =
-            process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-          // const CLOUDINARY_API_BASE =
-          //   process.env.NEXT_PUBLIC_CLOUDINARY_API_BASE!;
-
-          // const CLOUDINARY_API_URL = `/v1_1https://api.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-          // const CLOUDINARY_API_URL = `${CLOUDINARY_API_BASE}/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-          const cloudFormData = new FormData();
-          cloudFormData.append("file", videoBlob, "video.webm");
-          cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-          const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-
-          console.log("Uploading to Cloudinary...");
-
-          // Upload to Cloudinary
-          // const cloudRes = await fetch(
-          //   "https://api.cloudinary.com/v1_1/dh2skqoub/video/upload",
-          //   {
-          //     method: "POST",
-          //     body: cloudFormData,
-          //   }
-          // );
-
-          try {
-            const cloudRes = await axios.post(
-              CLOUDINARY_API_URL,
-              cloudFormData
-            );
-            console.log("Upload success:", cloudRes.data);
-            cloudinaryVideoUrl = cloudRes.data.secure_url;
-          } catch (error: unknown) {
-            if (axios.isAxiosError(error)) {
-              console.log("cloudinary failed... ... ");
-              console.error("Cloudinary upload failed:");
-              console.error("Status:", error.response?.status);
-              console.error("Status Text:", error.response?.statusText);
-              console.error("Response Data:", error.response?.data);
-              console.error("Headers:", error.response?.headers);
-            } else {
-              console.error("Unexpected error:", error);
-            }
-          }
-        } catch (cloudError) {
-          console.error("Error uploading to Cloudinary:", cloudError);
-          toast.dismiss();
-          toast.error("Failed to upload video to Cloudinary");
-          return;
-        }
-      }
-
-      // Use current segments from the timeline
-      const segmentsToSave =
-        currentSegments.length > 0
-          ? currentSegments
-          : [
-              {
-                start: startTime,
-                end: endTime,
-              },
-            ];
-
-      // Call the API to save demo with editing object
-      const editingToSave = {
-        segments: segmentsToSave,
-        zoom: zoomEffects,
-      };
-      try {
-        const response = await axios.post("/api/demo", {
-          title: data.title,
-          description: data.description,
-          videoUrl: cloudinaryVideoUrl,
-          // startTime,
-          // endTime,
-          editing: editingToSave,
-        });
-        console.log("Demo saved:", response.data);
-      } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-          if (error.response) {
-            console.error(
-              `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
-            );
-          } else {
-            console.error("Axios error:", error.message);
-          }
-        } else if (error instanceof Error) {
-          console.error("Unexpected error:", error.message);
-        } else {
-          console.error("Unknown error:", error);
-        }
-      }
-
-      // Update the sidebar state with the saved data
-      setSidebarTitle(data.title);
-      setSidebarDescription(data.description);
-      toast.dismiss();
-      toast.success("Demo saved successfully!");
-      // Close the modal
-      setShowSaveDemoModal(false);
-    } catch (error) {
-      console.error("Error saving demo:", error);
-      toast.dismiss();
-      toast.error("Failed to save demo");
-    } finally {
-      setSavingDemo(false);
-    }
+  // Video trim handler
+  const onVideoTrim = async (segments: { start: string; end: string }[]) => {
+    await videoTrimHandler(segments, {
+      videoUrl: videoUrl!,
+      setVideoUrl,
+      setProgress,
+    });
   };
 
-  // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
-  function normalizeTimeFormat(time: string | number): string {
-    let totalSeconds: number;
-
-    if (typeof time === "number") {
-      totalSeconds = time;
-    } else if (time.includes(":")) {
-      // Handle "mm:ss" or "hh:mm:ss"
-      const parts = time.split(":").map(Number);
-      if (parts.length === 2) {
-        totalSeconds = parts[0] * 60 + parts[1];
-      } else if (parts.length === 3) {
-        totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-      } else {
-        throw new Error("Invalid time format: " + time);
-      }
-    } else {
-      totalSeconds = Number(time);
-    }
-
-    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
-      2,
-      "0"
-    );
-    const seconds = String(totalSeconds % 60).padStart(2, "0");
-
-    return `${hours}:${minutes}:${seconds}`;
-  }
-
-  const videoTrimHandler = async (
-    segments: { start: string; end: string }[]
-  ) => {
-    try {
-      setProgress(1);
-      toast.loading("Uploading and trimming video...");
-
-      // Check if videoUrl exists
-      if (!videoUrl) {
-        toast.error("No video available to trim");
-        return;
-      }
-      const normalizedSegments = segments.map((seg) => ({
-        start: normalizeTimeFormat(seg.start),
-        end: normalizeTimeFormat(seg.end),
-      }));
-
-      console.log("Starting trim process...");
-      console.log("Video URL:", videoUrl);
-      console.log("Segments:", segments);
-
-      // Get the current video blob
-      const response = await fetch(videoUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch video: ${response.status}`);
-      }
-      const videoBlob = await response.blob();
-      console.log("Video blob size:", videoBlob.size);
-      // 1. Validate segments
-      if (!segments || segments.length === 0) {
-        throw new Error("No segments provided");
-      }
-
-      // 2. Prepare multipart form data and send to backend
-      console.log("Sending video blob to backend");
-      const formData = new FormData();
-      formData.append("segments", JSON.stringify(normalizedSegments));
-      formData.append("video", videoBlob, "video.mp4");
-      // formData.append("segments", JSON.stringify(segments));
-
-      const trimRes = await axios.post(
-        `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL_LOCAL}/api/trim`,
-        formData,
-        {
-          responseType: "blob",
-        }
-      );
-
-      const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
-      const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
-
-      if (trimmedVideoUrl) {
-        toast.dismiss();
-        toast.success("Video trimmed successfully!");
-        setVideoUrl(trimmedVideoUrl);
-      } else {
-        toast.error("Failed to trim video - no trimmedUrl returned");
-      }
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        const message = err.response?.data?.message || "Unexpected error";
-        toast.dismiss();
-        toast.error(`Error processing video: ${message}`);
-      } else {
-        toast.dismiss();
-        toast.error("Something went wrong");
-      }
-    } finally {
-      setProgress(0);
-    }
+  // Export video handler
+  const onExportVideo = async () => {
+    await exportVideo({
+      videoUrl: videoUrl!,
+      selectedBackground,
+      imageMap,
+      sidebarTitle,
+      sidebarDescription,
+      router,
+    });
   };
+
   // Zoom effects handlers
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
@@ -1142,7 +280,7 @@ export default function EditorPage() {
     );
 
     if (effect.zoomLevel <= 1.0) {
-      console.warn("ΓÜá Zoom level is too low, forcing to 2.0");
+      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
       effect.zoomLevel = 2.0;
     }
 
@@ -1150,154 +288,8 @@ export default function EditorPage() {
     console.log("Total zoom effects:", [...zoomEffects, effect].length);
   };
 
-  // const onZoomEffectRemove = (id: string) => {
-  //   setZoomEffects((prev) => prev.filter((effect) => effect.id !== id));
-  // };
-
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
-  };
-
-  // Check for active zoom effects based on current time
-  useEffect(() => {
-    // setCurrentZoomEffect(activeEffect || null);
-  }, [currentTime, zoomEffects]);
-
-  const [volume, setVolume] = useState(1);
-
-  const getBackgroundStyle = useCallback(() => {
-    if (!selectedBackground) return {};
-
-    if (selectedBackground === "hidden") {
-      return { background: "transparent" };
-    }
-
-    if (selectedBackground === "custom" && customBackground) {
-      return {
-        backgroundImage: `url(${URL.createObjectURL(customBackground)})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      };
-    }
-
-    if (selectedBackground.startsWith("gradient:")) {
-      const gradientId = selectedBackground.replace("gradient:", "");
-      const gradientMap: Record<string, string> = {
-        sunset:
-          "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
-        ocean: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        mint: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
-        royal: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        steel: "linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)",
-        candy: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-      };
-      return { background: gradientMap[gradientId] || "" };
-    }
-
-    if (selectedBackground.startsWith("color:")) {
-      const color = selectedBackground.replace("color:", "");
-      return { backgroundColor: color };
-    }
-
-    if (imageMap[selectedBackground]) {
-      return {
-        backgroundImage: `url(${imageMap[selectedBackground]})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      };
-    }
-
-    return {};
-  }, [selectedBackground, customBackground, imageMap]);
-
-  const exportVideo = async () => {
-    if (!videoUrl) {
-      toast.error("No video available to export");
-      return;
-    }
-
-    try {
-      console.log("sending from here #linex 1228");
-      toast.loading("Processing video...");
-      console.log(selectedBackground);
-
-      // Fetch blob from ReactPlayer video
-      const res = await fetch(videoUrl);
-      const videoBlob = await res.blob();
-
-      const formData = new FormData();
-      formData.append("video", videoBlob, "video.webm");
-
-      // Handle background
-      if (selectedBackground) {
-        const backgroundPath = imageMap[selectedBackground];
-        console.log(backgroundPath);
-        if (backgroundPath) {
-          const bgUrl = `${window.location.origin}${backgroundPath}`;
-          console.log("Fetching background from:", bgUrl);
-
-          const bgRes = await fetch(bgUrl);
-          if (!bgRes.ok) {
-            throw new Error(`Failed to fetch background: ${bgUrl}`);
-          }
-
-          const bgBlob = await bgRes.blob();
-          console.log("Background blob:", bgBlob);
-
-          formData.append("background", bgBlob, "background.svg");
-        }
-      }
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-      const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-      const cloudinaryPreset = process.env
-        .NEXT_PUBLIC_CLOUDINARY_PRESET as string;
-      // Call backend FFmpeg server with axios
-      const serverRes = await axios.post(
-        `${backendUrl}/process-video`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
-
-      const { url } = serverRes.data; // backend returns { url }
-
-      // Fetch processed video (mp4) from backend
-      const processedRes = await axios.get(`${backendUrl}${url}`, {
-        responseType: "blob",
-      });
-      const processedBlob = processedRes.data;
-
-      // Upload processed video to Cloudinary with axios
-      const cloudFormData = new FormData();
-      cloudFormData.append("file", processedBlob, "final.mp4");
-      cloudFormData.append("upload_preset", cloudinaryPreset);
-
-      const cloudRes = await axios.post(cloudinaryUrl, cloudFormData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const cloudData = cloudRes.data;
-
-      console.log("backend url is ", cloudData.secure_url);
-      toast.dismiss();
-      toast.success("Video exported with background!");
-
-      // Navigate to preview page
-      router.push(
-        `/preview?video=${encodeURIComponent(
-          cloudData.secure_url
-        )}&title=${encodeURIComponent(
-          sidebarTitle
-        )}&description=${encodeURIComponent(sidebarDescription || "")}`
-      );
-    } catch (err) {
-      console.error(err);
-      toast.dismiss();
-      toast.error("Export failed");
-    }
   };
 
   return (
@@ -1318,13 +310,15 @@ export default function EditorPage() {
           error: { iconTheme: { primary: "#f87171", secondary: "#fff" } },
         }}
       />
+
       <EditorTopbar
         onBack={() => router.back()}
         userInitials={initials}
-        onToggleMenu={toggleDashboardMenu} // Pass the toggle function
-      />{" "}
+        onToggleMenu={toggleDashboardMenu}
+      />
+
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
-        {/* Sidebar for Desktop (EditorSidebar, always visible) */}
+        {/* Sidebar for Desktop */}
         <div className="hidden md:block w-80 bg-white shadow-lg z-40">
           <div className="w-full h-full">
             <EditorSidebar
@@ -1347,7 +341,7 @@ export default function EditorPage() {
                   downloadBlob(mp4Url, `${filename}.mp4`);
                 }
               }}
-              onExportWebM={exportVideo}
+              onExportWebM={onExportVideo}
               tool={tool}
               setTool={(t: string) => {
                 if (
@@ -1410,8 +404,8 @@ export default function EditorPage() {
                     downloadBlob(mp4Url, `${filename}.mp4`);
                   }
                 }}
-                onExportWebM={exportVideo}
-                tool={tool} // Γ£à Correct prop
+                onExportWebM={onExportVideo}
+                tool={tool}
                 setTool={(t: string) => {
                   if (
                     t === "none" ||
@@ -1465,7 +459,6 @@ export default function EditorPage() {
                   <FaBars className="text-xl" />
                   Menu
                 </button>
-                {/* Mobile Drawer for SidemenuDashboard */}
                 {isDashboardMenuOpen && (
                   <div className="fixed inset-0 z-50 flex md:hidden">
                     <div
@@ -1483,6 +476,7 @@ export default function EditorPage() {
               >
                 <span className="text-xl"></span> Save Demo
               </button>
+
               {/* Editor Sidebar Toggle for Mobile */}
               <button
                 className="md:hidden cursor-pointer flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
@@ -1493,6 +487,7 @@ export default function EditorPage() {
               </button>
             </div>
           </div>
+
           {(sidebarTitle || sidebarDescription) && (
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
               {sidebarTitle && (
@@ -1517,7 +512,8 @@ export default function EditorPage() {
               )}
             </div>
           )}
-          {/* WRAPPER */}
+
+          {/* Video Wrapper */}
           <div
             className={`flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl shadow-lg bg-white`}
             style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
@@ -1547,25 +543,75 @@ export default function EditorPage() {
                   transition: "width 0.3s ease, height 0.3s ease",
                 }}
               >
-                <ReactPlayer
-                  ref={playerRef}
-                  url={videoUrl || undefined}
-                  playing={playing}
-                  controls={false}
-                  muted={false}
-                  volume={volume}
-                  width="100%"
-                  height="100%"
-                  style={{
-                    objectFit: "contain",
-                    borderRadius: "1.25rem",
-                    background: "#F6F3FF",
-                  }}
-                  onError={(e) => console.error("Video failed to load", e)}
-                  onProgress={({ playedSeconds }) =>
-                    setCurrentTime(playedSeconds)
-                  }
-                />
+                {videoUrl ? (
+                  <ReactPlayer
+                    ref={playerRef}
+                    url={videoUrl}
+                    playing={playing}
+                    controls={false}
+                    muted={false}
+                    volume={volume}
+                    width="100%"
+                    height="100%"
+                    style={{
+                      objectFit: "contain",
+                      borderRadius: "1.25rem",
+                      background: "#F6F3FF",
+                    }}
+                    onError={(e) => console.error("Video failed to load", e)}
+                    onProgress={({ playedSeconds }) =>
+                      setCurrentTime(playedSeconds)
+                    }
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                    <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
+                      <svg
+                        className="w-8 h-8 text-[#7C5CFC]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
+                      No Video Selected
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      To start editing, please:
+                    </p>
+                    <div className="space-y-2 text-sm text-gray-500">
+                      <p>
+                        • Go to <strong>Dashboard</strong> and edit an existing
+                        demo
+                      </p>
+                      <p>
+                        • Or go to <strong>Recorder</strong> to record/upload a
+                        new video
+                      </p>
+                    </div>
+                    <div className="mt-6 flex gap-3">
+                      <button
+                        onClick={() => router.push("/dashboard")}
+                        className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
+                      >
+                        Go to Dashboard
+                      </button>
+                      <button
+                        onClick={() => router.push("/recorder")}
+                        className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
+                      >
+                        Go to Recorder
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Canvas stays on top of video */}
@@ -1581,104 +627,107 @@ export default function EditorPage() {
               />
             </div>
 
-            {/* Controls container */}
-            <div className="w-full flex flex-col gap-3">
-              <CustomVideoControls
-                playerRef={playerRef}
-                duration={duration}
-                currentTime={currentTime}
-                setCurrentTime={(t) => {
-                  setCurrentTime(t);
-                  playerRef.current?.seekTo(t, "seconds");
-                }}
-                recordingDuration={recordingDuration}
-                setPlaying={setPlaying}
-                playing={playing}
-              />
+            {/* Controls container - only show when video is available */}
+            {videoUrl && (
+              <div className="w-full flex flex-col gap-3">
+                <CustomVideoControls
+                  playerRef={playerRef}
+                  duration={duration}
+                  currentTime={currentTime}
+                  setCurrentTime={(t) => {
+                    setCurrentTime(t);
+                    playerRef.current?.seekTo(t, "seconds");
+                  }}
+                  recordingDuration={recordingDuration}
+                  setPlaying={setPlaying}
+                  playing={playing}
+                />
 
-              <div className="flex items-center justify-between px-2">
-                {/* Skip buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newTime = Math.max(0, currentTime - 5);
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Back 5 seconds"
-                  >
-                    <Image
-                      src="/icons/replay.svg"
-                      alt="Replay"
-                      width={16}
-                      height={16}
+                <div className="flex items-center justify-between px-2">
+                  {/* Skip buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const newTime = Math.max(0, currentTime - 5);
+                        setCurrentTime(newTime);
+                        playerRef.current?.seekTo(newTime, "seconds");
+                      }}
+                      className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                      title="Back 5 seconds"
+                    >
+                      <Image
+                        src="/icons/replay.svg"
+                        alt="Replay"
+                        width={16}
+                        height={16}
+                      />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newTime = Math.min(
+                          displayDuration,
+                          currentTime + 5
+                        );
+                        setCurrentTime(newTime);
+                        playerRef.current?.seekTo(newTime, "seconds");
+                      }}
+                      className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
+                      title="Forward 5 seconds"
+                    >
+                      <Image
+                        src="/icons/forward.svg"
+                        alt="Forward"
+                        width={16}
+                        height={16}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Volume */}
+                  <div className="flex items-center gap-2 flex-1 justify-center">
+                    <button
+                      onClick={() => setVolume(volume === 0 ? 1 : 0)}
+                      className="focus:outline-none"
+                      title={volume === 0 ? "Unmute" : "Mute"}
+                    >
+                      {volume === 0 ? (
+                        <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
+                      ) : (
+                        <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
+                      )}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={volume}
+                      onChange={(e) => setVolume(Number(e.target.value))}
+                      className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
                     />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newTime = Math.min(
-                        displayDuration,
-                        currentTime + 5
-                      );
-                      setCurrentTime(newTime);
-                      playerRef.current?.seekTo(newTime, "seconds");
-                    }}
-                    className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                    title="Forward 5 seconds"
-                  >
-                    <Image
-                      src="/icons/forward.svg"
-                      alt="Forward"
-                      width={16}
-                      height={16}
-                    />
-                  </button>
-                </div>
+                    <span className="text-xs text-[#7C5CFC] font-mono min-w-10">
+                      {Math.round(volume * 100)}%
+                    </span>
+                  </div>
 
-                {/* Volume */}
-                <div className="flex items-center gap-2 flex-1 justify-center">
-                  <button
-                    onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                    className="focus:outline-none"
-                    title={volume === 0 ? "Unmute" : "Mute"}
+                  {/* Fullscreen */}
+                  <div
+                    className="flex items-center justify-end"
+                    style={{ minWidth: 40 }}
                   >
-                    {volume === 0 ? (
-                      <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                    ) : (
-                      <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                  />
-                  <span className="text-xs text-[#7C5CFC] font-mono min-w-[40px]">
-                    {Math.round(volume * 100)}%
-                  </span>
-                </div>
-
-                {/* Fullscreen */}
-                <div
-                  className="flex items-center justify-end"
-                  style={{ minWidth: 40 }}
-                >
-                  <button
-                    className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                    title="Fullscreen"
-                    onClick={handleFullscreen}
-                  >
-                    <FaExpand size={22} />
-                  </button>
+                    <button
+                      className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
+                      title="Fullscreen"
+                      onClick={handleFullscreen}
+                    >
+                      <FaExpand size={22} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
+
           {tool === "text" && (
             <div className="flex gap-3 items-center mb-6 sm:mb-0 mx-4 sm:mx-8">
               <label className="text-sm">Text Color:</label>
@@ -1702,49 +751,54 @@ export default function EditorPage() {
               </select>
             </div>
           )}
-          <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
-            {duration > 0 ? (
-              <TimelineRuler
-                minValue={0}
-                maxValue={duration}
-                currentValue={Math.max(0, currentTime)}
-                onValueChange={(value) => {
-                  const clampedValue = Math.max(0, Math.min(duration, value));
-                  setCurrentTime(clampedValue);
-                  playerRef.current?.seekTo(clampedValue, "seconds");
-                }}
-                step={0.1}
-                majorStep={20}
-                minorStep={5}
-                microStep={1}
-                startTime={timelineStartTime}
-                endTime={timelineEndTime}
-                onStartTimeChange={(value) => {
-                  setTimelineStartTime(value);
-                  handleTimelineChange(value, timelineEndTime);
-                }}
-                onEndTimeChange={(value) => {
-                  setTimelineEndTime(value);
-                  handleTimelineChange(timelineStartTime, value);
-                }}
-                processing={processing}
-                onResetVideo={resetVideo}
-                onZoomEffectCreate={onZoomEffectCreate}
-                initialSegments={currentSegments}
-                onTrim={videoTrimHandler}
-              />
-            ) : (
-              <div className="w-full max-w-6xl mx-auto">
-                <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
-                  <span className="text-[#A594F9] font-medium">
-                    Loading timeline...
-                  </span>
+
+          {/* Timeline - only show when video is available */}
+          {videoUrl && (
+            <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
+              {duration > 0 ? (
+                <TimelineRuler
+                  minValue={0}
+                  maxValue={duration}
+                  currentValue={Math.max(0, currentTime)}
+                  onValueChange={(value) => {
+                    const clampedValue = Math.max(0, Math.min(duration, value));
+                    setCurrentTime(clampedValue);
+                    playerRef.current?.seekTo(clampedValue, "seconds");
+                  }}
+                  step={0.1}
+                  majorStep={20}
+                  minorStep={5}
+                  microStep={1}
+                  startTime={timelineStartTime}
+                  endTime={timelineEndTime}
+                  onStartTimeChange={(value) => {
+                    setTimelineStartTime(value);
+                    handleTimelineChange(value, timelineEndTime);
+                  }}
+                  onEndTimeChange={(value) => {
+                    setTimelineEndTime(value);
+                    handleTimelineChange(timelineStartTime, value);
+                  }}
+                  processing={processing}
+                  onResetVideo={resetVideo}
+                  onZoomEffectCreate={onZoomEffectCreate}
+                  initialSegments={currentSegments}
+                  onTrim={onVideoTrim}
+                />
+              ) : (
+                <div className="w-full max-w-6xl mx-auto">
+                  <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
+                    <span className="text-[#A594F9] font-medium">
+                      Loading timeline...
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
       <ZoomEffectsPopup
         isOpen={isZoomPopupOpen}
         onClose={() => setIsZoomPopupOpen(false)}
@@ -1763,127 +817,15 @@ export default function EditorPage() {
           }
         }}
       />
+
       <SaveDemoModal
         isOpen={showSaveDemoModal}
         onClose={() => setShowSaveDemoModal(false)}
-        onSave={handleSaveDemo}
+        onSave={onSaveDemo}
         initialTitle={sidebarTitle}
         initialDescription={sidebarDescription}
         processing={savingDemo}
       />
     </main>
-  );
-}
-// Custom video controls component
-function CustomVideoControls({
-  playerRef,
-  duration,
-  currentTime,
-  setCurrentTime,
-  recordingDuration,
-  setPlaying,
-  playing,
-}: {
-  playerRef: React.RefObject<ReactPlayer>;
-  duration: number;
-  currentTime: number;
-  setCurrentTime: (t: number) => void;
-  recordingDuration: number;
-  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
-  playing: boolean;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const [dragValue, setDragValue] = useState(0);
-
-  const handlePlayPause = () => {
-    setPlaying((prev) => {
-      if (prev) playerRef.current?.getInternalPlayer()?.pause?.();
-      else playerRef.current?.getInternalPlayer()?.play?.();
-      return !prev;
-    });
-  };
-
-  const handleSeekStart = () => {
-    setDragging(true);
-    setDragValue(currentTime);
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = Number(e.target.value);
-    setDragValue(value);
-    if (playerRef.current) {
-      const player = playerRef.current.getInternalPlayer();
-      if (player) {
-        player.currentTime = value;
-        player.dispatchEvent(new Event("seeking"));
-      }
-    }
-  };
-
-  const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
-    const value = Number((e.target as HTMLInputElement).value);
-    setCurrentTime(value);
-
-    if (playerRef.current) {
-      const player = playerRef.current.getInternalPlayer();
-      if (player) {
-        player.currentTime = value;
-        player.dispatchEvent(new Event("seeking"));
-        playerRef.current.seekTo(value, "seconds");
-      }
-    }
-    setDragging(false);
-  };
-
-  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
-
-  return (
-    <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
-      <div className="flex items-center gap-3">
-        {/* Γ£à Controlled Play/Pause Button */}
-        <button
-          onClick={handlePlayPause}
-          className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
-        >
-          {playing ? (
-            <Image
-              src="/icons/pause.png"
-              alt="Notifications"
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
-          ) : (
-            <Image
-              src="/icons/play.png"
-              alt="Notifications"
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
-          )}
-        </button>
-        <input
-          type="range"
-          min={0}
-          max={displayDuration}
-          step={0.01}
-          value={dragging ? dragValue : currentTime}
-          onPointerDown={handleSeekStart}
-          onChange={handleSeek}
-          onPointerUp={handleSeekEnd}
-          className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC]"
-          style={{
-            background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
-            height: 8,
-            borderRadius: 8,
-          }}
-        />
-        <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-          {formatTime(currentTime)} /{" "}
-          {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
-        </span>
-      </div>
-    </div>
   );
 }

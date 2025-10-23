@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
@@ -10,26 +10,34 @@ NProgress.configure({ showSpinner: false, trickleSpeed: 100 });
 export default function TopLoader() {
   const pathname = usePathname();
   const router = useRouter();
+  const isInitializedRef = useRef(false);
 
   // Intercept programmatic navigations (router.push, router.replace)
   useEffect(() => {
-    const originalPush = router.push;
-    const originalReplace = router.replace;
+    if (isInitializedRef.current) return;
+    isInitializedRef.current = true;
 
-    router.push = (...args: Parameters<typeof router.push>) => {
-      NProgress.start();
-      return originalPush.apply(router, args);
-    };
+    try {
+      const originalPush = router.push;
+      const originalReplace = router.replace;
 
-    router.replace = (...args: Parameters<typeof router.replace>) => {
-      NProgress.start();
-      return originalReplace.apply(router, args);
-    };
+      router.push = (...args: Parameters<typeof router.push>) => {
+        NProgress.start();
+        return originalPush.apply(router, args);
+      };
 
-    return () => {
-      router.push = originalPush;
-      router.replace = originalReplace;
-    };
+      router.replace = (...args: Parameters<typeof router.replace>) => {
+        NProgress.start();
+        return originalReplace.apply(router, args);
+      };
+
+      return () => {
+        router.push = originalPush;
+        router.replace = originalReplace;
+      };
+    } catch (error) {
+      console.error("TopLoader initialization error:", error);
+    }
   }, [router]);
 
   // Normal <a>/<Link> clicks → start progress

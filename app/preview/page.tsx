@@ -172,7 +172,7 @@ export default function PreviewPage() {
 
   if (!videoUrl) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-purple-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-4">
             No Video Found
@@ -189,7 +189,7 @@ export default function PreviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100">
+    <div className="min-h-screen bg-linear-to-br from-purple-50 to-indigo-100">
       {/* <Toaster
         position="top-center"
         toastOptions={{
@@ -333,7 +333,7 @@ export default function PreviewPage() {
           />
 
           {/* Video Controls Overlay */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+          <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-6">
             <div className="flex items-center space-x-4">
               {/* Play/Pause Button */}
               <button
