@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["@radix-ui/react-slider", "@headlessui/react"],
   },
-  
+
   async headers() {
     return [
       {
