@@ -39,10 +39,7 @@ export const createSimpleZoomTest = async (
 
     mediaRecorder.onstop = () => {
       const finalBlob = new Blob(chunks, { type: "video/webm" });
-      console.log(
-        "Enhanced zoom processing completed. Output size:",
-        finalBlob.size
-      );
+      console.log("Enhanced zoom processing completed. Output size:", finalBlob.size);
       resolve(finalBlob);
     };
 
@@ -57,8 +54,7 @@ export const createSimpleZoomTest = async (
 
       // Find active zoom effect with smooth transition
       const activeEffect = zoomEffects.find(
-        (effect) =>
-          currentTime >= effect.startTime && currentTime <= effect.endTime
+        (effect) => currentTime >= effect.startTime && currentTime <= effect.endTime
       );
 
       // Calculate smooth transition
@@ -75,8 +71,7 @@ export const createSimpleZoomTest = async (
           transitionProgress = timeInEffect / transitionDuration;
         } else if (timeInEffect > effectDuration - transitionDuration) {
           // Fade out
-          transitionProgress =
-            (effectDuration - timeInEffect) / transitionDuration;
+          transitionProgress = (effectDuration - timeInEffect) / transitionDuration;
         } else {
           // Full effect
           transitionProgress = 1;

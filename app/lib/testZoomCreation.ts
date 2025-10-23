@@ -23,12 +23,7 @@ export const testZoomEffectCreation = () => {
     console.log("✅ Zoom level is correct:", testEffect.zoomLevel);
   }
 
-  if (
-    testEffect.x < 0 ||
-    testEffect.x > 1 ||
-    testEffect.y < 0 ||
-    testEffect.y > 1
-  ) {
+  if (testEffect.x < 0 || testEffect.x > 1 || testEffect.y < 0 || testEffect.y > 1) {
     console.error("❌ Coordinates are out of range:", {
       x: testEffect.x,
       y: testEffect.y,
