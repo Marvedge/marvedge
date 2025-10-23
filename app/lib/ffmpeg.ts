@@ -5,24 +5,24 @@ type Overlay =
   | { type: "arrow"; x: number; y: number; x2: number; y2: number }
   | { type: "text"; x: number; y: number; text: string };
 
-export const videoTrimmer = async (
-  inputBlob: Blob,
-  start: string,
-  end: string
-): Promise<Blob> => {
+export const videoTrimmer = async (inputBlob: Blob, start: string, end: string): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
     corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
+  if (!ffmpeg.isLoaded()) {
+    await ffmpeg.load();
+  }
 
   const inputName = "input.webm";
   const outputName = "output.webm";
 
   // Helper to format time as seconds (float)
   function toSeconds(t: string | number): number {
-    if (typeof t === "number") return t;
+    if (typeof t === "number") {
+      return t;
+    }
     if (t.includes(":")) {
       // HH:MM:SS[.mmm]
       const parts = t.split(":").map(Number);
@@ -37,11 +37,7 @@ export const videoTrimmer = async (
     return parseFloat(t);
   }
 
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
+  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
 
   // Get video duration
   let duration = 0;
@@ -61,7 +57,7 @@ export const videoTrimmer = async (
     `[0:a]atrim=0:${startSec},asetpts=PTS-STARTPTS[a0];` +
     `[0:v]trim=${endSec}:${duration},setpts=PTS-STARTPTS[v1];` +
     `[0:a]atrim=${endSec}:${duration},asetpts=PTS-STARTPTS[a1];` +
-    `[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]`;
+    "[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]";
 
   try {
     await ffmpeg.run(
@@ -99,15 +95,13 @@ export const videoToMP4 = async (inputBlob: Blob): Promise<Blob> => {
     log: true,
     corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
+  if (!ffmpeg.isLoaded()) {
+    await ffmpeg.load();
+  }
 
   const inputName = "input.webm";
   const outputName = "output.mp4";
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
+  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
   await ffmpeg.run(
     "-i",
     inputName,
@@ -130,24 +124,14 @@ export const videoToThumbnail = async (inputBlob: Blob): Promise<Blob> => {
     log: true,
     corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
+  if (!ffmpeg.isLoaded()) {
+    await ffmpeg.load();
+  }
 
   const inputName = "input.webm";
   const outputName = "thumbnail.jpg";
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
-  await ffmpeg.run(
-    "-i",
-    inputName,
-    "-ss",
-    "00:00:01.000",
-    "-vframes",
-    "1",
-    outputName
-  );
+  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
+  await ffmpeg.run("-i", inputName, "-ss", "00:00:01.000", "-vframes", "1", outputName);
 
   const data = ffmpeg.FS("readFile", outputName);
   return new Blob([data.slice(0).buffer], { type: "image/jpeg" });
@@ -162,15 +146,13 @@ export const videoToMP4WithOverlays = async (
     log: true,
     corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
+  if (!ffmpeg.isLoaded()) {
+    await ffmpeg.load();
+  }
 
   const inputName = "input.webm";
   const outputName = "output_overlay.mp4";
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
+  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
 
   const vf = generateFFmpegFilters(overlays);
 
@@ -197,9 +179,7 @@ export const videoWithZoomEffects = async (
   zoomEffects: ZoomEffect[]
 ): Promise<Blob> => {
   // Use the enhanced zoom processor
-  const { createEnhancedZoomProcessor } = await import(
-    "./enhancedZoomProcessor"
-  );
+  const { createEnhancedZoomProcessor } = await import("./enhancedZoomProcessor");
   return await createEnhancedZoomProcessor(inputBlob, zoomEffects);
 };
 
@@ -226,27 +206,14 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
     log: true,
     corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
   });
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
+  if (!ffmpeg.isLoaded()) {
+    await ffmpeg.load();
+  }
 
   const inputName = "input.webm";
   const outputName = "output.mp3";
-  ffmpeg.FS(
-    "writeFile",
-    inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
-  );
-  await ffmpeg.run(
-    "-i",
-    inputName,
-    "-vn",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-b:a",
-    "192k",
-    outputName
-  );
+  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
+  await ffmpeg.run("-i", inputName, "-vn", "-ar", "44100", "-ac", "2", "-b:a", "192k", outputName);
 
   const data = ffmpeg.FS("readFile", outputName);
   return new Blob([data.slice(0).buffer], { type: "audio/mp3" });

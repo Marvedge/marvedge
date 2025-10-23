@@ -66,17 +66,11 @@ export default function InitialRecorderView({
       </div>
 
       {/* Mobile sidebar drawer */}
-      <Dialog
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        className="relative z-50"
-      >
+      <Dialog open={sidebarOpen} onClose={() => setSidebarOpen(false)} className="relative z-50">
         <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
         <div className="fixed inset-y-0 left-0 w-[90vw] max-w-xs bg-white shadow-2xl p-6 flex flex-col gap-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold text-[#7C5CFC]">
-              Recorder Settings
-            </h2>
+            <h2 className="text-xl font-bold text-[#7C5CFC]">Recorder Settings</h2>
             <button
               className="text-[#7C5CFC] text-2xl p-1 rounded hover:bg-[#ede7fa] focus:outline-none"
               onClick={() => setSidebarOpen(false)}
@@ -87,9 +81,7 @@ export default function InitialRecorderView({
           </div>
           {/* Title */}
           <div>
-            <label className="block text-[#7C5CFC] font-semibold mb-1">
-              Title
-            </label>
+            <label className="block text-[#7C5CFC] font-semibold mb-1">Title</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -99,9 +91,7 @@ export default function InitialRecorderView({
           </div>
           {/* Upload & Screen Share */}
           <div>
-            <label className="block text-[#7C5CFC] font-semibold mb-1">
-              Recording Source
-            </label>
+            <label className="block text-[#7C5CFC] font-semibold mb-1">Recording Source</label>
             <div className="border-2 border-dashed border-[#A594F9] rounded-lg p-4 flex flex-col items-center justify-center mb-4 bg-[#F8F6FF]">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -117,9 +107,7 @@ export default function InitialRecorderView({
                   />
                 </span>
                 Upload Screen Recording
-                <span className="text-xs text-gray-400">
-                  MP4, MOV up to 100MB
-                </span>
+                <span className="text-xs text-gray-400">MP4, MOV up to 100MB</span>
               </button>
               <input
                 type="file"
@@ -128,11 +116,7 @@ export default function InitialRecorderView({
                 className="hidden"
                 onChange={handleFileUpload}
               />
-              {uploadMessage && (
-                <div className="mt-2 text-green-600 text-xs">
-                  {uploadMessage}
-                </div>
-              )}
+              {uploadMessage && <div className="mt-2 text-green-600 text-xs">{uploadMessage}</div>}
             </div>
             <button
               onClick={startScreenShare}
@@ -156,12 +140,8 @@ export default function InitialRecorderView({
         {/* New Recording Header Bar */}
         <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-12 py-4 sm:py-6 bg-[#f3f0fc] border-b border-[#ede7fa]">
           <div>
-            <div className="text-lg sm:text-2xl font-semibold text-[#1A0033]">
-              New Recording
-            </div>
-            <div className="text-xs sm:text-sm text-gray-400">
-              Last saved 2 minutes ago
-            </div>
+            <div className="text-lg sm:text-2xl font-semibold text-[#1A0033]">New Recording</div>
+            <div className="text-xs sm:text-sm text-gray-400">Last saved 2 minutes ago</div>
           </div>
         </div>
         {/* Main Area */}
@@ -213,9 +193,7 @@ export default function InitialRecorderView({
                 Upload File
               </button>
               <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-4 mt-2 sm:mt-0 w-full sm:w-auto justify-center">
-                <span className="text-[#888] font-medium text-sm sm:text-base">
-                  Microphone
-                </span>
+                <span className="text-[#888] font-medium text-sm sm:text-base">Microphone</span>
                 <button
                   onClick={toggleMic}
                   className={`w-10 sm:w-12 h-6 rounded-full flex items-center px-1 transition ${micEnabled ? "bg-[#6C63FF]" : "bg-gray-300"} cursor-pointer`}

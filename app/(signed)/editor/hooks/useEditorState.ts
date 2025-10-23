@@ -19,9 +19,7 @@ export function useEditorState() {
   const [currentSegments, setCurrentSegments] = useState<Segment[]>([]);
 
   // Tool state
-  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
-    "none"
-  );
+  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">("none");
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
 
@@ -52,9 +50,7 @@ export function useEditorState() {
   const [inputEndTime, setInputEndTime] = useState("00:00:00");
 
   // Background state
-  const [selectedBackground, setSelectedBackground] = useState<string | null>(
-    null
-  );
+  const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [backgroundType, setBackgroundType] = useState<string>("");
   const [customBackground, setCustomBackground] = useState<File | null>(null);
 

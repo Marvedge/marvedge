@@ -6,9 +6,13 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 
 const getInitials = (name: string | undefined): string => {
-  if (!name) return "?";
+  if (!name) {
+    return "?";
+  }
   const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
+  if (parts.length === 1) {
+    return parts[0][0].toUpperCase();
+  }
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
@@ -33,10 +37,7 @@ const DashboardPage = () => {
   }, []);
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
     };
@@ -51,15 +52,10 @@ const DashboardPage = () => {
       </div>
     );
   }
-  const initials = getInitials(
-    (session?.user?.name as string) || (session?.user?.email as string)
-  );
+  const initials = getInitials((session?.user?.name as string) || (session?.user?.email as string));
 
   return (
-    <div
-      className="overflow-y-auto h-full"
-      style={{ minHeight: "calc(100vh - 80px)" }}
-    >
+    <div className="overflow-y-auto h-full" style={{ minHeight: "calc(100vh - 80px)" }}>
       <div className="flex flex-col gap-3 md:gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white/80 rounded-lg p-3 md:p-4 shadow mb-2 relative">
           {/* Left Side: Title and Logo */}
@@ -72,9 +68,7 @@ const DashboardPage = () => {
                 height={20}
                 className="md:w-6 md:h-6"
               />
-              <span className="text-lg text-gray-400 font-medium">
-                Dashboard
-              </span>
+              <span className="text-lg text-gray-400 font-medium">Dashboard</span>
             </div>
           </div>
 
@@ -114,8 +108,7 @@ const DashboardPage = () => {
                       repeat: 7,
                       repeatType: "loop",
                       ease: "easeInOut",
-                      delay:
-                        ((welcomeText.length + 1) * intervalMs) / 1000 + 0.5,
+                      delay: ((welcomeText.length + 1) * intervalMs) / 1000 + 0.5,
                     }}
                   >
                     👋
@@ -152,9 +145,7 @@ const DashboardPage = () => {
                 <button
                   className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#6356D7] text-white flex items-center justify-center text-lg md:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
                   onClick={() => setShowDropdown((v) => !v)}
-                  title={
-                    session?.user?.name || session?.user?.email || undefined
-                  }
+                  title={session?.user?.name || session?.user?.email || undefined}
                 >
                   {initials}
                 </button>

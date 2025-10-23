@@ -22,10 +22,8 @@ const SidemenuDashboard = () => {
     setIsMobileMenuOpen(false);
   };
 
-  const activeClass =
-    "bg-[#bcb3f7] text-white font-normal rounded-lg shadow-sm";
-  const inactiveClass =
-    "text-purple-200 font-normal hover:bg-[#bcb3f7] rounded-lg";
+  const activeClass = "bg-[#bcb3f7] text-white font-normal rounded-lg shadow-sm";
+  const inactiveClass = "text-purple-200 font-normal hover:bg-[#bcb3f7] rounded-lg";
 
   return (
     <>

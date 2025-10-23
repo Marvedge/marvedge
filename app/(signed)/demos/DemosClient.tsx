@@ -91,22 +91,13 @@ export default function DemosPage() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
-      if (
-        statusDropdownRef.current &&
-        !statusDropdownRef.current.contains(event.target as Node)
-      ) {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setStatusDropdownOpen(false);
       }
-      if (
-        sortDropdownRef.current &&
-        !sortDropdownRef.current.contains(event.target as Node)
-      ) {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
         setSortDropdownOpen(false);
       }
     }
@@ -152,9 +143,11 @@ export default function DemosPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteId) {
+      return;
+    }
     try {
-      await axios.delete(`/api/demo/`, {
+      await axios.delete("/api/demo/", {
         params: {
           id: deleteId,
         },
@@ -183,9 +176,7 @@ export default function DemosPage() {
           <span className="text-gray-500 text-lg">
             Welcome{" "}
             <span className="text-[#7C5CFC] font-semibold">
-              {session?.user?.name?.split(" ")[0] ||
-                session?.user?.email?.split("@")[0] ||
-                "User"}
+              {session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")[0] || "User"}
             </span>{" "}
             <span className="inline-block">👋</span>
           </span>
@@ -345,9 +336,7 @@ export default function DemosPage() {
           </div>
         </div>
         <div className="mt-8">
-          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">
-            Your Demos
-          </h3>
+          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
             {filteredDemos.length}/{demos.length} demos
           </div>
@@ -372,9 +361,7 @@ export default function DemosPage() {
                   onClick={() => handleEditDemo(demo)}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-2xl text-[#8B8B8B] font-normal">
-                      {demo.title}
-                    </div>
+                    <div className="text-2xl text-[#8B8B8B] font-normal">{demo.title}</div>
                     <div className="flex items-center gap-4">
                       <button
                         className="text-red-400 hover:text-red-600 text-xl"
@@ -407,19 +394,15 @@ export default function DemosPage() {
                       <FaEye className="text-lg" /> 0
                     </div>
                     <div className="flex items-center gap-2">
-                      <FaRegCalendarAlt className="text-lg" />{" "}
-                      {formatDate(demo.updatedAt)}
+                      <FaRegCalendarAlt className="text-lg" /> {formatDate(demo.updatedAt)}
                     </div>
                     <div>Draft</div>
                   </div>
                   <div className="text-sm text-[#8B8B8B] mb-4">
                     <div>
-                      Duration: {formatTime_2(demo.startTime)} -{" "}
-                      {formatTime_2(demo.endTime)}
+                      Duration: {formatTime_2(demo.startTime)} - {formatTime_2(demo.endTime)}
                     </div>
-                    <div className="truncate">
-                      {demo.description || "No description"}
-                    </div>
+                    <div className="truncate">{demo.description || "No description"}</div>
                   </div>
                   <button className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto">
                     <FaShareAlt /> Share
@@ -457,9 +440,7 @@ export default function DemosPage() {
                           />{" "}
                         </span>
                         <div>
-                          <div className="font-semibold text-lg text-[#1A0033]">
-                            {demo.title}
-                          </div>
+                          <div className="font-semibold text-lg text-[#1A0033]">{demo.title}</div>
                           <div className="text-[#8B8B8B] text-sm">
                             {demo.description || "No description"}
                           </div>
@@ -469,9 +450,7 @@ export default function DemosPage() {
                         {formatTime(demo.startTime)} -{" "}
                         {formatTime(demo.endTime)}
                       </td> */}
-                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">
-                        Draft
-                      </td>
+                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">Draft</td>
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
                         {formatDate(demo.updatedAt)}
                       </td>

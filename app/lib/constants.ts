@@ -1,12 +1,6 @@
 // Store shared arrays and constants here
 
-export const TABS = [
-  "Profile",
-  "Notification",
-  "Privacy",
-  "Preferences",
-  "Account",
-];
+export const TABS = ["Profile", "Notification", "Privacy", "Preferences", "Account"];
 
 export const NOTIFICATION_SETTINGS = [
   {
@@ -102,7 +96,9 @@ export const PREFERENCES_SETTINGS = [
 ];
 
 export const sanitizeFilename = (title: string): string => {
-  if (!title) return "recording";
+  if (!title) {
+    return "recording";
+  }
 
   // Remove or replace invalid filename characters
   return title

@@ -4,13 +4,7 @@ import React, { useRef, useState } from "react";
 import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer, toast } from "react-toastify";
 import Image from "next/image";
-import {
-  motion,
-  useInView,
-  easeOut,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { motion, useInView, easeOut, useScroll, useTransform } from "framer-motion";
 
 const socialIcons = [
   {
@@ -46,10 +40,7 @@ const linkSections = [
   },
 ];
 
-const SocialIcon: React.FC<{ path: string; index: number }> = ({
-  path,
-  index,
-}) => {
+const SocialIcon: React.FC<{ path: string; index: number }> = ({ path, index }) => {
   const iconRef = useRef<HTMLSpanElement>(null);
   // Set `once: true` to trigger only once when icon enters viewport
   const isInView = useInView(iconRef, { once: true, margin: "-50px" });
@@ -76,11 +67,7 @@ const SocialIcon: React.FC<{ path: string; index: number }> = ({
       }}
       whileTap={{ scale: 0.9 }}
     >
-      <svg
-        className="w-4 h-4 sm:w-5 sm:h-5"
-        fill="currentColor"
-        viewBox="0 0 24 24"
-      >
+      <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
         <path d={path} />
       </svg>
     </motion.span>
@@ -111,9 +98,7 @@ const LinkSection: React.FC<{
         delay: index * 0.1,
       }}
     >
-      <h3 className="text-white font-semibold mb-2 text-base sm:text-lg">
-        {title}
-      </h3>
+      <h3 className="text-white font-semibold mb-2 text-base sm:text-lg">{title}</h3>
       <ul className="text-gray-300 space-y-1.5 text-sm sm:text-base">
         {items.map((item, itemIndex) => (
           <motion.li
@@ -152,9 +137,7 @@ const ContactForm: React.FC = () => {
     message: "",
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
@@ -195,9 +178,7 @@ const ContactForm: React.FC = () => {
         boxShadow: "0 20px 40px rgba(60, 49, 96, 0.3)",
       }}
     >
-      <h2 className="text-white text-xl sm:text-2xl font-semibold mb-4">
-        Get In Touch
-      </h2>
+      <h2 className="text-white text-xl sm:text-2xl font-semibold mb-4">Get In Touch</h2>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         {[
           { type: "email", placeholder: "Your Email", name: "email" },
@@ -289,10 +270,7 @@ const Hero4: React.FC = () => {
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1.01, 1]);
 
   return (
-    <div
-      ref={sectionRef}
-      className="w-full bg-[#2d2347] min-h-screen relative overflow-hidden"
-    >
+    <div ref={sectionRef} className="w-full bg-[#2d2347] min-h-screen relative overflow-hidden">
       <motion.div
         className="absolute top-20 left-1/4 w-32 h-32 bg-purple-900 rounded-full opacity-10"
         animate={{
@@ -355,14 +333,11 @@ const Hero4: React.FC = () => {
                 className="w-12 h-12 md:w-16 md:h-16 object-contain"
                 priority
               />
-              <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">
-                Marvedge
-              </span>
+              <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">Marvedge</span>
             </div>
             <p className="text-gray-300 text-sm sm:text-base">
-              Transform your product URLs into compelling demo videos with the
-              power of AI. Boost conversations and save time with automated
-              video creation.
+              Transform your product URLs into compelling demo videos with the power of AI. Boost
+              conversations and save time with automated video creation.
             </p>
           </motion.div>
 
@@ -385,12 +360,7 @@ const Hero4: React.FC = () => {
         >
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
             {linkSections.map((section, index) => (
-              <LinkSection
-                key={index}
-                title={section.title}
-                items={section.items}
-                index={index}
-              />
+              <LinkSection key={index} title={section.title} items={section.items} index={index} />
             ))}
           </div>
         </motion.div>
@@ -440,8 +410,7 @@ const Hero4: React.FC = () => {
             delay: 1.0,
           }}
         >
-          Copyright © 2025. All rights reserved. Created with 🩶 for better
-          conversation.
+          Copyright © 2025. All rights reserved. Created with 🩶 for better conversation.
         </motion.p>
       </motion.footer>
       <ToastContainer position="top-center" autoClose={3000} />

@@ -72,7 +72,9 @@ export default function RecorderPage() {
   const stopCamera = () => {
     cameraStream?.getTracks().forEach((track) => track.stop());
     setCameraStream(null);
-    if (videoPreview.current) videoPreview.current.srcObject = null;
+    if (videoPreview.current) {
+      videoPreview.current.srcObject = null;
+    }
   };
 
   const { data: session } = useSession();
@@ -92,8 +94,7 @@ export default function RecorderPage() {
     const [dragValue, setDragValue] = useState(0);
 
     // Use recording duration if available, otherwise use detected duration
-    const displayDuration =
-      recordingDuration > 0 ? recordingDuration : videoDuration;
+    const displayDuration = recordingDuration > 0 ? recordingDuration : videoDuration;
 
     const handlePlayPause = () => {
       setVideoPlaying(!videoPlaying);
@@ -157,13 +158,7 @@ export default function RecorderPage() {
                 className="w-4 h-4"
               />
             ) : (
-              <Image
-                src="/icons/play.png"
-                alt="Play"
-                width={18}
-                height={18}
-                className="w-4 h-4"
-              />
+              <Image src="/icons/play.png" alt="Play" width={18} height={18} className="w-4 h-4" />
             )}
           </button>
           <input
@@ -284,9 +279,7 @@ export default function RecorderPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-mono">
-              Live Preview
-            </span>
+            <span className="text-xs text-gray-500 font-mono">Live Preview</span>
           </div>
         </div>
       </div>
@@ -294,15 +287,16 @@ export default function RecorderPage() {
   };
 
   const handleSaveAndPublish = () => {
-    if (!blob) return;
+    if (!blob) {
+      return;
+    }
     setShowSavePopup(true);
   };
 
-  const handlePopupDownload = async (data: {
-    title: string;
-    format: string;
-  }) => {
-    if (!blob) return;
+  const handlePopupDownload = async (data: { title: string; format: string }) => {
+    if (!blob) {
+      return;
+    }
 
     setProcessingDownload(true);
     try {
@@ -350,11 +344,7 @@ export default function RecorderPage() {
           tempVideo.src = URL.createObjectURL(blob);
 
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setVideoDuration(tempVideo.duration);
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -397,11 +387,7 @@ export default function RecorderPage() {
           tempVideo.src = URL.createObjectURL(blob);
 
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setVideoDuration(tempVideo.duration);
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -442,11 +428,7 @@ export default function RecorderPage() {
         hiddenVideo.src = videoUrl || uploadedFileUrl || "";
 
         hiddenVideo.onloadedmetadata = () => {
-          if (
-            hiddenVideo.duration &&
-            isFinite(hiddenVideo.duration) &&
-            hiddenVideo.duration > 0
-          ) {
+          if (hiddenVideo.duration && isFinite(hiddenVideo.duration) && hiddenVideo.duration > 0) {
             setVideoDuration(hiddenVideo.duration);
           }
           document.body.removeChild(hiddenVideo);
@@ -480,11 +462,7 @@ export default function RecorderPage() {
               .play()
               .then(() => {
                 setTimeout(() => {
-                  if (
-                    player.duration &&
-                    isFinite(player.duration) &&
-                    player.duration > 0
-                  ) {
+                  if (player.duration && isFinite(player.duration) && player.duration > 0) {
                     setVideoDuration(player.duration);
                   }
                   // Restore original state
@@ -496,11 +474,7 @@ export default function RecorderPage() {
               })
               .catch(() => {
                 // If play fails, just try to get duration anyway
-                if (
-                  player.duration &&
-                  isFinite(player.duration) &&
-                  player.duration > 0
-                ) {
+                if (player.duration && isFinite(player.duration) && player.duration > 0) {
                   setVideoDuration(player.duration);
                 }
               });
@@ -580,9 +554,7 @@ export default function RecorderPage() {
                 <div className="text-lg sm:text-2xl font-semibold text-[#1A0033]">
                   New Recording
                 </div>
-                <div className="text-xs sm:text-sm text-gray-400">
-                  Last saved 2 minutes ago
-                </div>
+                <div className="text-xs sm:text-sm text-gray-400">Last saved 2 minutes ago</div>
               </div>
               {!isUploaded && !recording && videoUrl && (
                 <button
@@ -624,8 +596,7 @@ export default function RecorderPage() {
                         height={500}
                       />
                     </div>
-                  ) : uploadedFileUrl &&
-                    uploadedFileType?.startsWith("video/") ? (
+                  ) : uploadedFileUrl && uploadedFileType?.startsWith("video/") ? (
                     <div className="w-full max-w-[900px] mx-auto">
                       <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
                         <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
@@ -678,8 +649,7 @@ export default function RecorderPage() {
                                 // Try to get duration immediately when video is ready
                                 setTimeout(() => {
                                   if (videoPlayerRef.current) {
-                                    const player =
-                                      videoPlayerRef.current.getInternalPlayer();
+                                    const player = videoPlayerRef.current.getInternalPlayer();
                                     if (
                                       player &&
                                       player.duration &&
@@ -694,8 +664,7 @@ export default function RecorderPage() {
                                 // Additional attempts with delays
                                 setTimeout(() => {
                                   if (videoPlayerRef.current) {
-                                    const player =
-                                      videoPlayerRef.current.getInternalPlayer();
+                                    const player = videoPlayerRef.current.getInternalPlayer();
                                     if (
                                       player &&
                                       player.duration &&
@@ -709,8 +678,7 @@ export default function RecorderPage() {
 
                                 setTimeout(() => {
                                   if (videoPlayerRef.current) {
-                                    const player =
-                                      videoPlayerRef.current.getInternalPlayer();
+                                    const player = videoPlayerRef.current.getInternalPlayer();
                                     if (
                                       player &&
                                       player.duration &&
@@ -780,8 +748,7 @@ export default function RecorderPage() {
                               // Try to get duration immediately when video is ready
                               setTimeout(() => {
                                 if (videoPlayerRef.current) {
-                                  const player =
-                                    videoPlayerRef.current.getInternalPlayer();
+                                  const player = videoPlayerRef.current.getInternalPlayer();
                                   if (
                                     player &&
                                     player.duration &&
@@ -796,8 +763,7 @@ export default function RecorderPage() {
                               // Additional attempts with delays
                               setTimeout(() => {
                                 if (videoPlayerRef.current) {
-                                  const player =
-                                    videoPlayerRef.current.getInternalPlayer();
+                                  const player = videoPlayerRef.current.getInternalPlayer();
                                   if (
                                     player &&
                                     player.duration &&
@@ -811,8 +777,7 @@ export default function RecorderPage() {
 
                               setTimeout(() => {
                                 if (videoPlayerRef.current) {
-                                  const player =
-                                    videoPlayerRef.current.getInternalPlayer();
+                                  const player = videoPlayerRef.current.getInternalPlayer();
                                   if (
                                     player &&
                                     player.duration &&
@@ -853,8 +818,8 @@ export default function RecorderPage() {
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
-                      No preview available. Start screen sharing or upload a
-                      video to see the preview.
+                      No preview available. Start screen sharing or upload a video to see the
+                      preview.
                     </div>
                   )}
                 </div>
@@ -863,9 +828,7 @@ export default function RecorderPage() {
                     <>
                       <button
                         onClick={() => {
-                          screenStream
-                            .getTracks()
-                            .forEach((track) => track.stop());
+                          screenStream.getTracks().forEach((track) => track.stop());
                           startScreenShare();
                         }}
                         className="bg-[#7C5CFC] text-white px-4 sm:px-8 py-2 rounded-lg font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base"
@@ -988,9 +951,7 @@ export default function RecorderPage() {
                       )}
                     </div>
                     {saveMessage && !isUploaded && (
-                      <div className="mt-2 text-[#6C63FF] text-xs sm:text-sm">
-                        {saveMessage}
-                      </div>
+                      <div className="mt-2 text-[#6C63FF] text-xs sm:text-sm">{saveMessage}</div>
                     )}
                   </div>
                 )}
@@ -1029,17 +990,11 @@ export default function RecorderPage() {
         </div>
 
         {/* Mobile sidebar drawer */}
-        <Dialog
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          className="relative z-50"
-        >
+        <Dialog open={sidebarOpen} onClose={() => setSidebarOpen(false)} className="relative z-50">
           <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
           <div className="fixed inset-y-0 left-0 w-[90vw] max-w-xs bg-white shadow-2xl p-6 flex flex-col gap-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-bold text-[#7C5CFC]">
-                Recorder Settings
-              </h2>
+              <h2 className="text-xl font-bold text-[#7C5CFC]">Recorder Settings</h2>
               <button
                 className="text-[#7C5CFC] text-2xl p-1 rounded hover:bg-[#ede7fa] focus:outline-none"
                 onClick={() => setSidebarOpen(false)}
@@ -1050,9 +1005,7 @@ export default function RecorderPage() {
             </div>
             {/* Title */}
             <div>
-              <label className="block text-[#7C5CFC] font-semibold mb-1">
-                Title
-              </label>
+              <label className="block text-[#7C5CFC] font-semibold mb-1">Title</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -1062,9 +1015,7 @@ export default function RecorderPage() {
             </div>
             {/* Upload & Screen Share */}
             <div>
-              <label className="block text-[#7C5CFC] font-semibold mb-1">
-                Recording Source
-              </label>
+              <label className="block text-[#7C5CFC] font-semibold mb-1">Recording Source</label>
               <div className="border-2 border-dashed border-[#A594F9] rounded-lg p-4 flex flex-col items-center justify-center mb-4 bg-[#F8F6FF]">
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -1080,9 +1031,7 @@ export default function RecorderPage() {
                     />
                   </span>
                   Upload Screen Recording
-                  <span className="text-xs text-gray-400">
-                    MP4, MOV up to 100MB
-                  </span>
+                  <span className="text-xs text-gray-400">MP4, MOV up to 100MB</span>
                 </button>
                 <input
                   type="file"
@@ -1105,9 +1054,7 @@ export default function RecorderPage() {
                   }}
                 />
                 {uploadMessage && (
-                  <div className="mt-2 text-green-600 text-xs">
-                    {uploadMessage}
-                  </div>
+                  <div className="mt-2 text-green-600 text-xs">{uploadMessage}</div>
                 )}
               </div>
               <button
@@ -1132,12 +1079,8 @@ export default function RecorderPage() {
           {/* New Recording Header Bar */}
           <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-12 py-4 sm:py-6 bg-[#f3f0fc] border-b border-[#ede7fa]">
             <div>
-              <div className="text-lg sm:text-2xl font-semibold text-[#1A0033]">
-                New Recording
-              </div>
-              <div className="text-xs sm:text-sm text-gray-400">
-                Last saved 2 minutes ago
-              </div>
+              <div className="text-lg sm:text-2xl font-semibold text-[#1A0033]">New Recording</div>
+              <div className="text-xs sm:text-sm text-gray-400">Last saved 2 minutes ago</div>
             </div>
           </div>
           {/* Main Area */}
@@ -1189,9 +1132,7 @@ export default function RecorderPage() {
                   Upload File
                 </button>
                 <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-4 mt-2 sm:mt-0 w-full sm:w-auto justify-center">
-                  <span className="text-[#888] font-medium text-sm sm:text-base">
-                    Microphone
-                  </span>
+                  <span className="text-[#888] font-medium text-sm sm:text-base">Microphone</span>
                   <button
                     onClick={toggleMic}
                     className={`w-10 sm:w-12 h-6 rounded-full flex items-center px-1 transition ${micEnabled ? "bg-[#6C63FF]" : "bg-gray-300"} cursor-pointer`}

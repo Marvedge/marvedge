@@ -23,7 +23,9 @@ export function useCameraControls() {
   const stopCamera = () => {
     cameraStream?.getTracks().forEach((track) => track.stop());
     setCameraStream(null);
-    if (videoPreview.current) videoPreview.current.srcObject = null;
+    if (videoPreview.current) {
+      videoPreview.current.srcObject = null;
+    }
   };
 
   return {

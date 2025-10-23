@@ -27,8 +27,11 @@ export default function CustomVideoControls({
 
   const handlePlayPause = () => {
     setPlaying((prev) => {
-      if (prev) playerRef.current?.getInternalPlayer()?.pause?.();
-      else playerRef.current?.getInternalPlayer()?.play?.();
+      if (prev) {
+        playerRef.current?.getInternalPlayer()?.pause?.();
+      } else {
+        playerRef.current?.getInternalPlayer()?.play?.();
+      }
       return !prev;
     });
   };
@@ -75,21 +78,9 @@ export default function CustomVideoControls({
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
         >
           {playing ? (
-            <Image
-              src="/icons/pause.png"
-              alt="Pause"
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
+            <Image src="/icons/pause.png" alt="Pause" width={24} height={24} className="w-6 h-6" />
           ) : (
-            <Image
-              src="/icons/play.png"
-              alt="Play"
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
+            <Image src="/icons/play.png" alt="Play" width={24} height={24} className="w-6 h-6" />
           )}
         </button>
         <input
@@ -109,8 +100,7 @@ export default function CustomVideoControls({
           }}
         />
         <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-          {formatTime(currentTime)} /{" "}
-          {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
+          {formatTime(currentTime)} / {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
         </span>
       </div>
     </div>

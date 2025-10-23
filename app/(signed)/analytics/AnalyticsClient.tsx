@@ -7,7 +7,9 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 
 const getInitials = (name: string | undefined): string => {
-  if (!name) return "?";
+  if (!name) {
+    return "?";
+  }
   const parts = name.trim().split(" ");
   return parts.length === 1
     ? parts[0][0].toUpperCase()
@@ -38,10 +40,7 @@ const AnalyticsPage = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
     };
@@ -49,9 +48,7 @@ const AnalyticsPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const initials = getInitials(
-    session?.user?.name ?? session?.user?.email ?? undefined
-  );
+  const initials = getInitials(session?.user?.name ?? session?.user?.email ?? undefined);
 
   return (
     <div
@@ -73,9 +70,7 @@ const AnalyticsPage = () => {
             height={20}
             className="w-5 h-5 sm:w-6 sm:h-6"
           />
-          <span className="text-base sm:text-lg text-gray-400 font-medium">
-            Analytics
-          </span>
+          <span className="text-base sm:text-lg text-gray-400 font-medium">Analytics</span>
         </div>
 
         {/* Right Side: Welcome Text, Bell Icon, and User Initials */}

@@ -37,8 +37,7 @@ const Navbar: React.FC = () => {
     }
   };
 
-  const actionButtonText =
-    status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
+  const actionButtonText = status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
 
   return (
     <>
@@ -55,9 +54,7 @@ const Navbar: React.FC = () => {
                 className="w-12 h-12 md:w-16 md:h-16 object-contain"
                 priority
               />
-              <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">
-                Marvedge
-              </span>
+              <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">Marvedge</span>
             </div>
             <button
               onClick={toggleMenu}
@@ -72,9 +69,7 @@ const Navbar: React.FC = () => {
         </div>
         {/* Desktop nav links (unchanged) */}
         <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium absolute right-8 top-6">
-          <NavButton onClick={() => router.push("/features")}>
-            Features
-          </NavButton>
+          <NavButton onClick={() => router.push("/features")}>Features</NavButton>
           <NavButton onClick={() => router.push("/pricing")}>Pricing</NavButton>
           <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
           <NavButton

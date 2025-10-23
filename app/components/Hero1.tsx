@@ -38,7 +38,9 @@ const TiltCard: React.FC<TiltCardProps> = ({
   const isInView = useInView(cardRef, { once: true, margin: "-50px" });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current) {
+      return;
+    }
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -213,8 +215,7 @@ const Hero1: React.FC = () => {
           }}
           style={{ y }}
         >
-          Automated Video Creation{" "}
-          <span className="text-[#6B46C1]">Powered by AI</span>
+          Automated Video Creation <span className="text-[#6B46C1]">Powered by AI</span>
         </motion.h1>
         <motion.p
           className="mt-4 max-sm:mt-8 text-gray-600 text-lg max-w-2xl mx-auto text-center translate-x-2 sm:translate-x-4 md:translate-x-6"
@@ -229,15 +230,11 @@ const Hero1: React.FC = () => {
             delay: 0.2,
           }}
         >
-          Our advanced AI technology analyzes your product, understands your
-          audience, and creates compelling demo videos that drive conversions
-          automatically.
+          Our advanced AI technology analyzes your product, understands your audience, and creates
+          compelling demo videos that drive conversions automatically.
         </motion.p>
 
-        <motion.div
-          className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6"
-          style={{ scale }}
-        >
+        <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6" style={{ scale }}>
           {cards.slice(0, 3).map((card, index) => (
             <TiltCard
               key={index}
@@ -250,10 +247,7 @@ const Hero1: React.FC = () => {
           ))}
         </motion.div>
 
-        <motion.div
-          className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6"
-          style={{ scale }}
-        >
+        <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6" style={{ scale }}>
           {cards.slice(3).map((card, index) => (
             <TiltCard
               key={index}
@@ -289,22 +283,21 @@ const Hero1: React.FC = () => {
               See It In Action
             </h2>
             <p className="mt-4 text-gray-600 text-lg">
-              Watch how our AI transforms a simple product URL into a compelling
-              demo video that showcases features, benefits, and drives
-              conversions.
+              Watch how our AI transforms a simple product URL into a compelling demo video that
+              showcases features, benefits, and drives conversions.
             </p>
             <ul className="mt-6 space-y-2 text-gray-600">
               <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Automatic
-                feature detection and highlighting
+                <span className="mr-2 text-green-600">✔</span> Automatic feature detection and
+                highlighting
               </li>
               <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Professional
-                voiceover and background music
+                <span className="mr-2 text-green-600">✔</span> Professional voiceover and
+                background music
               </li>
               <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Compelling
-                call-to-action integration
+                <span className="mr-2 text-green-600">✔</span> Compelling call-to-action
+                integration
               </li>
             </ul>
             <button className="mt-6 cursor-pointer bg-[#8a6ec5] text-white px-6 py-3 rounded-lg hover:bg-[#6B46C1] transition">

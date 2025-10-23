@@ -45,23 +45,20 @@ export default function SavePopupForm({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop with blur effect */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 transform transition-all duration-300 scale-100">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Download Video
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-800">Download Video</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
@@ -74,9 +71,7 @@ export default function SavePopupForm({
         <div className="space-y-4">
           {/* Title Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Title *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
             <input
               type="text"
               value={title}
@@ -89,9 +84,7 @@ export default function SavePopupForm({
 
           {/* Format Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Download Format
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Download Format</label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
@@ -104,9 +97,7 @@ export default function SavePopupForm({
                 disabled={processing}
               >
                 <div className="text-sm font-medium">WebM</div>
-                <div className="text-xs text-gray-500">
-                  High quality, smaller size
-                </div>
+                <div className="text-xs text-gray-500">High quality, smaller size</div>
               </button>
               <button
                 type="button"
@@ -127,12 +118,7 @@ export default function SavePopupForm({
 
         {/* Actions */}
         <div className="flex gap-3 mt-6">
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="flex-1"
-            disabled={processing}
-          >
+          <Button onClick={onClose} variant="outline" className="flex-1" disabled={processing}>
             Cancel
           </Button>
           <Button

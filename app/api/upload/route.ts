@@ -30,9 +30,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(uploadResult);
   } catch (err) {
     console.error("Upload API Error:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

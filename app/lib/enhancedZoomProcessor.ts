@@ -70,10 +70,7 @@ export const createEnhancedZoomProcessor = async (
 
       mediaRecorder.onstop = () => {
         const finalBlob = new Blob(chunks, { type: "video/webm" });
-        console.log(
-          "Enhanced zoom processing completed. Output size:",
-          finalBlob.size
-        );
+        console.log("Enhanced zoom processing completed. Output size:", finalBlob.size);
         resolve(finalBlob);
       };
 
@@ -88,8 +85,7 @@ export const createEnhancedZoomProcessor = async (
 
         // Find active zoom effect
         const activeEffect = zoomEffects.find(
-          (effect) =>
-            currentTime >= effect.startTime && currentTime <= effect.endTime
+          (effect) => currentTime >= effect.startTime && currentTime <= effect.endTime
         );
 
         // Calculate smooth transition
@@ -102,8 +98,7 @@ export const createEnhancedZoomProcessor = async (
           if (timeInEffect < transitionDuration) {
             transitionProgress = timeInEffect / transitionDuration;
           } else if (timeInEffect > effectDuration - transitionDuration) {
-            transitionProgress =
-              (effectDuration - timeInEffect) / transitionDuration;
+            transitionProgress = (effectDuration - timeInEffect) / transitionDuration;
           } else {
             transitionProgress = 1;
           }

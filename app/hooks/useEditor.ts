@@ -1,10 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useBlobStore } from "../store/blobStore";
-import {
-  videoTrimmer,
-  videoToMP4WithOverlays,
-  videoToThumbnail,
-} from "../lib/ffmpeg";
+import { videoTrimmer, videoToMP4WithOverlays, videoToThumbnail } from "../lib/ffmpeg";
 import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
 type Overlay =
@@ -14,9 +10,7 @@ type Overlay =
 
 export const useEditor = () => {
   const { blob, title, description, restoreBlob } = useBlobStore();
-  const [videoUrl, setVideoUrl] = useState(
-    blob ? URL.createObjectURL(blob) : ""
-  );
+  const [videoUrl, setVideoUrl] = useState(blob ? URL.createObjectURL(blob) : "");
   const [processing, setProcessing] = useState(false);
   const [mp4Url, setMp4Url] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -52,15 +46,13 @@ export const useEditor = () => {
       onProgress?: (progress: number) => void,
       zoomEffects?: ZoomEffect[]
     ) => {
-      if (!blob) return;
+      if (!blob) {
+        return;
+      }
       setProcessing(true);
       setError(null);
       try {
-        const trimmedBlob = await videoTrimmer(
-          blob,
-          startOrSegments as string,
-          end!
-        );
+        const trimmedBlob = await videoTrimmer(blob, startOrSegments as string, end!);
         const trimmedUrl = URL.createObjectURL(trimmedBlob);
         setVideoUrl(trimmedUrl);
 
@@ -72,13 +64,8 @@ export const useEditor = () => {
           console.log("Original blob size:", trimmedBlob.size);
 
           // Use enhanced zoom processor
-          const { createEnhancedZoomProcessor } = await import(
-            "../lib/enhancedZoomProcessor"
-          );
-          processedBlob = await createEnhancedZoomProcessor(
-            trimmedBlob,
-            zoomEffects
-          );
+          const { createEnhancedZoomProcessor } = await import("../lib/enhancedZoomProcessor");
+          processedBlob = await createEnhancedZoomProcessor(trimmedBlob, zoomEffects);
 
           console.log("Zoom effects processing completed");
           console.log("Processed blob size:", processedBlob.size);
@@ -93,10 +80,7 @@ export const useEditor = () => {
         let mp4Blob: Blob;
 
         if (currentOverlays.current.length > 0) {
-          mp4Blob = await videoToMP4WithOverlays(
-            processedBlob,
-            currentOverlays.current
-          );
+          mp4Blob = await videoToMP4WithOverlays(processedBlob, currentOverlays.current);
         } else {
           const { videoToMP4 } = await import("../lib/ffmpeg");
           mp4Blob = await videoToMP4(processedBlob);
@@ -110,18 +94,24 @@ export const useEditor = () => {
           thumbnailGenerated.current = true;
         }
         setProcessing(false);
-        if (onDone) onDone(true);
+        if (onDone) {
+          onDone(true);
+        }
       } catch (err: unknown) {
         setProcessing(false);
         setError((err as Error)?.message || "Failed to trim video");
-        if (onDone) onDone(false);
+        if (onDone) {
+          onDone(false);
+        }
       }
     },
     [blob]
   );
 
   const resetVideo = () => {
-    if (blob) setVideoUrl(URL.createObjectURL(blob));
+    if (blob) {
+      setVideoUrl(URL.createObjectURL(blob));
+    }
   };
 
   const downloadBlob = (url: string, filename: string) => {

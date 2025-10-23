@@ -27,10 +27,7 @@ export async function GET() {
     return NextResponse.json({ success: true, demos });
   } catch (error) {
     console.error("Error fetching demos:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch demos" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch demos" }, { status: 500 });
   }
 }
 
@@ -39,10 +36,7 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
 
   if (!id) {
-    return NextResponse.json(
-      { message: "Demo Id could not be found." },
-      { status: 404 }
-    );
+    return NextResponse.json({ message: "Demo Id could not be found." }, { status: 404 });
   }
 
   try {
@@ -53,10 +47,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ message: "Demo deleted successfully" });
   } catch (error) {
     console.error("Error deleting demo:", error);
-    return NextResponse.json(
-      { error: "Failed to delete demo" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete demo" }, { status: 500 });
   }
 }
 
@@ -71,10 +62,7 @@ export async function POST(req: NextRequest) {
     const { title, description, videoUrl, editing } = await req.json();
 
     if (!title || !videoUrl) {
-      return NextResponse.json(
-        { error: "Title, videoUrl are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Title, videoUrl are required" }, { status: 400 });
     }
 
     // Get logged-in user
@@ -103,9 +91,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Demo save error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -38,10 +38,7 @@ const handler = NextAuth({
           }
 
           // Verify password
-          const valid = await bcrypt.compare(
-            credentials.password,
-            user.password
-          );
+          const valid = await bcrypt.compare(credentials.password, user.password);
           if (!valid) {
             console.log("❌ Invalid password for user:", credentials.email);
             throw new Error("Invalid password");
@@ -102,8 +99,12 @@ const handler = NextAuth({
 
     async redirect({ url, baseUrl }) {
       // Handle redirects safely
-      if (url === baseUrl || url === "/") return "/dashboard";
-      if (url.includes("/dashboard")) return "/dashboard";
+      if (url === baseUrl || url === "/") {
+        return "/dashboard";
+      }
+      if (url.includes("/dashboard")) {
+        return "/dashboard";
+      }
       return baseUrl;
     },
   },

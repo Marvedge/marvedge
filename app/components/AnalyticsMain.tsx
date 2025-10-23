@@ -64,9 +64,7 @@ const AnalyticsMain = () => {
       value: "4.8%",
       trend: "+0.3%",
       trendLabel: "vs last month",
-      icon: (
-        <MousePointerClick className="w-6 h-6 md:w-7 md:h-7 text-[#E33629]" />
-      ),
+      icon: <MousePointerClick className="w-6 h-6 md:w-7 md:h-7 text-[#E33629]" />,
       bgColor: "bg-[#F9E6E6]",
       hoverColor: "from-[#F9E6E6] to-[#E33629]",
       shadow: "shadow-[#E33629]/50",
@@ -108,19 +106,13 @@ const AnalyticsMain = () => {
               <span
                 className={`
                   inline-block p-2 rounded-lg transition-all duration-300
-                  ${
-                    hoveredCard === card.id
-                      ? "scale-110 bg-opacity-80"
-                      : "bg-white/70"
-                  }
+                  ${hoveredCard === card.id ? "scale-110 bg-opacity-80" : "bg-white/70"}
                 `}
               >
                 {card.icon}
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-[#261753]">
-              {card.label}
-            </div>
+            <div className="text-sm md:text-lg font-medium text-[#261753]">{card.label}</div>
             <div
               className={`text-2xl md:text-3xl font-bold text-[#261753] ${
                 hoveredCard === card.id ? card.textColor : ""
@@ -137,16 +129,9 @@ const AnalyticsMain = () => {
                 stroke="currentColor"
                 strokeWidth={2}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 17l6-6 4 4 8-8"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l6-6 4 4 8-8" />
               </svg>
-              {card.trend}{" "}
-              <span className="text-gray-500 font-normal ml-1">
-                {card.trendLabel}
-              </span>
+              {card.trend} <span className="text-gray-500 font-normal ml-1">{card.trendLabel}</span>
             </div>
           </div>
         ))}
@@ -165,18 +150,14 @@ const AnalyticsMain = () => {
             <h3 className="text-[22px] font-semibold text-[#2D2154] leading-tight">
               Views over time
             </h3>
-            <p className="text-base text-[#8C82B4] mt-1">
-              Demo views in last 30 days
-            </p>
+            <p className="text-base text-[#8C82B4] mt-1">Demo views in last 30 days</p>
           </div>
           <div className="flex-1 rounded-[16px] flex flex-col items-center justify-center px-6 py-10 text-center">
             <Eye className="w-10 h-10 text-[#C5B6F1] mb-4" />
             <p className="text-[#7569A5] font-semibold text-base">
               Chart visualization would go here
             </p>
-            <p className="text-base text-[#8C82B4] mt-1">
-              Showing growth trend over time
-            </p>
+            <p className="text-base text-[#8C82B4] mt-1">Showing growth trend over time</p>
           </div>
         </motion.div>
 
@@ -192,9 +173,7 @@ const AnalyticsMain = () => {
             <h3 className="text-[22px] font-semibold text-[#2D2154] leading-tight">
               Top performing Demos
             </h3>
-            <p className="text-base text-[#8C82B4] mt-1">
-              Your best performing demos this month
-            </p>
+            <p className="text-base text-[#8C82B4] mt-1">Your best performing demos this month</p>
           </div>
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
             <div className="bg-[#F6F3FF] p-4 rounded-full">
@@ -206,9 +185,7 @@ const AnalyticsMain = () => {
                 className="md:w-6 md:h-6"
               />
             </div>
-            <p className="text-[#7569A5] font-semibold text-base">
-              No Analytics yet
-            </p>
+            <p className="text-[#7569A5] font-semibold text-base">No Analytics yet</p>
             <p className="text-base text-[#8C82B4]">
               Create and share demos to share performance data
             </p>

@@ -62,7 +62,9 @@ export default function ZoomEffectsPopup({
   };
 
   const handleUpdateEffect = () => {
-    if (!editingEffect) return;
+    if (!editingEffect) {
+      return;
+    }
 
     const updatedEffect: ZoomEffect = {
       ...editingEffect,
@@ -116,24 +118,20 @@ export default function ZoomEffectsPopup({
     onZoomEffectsChange([...zoomEffects, testEffect]);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black bg-opacity-50"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-800">Zoom Effects</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X size={24} />
           </button>
         </div>
@@ -142,9 +140,7 @@ export default function ZoomEffectsPopup({
         <div className="space-y-4 mb-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Start Time
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
               <input
                 type="text"
                 value={startTime}
@@ -154,9 +150,7 @@ export default function ZoomEffectsPopup({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                End Time
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Time</label>
               <input
                 type="text"
                 value={endTime}
@@ -168,9 +162,7 @@ export default function ZoomEffectsPopup({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Zoom Level
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Zoom Level</label>
             <input
               type="range"
               min="1"
@@ -184,14 +176,10 @@ export default function ZoomEffectsPopup({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Center Point
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Center Point</label>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  X Position
-                </label>
+                <label className="block text-xs text-gray-500 mb-1">X Position</label>
                 <input
                   type="range"
                   min="0"
@@ -201,14 +189,10 @@ export default function ZoomEffectsPopup({
                   onChange={(e) => setCenterX(parseFloat(e.target.value))}
                   className="w-full"
                 />
-                <div className="text-xs text-gray-500">
-                  {Math.round(centerX * 100)}%
-                </div>
+                <div className="text-xs text-gray-500">{Math.round(centerX * 100)}%</div>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Y Position
-                </label>
+                <label className="block text-xs text-gray-500 mb-1">Y Position</label>
                 <input
                   type="range"
                   min="0"
@@ -218,9 +202,7 @@ export default function ZoomEffectsPopup({
                   onChange={(e) => setCenterY(parseFloat(e.target.value))}
                   className="w-full"
                 />
-                <div className="text-xs text-gray-500">
-                  {Math.round(centerY * 100)}%
-                </div>
+                <div className="text-xs text-gray-500">{Math.round(centerY * 100)}%</div>
               </div>
             </div>
           </div>
@@ -260,9 +242,7 @@ export default function ZoomEffectsPopup({
         <div>
           <h3 className="text-lg font-semibold mb-4">Current Effects</h3>
           {zoomEffects.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">
-              No zoom effects added yet.
-            </p>
+            <p className="text-gray-500 text-center py-4">No zoom effects added yet.</p>
           ) : (
             <div className="space-y-2">
               {zoomEffects.map((effect) => (
@@ -272,21 +252,15 @@ export default function ZoomEffectsPopup({
                 >
                   <div className="flex-1">
                     <div className="font-medium">
-                      {formatTime(effect.startTime)} -{" "}
-                      {formatTime(effect.endTime)}
+                      {formatTime(effect.startTime)} - {formatTime(effect.endTime)}
                     </div>
                     <div className="text-sm text-gray-500">
-                      Zoom: {effect.zoomLevel}x | Center: (
-                      {Math.round(effect.x * 100)}%,{" "}
+                      Zoom: {effect.zoomLevel}x | Center: ({Math.round(effect.x * 100)}%,{" "}
                       {Math.round(effect.y * 100)}%)
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      onClick={() => handleEditEffect(effect)}
-                      variant="outline"
-                      size="sm"
-                    >
+                    <Button onClick={() => handleEditEffect(effect)} variant="outline" size="sm">
                       Edit
                     </Button>
                     <Button

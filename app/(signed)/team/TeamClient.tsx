@@ -7,7 +7,9 @@ import { Users, ChevronDown } from "lucide-react";
 import Image from "next/image";
 
 const getInitials = (name: string | undefined): string => {
-  if (!name) return "?";
+  if (!name) {
+    return "?";
+  }
   const parts = name.trim().split(" ");
   return parts.length === 1
     ? parts[0][0].toUpperCase()
@@ -57,10 +59,7 @@ const TeamPage = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
     };
@@ -68,12 +67,12 @@ const TeamPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const initials = getInitials(
-    session?.user?.name ?? session?.user?.email ?? undefined
-  );
+  const initials = getInitials(session?.user?.name ?? session?.user?.email ?? undefined);
 
   const addTeam = () => {
-    if (!newTeam.name || !newTeam.plan) return;
+    if (!newTeam.name || !newTeam.plan) {
+      return;
+    }
     setTeams((prev) => [...prev, newTeam]);
     setNewTeam({ name: "", plan: "", description: "" });
     setShowModal(false);
@@ -93,9 +92,7 @@ const TeamPage = () => {
         {/* Left Side: Team Title and Logo */}
         <div className="flex items-center gap-2 ml-4 mr-6">
           <Users color="#6356D7" size={24} />
-          <span className="text-base sm:text-lg text-gray-400 font-medium">
-            Team
-          </span>
+          <span className="text-base sm:text-lg text-gray-400 font-medium">Team</span>
         </div>
 
         {/* Right Side: Welcome Text, Bell Icon, and User Initials */}
@@ -201,33 +198,25 @@ const TeamPage = () => {
             transition={{ duration: 0.3 }}
             className="bg-white p-6 sm:p-10 rounded-xl w-full max-w-2xl shadow-xl"
           >
-            <h2 className="text-xl font-semibold text-[#2D1E6B] mb-6">
-              Create new team
-            </h2>
+            <h2 className="text-xl font-semibold text-[#2D1E6B] mb-6">Create new team</h2>
             <form className="flex flex-col gap-4">
               <input
                 type="text"
                 placeholder="Enter your team name"
                 value={newTeam.name}
-                onChange={(e) =>
-                  setNewTeam({ ...newTeam, name: e.target.value })
-                }
+                onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
                 className="border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] placeholder-[#B8AEE4] focus:ring-2 focus:ring-[#A99AF5] outline-none"
               />
               <textarea
                 placeholder="Enter team description"
                 value={newTeam.description}
-                onChange={(e) =>
-                  setNewTeam({ ...newTeam, description: e.target.value })
-                }
+                onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
                 className="border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] placeholder-[#B8AEE4] h-24 resize-none focus:ring-2 focus:ring-[#A99AF5] outline-none"
               />
               <div className="relative">
                 <select
                   value={newTeam.plan}
-                  onChange={(e) =>
-                    setNewTeam({ ...newTeam, plan: e.target.value })
-                  }
+                  onChange={(e) => setNewTeam({ ...newTeam, plan: e.target.value })}
                   className="appearance-none w-full border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] bg-white focus:ring-2 focus:ring-[#A99AF5] outline-none"
                 >
                   <option value="">Plan Type</option>

@@ -56,29 +56,32 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   const [activeTab, setActiveTab] = React.useState<MainTab>("background");
   const [bgSubTab, setBgSubTab] = React.useState<BgSubTab>("image");
 
-  const [localSelectedBackground, setLocalSelectedBackground] = React.useState<
-    string | null
-  >(selectedBackground ?? null);
+  const [localSelectedBackground, setLocalSelectedBackground] = React.useState<string | null>(
+    selectedBackground ?? null
+  );
   const [localBackgroundType, setLocalBackgroundType] = React.useState<string>(
     backgroundType || ""
   );
-  const [localCustomBackground, setLocalCustomBackground] =
-    React.useState<File | null>(customBackground || null);
-  const [customBackgroundUrl, setCustomBackgroundUrl] = React.useState<
-    string | null
-  >(null);
+  const [localCustomBackground, setLocalCustomBackground] = React.useState<File | null>(
+    customBackground || null
+  );
+  const [customBackgroundUrl, setCustomBackgroundUrl] = React.useState<string | null>(null);
 
   // Sync down external changes if they happen upstream
   React.useEffect(() => {
-    if (selectedBackground !== undefined)
+    if (selectedBackground !== undefined) {
       setLocalSelectedBackground(selectedBackground);
+    }
   }, [selectedBackground]);
   React.useEffect(() => {
-    if (backgroundType !== undefined) setLocalBackgroundType(backgroundType);
+    if (backgroundType !== undefined) {
+      setLocalBackgroundType(backgroundType);
+    }
   }, [backgroundType]);
   React.useEffect(() => {
-    if (customBackground !== undefined)
+    if (customBackground !== undefined) {
       setLocalCustomBackground(customBackground);
+    }
   }, [customBackground]);
 
   const handleBackgroundSelect = (value: string | null) => {
@@ -86,9 +89,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
     setSelectedBackground?.(value);
   };
 
-  const handleCustomBackgroundUpload = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleCustomBackgroundUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setLocalCustomBackground(file);
@@ -248,9 +249,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       <div className="flex justify-between bg-[#F6F3FF] rounded-xl p-1">
         <button
           className={`flex-1 cursor-pointer py-2 rounded-lg text-sm font-semibold ${
-            activeTab === "background"
-              ? "bg-white text-[#7C5CFC] shadow"
-              : "text-gray-600"
+            activeTab === "background" ? "bg-white text-[#7C5CFC] shadow" : "text-gray-600"
           }`}
           onClick={() => setActiveTab("background")}
         >
@@ -258,9 +257,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
         </button>
         <button
           className={`flex-1 cursor-pointer py-2 rounded-lg text-sm font-semibold ${
-            activeTab === "tools"
-              ? "bg-white text-[#7C5CFC] shadow"
-              : "text-gray-600"
+            activeTab === "tools" ? "bg-white text-[#7C5CFC] shadow" : "text-gray-600"
           }`}
           onClick={() => setActiveTab("tools")}
         >
@@ -338,9 +335,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
 
               {/* Type select + upload */}
               <div className="mt-3">
-                <label className="block text-[#A594F9] font-semibold mb-2">
-                  Select Type
-                </label>
+                <label className="block text-[#A594F9] font-semibold mb-2">Select Type</label>
                 <select
                   value={localBackgroundType}
                   onChange={(e) => {
@@ -370,16 +365,9 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                   />
                   <div className="border border-[#ede7fa] rounded px-3 py-2 text-[#7C5CFC] flex items-center justify-between">
                     <span className="text-sm">
-                      {localCustomBackground
-                        ? localCustomBackground.name
-                        : "Upload Custom Image"}
+                      {localCustomBackground ? localCustomBackground.name : "Upload Custom Image"}
                     </span>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"

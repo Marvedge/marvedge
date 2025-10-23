@@ -36,27 +36,23 @@ interface UseOverlaysProps {
   textFont: string;
 }
 
-export function useOverlays({
-  canvasRef,
-  playerRef,
-  tool,
-  textColor,
-  textFont,
-}: UseOverlaysProps) {
+export function useOverlays({ canvasRef, playerRef, tool, textColor, textFont }: UseOverlaysProps) {
   const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
 
   // Canvas drawing effect
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = playerRef.current?.getInternalPlayer();
-    if (!canvas || !video) return;
+    if (!canvas || !video) {
+      return;
+    }
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
     const draw = () => {
       const width = video.clientWidth;
@@ -107,7 +103,9 @@ export function useOverlays({
   };
 
   const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing || !startPos) return;
+    if (!drawing || !startPos) {
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const endX = e.clientX - rect.left;
     const endY = e.clientY - rect.top;
@@ -153,11 +151,12 @@ export function useOverlays({
 
   const handleUndo = () => setOverlays((prev) => prev.slice(0, -1));
   const handleClear = () => setOverlays([]);
-  const handleSaveOverlays = () =>
-    localStorage.setItem("videoOverlays", JSON.stringify(overlays));
+  const handleSaveOverlays = () => localStorage.setItem("videoOverlays", JSON.stringify(overlays));
   const handleLoadOverlays = () => {
     const saved = localStorage.getItem("videoOverlays");
-    if (saved) setOverlays(JSON.parse(saved));
+    if (saved) {
+      setOverlays(JSON.parse(saved));
+    }
   };
 
   return {

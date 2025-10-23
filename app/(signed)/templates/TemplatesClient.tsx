@@ -17,8 +17,7 @@ const templates = [
   },
   {
     title: "E-commerce Checkout Flow",
-    description:
-      "Demonstrate the complete checkout process from cart to payment confirmation.",
+    description: "Demonstrate the complete checkout process from cart to payment confirmation.",
     time: "20m",
     level: "Intermediate",
     type: "e commerce",
@@ -27,8 +26,7 @@ const templates = [
   },
   {
     title: "Mobile App Tutorial",
-    description:
-      "Demonstrate the interactive tutorial for mobile app first time users",
+    description: "Demonstrate the interactive tutorial for mobile app first time users",
     time: "10m",
     level: "Beginner",
     type: "mobile",
@@ -36,8 +34,7 @@ const templates = [
   },
   {
     title: "Web Dashboard Overview",
-    description:
-      "Overview of a comprehensive walkthrough of an analytics dashboard.",
+    description: "Overview of a comprehensive walkthrough of an analytics dashboard.",
     time: "25m",
     level: "Beginner",
     type: "web",
@@ -55,8 +52,7 @@ const templates = [
   },
   {
     title: "Customer Support Flow",
-    description:
-      "Complete customer support ticket creation and tracking process.",
+    description: "Complete customer support ticket creation and tracking process.",
     time: "10m",
     level: "Beginner",
     type: "saas",
@@ -140,16 +136,10 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        levelDropdownRef.current &&
-        !levelDropdownRef.current.contains(event.target as Node)
-      ) {
+      if (levelDropdownRef.current && !levelDropdownRef.current.contains(event.target as Node)) {
         setLevelDropdownOpen(false);
       }
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
       if (ref.current && !ref.current.contains(event.target as Node)) {
@@ -173,9 +163,7 @@ export default function TemplatesPage() {
               className="w-6 h-6"
             />
           </span>
-          <span className="text-lg text-gray-400 font-medium">
-            Explore Templates
-          </span>
+          <span className="text-lg text-gray-400 font-medium">Explore Templates</span>
         </div>
 
         {/* Removed search bar block */}
@@ -184,9 +172,7 @@ export default function TemplatesPage() {
           <span className="text-gray-500 text-lg">
             Welcome{" "}
             <span className="text-[#7C5CFC] font-semibold">
-              {session?.user?.name?.split(" ")[0] ||
-                session?.user?.email?.split("@")[0] ||
-                "User"}
+              {session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")[0] || "User"}
             </span>{" "}
             <span className="inline-block">👋</span>
           </span>
@@ -329,9 +315,7 @@ export default function TemplatesPage() {
         </div>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-2xl font-semibold text-[#1A0033]">Templates</h3>
-          <span className="text-[#8B8B8B] font-medium">
-            {templates.length}/6 demos
-          </span>
+          <span className="text-[#8B8B8B] font-medium">{templates.length}/6 demos</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
           {templates.map((tpl) => (
@@ -350,13 +334,11 @@ export default function TemplatesPage() {
                     {tpl.badge}
                   </span>
                 )}
-                {tpl.level &&
-                  tpl.level !== "Beginner" &&
-                  tpl.level !== "Advanced" && (
-                    <span className="bg-[#E7F8E7] text-[#4CAF50] text-xs font-semibold px-2 py-1 rounded">
-                      {tpl.level}
-                    </span>
-                  )}
+                {tpl.level && tpl.level !== "Beginner" && tpl.level !== "Advanced" && (
+                  <span className="bg-[#E7F8E7] text-[#4CAF50] text-xs font-semibold px-2 py-1 rounded">
+                    {tpl.level}
+                  </span>
+                )}
                 {tpl.level === "Beginner" && (
                   <span className="bg-[#E7F8E7] text-[#4CAF50] text-xs font-semibold px-2 py-1 rounded">
                     Beginner
@@ -373,12 +355,8 @@ export default function TemplatesPage() {
                   </span>
                 )}
               </div>
-              <div className="font-semibold text-lg text-[#1A0033] mb-1">
-                {tpl.title}
-              </div>
-              <div className="text-[#8B8B8B] text-sm mb-4">
-                {tpl.description}
-              </div>
+              <div className="font-semibold text-lg text-[#1A0033] mb-1">{tpl.title}</div>
+              <div className="text-[#8B8B8B] text-sm mb-4">{tpl.description}</div>
               <div className="flex-1 flex items-center justify-center bg-[#F8F6FF] rounded-xl mb-6 min-h-[120px]">
                 <svg
                   width="71"
