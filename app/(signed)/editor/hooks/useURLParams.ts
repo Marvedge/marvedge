@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "./useEditorState";
 
 interface UseURLParamsProps {

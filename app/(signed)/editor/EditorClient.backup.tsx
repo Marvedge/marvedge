@@ -25,7 +25,7 @@ import SaveDemoModal from "@/app/components/SaveDemoModal";
 import { formatTime } from "@/app/lib/dateTimeUtils";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
-import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import axios from "axios";
 // import { ErrorResponse } from "resend";
 

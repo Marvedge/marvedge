@@ -5,7 +5,7 @@ import { Card } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import ReactPlayer from "react-player";
 import { defaultFormatTime } from "@/app/lib/dateTimeUtils";
-import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "../types/editor/zoom-effect";
 import { toggleZoom, trianglePoints } from "../lib/utils";
 
 interface TrimSegment {

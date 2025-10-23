@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useBlobStore } from "../store/blobStore";
 import { videoTrimmer, videoToMP4WithOverlays, videoToThumbnail } from "../lib/ffmpeg";
-import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "../types/editor/zoom-effect";
 
 type Overlay =
   | { type: "blur" | "rect"; x: number; y: number; w: number; h: number }

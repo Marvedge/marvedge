@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import axios from "axios";
-import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "../hooks/useEditorState";
 
 // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"

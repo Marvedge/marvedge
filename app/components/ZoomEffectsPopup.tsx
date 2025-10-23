@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button } from "@/app/components/ui/button";
 import { X, Trash2 } from "lucide-react";
 import { formatTime } from "@/app/lib/dateTimeUtils";
-import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "../types/editor/zoom-effect";
 
 interface ZoomEffectsPopupProps {
   isOpen: boolean;

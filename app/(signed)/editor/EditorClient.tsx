@@ -34,7 +34,7 @@ import { useTimelineInit } from "./hooks/useTimelineInit";
 // Utils
 import { sanitizeFilename } from "@/app/lib/constants";
 import { handleSaveDemo, videoTrimHandler, exportVideo } from "./utils/videoHandlers";
-import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 
 export default function EditorPage() {
   const router = useRouter();
