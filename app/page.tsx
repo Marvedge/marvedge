@@ -17,10 +17,10 @@ export default function LandingPage() {
   }
 
   return (
-    <div>
+    <>
       <Navbar />
       <HeroSection />
       <Footer />
-    </div>
+    </>
   );
 }
