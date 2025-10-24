@@ -5,7 +5,7 @@ import { useRouter } from "next/router";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useEffect } from "react";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
-import RecorderTopbar from "./components/RecorderTopbar";
+import RecorderTopbar from "@/app/components/RecorderTopbar";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import Image from "next/image";
 import { formatTime } from "@/app/lib/dateTimeUtils";

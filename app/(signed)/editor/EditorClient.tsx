@@ -17,7 +17,8 @@ import EditorTopbar from "@/app/components/EditorTopbar";
 import TimelineRuler from "@/app/components/TimeLine";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
-import CustomVideoControls from "./components/CustomVideoControls";
+import CustomVideoControls from "@/app/components/CustomVideoControls";
+// import CustomVideoControls from "./components/CustomVideoControls";
 
 // Hooks
 import { useEditor } from "@/app/hooks/useEditor";
