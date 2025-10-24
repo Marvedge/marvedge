@@ -257,7 +257,7 @@ const ContactForm: React.FC = () => {
   );
 };
 
-const Hero4: React.FC = () => {
+const Footer: React.FC = () => {
   const sectionRef = useRef(null);
   // Set `once: true` to trigger only once when section enters viewport
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
@@ -418,4 +418,4 @@ const Hero4: React.FC = () => {
   );
 };
 
-export default Hero4;
+export default Footer;
