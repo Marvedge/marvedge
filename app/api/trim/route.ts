@@ -10,6 +10,6 @@ export async function POST() {
       error:
         "Video trimming has been moved to client-side processing. Use the videoTrimmer function from app/lib/ffmpeg.ts instead.",
     },
-    { status: 501 }
+    { status: 501 },
   );
 }

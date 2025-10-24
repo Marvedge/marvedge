@@ -74,7 +74,7 @@ export default function ZoomEffectsPopup({
     };
 
     const updatedEffects = zoomEffects.map((effect) =>
-      effect.id === editingEffect.id ? updatedEffect : effect
+      effect.id === editingEffect.id ? updatedEffect : effect,
     );
 
     onZoomEffectsChange(updatedEffects);

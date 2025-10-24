@@ -18,7 +18,7 @@ export const toggleZoom = (
   onZoomEffectCreate: ((effect: ZoomEffect) => void) | undefined,
   currentTime: number,
   duration: number,
-  setzoomed: (value: boolean | ((prev: boolean) => boolean)) => void
+  setzoomed: (value: boolean | ((prev: boolean) => boolean)) => void,
 ): void => {
   if (onZoomEffectCreate) {
     const testEffect: ZoomEffect = {
@@ -48,7 +48,7 @@ export const trianglePoints = (
   y: number,
   w: number,
   h: number,
-  direction: "up" | "down"
+  direction: "up" | "down",
 ): string => {
   if (direction === "down") {
     return `${x},${y} ${x - w / 2},${y + h} ${x + w / 2},${y + h}`;

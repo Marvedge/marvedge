@@ -2,7 +2,7 @@ import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
 
 export const createSimpleZoomTest = async (
   videoBlob: Blob,
-  zoomEffects: ZoomEffect[]
+  zoomEffects: ZoomEffect[],
 ): Promise<Blob> => {
   console.log("=== ENHANCED ZOOM PROCESSING ===");
   console.log("Input video size:", videoBlob.size);
@@ -41,7 +41,7 @@ export const createSimpleZoomTest = async (
       const finalBlob = new Blob(chunks, { type: "video/webm" });
       console.log(
         "Enhanced zoom processing completed. Output size:",
-        finalBlob.size
+        finalBlob.size,
       );
       resolve(finalBlob);
     };
@@ -58,7 +58,7 @@ export const createSimpleZoomTest = async (
       // Find active zoom effect with smooth transition
       const activeEffect = zoomEffects.find(
         (effect) =>
-          currentTime >= effect.startTime && currentTime <= effect.endTime
+          currentTime >= effect.startTime && currentTime <= effect.endTime,
       );
 
       // Calculate smooth transition
@@ -100,11 +100,11 @@ export const createSimpleZoomTest = async (
         const scaledHeight = canvas.height / smoothZoomLevel;
         const sourceX = Math.max(
           0,
-          Math.min(canvas.width - scaledWidth, centerX - scaledWidth / 2)
+          Math.min(canvas.width - scaledWidth, centerX - scaledWidth / 2),
         );
         const sourceY = Math.max(
           0,
-          Math.min(canvas.height - scaledHeight, centerY - scaledHeight / 2)
+          Math.min(canvas.height - scaledHeight, centerY - scaledHeight / 2),
         );
 
         // Apply high-quality zoom with anti-aliasing
@@ -123,13 +123,13 @@ export const createSimpleZoomTest = async (
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
 
         ctx.restore();
 
         console.log(
-          `Enhanced zoom applied: ${smoothZoomLevel.toFixed(2)}x at (${centerX.toFixed(0)}, ${centerY.toFixed(0)}) - Progress: ${(transitionProgress * 100).toFixed(1)}%`
+          `Enhanced zoom applied: ${smoothZoomLevel.toFixed(2)}x at (${centerX.toFixed(0)}, ${centerY.toFixed(0)}) - Progress: ${(transitionProgress * 100).toFixed(1)}%`,
         );
       } else {
         // Draw normal video without any overlays

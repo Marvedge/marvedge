@@ -95,11 +95,11 @@ export default function EditorPage() {
 
   // Update tool state to include 'none' and set as default
   const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
-    "none"
+    "none",
   );
   const [drawing, setDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null
+    null,
   );
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [textColor, setTextColor] = useState("#000000");
@@ -214,7 +214,7 @@ export default function EditorPage() {
             (seg: { start: string; end: string }) => ({
               start: seg.start,
               end: seg.end,
-            })
+            }),
           );
           setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);
@@ -261,7 +261,7 @@ export default function EditorPage() {
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
   const [selectedBackground, setSelectedBackground] = useState<string | null>(
-    null
+    null,
   );
   const [backgroundType, setBackgroundType] = useState<string>("");
   const [customBackground, setCustomBackground] = useState<File | null>(null);
@@ -303,7 +303,7 @@ export default function EditorPage() {
       setInputStartTime(formatTimeForInput(start));
       setInputEndTime(formatTimeForInput(end));
     },
-    [formatTimeForInput]
+    [formatTimeForInput],
   );
 
   // Fullscreen logic
@@ -684,7 +684,7 @@ export default function EditorPage() {
                 setDuration(Math.floor(video.duration));
               }
             },
-            { once: true }
+            { once: true },
           );
         }
       };
@@ -948,7 +948,7 @@ export default function EditorPage() {
           try {
             const cloudRes = await axios.post(
               CLOUDINARY_API_URL,
-              cloudFormData
+              cloudFormData,
             );
             console.log("Upload success:", cloudRes.data);
             cloudinaryVideoUrl = cloudRes.data.secure_url;
@@ -1002,7 +1002,7 @@ export default function EditorPage() {
         if (axios.isAxiosError(error)) {
           if (error.response) {
             console.error(
-              `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
+              `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`,
             );
           } else {
             console.error("Axios error:", error.message);
@@ -1053,7 +1053,7 @@ export default function EditorPage() {
     const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
     const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
       2,
-      "0"
+      "0",
     );
     const seconds = String(totalSeconds % 60).padStart(2, "0");
 
@@ -1061,7 +1061,7 @@ export default function EditorPage() {
   }
 
   const videoTrimHandler = async (
-    segments: { start: string; end: string }[]
+    segments: { start: string; end: string }[],
   ) => {
     try {
       setProgress(1);
@@ -1105,7 +1105,7 @@ export default function EditorPage() {
         formData,
         {
           responseType: "blob",
-        }
+        },
       );
 
       const trimmedBlob = new Blob([trimRes.data], { type: "video/mp4" });
@@ -1138,7 +1138,7 @@ export default function EditorPage() {
     console.log(
       "Coordinates:",
       { x: effect.x, y: effect.y },
-      "Expected: 0-1 range"
+      "Expected: 0-1 range",
     );
 
     if (effect.zoomLevel <= 1.0) {
@@ -1259,7 +1259,7 @@ export default function EditorPage() {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       const { url } = serverRes.data; // backend returns { url }
@@ -1288,10 +1288,10 @@ export default function EditorPage() {
       // Navigate to preview page
       router.push(
         `/preview?video=${encodeURIComponent(
-          cloudData.secure_url
+          cloudData.secure_url,
         )}&title=${encodeURIComponent(
-          sidebarTitle
-        )}&description=${encodeURIComponent(sidebarDescription || "")}`
+          sidebarTitle,
+        )}&description=${encodeURIComponent(sidebarDescription || "")}`,
       );
     } catch (err) {
       console.error(err);
@@ -1619,7 +1619,7 @@ export default function EditorPage() {
                     onClick={() => {
                       const newTime = Math.min(
                         displayDuration,
-                        currentTime + 5
+                        currentTime + 5,
                       );
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");

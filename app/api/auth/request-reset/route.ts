@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       console.error("Missing RESEND_API_KEY");
       return NextResponse.json(
         { error: "Email service not configured" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json(
         { error: "No user found with this email" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     if (!user.password) {
       return NextResponse.json(
         { error: "This account does not support password reset" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       console.error("Email send error:", result.error);
       return NextResponse.json(
         { error: "Failed to send OTP email" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
     console.error("Unexpected error in password reset handler:", err);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

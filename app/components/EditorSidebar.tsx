@@ -60,7 +60,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
     string | null
   >(selectedBackground ?? null);
   const [localBackgroundType, setLocalBackgroundType] = React.useState<string>(
-    backgroundType || ""
+    backgroundType || "",
   );
   const [localCustomBackground, setLocalCustomBackground] =
     React.useState<File | null>(customBackground || null);
@@ -87,7 +87,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   };
 
   const handleCustomBackgroundUpload = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (file) {

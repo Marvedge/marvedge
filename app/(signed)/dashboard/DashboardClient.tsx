@@ -52,7 +52,7 @@ const DashboardPage = () => {
     );
   }
   const initials = getInitials(
-    (session?.user?.name as string) || (session?.user?.email as string)
+    (session?.user?.name as string) || (session?.user?.email as string),
   );
 
   return (

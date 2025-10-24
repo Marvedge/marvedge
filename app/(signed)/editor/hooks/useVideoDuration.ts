@@ -291,7 +291,7 @@ export function useVideoDuration({
                 setDuration(Math.floor(video.duration));
               }
             },
-            { once: true }
+            { once: true },
           );
         }
       };

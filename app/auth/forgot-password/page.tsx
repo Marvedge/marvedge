@@ -36,9 +36,9 @@ const ForgotPassword = () => {
         setTimeout(
           () =>
             router.push(
-              `/auth/reset-password?email=${encodeURIComponent(email!)}`
+              `/auth/reset-password?email=${encodeURIComponent(email!)}`,
             ),
-          1500
+          1500,
         );
       }
     } catch (err) {

@@ -45,7 +45,7 @@ export function useOverlays({
 }: UseOverlaysProps) {
   const [drawing, setDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null
+    null,
   );
   const [overlays, setOverlays] = useState<Overlay[]>([]);
 

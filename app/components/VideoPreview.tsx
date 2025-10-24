@@ -154,7 +154,7 @@ export default function VideoPreview({
                 setDuration(videoRef.current.duration);
               }
             },
-            { once: true }
+            { once: true },
           );
         }
       };

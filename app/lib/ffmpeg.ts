@@ -8,7 +8,7 @@ type Overlay =
 export const videoTrimmer = async (
   inputBlob: Blob,
   start: string,
-  end: string
+  end: string,
 ): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
@@ -40,7 +40,7 @@ export const videoTrimmer = async (
   ffmpeg.FS(
     "writeFile",
     inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
+    new Uint8Array(await inputBlob.arrayBuffer()),
   );
 
   // Get video duration
@@ -77,7 +77,7 @@ export const videoTrimmer = async (
       "libvpx",
       "-c:a",
       "libvorbis",
-      outputName
+      outputName,
     );
   } catch (err) {
     console.error("FFmpeg filter_complex error", err);
@@ -106,7 +106,7 @@ export const videoToMP4 = async (inputBlob: Blob): Promise<Blob> => {
   ffmpeg.FS(
     "writeFile",
     inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
+    new Uint8Array(await inputBlob.arrayBuffer()),
   );
   await ffmpeg.run(
     "-i",
@@ -117,7 +117,7 @@ export const videoToMP4 = async (inputBlob: Blob): Promise<Blob> => {
     "fast",
     "-c:a",
     "aac",
-    outputName
+    outputName,
   );
 
   const data = ffmpeg.FS("readFile", outputName);
@@ -137,7 +137,7 @@ export const videoToThumbnail = async (inputBlob: Blob): Promise<Blob> => {
   ffmpeg.FS(
     "writeFile",
     inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
+    new Uint8Array(await inputBlob.arrayBuffer()),
   );
   await ffmpeg.run(
     "-i",
@@ -146,7 +146,7 @@ export const videoToThumbnail = async (inputBlob: Blob): Promise<Blob> => {
     "00:00:01.000",
     "-vframes",
     "1",
-    outputName
+    outputName,
   );
 
   const data = ffmpeg.FS("readFile", outputName);
@@ -155,7 +155,7 @@ export const videoToThumbnail = async (inputBlob: Blob): Promise<Blob> => {
 
 export const videoToMP4WithOverlays = async (
   inputBlob: Blob,
-  overlays: Overlay[]
+  overlays: Overlay[],
 ): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
@@ -169,7 +169,7 @@ export const videoToMP4WithOverlays = async (
   ffmpeg.FS(
     "writeFile",
     inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
+    new Uint8Array(await inputBlob.arrayBuffer()),
   );
 
   const vf = generateFFmpegFilters(overlays);
@@ -185,7 +185,7 @@ export const videoToMP4WithOverlays = async (
     "fast",
     "-c:a",
     "aac",
-    outputName
+    outputName,
   );
 
   const data = ffmpeg.FS("readFile", outputName);
@@ -194,7 +194,7 @@ export const videoToMP4WithOverlays = async (
 
 export const videoWithZoomEffects = async (
   inputBlob: Blob,
-  zoomEffects: ZoomEffect[]
+  zoomEffects: ZoomEffect[],
 ): Promise<Blob> => {
   // Use the enhanced zoom processor
   const { createEnhancedZoomProcessor } = await import(
@@ -233,7 +233,7 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   ffmpeg.FS(
     "writeFile",
     inputName,
-    new Uint8Array(await inputBlob.arrayBuffer())
+    new Uint8Array(await inputBlob.arrayBuffer()),
   );
   await ffmpeg.run(
     "-i",
@@ -245,7 +245,7 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
     "2",
     "-b:a",
     "192k",
-    outputName
+    outputName,
   );
 
   const data = ffmpeg.FS("readFile", outputName);
