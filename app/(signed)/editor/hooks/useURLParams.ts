@@ -72,7 +72,7 @@ export function useURLParams({
             (seg: { start: string; end: string }) => ({
               start: seg.start,
               end: seg.end,
-            }),
+            })
           );
           setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);

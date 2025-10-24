@@ -54,7 +54,7 @@ export default function TimelineRuler({
           start: parseFloat(seg.start),
           end: parseFloat(seg.end),
         }))
-      : [{ start: minValue, end: maxValue }], // Initialize with full duration segment
+      : [{ start: minValue, end: maxValue }] // Initialize with full duration segment
   );
   const [activeSegment, setActiveSegment] = useState(0);
   const [removedSegments, setRemovedSegments] = useState<
@@ -68,14 +68,14 @@ export default function TimelineRuler({
   const [zoomLevel, setZoomLevel] = useState(1); // Start with no zoom
   const [scrollLeft, setScrollLeft] = useState(0);
   const [resizingSegmentIdx, setResizingSegmentIdx] = useState<number | null>(
-    null,
+    null
   );
   const [resizingHandle, setResizingHandle] = useState<"start" | "end" | null>(
-    null,
+    null
   );
   const [isAutoPlaying] = useState(true);
   const [playheadMode, setPlayheadMode] = useState<"trim" | "non-trim">(
-    "non-trim",
+    "non-trim"
   );
   const [selectedTrimIdx, setSelectedTrimIdx] = useState<number | null>(null);
   const FIXED_TRIM_DURATION = 4; // Fixed duration in seconds for initial trim
@@ -93,7 +93,7 @@ export default function TimelineRuler({
   // Helper function to immediately switch to trim mode
   const switchToTrimMode = (trimIdx: number) => {
     console.log(
-      `[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`,
+      `[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`
     );
     playheadModeRef.current = "trim";
     selectedTrimIdxRef.current = trimIdx;
@@ -207,7 +207,7 @@ export default function TimelineRuler({
             const targetScrollLeft = cursorRatio * newTimelineWidth - cursorX;
             const clampedScrollLeft = Math.max(
               0,
-              Math.min(targetScrollLeft, maxScroll),
+              Math.min(targetScrollLeft, maxScroll)
             );
 
             setScrollLeft(clampedScrollLeft);
@@ -312,7 +312,7 @@ export default function TimelineRuler({
       // Allow clicking anywhere - no skipping logic
       setLocalValue(value);
     },
-    [minValue, maxValue],
+    [minValue, maxValue]
   );
 
   useEffect(() => {
@@ -380,7 +380,7 @@ export default function TimelineRuler({
       draggingHandle,
       segments,
       activeSegment,
-    ],
+    ]
   );
 
   useEffect(() => {
@@ -431,7 +431,7 @@ export default function TimelineRuler({
         const newSegments = prev.slice(0, -1);
         const newActiveSegment = Math.min(
           activeSegment,
-          newSegments.length - 1,
+          newSegments.length - 1
         );
         setActiveSegment(newActiveSegment);
         if (newSegments[newActiveSegment]) {
@@ -473,7 +473,7 @@ export default function TimelineRuler({
     setLocalEndTime(endTime);
 
     console.log(
-      `Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`,
+      `Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`
     );
   };
 
@@ -556,7 +556,7 @@ export default function TimelineRuler({
 
           // Sort segments by start position
           const sortedSegments = [...currentSegments].sort(
-            (a, b) => a.start - b.start,
+            (a, b) => a.start - b.start
           );
 
           // First, check if currentVal is already inside a trimmed section
@@ -615,7 +615,7 @@ export default function TimelineRuler({
           // DEBUG
           if (currentMode === "non-trim" && currentVal !== 0) {
             console.log(
-              `Non-trim: currentVal=${currentVal.toFixed(4)}, gap=[${gapStart.toFixed(4)}, ${gapEnd.toFixed(4)}], nextValue=${nextValue.toFixed(4)}, gapIdx=${currentGapIndex}`,
+              `Non-trim: currentVal=${currentVal.toFixed(4)}, gap=[${gapStart.toFixed(4)}, ${gapEnd.toFixed(4)}], nextValue=${nextValue.toFixed(4)}, gapIdx=${currentGapIndex}`
             );
           }
 
@@ -623,7 +623,7 @@ export default function TimelineRuler({
           if (nextValue >= gapEnd) {
             // Current gap is ending, find the next gap
             const sortedSegments = [...currentSegments].sort(
-              (a, b) => a.start - b.start,
+              (a, b) => a.start - b.start
             );
 
             // Calculate all gap boundaries

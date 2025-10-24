@@ -118,7 +118,7 @@ export default function DemosPage() {
   const filteredDemos = demos.filter(
     (demo) =>
       demo.title.toLowerCase().includes(search.toLowerCase()) ||
-      demo.description.toLowerCase().includes(search.toLowerCase()),
+      demo.description.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleEditDemo = (demo: Demo) => {

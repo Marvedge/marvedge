@@ -69,7 +69,7 @@ const TeamPage = () => {
   }, []);
 
   const initials = getInitials(
-    session?.user?.name ?? session?.user?.email ?? undefined,
+    session?.user?.name ?? session?.user?.email ?? undefined
   );
 
   const addTeam = () => {

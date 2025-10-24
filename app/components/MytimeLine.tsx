@@ -93,7 +93,7 @@ export function TimelineSlider({
       "Current state - segments:",
       segments.length,
       "removedSegments:",
-      removedSegments.length,
+      removedSegments.length
     );
     console.log("Segments:", segments);
   }, [segments.length, removedSegments.length, segments]);
@@ -103,7 +103,7 @@ export function TimelineSlider({
       "Current state - segments:",
       segments.length,
       "removedSegments:",
-      removedSegments.length,
+      removedSegments.length
     );
     console.log("Segments:", segments);
   }, [segments.length, removedSegments.length, segments]);
@@ -174,7 +174,7 @@ export function TimelineSlider({
       segments.map((seg) => ({
         start: timeFormatter(seg.start),
         end: timeFormatter(seg.end),
-      })),
+      }))
     );
     setHasBeenTrimmed(true);
   }, [segments, duration, ontrim, timeFormatter]);
@@ -291,7 +291,7 @@ export function TimelineSlider({
         ((clamped - margin) / (svgWidth - 2 * margin)) * (duration || 80.0)
       );
     },
-    [duration, margin, svgWidth],
+    [duration, margin, svgWidth]
   );
 
   useEffect(() => {
@@ -317,12 +317,12 @@ export function TimelineSlider({
       // );
       setSegments((segs) => {
         const updated = segs.map((seg, i) =>
-          i === activeIdx ? { ...seg, [key]: value } : seg,
+          i === activeIdx ? { ...seg, [key]: value } : seg
         );
         return updated;
       });
     },
-    [activeIdx],
+    [activeIdx]
   );
 
   const start = segments[activeIdx]?.start ?? 0;
@@ -411,7 +411,7 @@ export function TimelineSlider({
   ]);
 
   const handleTimelineClick = (
-    e: React.MouseEvent<SVGSVGElement, MouseEvent>,
+    e: React.MouseEvent<SVGSVGElement, MouseEvent>
   ) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -985,7 +985,7 @@ export function TimelineSlider({
                 timelineY + timelineHeight / 2,
                 handleWidth,
                 handleHeight,
-                "up",
+                "up"
               )}
               fill={handleColor}
               stroke={rulerColor}
@@ -1009,7 +1009,7 @@ export function TimelineSlider({
                 timelineY + timelineHeight / 2,
                 handleWidth,
                 handleHeight,
-                "up",
+                "up"
               )}
               fill={handleColor}
               stroke={rulerColor}
@@ -1042,7 +1042,7 @@ export function TimelineSlider({
                   timelineY + timelineHeight / 2,
                   handleWidth,
                   handleHeight,
-                  "up",
+                  "up"
                 )}
                 fill={handleColor}
                 stroke={rulerColor}
@@ -1072,7 +1072,7 @@ export function TimelineSlider({
                   timelineY + timelineHeight / 2,
                   handleWidth,
                   handleHeight,
-                  "up",
+                  "up"
                 )}
                 fill={handleColor}
                 stroke={rulerColor}

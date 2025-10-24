@@ -34,7 +34,7 @@ const Hero3: React.FC = () => {
     if (!email || !name) return;
 
     router.push(
-      `/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
+      `/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`
     );
   };
 

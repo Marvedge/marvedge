@@ -29,7 +29,7 @@ export async function GET() {
     console.error("Error fetching demos:", error);
     return NextResponse.json(
       { error: "Failed to fetch demos" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
@@ -41,7 +41,7 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json(
       { message: "Demo Id could not be found." },
-      { status: 404 },
+      { status: 404 }
     );
   }
 
@@ -55,7 +55,7 @@ export async function DELETE(req: NextRequest) {
     console.error("Error deleting demo:", error);
     return NextResponse.json(
       { error: "Failed to delete demo" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     if (!title || !videoUrl) {
       return NextResponse.json(
         { error: "Title, videoUrl are required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     console.error("Demo save error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

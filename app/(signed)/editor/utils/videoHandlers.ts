@@ -27,7 +27,7 @@ export function normalizeTimeFormat(time: string | number): string {
   const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
   const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
     2,
-    "0",
+    "0"
   );
   const seconds = String(Math.floor(totalSeconds % 60)).padStart(2, "0");
 
@@ -48,7 +48,7 @@ interface SaveDemoParams {
 
 export async function handleSaveDemo(
   data: { title: string; description: string },
-  params: SaveDemoParams,
+  params: SaveDemoParams
 ) {
   const {
     videoUrl,
@@ -151,7 +151,7 @@ export async function handleSaveDemo(
       if (axios.isAxiosError(error)) {
         if (error.response) {
           console.error(
-            `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`,
+            `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
           );
         } else {
           console.error("Axios error:", error.message);
@@ -187,7 +187,7 @@ interface VideoTrimParams {
 
 export async function videoTrimHandler(
   segments: { start: string; end: string }[],
-  params: VideoTrimParams,
+  params: VideoTrimParams
 ) {
   const { videoUrl, setVideoUrl, setProgress } = params;
 
@@ -232,7 +232,7 @@ export async function videoTrimHandler(
     const trimmedBlob = await videoTrimmer(
       videoBlob,
       firstSegment.start,
-      firstSegment.end,
+      firstSegment.end
     );
     setProgress(95);
 
@@ -333,7 +333,7 @@ export async function exportVideo(params: ExportVideoParams) {
       formData,
       {
         headers: { "Content-Type": "multipart/form-data" },
-      },
+      }
     );
 
     const { url } = serverRes.data; // backend returns { url }
@@ -362,8 +362,8 @@ export async function exportVideo(params: ExportVideoParams) {
     // Navigate to preview page
     router.push(
       `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(
-        sidebarTitle,
-      )}&description=${encodeURIComponent(sidebarDescription || "")}`,
+        sidebarTitle
+      )}&description=${encodeURIComponent(sidebarDescription || "")}`
     );
   } catch (err) {
     console.error(err);

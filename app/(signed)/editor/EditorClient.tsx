@@ -222,7 +222,7 @@ export default function EditorPage() {
       setInputStartTime(formatTimeForInput(start));
       setInputEndTime(formatTimeForInput(end));
     },
-    [formatTimeForInput, setInputStartTime, setInputEndTime],
+    [formatTimeForInput, setInputStartTime, setInputEndTime]
   );
 
   // Dashboard menu handlers
@@ -277,7 +277,7 @@ export default function EditorPage() {
     console.log(
       "Coordinates:",
       { x: effect.x, y: effect.y },
-      "Expected: 0-1 range",
+      "Expected: 0-1 range"
     );
 
     if (effect.zoomLevel <= 1.0) {
@@ -667,7 +667,7 @@ export default function EditorPage() {
                       onClick={() => {
                         const newTime = Math.min(
                           displayDuration,
-                          currentTime + 5,
+                          currentTime + 5
                         );
                         setCurrentTime(newTime);
                         playerRef.current?.seekTo(newTime, "seconds");
