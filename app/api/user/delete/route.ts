@@ -29,9 +29,6 @@ export async function DELETE() {
     return NextResponse.json({ message: "Account deleted successfully" });
   } catch (error) {
     console.error("Error deleting account:", error);
-    return NextResponse.json(
-      { error: error || "Failed to delete account" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error || "Failed to delete account" }, { status: 500 });
   }
 }

@@ -14,7 +14,9 @@ export default function TopLoader() {
 
   // Intercept programmatic navigations (router.push, router.replace)
   useEffect(() => {
-    if (isInitializedRef.current) return;
+    if (isInitializedRef.current) {
+      return;
+    }
     isInitializedRef.current = true;
 
     try {
@@ -54,7 +56,9 @@ export default function TopLoader() {
 
   // Stop when route actually changes (after render)
   useEffect(() => {
-    if (!pathname) return;
+    if (!pathname) {
+      return;
+    }
     const timer = setTimeout(() => {
       NProgress.done();
     }, 200);

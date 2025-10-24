@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  useRef,
-  useState,
-  useEffect,
-  useCallback,
-  MouseEvent,
-} from "react";
+import React, { useRef, useState, useEffect, useCallback, MouseEvent } from "react";
 
 import { FaBars } from "react-icons/fa6";
 import SidemenuDashboard from "@/app/components/SidemenuDashboard";
@@ -31,7 +25,7 @@ import SaveDemoModal from "@/app/components/SaveDemoModal";
 import { formatTime } from "@/app/lib/dateTimeUtils";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
-import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import axios from "axios";
 // import { ErrorResponse } from "resend";
 
@@ -86,21 +80,13 @@ export default function EditorPage() {
   // const [tool, setTool] = useState<ToolType>("none");
 
   // State to store loaded segments
-  const [, setLoadedSegments] = useState<
-    { start: string; end: string }[] | null
-  >(null);
-  const [currentSegments, setCurrentSegments] = useState<
-    { start: string; end: string }[]
-  >([]);
+  const [, setLoadedSegments] = useState<{ start: string; end: string }[] | null>(null);
+  const [currentSegments, setCurrentSegments] = useState<{ start: string; end: string }[]>([]);
 
   // Update tool state to include 'none' and set as default
-  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">(
-    "none"
-  );
+  const [tool, setTool] = useState<"none" | "blur" | "rect" | "arrow" | "text">("none");
   const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null
-  );
+  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [textColor, setTextColor] = useState("#000000");
   const [textFont, setTextFont] = useState("16px sans-serif");
@@ -173,7 +159,9 @@ export default function EditorPage() {
 
   // Handle URL parameters for editing existing demos
   useEffect(() => {
-    if (!params) return;
+    if (!params) {
+      return;
+    }
 
     const urlVideo = params.get("video");
     const urlStartTime = params.get("startTime");
@@ -210,12 +198,10 @@ export default function EditorPage() {
         try {
           const segments = JSON.parse(urlSegments);
           console.log("Loaded segments from URL:", segments);
-          const convertedSegments = segments.map(
-            (seg: { start: string; end: string }) => ({
-              start: seg.start,
-              end: seg.end,
-            })
-          );
+          const convertedSegments = segments.map((seg: { start: string; end: string }) => ({
+            start: seg.start,
+            end: seg.end,
+          }));
           setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);
         } catch (error) {
@@ -260,9 +246,7 @@ export default function EditorPage() {
         .slice(0, 2)
     : session?.user?.email?.[0]?.toUpperCase() || "U";
 
-  const [selectedBackground, setSelectedBackground] = useState<string | null>(
-    null
-  );
+  const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [backgroundType, setBackgroundType] = useState<string>("");
   const [customBackground, setCustomBackground] = useState<File | null>(null);
 
@@ -319,13 +303,11 @@ export default function EditorPage() {
       !document.fullscreenElement &&
       !(
         "webkitFullscreenElement" in document &&
-        (document as Document & { webkitFullscreenElement?: Element })
-          .webkitFullscreenElement
+        (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
       ) &&
       !(
         "msFullscreenElement" in document &&
-        (document as Document & { msFullscreenElement?: Element })
-          .msFullscreenElement
+        (document as Document & { msFullscreenElement?: Element }).msFullscreenElement
       )
     ) {
       if (el.requestFullscreen) {
@@ -334,13 +316,9 @@ export default function EditorPage() {
           console.error("Fullscreen error:", err);
         });
       } else if ("webkitRequestFullscreen" in el) {
-        (
-          el as HTMLElement & { webkitRequestFullscreen?: () => void }
-        ).webkitRequestFullscreen?.();
+        (el as HTMLElement & { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.();
       } else if ("msRequestFullscreen" in el) {
-        (
-          el as HTMLElement & { msRequestFullscreen?: () => void }
-        ).msRequestFullscreen?.();
+        (el as HTMLElement & { msRequestFullscreen?: () => void }).msRequestFullscreen?.();
       } else {
         alert("Fullscreen API is not supported in this browser.");
         console.error("Fullscreen API not supported");
@@ -350,13 +328,9 @@ export default function EditorPage() {
       if (document.exitFullscreen) {
         document.exitFullscreen();
       } else if ("webkitExitFullscreen" in document) {
-        (
-          document as Document & { webkitExitFullscreen?: () => void }
-        ).webkitExitFullscreen?.();
+        (document as Document & { webkitExitFullscreen?: () => void }).webkitExitFullscreen?.();
       } else if ("msExitFullscreen" in document) {
-        (
-          document as Document & { msExitFullscreen?: () => void }
-        ).msExitFullscreen?.();
+        (document as Document & { msExitFullscreen?: () => void }).msExitFullscreen?.();
       } else {
         alert("Cannot exit fullscreen: API not supported.");
         console.error("Exit Fullscreen API not supported");
@@ -371,7 +345,9 @@ export default function EditorPage() {
   }, []);
 
   useEffect(() => {
-    if (!params) return;
+    if (!params) {
+      return;
+    }
 
     // Only set recorded video URL if no URL parameter is provided
     if (recordedVideoUrl && !params.get("video")) {
@@ -421,11 +397,7 @@ export default function EditorPage() {
           tempVideo.preload = "metadata";
 
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -493,11 +465,7 @@ export default function EditorPage() {
         hiddenVideo.src = videoUrl;
 
         hiddenVideo.onloadedmetadata = () => {
-          if (
-            hiddenVideo.duration &&
-            isFinite(hiddenVideo.duration) &&
-            hiddenVideo.duration > 0
-          ) {
+          if (hiddenVideo.duration && isFinite(hiddenVideo.duration) && hiddenVideo.duration > 0) {
             setDuration(hiddenVideo.duration);
           }
           document.body.removeChild(hiddenVideo);
@@ -535,11 +503,7 @@ export default function EditorPage() {
             // Try to seek to a large time to trigger duration detection
             player.currentTime = 999999;
             setTimeout(() => {
-              if (
-                player.duration &&
-                isFinite(player.duration) &&
-                player.duration > 0
-              ) {
+              if (player.duration && isFinite(player.duration) && player.duration > 0) {
                 setDuration(player.duration);
               }
               // Reset to beginning
@@ -550,10 +514,7 @@ export default function EditorPage() {
       };
 
       // Try with delays - FASTER
-      const timers = [
-        setTimeout(getDurationBySeeking, 70),
-        setTimeout(getDurationBySeeking, 140),
-      ];
+      const timers = [setTimeout(getDurationBySeeking, 70), setTimeout(getDurationBySeeking, 140)];
 
       return () => {
         timers.forEach((timer) => clearTimeout(timer));
@@ -570,11 +531,7 @@ export default function EditorPage() {
           tempVideo.src = videoUrl;
 
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
           };
@@ -606,12 +563,7 @@ export default function EditorPage() {
     if (recordingDuration === 0) {
       const interval = setInterval(() => {
         const video = playerRef.current?.getInternalPlayer();
-        if (
-          video &&
-          !isNaN(video.duration) &&
-          video.duration > 0 &&
-          duration === 0
-        ) {
+        if (video && !isNaN(video.duration) && video.duration > 0 && duration === 0) {
           setDuration(Math.floor(video.duration));
           clearInterval(interval);
         }
@@ -631,11 +583,7 @@ export default function EditorPage() {
           const tempVideo = document.createElement("video");
           tempVideo.src = URL.createObjectURL(videoBlob);
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -676,11 +624,7 @@ export default function EditorPage() {
           video.addEventListener(
             "loadedmetadata",
             () => {
-              if (
-                video.duration &&
-                isFinite(video.duration) &&
-                video.duration > 0
-              ) {
+              if (video.duration && isFinite(video.duration) && video.duration > 0) {
                 setDuration(Math.floor(video.duration));
               }
             },
@@ -713,11 +657,7 @@ export default function EditorPage() {
           tempVideo.muted = true;
           tempVideo.src = URL.createObjectURL(blob);
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -753,11 +693,7 @@ export default function EditorPage() {
             player.currentTime = 999999;
 
             setTimeout(() => {
-              if (
-                player.duration &&
-                isFinite(player.duration) &&
-                player.duration > 0
-              ) {
+              if (player.duration && isFinite(player.duration) && player.duration > 0) {
                 setDuration(Math.floor(player.duration));
               }
               // Restore original state
@@ -785,10 +721,14 @@ export default function EditorPage() {
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = playerRef.current?.getInternalPlayer();
-    if (!canvas || !video) return;
+    if (!canvas || !video) {
+      return;
+    }
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
     const draw = () => {
       const width = video.clientWidth;
@@ -839,7 +779,9 @@ export default function EditorPage() {
   };
 
   const handleMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing || !startPos) return;
+    if (!drawing || !startPos) {
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const endX = e.clientX - rect.left;
     const endY = e.clientY - rect.top;
@@ -885,18 +827,16 @@ export default function EditorPage() {
 
   const handleUndo = () => setOverlays((prev) => prev.slice(0, -1));
   const handleClear = () => setOverlays([]);
-  const handleSaveOverlays = () =>
-    localStorage.setItem("videoOverlays", JSON.stringify(overlays));
+  const handleSaveOverlays = () => localStorage.setItem("videoOverlays", JSON.stringify(overlays));
   const handleLoadOverlays = () => {
     const saved = localStorage.getItem("videoOverlays");
-    if (saved) setOverlays(JSON.parse(saved));
+    if (saved) {
+      setOverlays(JSON.parse(saved));
+    }
   };
 
   // Save Demo handler
-  const handleSaveDemo = async (data: {
-    title: string;
-    description: string;
-  }) => {
+  const handleSaveDemo = async (data: { title: string; description: string }) => {
     if (!videoUrl) {
       toast.error("No video available to save");
       return;
@@ -920,10 +860,8 @@ export default function EditorPage() {
           }
           const videoBlob = await response.blob();
           // Create FormData for Cloudinary upload
-          const CLOUDINARY_CLOUD_NAME =
-            process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-          const CLOUDINARY_UPLOAD_PRESET =
-            process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+          const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+          const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
           // const CLOUDINARY_API_BASE =
           //   process.env.NEXT_PUBLIC_CLOUDINARY_API_BASE!;
 
@@ -946,10 +884,7 @@ export default function EditorPage() {
           // );
 
           try {
-            const cloudRes = await axios.post(
-              CLOUDINARY_API_URL,
-              cloudFormData
-            );
+            const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
             console.log("Upload success:", cloudRes.data);
             cloudinaryVideoUrl = cloudRes.data.secure_url;
           } catch (error: unknown) {
@@ -1051,18 +986,13 @@ export default function EditorPage() {
     }
 
     const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
-      2,
-      "0"
-    );
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
     const seconds = String(totalSeconds % 60).padStart(2, "0");
 
     return `${hours}:${minutes}:${seconds}`;
   }
 
-  const videoTrimHandler = async (
-    segments: { start: string; end: string }[]
-  ) => {
+  const videoTrimHandler = async (segments: { start: string; end: string }[]) => {
     try {
       setProgress(1);
       toast.loading("Uploading and trimming video...");
@@ -1135,11 +1065,7 @@ export default function EditorPage() {
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
     console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
-    console.log(
-      "Coordinates:",
-      { x: effect.x, y: effect.y },
-      "Expected: 0-1 range"
-    );
+    console.log("Coordinates:", { x: effect.x, y: effect.y }, "Expected: 0-1 range");
 
     if (effect.zoomLevel <= 1.0) {
       console.warn("ΓÜá Zoom level is too low, forcing to 2.0");
@@ -1166,7 +1092,9 @@ export default function EditorPage() {
   const [volume, setVolume] = useState(1);
 
   const getBackgroundStyle = useCallback(() => {
-    if (!selectedBackground) return {};
+    if (!selectedBackground) {
+      return {};
+    }
 
     if (selectedBackground === "hidden") {
       return { background: "transparent" };
@@ -1184,8 +1112,7 @@ export default function EditorPage() {
     if (selectedBackground.startsWith("gradient:")) {
       const gradientId = selectedBackground.replace("gradient:", "");
       const gradientMap: Record<string, string> = {
-        sunset:
-          "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
+        sunset: "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
         ocean: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         mint: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
         royal: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
@@ -1251,16 +1178,11 @@ export default function EditorPage() {
       }
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
       const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-      const cloudinaryPreset = process.env
-        .NEXT_PUBLIC_CLOUDINARY_PRESET as string;
+      const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET as string;
       // Call backend FFmpeg server with axios
-      const serverRes = await axios.post(
-        `${backendUrl}/process-video`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
+      const serverRes = await axios.post(`${backendUrl}/process-video`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       const { url } = serverRes.data; // backend returns { url }
 
@@ -1287,9 +1209,7 @@ export default function EditorPage() {
 
       // Navigate to preview page
       router.push(
-        `/preview?video=${encodeURIComponent(
-          cloudData.secure_url
-        )}&title=${encodeURIComponent(
+        `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(
           sidebarTitle
         )}&description=${encodeURIComponent(sidebarDescription || "")}`
       );
@@ -1350,13 +1270,7 @@ export default function EditorPage() {
               onExportWebM={exportVideo}
               tool={tool}
               setTool={(t: string) => {
-                if (
-                  t === "none" ||
-                  t === "text" ||
-                  t === "blur" ||
-                  t === "rect" ||
-                  t === "arrow"
-                ) {
+                if (t === "none" || t === "text" || t === "blur" || t === "rect" || t === "arrow") {
                   setTool(t);
                 }
               }}
@@ -1444,10 +1358,7 @@ export default function EditorPage() {
         {/* Mobile Drawer for SidemenuDashboard */}
         {isDashboardMenuOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-40"
-              onClick={closeDashboardMenu}
-            />
+            <div className="fixed inset-0 bg-black bg-opacity-40" onClick={closeDashboardMenu} />
             <SidemenuDashboard />
           </div>
         )}
@@ -1497,29 +1408,23 @@ export default function EditorPage() {
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
               {sidebarTitle && (
                 <div className="mb-3">
-                  <span className="text-sm font-medium text-gray-500">
-                    Title:{" "}
-                  </span>
-                  <span className="text-xl font-semibold text-gray-800">
-                    {sidebarTitle}
-                  </span>
+                  <span className="text-sm font-medium text-gray-500">Title: </span>
+                  <span className="text-xl font-semibold text-gray-800">{sidebarTitle}</span>
                 </div>
               )}
               {sidebarDescription && (
                 <div>
-                  <span className="text-sm font-medium text-gray-500">
-                    Description:{" "}
-                  </span>
-                  <span className="text-gray-600 text-sm">
-                    {sidebarDescription}
-                  </span>
+                  <span className="text-sm font-medium text-gray-500">Description: </span>
+                  <span className="text-gray-600 text-sm">{sidebarDescription}</span>
                 </div>
               )}
             </div>
           )}
           {/* WRAPPER */}
           <div
-            className={`flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl shadow-lg bg-white`}
+            className={
+              "flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl shadow-lg bg-white"
+            }
             style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
           >
             {/* Video container */}
@@ -1562,9 +1467,7 @@ export default function EditorPage() {
                     background: "#F6F3FF",
                   }}
                   onError={(e) => console.error("Video failed to load", e)}
-                  onProgress={({ playedSeconds }) =>
-                    setCurrentTime(playedSeconds)
-                  }
+                  onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
                 />
               </div>
 
@@ -1608,31 +1511,18 @@ export default function EditorPage() {
                     className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                     title="Back 5 seconds"
                   >
-                    <Image
-                      src="/icons/replay.svg"
-                      alt="Replay"
-                      width={16}
-                      height={16}
-                    />
+                    <Image src="/icons/replay.svg" alt="Replay" width={16} height={16} />
                   </button>
                   <button
                     onClick={() => {
-                      const newTime = Math.min(
-                        displayDuration,
-                        currentTime + 5
-                      );
+                      const newTime = Math.min(displayDuration, currentTime + 5);
                       setCurrentTime(newTime);
                       playerRef.current?.seekTo(newTime, "seconds");
                     }}
                     className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                     title="Forward 5 seconds"
                   >
-                    <Image
-                      src="/icons/forward.svg"
-                      alt="Forward"
-                      width={16}
-                      height={16}
-                    />
+                    <Image src="/icons/forward.svg" alt="Forward" width={16} height={16} />
                   </button>
                 </div>
 
@@ -1664,10 +1554,7 @@ export default function EditorPage() {
                 </div>
 
                 {/* Fullscreen */}
-                <div
-                  className="flex items-center justify-end"
-                  style={{ minWidth: 40 }}
-                >
+                <div className="flex items-center justify-end" style={{ minWidth: 40 }}>
                   <button
                     className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
                     title="Fullscreen"
@@ -1736,9 +1623,7 @@ export default function EditorPage() {
             ) : (
               <div className="w-full max-w-6xl mx-auto">
                 <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
-                  <span className="text-[#A594F9] font-medium">
-                    Loading timeline...
-                  </span>
+                  <span className="text-[#A594F9] font-medium">Loading timeline...</span>
                 </div>
               </div>
             )}
@@ -1797,8 +1682,11 @@ function CustomVideoControls({
 
   const handlePlayPause = () => {
     setPlaying((prev) => {
-      if (prev) playerRef.current?.getInternalPlayer()?.pause?.();
-      else playerRef.current?.getInternalPlayer()?.play?.();
+      if (prev) {
+        playerRef.current?.getInternalPlayer()?.pause?.();
+      } else {
+        playerRef.current?.getInternalPlayer()?.play?.();
+      }
       return !prev;
     });
   };
@@ -1880,8 +1768,7 @@ function CustomVideoControls({
           }}
         />
         <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-          {formatTime(currentTime)} /{" "}
-          {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
+          {formatTime(currentTime)} / {displayDuration > 0 ? formatTime(displayDuration) : "0:00"}
         </span>
       </div>
     </div>

@@ -18,7 +18,9 @@ export const useScreenRecorder = () => {
 
   const startRecording = async () => {
     try {
-      if (!screenStreamRef.current) return;
+      if (!screenStreamRef.current) {
+        return;
+      }
 
       let micStream: MediaStream | null = null;
 
@@ -45,7 +47,9 @@ export const useScreenRecorder = () => {
       });
 
       mediaRecorder.current.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
       };
 
       mediaRecorder.current.onstop = () => {
@@ -87,10 +91,7 @@ export const useScreenRecorder = () => {
       await startRecording();
     } catch (err: unknown) {
       if (err instanceof Error) {
-        if (
-          err.name === "NotAllowedError" ||
-          err.name === "PermissionDeniedError"
-        ) {
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
           // User clicked "Cancel" or denied permissions
           console.log("User denied screen share.");
           // toast.error("Screen sharing was denied. Please allow it to continue.");

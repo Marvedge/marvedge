@@ -16,7 +16,9 @@ export const defaultFormatTime = (seconds: number): string => {
  * @returns Formatted time string in MM:SS format
  */
 export const formatTime = (s: number): string => {
-  if (!isFinite(s) || isNaN(s)) return "0:00";
+  if (!isFinite(s) || isNaN(s)) {
+    return "0:00";
+  }
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;

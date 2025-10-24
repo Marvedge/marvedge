@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import {
-  motion,
-  useInView,
-  easeOut,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { motion, useInView, easeOut, useScroll, useTransform } from "framer-motion";
 import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -31,11 +25,11 @@ const Hero3: React.FC = () => {
   const router = useRouter();
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !name) return;
+    if (!email || !name) {
+      return;
+    }
 
-    router.push(
-      `/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`
-    );
+    router.push(`/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
   };
 
   return (
@@ -97,8 +91,7 @@ const Hero3: React.FC = () => {
             ease: easeOut,
           }}
         >
-          Ready to Transform Your{" "}
-          <span className="text-purple-600">Product Demos?</span>
+          Ready to Transform Your <span className="text-purple-600">Product Demos?</span>
         </motion.h1>
         <motion.p
           className="text-base md:text-lg text-gray-700 mb-8"
@@ -113,8 +106,8 @@ const Hero3: React.FC = () => {
             delay: 0.2,
           }}
         >
-          Join thousands of companies using AI to create compelling demo videos
-          that convert. Start your free trial today.
+          Join thousands of companies using AI to create compelling demo videos that convert. Start
+          your free trial today.
         </motion.p>
         <motion.ul
           className="text-gray-700 space-y-6 text-base md:text-lg"

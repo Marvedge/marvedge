@@ -1,10 +1,6 @@
 import { useRef, useState, useEffect, RefObject } from "react";
 
-const DraggableCameraPreview = ({
-  videoRef,
-}: {
-  videoRef: RefObject<HTMLVideoElement | null>;
-}) => {
+const DraggableCameraPreview = ({ videoRef }: { videoRef: RefObject<HTMLVideoElement | null> }) => {
   const previewRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 20, y: 20 });
   const [dragging, setDragging] = useState(false);
@@ -12,7 +8,9 @@ const DraggableCameraPreview = ({
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!dragging) return;
+      if (!dragging) {
+        return;
+      }
       setPosition({
         x: e.clientX - rel.x,
         y: e.clientY - rel.y,
@@ -30,7 +28,9 @@ const DraggableCameraPreview = ({
   }, [dragging, rel]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!previewRef.current) return;
+    if (!previewRef.current) {
+      return;
+    }
     const rect = previewRef.current.getBoundingClientRect();
     setDragging(true);
     setRel({
@@ -52,12 +52,7 @@ const DraggableCameraPreview = ({
         height: "120px",
       }}
     >
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full rounded"
-      />
+      <video ref={videoRef} autoPlay playsInline className="w-full h-full rounded" />
     </div>
   );
 };

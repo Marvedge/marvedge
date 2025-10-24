@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "../types/editor/zoom-effect";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

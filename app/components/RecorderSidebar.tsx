@@ -27,13 +27,9 @@ const RecorderSidebar: React.FC<RecorderSidebarProps> = ({
   return (
     <aside className="w-full max-w-xs bg-white border-r border-[#ede7fa] px-6 py-8 flex flex-col gap-8 min-h-screen hidden md:flex">
       <div>
-        <h2 className="text-xl font-bold text-[#7C5CFC] mb-4">
-          Recorder Settings
-        </h2>
+        <h2 className="text-xl font-bold text-[#7C5CFC] mb-4">Recorder Settings</h2>
         <div className="mb-4">
-          <label className="block text-[#7C5CFC] font-semibold mb-1">
-            Title
-          </label>
+          <label className="block text-[#7C5CFC] font-semibold mb-1">Title</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -42,9 +38,7 @@ const RecorderSidebar: React.FC<RecorderSidebarProps> = ({
           />
         </div>
         <div className="mb-4">
-          <label className="block text-[#7C5CFC] font-semibold mb-1">
-            Description
-          </label>
+          <label className="block text-[#7C5CFC] font-semibold mb-1">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -54,9 +48,7 @@ const RecorderSidebar: React.FC<RecorderSidebarProps> = ({
           />
         </div>
         <div className="mb-4">
-          <label className="block text-[#7C5CFC] font-semibold mb-1">
-            Recording Source
-          </label>
+          <label className="block text-[#7C5CFC] font-semibold mb-1">Recording Source</label>
           <div className="border-2 border-dashed border-[#A594F9] rounded-lg p-4 flex flex-col items-center justify-center mb-4 bg-[#F8F6FF]">
             <button
               onClick={onFileInputClick}
@@ -72,9 +64,7 @@ const RecorderSidebar: React.FC<RecorderSidebarProps> = ({
                 />
               </span>
               Upload Screen Recording
-              <span className="text-xs text-gray-400">
-                MP4, MOV up to 100MB
-              </span>
+              <span className="text-xs text-gray-400">MP4, MOV up to 100MB</span>
             </button>
             <input
               type="file"
@@ -83,9 +73,7 @@ const RecorderSidebar: React.FC<RecorderSidebarProps> = ({
               className="hidden"
               onChange={onFileChange}
             />
-            {uploadMessage && (
-              <div className="mt-2 text-green-600 text-xs">{uploadMessage}</div>
-            )}
+            {uploadMessage && <div className="mt-2 text-green-600 text-xs">{uploadMessage}</div>}
           </div>
 
           <button

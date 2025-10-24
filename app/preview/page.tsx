@@ -1,14 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import ReactPlayer from "react-player";
-import {
-  FaPlay,
-  FaPause,
-  FaVolumeUp,
-  FaVolumeMute,
-  FaExpand,
-  FaDownload,
-} from "react-icons/fa";
+import { FaPlay, FaPause, FaVolumeUp, FaVolumeMute, FaExpand, FaDownload } from "react-icons/fa";
 import { ArrowLeft, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -105,7 +98,9 @@ export default function PreviewPage() {
     title: string;
     format: "webm" | "mp4";
   }) => {
-    if (!videoUrl) return;
+    if (!videoUrl) {
+      return;
+    }
 
     try {
       const response = await fetch(videoUrl);
@@ -174,9 +169,7 @@ export default function PreviewPage() {
     return (
       <div className="min-h-screen bg-linear-to-br from-purple-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">
-            No Video Found
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">No Video Found</h1>
           <button
             onClick={() => router.push("/")}
             className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -219,9 +212,7 @@ export default function PreviewPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-lg font-semibold text-gray-900">
-                  Video Preview
-                </h1>
+                <h1 className="text-lg font-semibold text-gray-900">Video Preview</h1>
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -385,9 +376,7 @@ export default function PreviewPage() {
                   max={1}
                   step={0.01}
                   value={muted ? 0 : volume}
-                  onChange={(e) =>
-                    handleVolumeChange(parseFloat(e.target.value))
-                  }
+                  onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
                   className="w-20 h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
@@ -406,9 +395,7 @@ export default function PreviewPage() {
         {/* Video Info */}
         <div className="mt-8 bg-white rounded-2xl p-6 shadow-lg">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">{title}</h2>
-          {description && (
-            <p className="text-gray-600 leading-relaxed">{description}</p>
-          )}
+          {description && <p className="text-gray-600 leading-relaxed">{description}</p>}
           <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
             <span>Duration: {formatTime(duration)}</span>
             <span>Format: WebM</span>

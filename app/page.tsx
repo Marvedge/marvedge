@@ -2,8 +2,10 @@
 import { useSession } from "next-auth/react";
 import { useEffect } from "react";
 import Navbar from "../app/components/Navbar";
+import HeroSection from "./components/HeroSection";
+import Footer from "./components/Footer";
 
-export default function Home() {
+export default function LandingPage() {
   const { status } = useSession();
 
   useEffect(() => {
@@ -15,8 +17,10 @@ export default function Home() {
   }
 
   return (
-    <div>
+    <>
       <Navbar />
-    </div>
+      <HeroSection />
+      <Footer />
+    </>
   );
 }

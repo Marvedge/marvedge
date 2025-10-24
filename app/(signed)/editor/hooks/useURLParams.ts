@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { ZoomEffect } from "@/app/interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "./useEditorState";
 
 interface UseURLParamsProps {
@@ -30,7 +30,9 @@ export function useURLParams({
   formatTimeForInput,
 }: UseURLParamsProps) {
   useEffect(() => {
-    if (!params) return;
+    if (!params) {
+      return;
+    }
 
     const urlVideo = params.get("video");
     const urlStartTime = params.get("startTime");
@@ -68,12 +70,10 @@ export function useURLParams({
         try {
           const segments = JSON.parse(urlSegments);
           console.log("Loaded segments from URL:", segments);
-          const convertedSegments = segments.map(
-            (seg: { start: string; end: string }) => ({
-              start: seg.start,
-              end: seg.end,
-            })
-          );
+          const convertedSegments = segments.map((seg: { start: string; end: string }) => ({
+            start: seg.start,
+            end: seg.end,
+          }));
           setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);
         } catch (error) {

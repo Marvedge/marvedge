@@ -3,13 +3,7 @@
 import React, { useRef } from "react";
 import { FaPlay } from "react-icons/fa6";
 import { Sparkles } from "lucide-react";
-import {
-  motion,
-  useInView,
-  useScroll,
-  useTransform,
-  easeOut,
-} from "framer-motion";
+import { motion, useInView, useScroll, useTransform, easeOut } from "framer-motion";
 
 const Hero: React.FC = () => {
   const textSegments = [
@@ -102,10 +96,7 @@ const Hero: React.FC = () => {
             {textSegments.map((segment, segmentIndex) => (
               <span key={segmentIndex} className={segment.color}>
                 {segment.text.split("").map((char, charIndex) => (
-                  <motion.span
-                    key={`${segmentIndex}-${charIndex}`}
-                    variants={letterVariants}
-                  >
+                  <motion.span key={`${segmentIndex}-${charIndex}`} variants={letterVariants}>
                     {char === " " ? "\u00A0" : char}
                   </motion.span>
                 ))}
@@ -120,9 +111,8 @@ const Hero: React.FC = () => {
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
           >
-            Stop spending hours creating product demos. Our AI analyzes your
-            product URL and automatically generates professional demo videos
-            that convert visitors into customers.
+            Stop spending hours creating product demos. Our AI analyzes your product URL and
+            automatically generates professional demo videos that convert visitors into customers.
           </motion.p>
 
           <motion.div

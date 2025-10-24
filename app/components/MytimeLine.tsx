@@ -5,7 +5,7 @@ import { Card } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import ReactPlayer from "react-player";
 import { defaultFormatTime } from "@/app/lib/dateTimeUtils";
-import { ZoomEffect } from "../interfaces/editor/IZoomEffect";
+import { ZoomEffect } from "../types/editor/zoom-effect";
 import { toggleZoom, trianglePoints } from "../lib/utils";
 
 interface TrimSegment {
@@ -85,7 +85,9 @@ export function TimelineSlider({
   const [hasBeenTrimmed, setHasBeenTrimmed] = useState(false);
 
   useEffect(() => {
-    if (setProgress) setProgress(progress);
+    if (setProgress) {
+      setProgress(progress);
+    }
   }, [progress, setProgress]);
 
   useEffect(() => {
@@ -279,7 +281,9 @@ export function TimelineSlider({
   const labelColor = "#A594F9";
 
   const timeToX = (t: number) => {
-    if (isNaN(t) || isNaN(duration) || duration === 0) return margin;
+    if (isNaN(t) || isNaN(duration) || duration === 0) {
+      return margin;
+    }
     const x = margin + ((svgWidth - 2 * margin) * t) / duration;
     return Math.max(margin, Math.min(svgWidth - margin, x));
   };
@@ -287,9 +291,7 @@ export function TimelineSlider({
   const xToTime = useCallback(
     (x: number) => {
       const clamped = Math.max(margin, Math.min(svgWidth - margin, x));
-      return (
-        ((clamped - margin) / (svgWidth - 2 * margin)) * (duration || 80.0)
-      );
+      return ((clamped - margin) / (svgWidth - 2 * margin)) * (duration || 80.0);
     },
     [duration, margin, svgWidth]
   );
@@ -316,9 +318,7 @@ export function TimelineSlider({
       //   activeIdx
       // );
       setSegments((segs) => {
-        const updated = segs.map((seg, i) =>
-          i === activeIdx ? { ...seg, [key]: value } : seg
-        );
+        const updated = segs.map((seg, i) => (i === activeIdx ? { ...seg, [key]: value } : seg));
         return updated;
       });
     },
@@ -329,22 +329,31 @@ export function TimelineSlider({
   const end = segments[activeIdx]?.end ?? (duration || 80.0);
 
   useEffect(() => {
-    if (!dragging) return;
+    if (!dragging) {
+      return;
+    }
 
     // console.log("Dragging started:", dragging);
 
     const onMove = (e: MouseEvent | TouchEvent) => {
       let clientX = 0;
-      if (e instanceof MouseEvent) clientX = e.clientX;
-      else if (e.touches && e.touches[0]) clientX = e.touches[0].clientX;
+      if (e instanceof MouseEvent) {
+        clientX = e.clientX;
+      } else if (e.touches && e.touches[0]) {
+        clientX = e.touches[0].clientX;
+      }
       const rect = svgRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      if (!rect) {
+        return;
+      }
       const x = clientX - rect.left;
       let newTime = xToTime(x);
       newTime = Math.max(0, Math.min(duration || 80.0, newTime));
 
       if (dragging === "start") {
-        if (newTime >= end) newTime = end - 0.01;
+        if (newTime >= end) {
+          newTime = end - 0.01;
+        }
         updateSegment("start", newTime);
         onTimeChange?.(newTime);
         setCurrentTime(newTime);
@@ -364,7 +373,9 @@ export function TimelineSlider({
           onExternalTimeChange(newTime, end);
         }
       } else if (dragging === "end") {
-        if (newTime <= start) newTime = start + 0.01;
+        if (newTime <= start) {
+          newTime = start + 0.01;
+        }
         updateSegment("end", newTime);
         onTimeChange?.(newTime);
         setCurrentTime(newTime);
@@ -410,11 +421,11 @@ export function TimelineSlider({
     onExternalTimeChange,
   ]);
 
-  const handleTimelineClick = (
-    e: React.MouseEvent<SVGSVGElement, MouseEvent>
-  ) => {
+  const handleTimelineClick = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect) {
+      return;
+    }
     const x = e.clientX - rect.left;
     let seekTime = xToTime(x);
     seekTime = Math.max(0, Math.min(duration || 80.0, seekTime));
@@ -442,14 +453,7 @@ export function TimelineSlider({
       setSegments((prev) => prev.slice(0, -1));
       setActiveIdx(Math.min(activeIdx, segments.length - 2));
     }
-  }, [
-    segments,
-    activeIdx,
-    setRemovedSegments,
-    setRemovedActiveIdx,
-    setSegments,
-    setActiveIdx,
-  ]);
+  }, [segments, activeIdx, setRemovedSegments, setRemovedActiveIdx, setSegments, setActiveIdx]);
 
   const handleRedo = useCallback(() => {
     if (removedSegments.length > 0) {
@@ -484,7 +488,9 @@ export function TimelineSlider({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (processing) return;
+      if (processing) {
+        return;
+      }
       switch (e.key) {
         case "ArrowLeft":
           const newTimeLeft = Math.max(0, currentTime - 1);
@@ -530,8 +536,11 @@ export function TimelineSlider({
         case "z":
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
-            if (e.shiftKey) handleRedo();
-            else handleUndo();
+            if (e.shiftKey) {
+              handleRedo();
+            } else {
+              handleUndo();
+            }
           }
           break;
         case "y":
@@ -593,10 +602,7 @@ export function TimelineSlider({
       <div className="space-y-6">
         {progress > 0 && progress < 100 && (
           <div className="w-full h-2 bg-gray-200 rounded mb-2 overflow-hidden">
-            <div
-              className="h-full bg-[#7C5CFC] transition-all"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="h-full bg-[#7C5CFC] transition-all" style={{ width: `${progress}%` }} />
           </div>
         )}
         <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mb-4 w-full">
@@ -619,9 +625,7 @@ export function TimelineSlider({
             </Button>
             <Button
               onClick={handleTrim}
-              disabled={
-                processing || segments.some((seg) => seg.start >= seg.end)
-              }
+              disabled={processing || segments.some((seg) => seg.start >= seg.end)}
               className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
             >
               <span className="flex items-center gap-2">
@@ -640,13 +644,7 @@ export function TimelineSlider({
               className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
             >
               <span className="flex items-center gap-2">
-                <Image
-                  src="/icons/+.svg"
-                  alt="Add"
-                  width={20}
-                  height={20}
-                  className="w-5 h-5"
-                />
+                <Image src="/icons/+.svg" alt="Add" width={20} height={20} className="w-5 h-5" />
                 Add Segment
               </span>
             </Button>
@@ -656,13 +654,7 @@ export function TimelineSlider({
               className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               <span className="flex items-center gap-2">
-                <Image
-                  src="/icons/-.svg"
-                  alt="Remove"
-                  width={20}
-                  height={20}
-                  className="w-5 h-5"
-                />
+                <Image src="/icons/-.svg" alt="Remove" width={20} height={20} className="w-5 h-5" />
                 Remove Segment
               </span>
             </Button>
@@ -674,26 +666,14 @@ export function TimelineSlider({
               disabled={segments.length <= 1}
               className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Image
-                src="/icons/undo.svg"
-                alt="Undo"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
+              <Image src="/icons/undo.svg" alt="Undo" width={20} height={20} className="w-5 h-5" />
             </Button>
             <Button
               onClick={handleRedo}
               disabled={removedSegments.length === 0}
               className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Image
-                src="/icons/redo.svg"
-                alt="Redo"
-                width={20}
-                height={20}
-                className="w-5 h-5"
-              />
+              <Image src="/icons/redo.svg" alt="Redo" width={20} height={20} className="w-5 h-5" />
             </Button>
             {onResetVideo && hasBeenTrimmed && (
               <Button
@@ -720,9 +700,7 @@ export function TimelineSlider({
             <span>📋</span>
             <span>Drag segments to reorder them</span>
             {isDragging && <span className="text-blue-500">(Dragging...)</span>}
-            {dragIndex !== null && (
-              <span className="text-green-500">(From: {dragIndex + 1})</span>
-            )}
+            {dragIndex !== null && <span className="text-green-500">(From: {dragIndex + 1})</span>}
             {dragOverIndex !== null && (
               <span className="text-purple-500">(To: {dragOverIndex + 1})</span>
             )}
@@ -733,7 +711,9 @@ export function TimelineSlider({
                 key={idx}
                 variant={idx === activeIdx ? "default" : "outline"}
                 onClick={() => {
-                  if (!isDragging) setActiveIdx(idx);
+                  if (!isDragging) {
+                    setActiveIdx(idx);
+                  }
                 }}
                 draggable
                 onDragStart={(e) => handleDragStart(e, idx)}
@@ -750,9 +730,7 @@ export function TimelineSlider({
                     ? "bg-[#7C5CFC] text-white shadow-lg"
                     : "bg-white text-[#7C5CFC] border border-[#7C5CFC] hover:bg-[#F6F3FF] hover:text-[#7C5CFC] hover:shadow-md"
                 } ${
-                  dragOverIndex === idx
-                    ? "ring-2 ring-[#7C5CFC] ring-opacity-50 scale-110"
-                    : ""
+                  dragOverIndex === idx ? "ring-2 ring-[#7C5CFC] ring-opacity-50 scale-110" : ""
                 } ${dragIndex === idx ? "opacity-50 scale-95 shadow-xl" : ""}`}
               >
                 Segment {idx + 1}
@@ -764,15 +742,9 @@ export function TimelineSlider({
           <div className="text-sm font-medium text-muted-foreground">
             Timeline Duration: {timeFormatter(duration || 80.0)}
           </div>
-          <div className="text-lg font-mono">
-            StartTime : {timeFormatter(start)}
-          </div>
-          <div className="text-lg font-mono">
-            EndTime : {timeFormatter(end)}
-          </div>
-          <div className="text-sm font-medium text-[#7C5CFC]">
-            Active: Segment {activeIdx + 1}
-          </div>
+          <div className="text-lg font-mono">StartTime : {timeFormatter(start)}</div>
+          <div className="text-lg font-mono">EndTime : {timeFormatter(end)}</div>
+          <div className="text-sm font-medium text-[#7C5CFC]">Active: Segment {activeIdx + 1}</div>
         </div>
         <div className="w-full flex justify-center">
           <svg
@@ -802,9 +774,7 @@ export function TimelineSlider({
                 x={isNaN(seg.start) ? margin : timeToX(seg.start)}
                 y={timelineY}
                 width={
-                  isNaN(seg.end) || isNaN(seg.start)
-                    ? 0
-                    : timeToX(seg.end) - timeToX(seg.start)
+                  isNaN(seg.end) || isNaN(seg.start) ? 0 : timeToX(seg.end) - timeToX(seg.start)
                 }
                 height={timelineHeight}
                 fill={idx === activeIdx ? trimColor : "#D1C4E9"}

@@ -7,10 +7,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 
 const signInSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Please enter your email")
-    .email("Invalid email address"),
+  email: z.string().min(1, "Please enter your email").email("Invalid email address"),
   password: z.string().min(1, "Please enter your password"),
 });
 
@@ -162,9 +159,7 @@ const SignIn = () => {
 
       <div
         className={`w-full md:w-1/2 flex justify-center items-center px-4 sm:px-10 lg:px-20 py-6 md:py-10 transition-all duration-700 ease-out pt-24 md:pt-10 ${
-          animatePanel
-            ? "opacity-100 translate-x-0"
-            : "opacity-0 -translate-x-10"
+          animatePanel ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-10"
         }`}
       >
         <form
@@ -212,9 +207,7 @@ const SignIn = () => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
             >
               <Image
-                src={
-                  showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"
-                }
+                src={showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"}
                 alt="Toggle Password"
                 width={18}
                 height={18}
@@ -224,10 +217,7 @@ const SignIn = () => {
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-xs sm:text-sm">
             <label className="flex items-center space-x-1 mb-2 sm:mb-0 cursor-pointer">
-              <input
-                type="checkbox"
-                className="accent-[#6356D7] w-3.5 h-3.5 sm:w-4 sm:h-4"
-              />
+              <input type="checkbox" className="accent-[#6356D7] w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="font-semibold">Remember Me</span>
             </label>
             <button

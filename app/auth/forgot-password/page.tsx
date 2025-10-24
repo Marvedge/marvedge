@@ -7,10 +7,7 @@ import { toast } from "sonner";
 import axios from "axios";
 
 const forgotPasswordSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Please enter your email")
-    .email("Invalid email address"),
+  email: z.string().min(1, "Please enter your email").email("Invalid email address"),
 });
 
 const ForgotPassword = () => {
@@ -34,10 +31,7 @@ const ForgotPassword = () => {
       if (res.status === 200) {
         toast.success("OTP sent to your email!");
         setTimeout(
-          () =>
-            router.push(
-              `/auth/reset-password?email=${encodeURIComponent(email!)}`
-            ),
+          () => router.push(`/auth/reset-password?email=${encodeURIComponent(email!)}`),
           1500
         );
       }
@@ -104,9 +98,7 @@ const ForgotPassword = () => {
       </div>
       <div
         className={`w-full md:w-1/2 flex justify-center items-center px-4 sm:px-10 lg:px-20 py-10 transition-all duration-700 ease-out pt-24 md:pt-10 ${
-          animatePanel
-            ? "opacity-100 translate-x-0"
-            : "opacity-0 translate-x-10"
+          animatePanel ? "opacity-100 translate-x-0" : "opacity-0 translate-x-10"
         }`}
       >
         <form
@@ -115,9 +107,7 @@ const ForgotPassword = () => {
           autoComplete="on"
         >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
-              Forgot Password
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">Forgot Password</h1>
             <p className="text-sm text-gray-600 font-semibold">
               Enter your email to receive an OTP for password reset.
             </p>

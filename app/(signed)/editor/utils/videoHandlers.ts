@@ -1,7 +1,6 @@
 import { toast } from "sonner";
 import axios from "axios";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
-
 import { Segment } from "../hooks/useEditorState";
 
 // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
@@ -25,10 +24,7 @@ export function normalizeTimeFormat(time: string | number): string {
   }
 
   const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
-    2,
-    "0"
-  );
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
   const seconds = String(Math.floor(totalSeconds % 60)).padStart(2, "0");
 
   return `${hours}:${minutes}:${seconds}`;
@@ -86,10 +82,8 @@ export async function handleSaveDemo(
         const videoBlob = await response.blob();
 
         // Create FormData for Cloudinary upload
-        const CLOUDINARY_CLOUD_NAME =
-          process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET =
-          process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
 
         const cloudFormData = new FormData();
         cloudFormData.append("file", videoBlob, "video.webm");
@@ -229,11 +223,7 @@ export async function videoTrimHandler(
 
     // Use only the first segment for trimming
     const firstSegment = normalizedSegments[0];
-    const trimmedBlob = await videoTrimmer(
-      videoBlob,
-      firstSegment.start,
-      firstSegment.end
-    );
+    const trimmedBlob = await videoTrimmer(videoBlob, firstSegment.start, firstSegment.end);
     setProgress(95);
 
     const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
@@ -276,14 +266,8 @@ interface ExportVideoParams {
 }
 
 export async function exportVideo(params: ExportVideoParams) {
-  const {
-    videoUrl,
-    selectedBackground,
-    imageMap,
-    sidebarTitle,
-    sidebarDescription,
-    router,
-  } = params;
+  const { videoUrl, selectedBackground, imageMap, sidebarTitle, sidebarDescription, router } =
+    params;
 
   if (!videoUrl) {
     toast.error("No video available to export");
@@ -324,17 +308,12 @@ export async function exportVideo(params: ExportVideoParams) {
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-    const cloudinaryPreset = process.env
-      .NEXT_PUBLIC_CLOUDINARY_PRESET as string;
+    const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET as string;
 
     // Call backend FFmpeg server with axios
-    const serverRes = await axios.post(
-      `${backendUrl}/process-video`,
-      formData,
-      {
-        headers: { "Content-Type": "multipart/form-data" },
-      }
-    );
+    const serverRes = await axios.post(`${backendUrl}/process-video`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
 
     const { url } = serverRes.data; // backend returns { url }
 
