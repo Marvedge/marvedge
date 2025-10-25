@@ -4,7 +4,7 @@ import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
-import RecorderTopbar from "./components/RecorderTopbar";
+import RecorderTopbar from "@/app/components/RecorderTopbar";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import Image from "next/image";
 import { toast, Toaster } from "sonner";
@@ -18,9 +18,9 @@ import { useCameraControls } from "./hooks/useCameraControls";
 import { useVideoDuration } from "./hooks/useVideoDuration";
 
 // Import components
-import VideoPlayerSection from "./components/VideoPlayerSection";
-import RecordingControls from "./components/RecordingControls";
-import InitialRecorderView from "./components/InitialRecorderView";
+import VideoPlayerSection from "@/app/components/VideoPlayerSection";
+import RecordingControls from "@/app/components/RecordingControls";
+import InitialRecorderView from "@/app/components/InitialRecorderView";
 
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);

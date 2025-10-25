@@ -593,7 +593,7 @@ export default function VideoPreview({
               onChange={handleSeek}
               onPointerUp={handleSeekEnd}
               disabled={isRecording}
-              className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-gradient-to-r from-[#A594F9] to-[#7C5CFC] disabled:opacity-50"
+              className="flex-1 accent-[#A594F9] h-2 rounded-lg bg-linear-to-r from-[#A594F9] to-[#7C5CFC] disabled:opacity-50"
               style={{
                 background: "linear-gradient(90deg, #A594F9 0%, #7C5CFC 100%)",
                 height: 8,

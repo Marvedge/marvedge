@@ -1,8 +1,8 @@
 import ReactPlayer from "react-player";
 import Image from "next/image";
 import VideoPreview from "@/app/components/VideoPreview";
-import SimpleTimeline from "./SimpleTimeline";
-import RecordingTimeline from "./RecordingTimeline";
+import SimpleTimeline from "@/app/components/SimpleTimeline";
+import RecordingTimeline from "@/app/components/RecordingTimeline";
 
 interface VideoPlayerSectionProps {
   uploadedFileType: string | null;
