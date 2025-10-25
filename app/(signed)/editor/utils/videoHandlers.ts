@@ -138,7 +138,7 @@ export async function handleSaveDemo(
         title: data.title,
         description: data.description,
         videoUrl: cloudinaryVideoUrl,
-        editing: editingToSave
+        editing: editingToSave,
       });
       console.log("Demo saved:", response.data);
     } catch (error: unknown) {
