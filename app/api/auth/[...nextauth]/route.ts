@@ -76,23 +76,30 @@ const handler = NextAuth({
   },
 
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Persist user info to token when user is first authenticated
+      if (trigger === "update" && session?.user?.image) {
+        token.picture = session.user.image;
+      }
       if (user) {
+        console.log("user info", user);
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
+        token.picture = user.image || null;
       }
       return token;
     },
 
     async session({ session, token }) {
       if (token && session.user) {
+        console.log("session info", session);
         // Add token info to session
         // @ts-expect-error: `id` property does not exist on session.user by default, but we add it for frontend use
         session.user.id = token.id || token.sub;
         session.user.email = token.email;
         session.user.name = token.name;
+        session.user.image = token.picture;
       }
       return session;
     },
