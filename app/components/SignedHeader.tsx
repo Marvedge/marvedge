@@ -15,15 +15,10 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
 
   // Calculate initials from user's name or email
   const initials = React.useMemo(() => {
-    if (session?.user?.name) {
-      return session.user.name
-        .split(" ")
-        .map((part) => part[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
+    if (session?.user?.image) {
+      return session.user.image;
     }
-    return session?.user?.email?.[0].toUpperCase() || "U";
+    return "/icons/status-icon-green.png";
   }, [session?.user]);
 
   useEffect(() => {
@@ -74,7 +69,8 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
               onClick={() => setShowDropdown((v) => !v)}
               title={session?.user?.name || session?.user?.email || undefined}
             >
-              {initials}
+              {/* {initials} */}
+              <Image src={initials} alt="user_profile" fill className="rounded-full object-cover" />
             </button>
             {showDropdown && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
