@@ -174,6 +174,7 @@ const SettingsPage = () => {
         ...session,
         user: {
           ...session?.user,
+          name: form.firstName + " " + form.lastName,
           image: userProfileCloudUrl,
         },
       });
