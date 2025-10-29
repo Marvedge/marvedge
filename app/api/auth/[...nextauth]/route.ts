@@ -78,8 +78,13 @@ const handler = NextAuth({
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       // Persist user info to token when user is first authenticated
-      if (trigger === "update" && session?.user?.image) {
-        token.picture = session.user.image;
+      if (trigger === "update") {
+        if (session?.user?.image) {
+          token.picture = session.user.image;
+        }
+        if (session?.user?.name) {
+          token.name = session.user.name;
+        }
       }
       if (user) {
         console.log("user info", user);
