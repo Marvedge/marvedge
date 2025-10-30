@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect } from "react";
 import { FaBars } from "react-icons/fa6";
 import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
@@ -14,7 +14,6 @@ import Image from "next/image";
 import SidemenuDashboard from "@/app/components/SidemenuDashboard";
 import EditorSidebar from "@/app/components/EditorSidebar";
 import EditorTopbar from "@/app/components/EditorTopbar";
-import TimelineRuler from "@/app/components/TimeLine";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
 import CustomVideoControls from "./components/CustomVideoControls";
@@ -33,7 +32,7 @@ import { useTimelineInit } from "./hooks/useTimelineInit";
 
 // Utils
 import { sanitizeFilename } from "@/app/lib/constants";
-import { handleSaveDemo, videoTrimHandler, exportVideo } from "./utils/videoHandlers";
+import { handleSaveDemo, exportVideo } from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 
 export default function EditorPage() {
@@ -48,7 +47,7 @@ export default function EditorPage() {
     setVideoUrl,
     playing,
     setPlaying,
-    timelineStartTime,
+    // timelineStartTime,
     setTimelineStartTime,
     timelineEndTime,
     setTimelineEndTime,
@@ -105,8 +104,8 @@ export default function EditorPage() {
     videoUrl: recordedVideoUrl,
     mp4Url,
     thumbnailUrl,
-    processing,
-    resetVideo,
+    // processing,
+    // resetVideo,
     downloadBlob,
   } = useEditor();
 
@@ -214,13 +213,13 @@ export default function EditorPage() {
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
   // Timeline change handler
-  const handleTimelineChange = useCallback(
-    (start: number, end: number) => {
-      setInputStartTime(formatTimeForInput(start));
-      setInputEndTime(formatTimeForInput(end));
-    },
-    [formatTimeForInput, setInputStartTime, setInputEndTime]
-  );
+  // const handleTimelineChange = useCallback(
+  //   (start: number, end: number) => {
+  //     setInputStartTime(formatTimeForInput(start));
+  //     setInputEndTime(formatTimeForInput(end));
+  //   },
+  //   [formatTimeForInput, setInputStartTime, setInputEndTime]
+  // );
 
   // Dashboard menu handlers
   const closeDashboardMenu = () => {
@@ -247,13 +246,13 @@ export default function EditorPage() {
   };
 
   // Video trim handler
-  const onVideoTrim = async (segments: { start: string; end: string }[]) => {
-    await videoTrimHandler(segments, {
-      videoUrl: videoUrl!,
-      setVideoUrl,
-      setProgress,
-    });
-  };
+  // const onVideoTrim = async (segments: { start: string; end: string }[]) => {
+  //   await videoTrimHandler(segments, {
+  //     videoUrl: videoUrl!,
+  //     setVideoUrl,
+  //     setProgress,
+  //   });
+  // };
 
   // Export video handler
   const onExportVideo = async () => {
@@ -268,19 +267,19 @@ export default function EditorPage() {
   };
 
   // Zoom effects handlers
-  const onZoomEffectCreate = (effect: ZoomEffect) => {
-    console.log("Creating zoom effect:", effect);
-    console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
-    console.log("Coordinates:", { x: effect.x, y: effect.y }, "Expected: 0-1 range");
+  // const onZoomEffectCreate = (effect: ZoomEffect) => {
+  //   console.log("Creating zoom effect:", effect);
+  //   console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
+  //   console.log("Coordinates:", { x: effect.x, y: effect.y }, "Expected: 0-1 range");
 
-    if (effect.zoomLevel <= 1.0) {
-      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
-      effect.zoomLevel = 2.0;
-    }
+  //   if (effect.zoomLevel <= 1.0) {
+  //     console.warn("⚠️ Zoom level is too low, forcing to 2.0");
+  //     effect.zoomLevel = 2.0;
+  //   }
 
-    setZoomEffects((prev) => [...prev, effect]);
-    console.log("Total zoom effects:", [...zoomEffects, effect].length);
-  };
+  //   setZoomEffects((prev) => [...prev, effect]);
+  //   console.log("Total zoom effects:", [...zoomEffects, effect].length);
+  // };
 
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
@@ -711,7 +710,7 @@ export default function EditorPage() {
           {videoUrl && (
             <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
               {duration > 0 ? (
-                <TimelineRuler
+                /* <TimelineRuler
                   minValue={0}
                   maxValue={duration}
                   currentValue={Math.max(0, currentTime)}
@@ -739,7 +738,33 @@ export default function EditorPage() {
                   onZoomEffectCreate={onZoomEffectCreate}
                   initialSegments={currentSegments}
                   onTrim={onVideoTrim}
-                />
+                /> */
+                <div className="w-full max-w-6xl mx-auto">
+                  <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
+                    <span className="text-[#A594F9] font-medium">
+                      Note: The <strong>TimeLineRuler</strong> component is currently commented out.
+                      Implementation is planned for a future update. ------------------------------
+                      If you plan to uncomment <strong>TimeLineRuler</strong>,------------------
+                      please remove the related commented functions and variables as listed below.
+                      Refer to the codebase for details.
+                      {/*
+                        1. onZoomEffectCreate — Line ~271
+                        2. onVideoTrim — Line ~250
+                        3. handleTimelineChange — Line ~217
+                        4. processing, resetVideo — Lines ~108 and ~109
+                        5. timelineStartTime — Line ~51
+                        6. Replace Line ~36 with:
+                          import { handleSaveDemo, videoTrimHandler, exportVideo } from "./utils/videoHandlers";
+                          (or import only videoTrimHandler)
+                        7. Add import:
+                          import TimelineRuler from "@/app/components/TimeLine";
+                        8. Replace Line ~3 with:
+                          import React, { useEffect, useCallback } from "react";
+                          (or import only useCallback)
+                      */}
+                    </span>
+                  </div>
+                </div>
               ) : (
                 <div className="w-full max-w-6xl mx-auto">
                   <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
