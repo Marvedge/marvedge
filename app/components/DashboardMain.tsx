@@ -293,10 +293,13 @@ const DashboardMain = () => {
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Total Demos</div>
+            <div className="text-sm md:text-lg font-medium text-black">
+              Total Demos
+            </div>
             <div className="text-2xl md:text-3xl font-bold text-black">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +12% <span className="text-gray-500 font-normal">vs last month</span>
+              +12%{" "}
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
 
@@ -312,10 +315,13 @@ const DashboardMain = () => {
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Total Views</div>
+            <div className="text-sm md:text-lg font-medium text-black">
+              Total Views
+            </div>
             <div className="text-2xl md:text-3xl font-bold text-black">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +23% <span className="text-gray-500 font-normal">vs last month</span>
+              +23%{" "}
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
 
@@ -331,10 +337,13 @@ const DashboardMain = () => {
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Completion Rate</div>
+            <div className="text-sm md:text-lg font-medium text-black">
+              Completion Rate
+            </div>
             <div className="text-2xl md:text-3xl font-bold text-black">0%</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +5% <span className="text-gray-500 font-normal">vs last month</span>
+              +5%{" "}
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
 
@@ -350,10 +359,13 @@ const DashboardMain = () => {
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Active shares</div>
+            <div className="text-sm md:text-lg font-medium text-black">
+              Active shares
+            </div>
             <div className="text-2xl md:text-3xl font-bold text-black">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +8% <span className="text-gray-500 font-normal">vs last month</span>
+              +8%{" "}
+              <span className="text-gray-500 font-normal">vs last month</span>
             </div>
           </div>
         </div>
@@ -388,7 +400,9 @@ const DashboardMain = () => {
           ) : demos.length > 0 ? (
             <div className="flex flex-col divide-y divide-gray-200">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">Recent Demos</h3>
+                <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">
+                  Recent Demos
+                </h3>
                 {demos.length > 5 && (
                   <button
                     className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
@@ -407,10 +421,17 @@ const DashboardMain = () => {
                     {/* Left: Icon + Title + Description */}
                     <div className="flex items-center gap-3">
                       <div className="flex items-center justify-center bg-[#F8F6FF] rounded-lg w-10 h-10">
-                        <Image src="/icons/play-demo.svg" alt="Play" width={20} height={20} />
+                        <Image
+                          src="/icons/play-demo.svg"
+                          alt="Play"
+                          width={20}
+                          height={20}
+                        />
                       </div>
                       <div>
-                        <div className="font-medium text-gray-800">{demo.title}</div>
+                        <div className="font-medium text-gray-800">
+                          {demo.title}
+                        </div>
                         <div className="text-sm text-gray-500 truncate w-40">
                           {demo.description || "No description"}
                         </div>
@@ -485,11 +506,13 @@ const DashboardMain = () => {
                     className="sm:w-[25px] sm:h-[25px]"
                   />
                 </span>
-                <span className="text-lg md:text-xl font-bold text-white">AI Assistant</span>
+                <span className="text-lg md:text-xl font-bold text-white">
+                  AI Assistant
+                </span>
               </div>
               <div className="text-white text-sm md:text-base mb-4 md:mb-6">
-                Ready to help you create better demos with smart suggestions and auto generated
-                content.
+                Ready to help you create better demos with smart suggestions and
+                auto generated content.
               </div>
             </div>
             <button className="w-full py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
@@ -536,7 +559,9 @@ const DashboardMain = () => {
                   <div className="font-bold text-[#2D2154] text-sm md:text-base">
                     Feature Launch
                   </div>
-                  <div className="text-gray-500 text-xs md:text-sm">Showcase new capabilities</div>
+                  <div className="text-gray-500 text-xs md:text-sm">
+                    Showcase new capabilities
+                  </div>
                 </div>
               </div>
 
@@ -551,8 +576,12 @@ const DashboardMain = () => {
                   />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-sm md:text-base">Sales Demo</div>
-                  <div className="text-gray-500 text-xs md:text-sm">Impress prospects</div>
+                  <div className="font-bold text-[#2D2154] text-sm md:text-base">
+                    Sales Demo
+                  </div>
+                  <div className="text-gray-500 text-xs md:text-sm">
+                    Impress prospects
+                  </div>
                 </div>
               </div>
             </div>

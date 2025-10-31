@@ -54,11 +54,15 @@ export default function TimelineRuler({
           start: parseFloat(seg.start),
           end: parseFloat(seg.end),
         }))
-      : [{ start: minValue, end: maxValue }] // Initialize with full duration segment
+      : [{ start: minValue, end: maxValue }], // Initialize with full duration segment
   );
   const [activeSegment, setActiveSegment] = useState(0);
-  const [removedSegments, setRemovedSegments] = useState<{ start: number; end: number }[]>([]);
-  const [draggingScissor, setDraggingScissor] = useState<"left" | "right" | null>(null);
+  const [removedSegments, setRemovedSegments] = useState<
+    { start: number; end: number }[]
+  >([]);
+  const [draggingScissor, setDraggingScissor] = useState<
+    "left" | "right" | null
+  >(null);
   const [scissorPreview, setScissorPreview] = useState<number | null>(null);
   const [draggingCurrentTime, setDraggingCurrentTime] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1); // Start with no zoom
@@ -83,7 +87,7 @@ export default function TimelineRuler({
   // Helper function to immediately switch to trim mode
   const switchToTrimMode = (trimIdx: number) => {
     console.log(
-      `[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`
+      `[MODE] Switching to TRIM mode, trimIdx=${trimIdx}, segment=${JSON.stringify(segments[trimIdx])}`,
     );
     playheadModeRef.current = "trim";
     selectedTrimIdxRef.current = trimIdx;
@@ -105,7 +109,10 @@ export default function TimelineRuler({
 
       // Check if currentPos is inside a trimmed section
       for (let i = 0; i < sortedSegments.length; i++) {
-        if (currentPos >= sortedSegments[i].start && currentPos < sortedSegments[i].end) {
+        if (
+          currentPos >= sortedSegments[i].start &&
+          currentPos < sortedSegments[i].end
+        ) {
           // Jump to the next gap after this segment
           if (i + 1 < sortedSegments.length) {
             return sortedSegments[i].end;
@@ -196,7 +203,10 @@ export default function TimelineRuler({
             const newTimelineWidth = baseTimelineWidth * newZoom;
             const maxScroll = Math.max(0, newTimelineWidth - baseTimelineWidth);
             const targetScrollLeft = cursorRatio * newTimelineWidth - cursorX;
-            const clampedScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScroll));
+            const clampedScrollLeft = Math.max(
+              0,
+              Math.min(targetScrollLeft, maxScroll),
+            );
 
             setScrollLeft(clampedScrollLeft);
             scrollContainerRef.current.scrollLeft = clampedScrollLeft;
@@ -259,15 +269,25 @@ export default function TimelineRuler({
     };
     const onUp = () => {
       if (scissorPreview !== null) {
-        if (draggingScissor === "left" && scissorPreview > minValue && scissorPreview < maxValue) {
-          setSegments((prev) => [...prev, { start: minValue, end: scissorPreview }]);
+        if (
+          draggingScissor === "left" &&
+          scissorPreview > minValue &&
+          scissorPreview < maxValue
+        ) {
+          setSegments((prev) => [
+            ...prev,
+            { start: minValue, end: scissorPreview },
+          ]);
           setActiveSegment(segments.length);
         } else if (
           draggingScissor === "right" &&
           scissorPreview > minValue &&
           scissorPreview < maxValue
         ) {
-          setSegments((prev) => [...prev, { start: scissorPreview, end: maxValue }]);
+          setSegments((prev) => [
+            ...prev,
+            { start: scissorPreview, end: maxValue },
+          ]);
           setActiveSegment(segments.length);
         }
       }
@@ -288,7 +308,9 @@ export default function TimelineRuler({
         return;
       }
       const rect = rulerRef.current.getBoundingClientRect();
-      const x = (e instanceof MouseEvent ? e.clientX : e.nativeEvent.clientX) - rect.left;
+      const x =
+        (e instanceof MouseEvent ? e.clientX : e.nativeEvent.clientX) -
+        rect.left;
       const width = rect.width;
       const percentage = Math.max(0, Math.min(1, x / width));
       const value = minValue + (maxValue - minValue) * percentage;
@@ -296,7 +318,7 @@ export default function TimelineRuler({
       // Allow clicking anywhere - no skipping logic
       setLocalValue(value);
     },
-    [minValue, maxValue]
+    [minValue, maxValue],
   );
 
   useEffect(() => {
@@ -368,7 +390,7 @@ export default function TimelineRuler({
       draggingHandle,
       segments,
       activeSegment,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -417,7 +439,10 @@ export default function TimelineRuler({
       setRemovedSegments((prev) => [...prev, lastSegment]);
       setSegments((prev) => {
         const newSegments = prev.slice(0, -1);
-        const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
+        const newActiveSegment = Math.min(
+          activeSegment,
+          newSegments.length - 1,
+        );
         setActiveSegment(newActiveSegment);
         if (newSegments[newActiveSegment]) {
           setLocalStartTime(newSegments[newActiveSegment].start);
@@ -457,215 +482,12 @@ export default function TimelineRuler({
     setLocalStartTime(startTime);
     setLocalEndTime(endTime);
 
-    console.log(`Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`);
+    console.log(
+      `Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`,
+    );
   };
 
-  // Handle segment resize
-  useEffect(() => {
-    if (resizingSegmentIdx === null || resizingHandle === null) {
-      return;
-    }
-
-    const onMove = (e: MouseEvent) => {
-      if (!rulerRef.current) {
-        return;
-      }
-      const rect = rulerRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const width = rect.width;
-      const percentage = Math.max(0, Math.min(1, x / width));
-      const value = minValue + (maxValue - minValue) * percentage;
-
-      setSegments((prev) => {
-        const updated = [...prev];
-        const segment = updated[resizingSegmentIdx];
-
-        if (resizingHandle === "start") {
-          // Don't let start go past end, maintain minimum duration
-          segment.start = Math.min(value, segment.end - 0.1);
-        } else if (resizingHandle === "end") {
-          // Don't let end go before start, maintain minimum duration
-          segment.end = Math.max(value, segment.start + 0.1);
-        }
-
-        return updated;
-      });
-    };
-
-    const onUp = () => {
-      setResizingSegmentIdx(null);
-      setResizingHandle(null);
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [resizingSegmentIdx, resizingHandle, minValue, maxValue]);
-
-  // Auto-play playhead movement
-  // useEffect(() => {
-  //   if (!isAutoPlaying) {
-  //     console.log("[ANIMATION] isAutoPlaying is FALSE, not starting");
-  //     return;
-  //   }
-  //   console.log("[ANIMATION] Starting animation loop, isAutoPlaying=true");
-
-  //   const animationInterval = setInterval(() => {
-  //     setLocalValue((currentVal) => {
-  //       const nextValue = currentVal + PLAYHEAD_SPEED;
-  //       const currentMode = playheadModeRef.current;
-  //       const currentSegments = segmentsRef.current;
-  //       const currentSelectedIdx = selectedTrimIdxRef.current;
-  //       let finalValue = currentVal;
-
-  //       if (currentMode === "trim" && currentSelectedIdx !== null) {
-  //         // TRIM MODE: Move within trim section, loop back to start when reaching end
-  //         const selectedSegment = currentSegments[currentSelectedIdx];
-  //         if (selectedSegment) {
-  //           // Check if we've reached the end of the segment
-  //           if (nextValue >= selectedSegment.end) {
-  //             // Loop back to the start of the segment
-  //             finalValue = selectedSegment.start;
-  //           } else {
-  //             // Move within the segment
-  //             finalValue = nextValue;
-  //           }
-  //         }
-  //       } else {
-  //         // NON-TRIM MODE: Move through gaps only, skip trimmed sections, jump to next gap when current gap ends
-  //         let gapStart = minValue;
-  //         let gapEnd = maxValue;
-  //         let currentGapIndex = -1; // Track which gap we're in
-
-  //         // Sort segments by start position
-  //         const sortedSegments = [...currentSegments].sort((a, b) => a.start - b.start);
-
-  //         // First, check if currentVal is already inside a trimmed section
-  //         let isInTrimmedSection = false;
-  //         for (let i = 0; i < sortedSegments.length; i++) {
-  //           if (currentVal >= sortedSegments[i].start && currentVal < sortedSegments[i].end) {
-  //             isInTrimmedSection = true;
-  //             break;
-  //           }
-  //         }
-
-  //         // If we're inside a trimmed section, jump to the next gap after it
-  //         if (isInTrimmedSection) {
-  //           for (let i = 0; i < sortedSegments.length; i++) {
-  //             if (currentVal < sortedSegments[i].end) {
-  //               // Found the segment we're in, set gap after it
-  //               if (i + 1 < sortedSegments.length) {
-  //                 gapStart = sortedSegments[i].end;
-  //                 gapEnd = sortedSegments[i + 1].start;
-  //                 currentGapIndex = i + 1; // Gap after segment i
-  //               } else {
-  //                 gapStart = sortedSegments[i].end;
-  //                 gapEnd = maxValue;
-  //                 currentGapIndex = sortedSegments.length; // Gap after last segment
-  //               }
-  //               break;
-  //             }
-  //           }
-  //         } else {
-  //           // We're in a gap, find which one
-  //           // Gap 0: minValue to segment[0].start
-  //           // Gap 1: segment[0].end to segment[1].start
-  //           // Gap 2: segment[1].end to segment[2].start
-  //           // ... and so on
-
-  //           for (let i = 0; i < sortedSegments.length; i++) {
-  //             if (currentVal < sortedSegments[i].start) {
-  //               // We're in a gap before this segment
-  //               gapEnd = sortedSegments[i].start;
-  //               currentGapIndex = i; // Gap before segment i
-  //               break;
-  //             } else {
-  //               // We passed this segment, update gapStart for next iteration
-  //               gapStart = sortedSegments[i].end;
-  //             }
-  //           }
-  //           // If we didn't break, we're in the gap after the last segment
-  //           if (currentGapIndex === -1) {
-  //             currentGapIndex = sortedSegments.length;
-  //           }
-  //         }
-
-  //         // DEBUG
-  //         if (currentMode === "non-trim" && currentVal !== 0) {
-  //           console.log(
-  //             `Non-trim: currentVal=${currentVal.toFixed(4)}, gap=[${gapStart.toFixed(4)}, ${gapEnd.toFixed(4)}], nextValue=${nextValue.toFixed(4)}, gapIdx=${currentGapIndex}`
-  //           );
-  //         }
-
-  //         // Move within the gap or jump to next gap when current gap ends
-  //         if (nextValue >= gapEnd) {
-  //           // Current gap is ending, find the next gap
-  //           const sortedSegments = [...currentSegments].sort((a, b) => a.start - b.start);
-
-  //           // Calculate all gap boundaries
-  //           const gaps: Array<{ start: number; end: number }> = [];
-  //           if (sortedSegments.length === 0) {
-  //             gaps.push({ start: minValue, end: maxValue });
-  //           } else {
-  //             // Gap before first segment
-  //             if (sortedSegments[0].start > minValue) {
-  //               gaps.push({ start: minValue, end: sortedSegments[0].start });
-  //             }
-  //             // Gaps between segments
-  //             for (let i = 0; i < sortedSegments.length - 1; i++) {
-  //               if (sortedSegments[i].end < sortedSegments[i + 1].start) {
-  //                 gaps.push({
-  //                   start: sortedSegments[i].end,
-  //                   end: sortedSegments[i + 1].start,
-  //                 });
-  //               }
-  //             }
-  //             // Gap after last segment
-  //             if (sortedSegments[sortedSegments.length - 1].end < maxValue) {
-  //               gaps.push({
-  //                 start: sortedSegments[sortedSegments.length - 1].end,
-  //                 end: maxValue,
-  //               });
-  //             }
-  //           }
-
-  //           // Find which gap we're in
-  //           let currentGapIdx = -1;
-  //           for (let i = 0; i < gaps.length; i++) {
-  //             if (currentVal >= gaps[i].start && currentVal < gaps[i].end) {
-  //               currentGapIdx = i;
-  //               break;
-  //             }
-  //           }
-
-  //           // Jump to next gap if available
-  //           if (currentGapIdx !== -1 && currentGapIdx + 1 < gaps.length) {
-  //             finalValue = gaps[currentGapIdx + 1].start;
-  //           } else if (gaps.length > 0) {
-  //             // No more gaps, loop back to the first gap
-  //             finalValue = gaps[0].start;
-  //           } else {
-  //             // No gaps available, stop at the end of current gap
-  //             finalValue = gapEnd;
-  //           }
-  //         } else if (nextValue < gapStart) {
-  //           // Shouldn't happen, but just in case
-  //           finalValue = gapStart;
-  //         } else {
-  //           finalValue = nextValue;
-  //         }
-  //       }
-
-  //       return finalValue;
-  //     });
-  //   }, 33); // ~30fps
-
-  //   return () => clearInterval(animationInterval);
-  // }, [isAutoPlaying, minValue, maxValue]);
+  // Auto-play playhead movement intentionally disabled. Legacy block removed.
 
   // Separate effect to call onValueChange callback after localValue updates
   // But skip if the update came from a prop change
@@ -723,7 +545,8 @@ export default function TimelineRuler({
     return ticks;
   };
 
-  const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+  const currentPosition =
+    ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
 
   return (
     <div className="w-full max-w-6xl mx-auto p-6">
@@ -805,8 +628,18 @@ export default function TimelineRuler({
               className="text-gray-600 hover:text-purple-600 hover:bg-white rounded p-1 transition-colors"
               title="Zoom out"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 12H4"
+                />
               </svg>
             </button>
 
@@ -861,7 +694,12 @@ export default function TimelineRuler({
               className="text-gray-600 hover:text-purple-600 hover:bg-white rounded p-1 transition-colors"
               title="Zoom in"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -885,7 +723,13 @@ export default function TimelineRuler({
               className="h-9 px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Undo"
             >
-              <Image src="/icons/undo.svg" alt="Undo" width={16} height={16} className="w-4 h-4" />
+              <Image
+                src="/icons/undo.svg"
+                alt="Undo"
+                width={16}
+                height={16}
+                className="w-4 h-4"
+              />
             </button>
             <button
               onClick={handleRedo}
@@ -893,7 +737,13 @@ export default function TimelineRuler({
               className="h-9 px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Redo"
             >
-              <Image src="/icons/redo.svg" alt="Redo" width={16} height={16} className="w-4 h-4" />
+              <Image
+                src="/icons/redo.svg"
+                alt="Redo"
+                width={16}
+                height={16}
+                className="w-4 h-4"
+              />
             </button>
           </div>
           {onResetVideo && hasBeenTrimmed && (
@@ -1001,7 +851,8 @@ export default function TimelineRuler({
               {/* Tick marks */}
               {generateTicks().map((tick, index) => {
                 const positionPx =
-                  ((tick.value - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  ((tick.value - minValue) / (maxValue - minValue)) *
+                  zoomedTimelineWidth;
 
                 return (
                   <div
@@ -1020,7 +871,9 @@ export default function TimelineRuler({
                     />
                     {tick.type === "major" && (
                       <div className="absolute top-7 -translate-x-1/2 left-1/2">
-                        <span className="text-xs text-[#A594F9] font-medium">{tick.label}</span>
+                        <span className="text-xs text-[#A594F9] font-medium">
+                          {tick.label}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -1049,9 +902,11 @@ export default function TimelineRuler({
               {/* Segments */}
               {segments.map((segment, idx) => {
                 const startPosition =
-                  ((segment.start - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  ((segment.start - minValue) / (maxValue - minValue)) *
+                  zoomedTimelineWidth;
                 const endPosition =
-                  ((segment.end - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  ((segment.end - minValue) / (maxValue - minValue)) *
+                  zoomedTimelineWidth;
                 const width = endPosition - startPosition;
 
                 return (

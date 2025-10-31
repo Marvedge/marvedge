@@ -8,7 +8,10 @@ export async function POST(req: NextRequest) {
     console.log("Received request:", { name, email, message });
 
     if (!name || !email || !message) {
-      return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "All fields are required" },
+        { status: 400 },
+      );
     }
 
     await prisma.contactMessage.create({
@@ -25,6 +28,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Contact form error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

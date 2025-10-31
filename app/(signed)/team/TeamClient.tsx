@@ -37,10 +37,14 @@ const TeamPage = () => {
 
   return (
     <div
-      className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
+      className="flex flex-col grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
       style={{ minHeight: "calc(100vh - 80px)" }}
     >
-      <SignedHeader titleText="Team" iconSRC="/icons/dash-users.svg" iconALT="team_icon" />
+      <SignedHeader
+        titleText="Team"
+        iconSRC="/icons/dash-users.svg"
+        iconALT="team_icon"
+      />
 
       <TeamsMain onCreateTeamClick={() => setShowModal(true)} teams={teams} />
 
@@ -56,25 +60,33 @@ const TeamPage = () => {
             transition={{ duration: 0.3 }}
             className="bg-white p-6 sm:p-10 rounded-xl w-full max-w-2xl shadow-xl"
           >
-            <h2 className="text-xl font-semibold text-[#2D1E6B] mb-6">Create new team</h2>
+            <h2 className="text-xl font-semibold text-[#2D1E6B] mb-6">
+              Create new team
+            </h2>
             <form className="flex flex-col gap-4">
               <input
                 type="text"
                 placeholder="Enter your team name"
                 value={newTeam.name}
-                onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                onChange={(e) =>
+                  setNewTeam({ ...newTeam, name: e.target.value })
+                }
                 className="border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] placeholder-[#B8AEE4] focus:ring-2 focus:ring-[#A99AF5] outline-none"
               />
               <textarea
                 placeholder="Enter team description"
                 value={newTeam.description}
-                onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
+                onChange={(e) =>
+                  setNewTeam({ ...newTeam, description: e.target.value })
+                }
                 className="border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] placeholder-[#B8AEE4] h-24 resize-none focus:ring-2 focus:ring-[#A99AF5] outline-none"
               />
               <div className="relative">
                 <select
                   value={newTeam.plan}
-                  onChange={(e) => setNewTeam({ ...newTeam, plan: e.target.value })}
+                  onChange={(e) =>
+                    setNewTeam({ ...newTeam, plan: e.target.value })
+                  }
                   className="appearance-none w-full border border-[#D8CFFF] rounded-md px-4 py-3 text-sm text-[#7569A5] bg-white focus:ring-2 focus:ring-[#A99AF5] outline-none"
                 >
                   <option value="">Plan Type</option>

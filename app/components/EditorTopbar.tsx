@@ -10,7 +10,11 @@ type EditorTopbarProps = {
   onToggleMenu: () => void;
 };
 
-const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps) => {
+const EditorTopbar = ({
+  onBack,
+  userInitials,
+  onToggleMenu,
+}: EditorTopbarProps) => {
   const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isDashboardMenuOpen, setIsDashboardMenuOpen] = useState(false);
@@ -18,15 +22,23 @@ const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps)
   const hamburgerRef = useRef<HTMLDivElement>(null);
 
   const username =
-    session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")?.[0] || "User";
+    session?.user?.name?.split(" ")[0] ||
+    session?.user?.email?.split("@")?.[0] ||
+    "User";
 
   // Close dropdown and menu on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setShowDropdown(false);
       }
-      if (hamburgerRef.current && !hamburgerRef.current.contains(event.target as Node)) {
+      if (
+        hamburgerRef.current &&
+        !hamburgerRef.current.contains(event.target as Node)
+      ) {
         setIsDashboardMenuOpen(false);
       }
     };

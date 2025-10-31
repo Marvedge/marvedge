@@ -71,8 +71,14 @@ export default function RecorderPage() {
     recordingIntervalRef,
   } = useRecorderState();
 
-  const { cameraStream, enableCamera, setEnableCamera, videoPreview, startCamera, stopCamera } =
-    useCameraControls();
+  const {
+    cameraStream,
+    enableCamera,
+    setEnableCamera,
+    videoPreview,
+    startCamera,
+    stopCamera,
+  } = useCameraControls();
 
   const { setBlob, blob, title, setTitle } = useBlobStore();
 
@@ -117,7 +123,10 @@ export default function RecorderPage() {
     setShowSavePopup(true);
   };
 
-  const handlePopupDownload = async (data: { title: string; format: string }) => {
+  const handlePopupDownload = async (data: {
+    title: string;
+    format: string;
+  }) => {
     if (!blob) {
       return;
     }
@@ -163,7 +172,9 @@ export default function RecorderPage() {
                 <div className="text-lg sm:text-2xl font-semibold text-[#1A0033]">
                   New Recording
                 </div>
-                <div className="text-xs sm:text-sm text-gray-400">Last saved 2 minutes ago</div>
+                <div className="text-xs sm:text-sm text-gray-400">
+                  Last saved 2 minutes ago
+                </div>
               </div>
               {!isUploaded && !recording && videoUrl && (
                 <button

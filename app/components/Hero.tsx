@@ -1,17 +1,40 @@
 "use client";
 
 import React, { useRef } from "react";
+import Image from "next/image";
 import { FaPlay } from "react-icons/fa6";
 import { Sparkles } from "lucide-react";
-import { motion, useInView, useScroll, useTransform, easeOut } from "framer-motion";
+import {
+  motion,
+  useInView,
+  useScroll,
+  useTransform,
+  easeOut,
+} from "framer-motion";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 const Hero: React.FC = () => {
+  const router = useRouter();
+  const { status } = useSession();
+
   const textSegments = [
-    { text: "Transform URL's into", color: "text-gray-700" },
-    { text: "COMPELLING DEMO", color: "text-[#7C55D7]" },
-    { text: "VIDEO", color: "text-[#7C55D7]" },
-    { text: "with AI", color: "text-gray-700" },
+    { text: "Turn ", color: "text-[#494369]" },
+    { text: "Clicks", color: "text-[#261753]" },
+    { text: " Into Customers with", color: "text-[#494369]" },
+    { text: "Interactive Demos", color: "text-[#8A76FC]/70" },
   ];
+
+  const handleActionButtonClick = () => {
+    if (status === "authenticated") {
+      router.push("/dashboard");
+    } else {
+      router.push("/auth/signup");
+    }
+  };
+
+  const actionButtonText =
+    status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
 
   const ref = useRef<HTMLElement>(null);
   // Set `once: true` to trigger isInView only once when the section enters the viewport
@@ -61,11 +84,11 @@ const Hero: React.FC = () => {
   return (
     <section
       ref={ref}
-      className="min-h-[90vh] pt-[140px] h-auto pb-16 bg-gradient-to-br from-white via-[#f9fef4] to-[#e6f0d6] relative overflow-hidden z-10"
-      style={{ zIndex: 10 }}
+      className="min-h-screen pt-48 sm:pt-32 md:pt-32 lg:pt-[170px] pb-4 bg-white relative overflow-hidden z-0"
+      style={{ zIndex: 0 }}
     >
       <motion.div
-        className="absolute bottom-40 left-1/4 w-12 h-12 bg-green-200 rounded-full opacity-20"
+        className="absolute bottom-40 left-1/4 w-8 sm:w-12 h-8 sm:h-12 bg-green-200 rounded-full opacity-20"
         animate={{
           scale: [1, 1.3, 1],
           x: [0, 40, 0],
@@ -78,16 +101,22 @@ const Hero: React.FC = () => {
         }}
       />
 
-      <div className="w-full px-2 sm:px-4 md:max-w-7xl md:mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-center relative">
+      <div className="w-full px-3 sm:px-4 md:px-6 lg:max-w-6xl lg:mx-auto flex flex-col items-center text-center relative">
         <motion.div
-          className="pl-0 sm:pl-0 md:pl-0 mt-10 sm:mt-16"
+          className="w-full"
           variants={fadeInLeft}
           initial="hidden"
           animate={isInView ? "visible" : "hidden"}
           style={{ y: y1 }}
         >
           <motion.h1
-            className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight text-gray-700"
+            className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight"
+            style={{
+              fontFamily: "var(--font-raleway)",
+              fontWeight: 900,
+              lineHeight: "1.2",
+              letterSpacing: "0%",
+            }}
             variants={containerVariants}
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
@@ -96,64 +125,70 @@ const Hero: React.FC = () => {
             {textSegments.map((segment, segmentIndex) => (
               <span key={segmentIndex} className={segment.color}>
                 {segment.text.split("").map((char, charIndex) => (
-                  <motion.span key={`${segmentIndex}-${charIndex}`} variants={letterVariants}>
+                  <motion.span
+                    key={`${segmentIndex}-${charIndex}`}
+                    variants={letterVariants}
+                  >
                     {char === " " ? "\u00A0" : char}
                   </motion.span>
                 ))}
-                {segmentIndex === 0 || segmentIndex === 1 ? <br /> : null}
-                {segmentIndex === 2 ? " " : null}
+                {segmentIndex === 2 ? <br /> : null}
               </span>
             ))}
           </motion.h1>
           <motion.p
-            className="mt-4 sm:mt-6 text-gray-600 text-base sm:text-lg max-w-[98%] sm:max-w-[95%]"
+            className="mt-1 sm:mt-1 text-gray-600 text-base sm:text-lg max-w-2xl mx-auto"
+            style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
             variants={fadeInUp}
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
           >
-            Stop spending hours creating product demos. Our AI analyzes your product URL and
-            automatically generates professional demo videos that convert visitors into customers.
+            Marvedge turns your product into an instant demo — no editing, no
+            team, just click and convert.
           </motion.p>
 
           <motion.div
-            className="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-4 sm:gap-5"
+            className="mt-4 sm:mt-10 flex flex-col sm:flex-row gap-4 sm:gap-5 justify-center items-center"
             variants={fadeInUp}
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
           >
             <motion.button
-              className="flex items-center justify-center cursor-pointer gap-2 bg-[#6B46C1] hover:bg-[#553c9a] text-gray-200 px-6 sm:px-10 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition whitespace-nowrap"
+              onClick={handleActionButtonClick}
+              className="flex items-center justify-center cursor-pointer gap-2 bg-[#8A76FC] hover:bg-[#7563E8] text-white px-8 sm:px-12 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition whitespace-nowrap"
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
             >
               <FaPlay className="text-lg sm:text-xl" />
-              Create Demo Video
+              {actionButtonText}
             </motion.button>
             <motion.button
-              className="flex items-center justify-center cursor-pointer gap-2 border border-gray-300 bg-white shadow-sm px-6 sm:px-10 py-3 sm:py-4 rounded-lg text-gray-600 text-base sm:text-lg font-medium hover:shadow-md transition whitespace-nowrap"
+              className="flex items-center justify-center cursor-pointer gap-2 border-2 border-gray-300 bg-white shadow-md px-8 sm:px-12 py-3 sm:py-4 rounded-lg text-gray-800 text-base sm:text-lg font-semibold hover:shadow-lg transition whitespace-nowrap"
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Sparkles size={18} />
+              <Image
+                src="/ri_gemini-fill.png"
+                alt="Explore Examples"
+                width={20}
+                height={20}
+              />
               Explore Examples
             </motion.button>
           </motion.div>
         </motion.div>
 
         <motion.div
-          className="w-[90%] sm:w-[85%] md:w-[80%] h-[350px] sm:h-[400px] mt-4 sm:mt-8 rounded-[32px] bg-gradient-to-br from-[#c2b3f5] to-[#8a6ec5] flex items-center justify-center mx-auto lg:mr-[-32] md:ml-auto md:mr-0"
+          className="w-full mt-2 sm:mt-3 md:mt-4 rounded-4xl overflow-hidden"
           variants={fadeInUp}
           initial="hidden"
           animate={isInView ? "visible" : "hidden"}
-          aria-label="Demo video placeholder"
+          aria-label="Landing page hero image"
         >
-          <video
-            src="/icons/1.mp4"
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-[90%] sm:w-[85%] h-[85%] rounded-2xl object-cover"
+          <img
+            src="/images/landing_image.png"
+            alt="Interactive demo showcase"
+            className="w-full h-auto object-cover"
           />
         </motion.div>
       </div>

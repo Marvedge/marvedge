@@ -73,7 +73,12 @@ export default function VideoPlayerSection({
                 dur > 0
               ) {
                 setVideoDuration(dur);
-              } else if (!isUploaded && isFinite(dur) && !isNaN(dur) && dur > 0) {
+              } else if (
+                !isUploaded &&
+                isFinite(dur) &&
+                !isNaN(dur) &&
+                dur > 0
+              ) {
                 setVideoDuration(dur);
               }
             }}
@@ -241,7 +246,8 @@ export default function VideoPlayerSection({
         </div>
       ) : (
         <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
-          No preview available. Start screen sharing or upload a video to see the preview.
+          No preview available. Start screen sharing or upload a video to see
+          the preview.
         </div>
       )}
     </div>

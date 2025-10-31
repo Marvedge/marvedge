@@ -4,7 +4,9 @@ interface RecordingTimelineProps {
   recordingTimer: number;
 }
 
-export default function RecordingTimeline({ recordingTimer }: RecordingTimelineProps) {
+export default function RecordingTimeline({
+  recordingTimer,
+}: RecordingTimelineProps) {
   return (
     <div className="w-full px-6 pb-4 pt-2 flex flex-col gap-2">
       <div className="flex justify-end items-center gap-3">

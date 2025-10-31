@@ -75,10 +75,16 @@ export default function DemosPage() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+      if (
+        statusDropdownRef.current &&
+        !statusDropdownRef.current.contains(event.target as Node)
+      ) {
         setStatusDropdownOpen(false);
       }
-      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
+      if (
+        sortDropdownRef.current &&
+        !sortDropdownRef.current.contains(event.target as Node)
+      ) {
         setSortDropdownOpen(false);
       }
     }
@@ -90,7 +96,7 @@ export default function DemosPage() {
   const filteredDemos = demos.filter(
     (demo) =>
       demo.title.toLowerCase().includes(search.toLowerCase()) ||
-      demo.description.toLowerCase().includes(search.toLowerCase())
+      demo.description.toLowerCase().includes(search.toLowerCase()),
   );
 
   const handleEditDemo = (demo: Demo) => {
@@ -145,7 +151,11 @@ export default function DemosPage() {
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
-      <SignedHeader titleText="My Demos" iconSRC="/icons/play.png" iconALT="my_demos_icon" />
+      <SignedHeader
+        titleText="My Demos"
+        iconSRC="/icons/play.png"
+        iconALT="my_demos_icon"
+      />
 
       <div className="bg-[#F3F0FC] rounded-xl p-8">
         <div className="mb-8">
@@ -264,7 +274,9 @@ export default function DemosPage() {
           </div>
         </div>
         <div className="mt-8">
-          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
+          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">
+            Your Demos
+          </h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
             {filteredDemos.length}/{demos.length} demos
           </div>
@@ -289,7 +301,9 @@ export default function DemosPage() {
                   onClick={() => handleEditDemo(demo)}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-2xl text-[#8B8B8B] font-normal">{demo.title}</div>
+                    <div className="text-2xl text-[#8B8B8B] font-normal">
+                      {demo.title}
+                    </div>
                     <div className="flex items-center gap-4">
                       <button
                         className="text-red-400 hover:text-red-600 text-xl"
@@ -322,15 +336,19 @@ export default function DemosPage() {
                       <FaEye className="text-lg" /> 0
                     </div>
                     <div className="flex items-center gap-2">
-                      <FaRegCalendarAlt className="text-lg" /> {formatDate(demo.updatedAt)}
+                      <FaRegCalendarAlt className="text-lg" />{" "}
+                      {formatDate(demo.updatedAt)}
                     </div>
                     <div>Draft</div>
                   </div>
                   <div className="text-sm text-[#8B8B8B] mb-4">
                     <div>
-                      Duration: {formatTime_2(demo.startTime)} - {formatTime_2(demo.endTime)}
+                      Duration: {formatTime_2(demo.startTime)} -{" "}
+                      {formatTime_2(demo.endTime)}
                     </div>
-                    <div className="truncate">{demo.description || "No description"}</div>
+                    <div className="truncate">
+                      {demo.description || "No description"}
+                    </div>
                   </div>
                   <button className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto">
                     <FaShareAlt /> Share
@@ -365,10 +383,12 @@ export default function DemosPage() {
                             width={24}
                             height={24}
                             className="w-6 h-6"
-                          />{" "}
+                          />
                         </span>
                         <div>
-                          <div className="font-semibold text-lg text-[#1A0033]">{demo.title}</div>
+                          <div className="font-semibold text-lg text-[#1A0033]">
+                            {demo.title}
+                          </div>
                           <div className="text-[#8B8B8B] text-sm">
                             {demo.description || "No description"}
                           </div>
@@ -378,7 +398,9 @@ export default function DemosPage() {
                         {formatTime(demo.startTime)} -{" "}
                         {formatTime(demo.endTime)}
                       </td> */}
-                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">Draft</td>
+                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">
+                        Draft
+                      </td>
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
                         {formatDate(demo.updatedAt)}
                       </td>
