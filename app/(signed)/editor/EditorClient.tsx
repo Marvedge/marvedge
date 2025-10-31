@@ -541,6 +541,7 @@ export default function EditorPage() {
                     onError={(e) => console.error("Video failed to load", e)}
                     onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
                     onEnded={() => setPlaying(false)}
+                    progressInterval={50}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-8">
