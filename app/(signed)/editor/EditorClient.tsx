@@ -538,6 +538,13 @@ export default function EditorPage() {
                       borderRadius: "1.25rem",
                       background: "#F6F3FF",
                     }}
+                    config={{
+                      file: {
+                        attributes: {
+                          crossOrigin: "anonymous",
+                        },
+                      },
+                    }}
                     onError={(e) => console.error("Video failed to load", e)}
                     onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
                     onEnded={() => setPlaying(false)}
