@@ -26,7 +26,8 @@ export default function SimpleTimeline({
   const [dragValue, setDragValue] = useState(0);
 
   // Use recording duration if available, otherwise use detected duration
-  const displayDuration = recordingDuration > 0 ? recordingDuration : videoDuration;
+  const displayDuration =
+    recordingDuration > 0 ? recordingDuration : videoDuration;
 
   const handlePlayPause = () => {
     setVideoPlaying(!videoPlaying);
@@ -102,9 +103,21 @@ export default function SimpleTimeline({
           className="rounded-full bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#7C5CFC] hover:text-white p-2 transition"
         >
           {videoPlaying ? (
-            <Image src="/icons/pause.png" alt="Pause" width={18} height={18} className="w-4 h-4" />
+            <Image
+              src="/icons/pause.png"
+              alt="Pause"
+              width={18}
+              height={18}
+              className="w-4 h-4"
+            />
           ) : (
-            <Image src="/icons/play.png" alt="Play" width={18} height={18} className="w-4 h-4" />
+            <Image
+              src="/icons/play.png"
+              alt="Play"
+              width={18}
+              height={18}
+              className="w-4 h-4"
+            />
           )}
         </button>
         <input

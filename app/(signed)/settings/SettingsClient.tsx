@@ -1,5 +1,12 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ChangeEvent,
+  FormEvent,
+} from "react";
 import { useSession, signOut } from "next-auth/react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -186,7 +193,7 @@ const SettingsPage = () => {
 
   const handleDeleteAccount = async () => {
     const confirmed = confirm(
-      "Are you sure you want to delete your account? This action cannot be undone."
+      "Are you sure you want to delete your account? This action cannot be undone.",
     );
     if (!confirmed) {
       return;
@@ -239,7 +246,9 @@ const SettingsPage = () => {
                 <button
                   className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
                   onClick={() => setShowDropdown((v) => !v)}
-                  title={session?.user?.name || session?.user?.email || undefined}
+                  title={
+                    session?.user?.name || session?.user?.email || undefined
+                  }
                 >
                   {initials}
                 </button>
@@ -339,7 +348,9 @@ const SettingsPage = () => {
         <div className="px-2 sm:px-4 md:px-8 lg:px-16 xl:px-24">
           <div className="w-full mx-auto mt-8 mb-2">
             <h2 className="text-2xl font-bold mb-1">Profile Information</h2>
-            <p className="text-gray-500 mb-6">Manage your profile settings here.</p>
+            <p className="text-gray-500 mb-6">
+              Manage your profile settings here.
+            </p>
           </div>
           <form
             className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-4 sm:p-6 md:p-8 lg:p-10"
@@ -415,7 +426,9 @@ const SettingsPage = () => {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-gray-600 mb-2">Email address</label>
+                <label className="block text-gray-600 mb-2">
+                  Email address
+                </label>
                 <input
                   type="email"
                   name="email"
@@ -495,7 +508,9 @@ const SettingsPage = () => {
         <div className="px-4 md:px-10 lg:px-16 xl:px-24">
           <div className="w-full mx-auto mt-8 mb-2">
             <h2 className="text-2xl font-bold mb-1">Notification</h2>
-            <p className="text-gray-500 mb-6">Manage your notification settings here.</p>
+            <p className="text-gray-500 mb-6">
+              Manage your notification settings here.
+            </p>
           </div>
           <form className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-8">
             <div className="flex flex-col gap-4 mb-8">
@@ -505,11 +520,19 @@ const SettingsPage = () => {
                   className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4"
                 >
                   <div>
-                    <div className="font-semibold text-base text-[#1A0033]">{item.label}</div>
-                    <div className="text-sm text-gray-400 mt-1">{item.desc}</div>
+                    <div className="font-semibold text-base text-[#1A0033]">
+                      {item.label}
+                    </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      {item.desc}
+                    </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer w-11 h-6">
-                    <input type="checkbox" className="sr-only peer" defaultChecked={item.default} />
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      defaultChecked={item.default}
+                    />
                     <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#7C5CFC] peer-checked:bg-[#7C5CFC] transition-colors"></div>
                     <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full transition-all duration-300 peer-checked:translate-x-5"></span>
                   </label>
@@ -538,18 +561,25 @@ const SettingsPage = () => {
         <div className="px-4 md:px-10 lg:px-16 xl:px-24">
           <div className="w-full mx-auto mt-8 mb-2">
             <h2 className="text-2xl font-bold mb-1">Privacy and Security</h2>
-            <p className="text-gray-500 mb-6">Manage your privacy and security settings here.</p>
+            <p className="text-gray-500 mb-6">
+              Manage your privacy and security settings here.
+            </p>
           </div>
           <form className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-8">
             <div className="flex flex-col gap-4 mb-8">
               <div className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4">
                 <div>
-                  <div className="font-semibold text-base text-[#1A0033]">Public Visibility</div>
+                  <div className="font-semibold text-base text-[#1A0033]">
+                    Public Visibility
+                  </div>
                   <div className="text-sm text-gray-400 mt-1">
                     Public - Anyone can see your profile
                   </div>
                 </div>
-                <button type="button" className="text-[#7C5CFC] text-2xl focus:outline-none">
+                <button
+                  type="button"
+                  className="text-[#7C5CFC] text-2xl focus:outline-none"
+                >
                   <Image
                     src="/icons/chevron-down.png"
                     alt="Chevron Down"
@@ -566,11 +596,19 @@ const SettingsPage = () => {
                   className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4"
                 >
                   <div>
-                    <div className="font-semibold text-base text-[#1A0033]">{item.label}</div>
-                    <div className="text-sm text-gray-400 mt-1">{item.desc}</div>
+                    <div className="font-semibold text-base text-[#1A0033]">
+                      {item.label}
+                    </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      {item.desc}
+                    </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer w-11 h-6">
-                    <input type="checkbox" className="sr-only peer" defaultChecked={item.default} />
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      defaultChecked={item.default}
+                    />
                     <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#7C5CFC] peer-checked:bg-[#7C5CFC] transition-colors"></div>
                     <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full transition-all duration-300 peer-checked:translate-x-5"></span>
                   </label>
@@ -597,7 +635,9 @@ const SettingsPage = () => {
             <h2 className="text-xl font-bold mb-6">Password and Security</h2>
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4">
-                <span className="font-medium text-base text-[#1A0033]">Change Passwords</span>
+                <span className="font-medium text-base text-[#1A0033]">
+                  Change Passwords
+                </span>
                 <Image
                   src="/icons/purple-icon.png"
                   alt="Chevron Down"
@@ -608,7 +648,7 @@ const SettingsPage = () => {
               </div>
               <div className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4">
                 <span className="font-medium text-base text-[#1A0033]">
-                  Enable Two- factor authentication
+                  Enable Two-factor authentication
                 </span>
                 <Image
                   src="/icons/shield.png"
@@ -638,16 +678,23 @@ const SettingsPage = () => {
         <div className="px-4 md:px-10 lg:px-16 xl:px-24">
           <div className="w-full mx-auto mt-8 mb-2">
             <h2 className="text-2xl font-bold mb-1">Interface Preferences</h2>
-            <p className="text-gray-500 mb-6">Manage your interface preferences settings here.</p>
+            <p className="text-gray-500 mb-6">
+              Manage your interface preferences settings here.
+            </p>
           </div>
           <form className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-8">
             <div className="flex flex-col gap-4 mb-8">
               <div className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4">
                 <div>
-                  <div className="font-semibold text-base text-[#1A0033]">Theme</div>
+                  <div className="font-semibold text-base text-[#1A0033]">
+                    Theme
+                  </div>
                   <div className="text-sm text-gray-400 mt-1">Light mode</div>
                 </div>
-                <button type="button" className="text-[#7C5CFC] text-2xl focus:outline-none">
+                <button
+                  type="button"
+                  className="text-[#7C5CFC] text-2xl focus:outline-none"
+                >
                   <Image
                     src="/icons/chevron-down.png"
                     alt="Chevron Down"
@@ -659,10 +706,15 @@ const SettingsPage = () => {
               </div>
               <div className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4">
                 <div>
-                  <div className="font-semibold text-base text-[#1A0033]">Language</div>
+                  <div className="font-semibold text-base text-[#1A0033]">
+                    Language
+                  </div>
                   <div className="text-sm text-gray-400 mt-1">English</div>
                 </div>
-                <button type="button" className="text-[#7C5CFC] text-2xl focus:outline-none">
+                <button
+                  type="button"
+                  className="text-[#7C5CFC] text-2xl focus:outline-none"
+                >
                   <Image
                     src="/icons/chevron-down.png"
                     alt="Chevron Down"
@@ -678,11 +730,19 @@ const SettingsPage = () => {
                   className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4"
                 >
                   <div>
-                    <div className="font-semibold text-base text-[#1A0033]">{item.label}</div>
-                    <div className="text-sm text-gray-400 mt-1">{item.desc}</div>
+                    <div className="font-semibold text-base text-[#1A0033]">
+                      {item.label}
+                    </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      {item.desc}
+                    </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer w-11 h-6">
-                    <input type="checkbox" className="sr-only peer" defaultChecked={item.default} />
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      defaultChecked={item.default}
+                    />
                     <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#7C5CFC] peer-checked:bg-[#7C5CFC] transition-colors"></div>
                     <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full transition-all duration-300 peer-checked:translate-x-5"></span>
                   </label>
@@ -715,8 +775,12 @@ const SettingsPage = () => {
           <div className="w-full mx-auto mb-8 bg-[#F3F0FC] rounded-xl p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <div className="font-semibold text-lg text-[#1A0033]">Free Plan</div>
-                <div className="text-sm text-gray-500">Create up to 5 demos and basic features</div>
+                <div className="font-semibold text-lg text-[#1A0033]">
+                  Free Plan
+                </div>
+                <div className="text-sm text-gray-500">
+                  Create up to 5 demos and basic features
+                </div>
               </div>
               <button className="px-6 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition">
                 Upgrade to Pro
@@ -742,9 +806,12 @@ const SettingsPage = () => {
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between bg-white rounded-lg border border-[#ede7fa] px-6 py-4">
                 <div>
-                  <div className="font-semibold text-base text-[#1A0033]">Export My Data</div>
+                  <div className="font-semibold text-base text-[#1A0033]">
+                    Export My Data
+                  </div>
                   <div className="text-sm text-gray-400 mt-1">
-                    Download a copy of all your data including demos, teams and settings.
+                    Download a copy of all your data including demos, teams and
+                    settings.
                   </div>
                 </div>
                 <button className="text-[#7C5CFC] text-2xl focus:outline-none">
@@ -759,9 +826,12 @@ const SettingsPage = () => {
               </div>
               <div className="flex items-center justify-between bg-red-50 rounded-lg border border-red-200 px-6 py-4">
                 <div>
-                  <div className="font-semibold text-base text-[#E53E3E]">Delete Account</div>
+                  <div className="font-semibold text-base text-[#E53E3E]">
+                    Delete Account
+                  </div>
                   <div className="text-sm text-red-400 mt-1">
-                    Once you delete the account, your data cannot be retrieved. Be Certain!
+                    Once you delete the account, your data cannot be retrieved.
+                    Be Certain!
                   </div>
                 </div>
                 <button

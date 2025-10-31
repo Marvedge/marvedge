@@ -109,7 +109,10 @@ export default function RecordingControls({
         <div className="flex flex-col gap-2 sm:gap-4 mt-4 sm:mt-6 justify-center items-center">
           {!isUploaded && (
             <div className="flex gap-2 items-center mb-2">
-              <label htmlFor="format-select" className="font-medium text-[#6C63FF] text-sm">
+              <label
+                htmlFor="format-select"
+                className="font-medium text-[#6C63FF] text-sm"
+              >
                 Download as:
               </label>
               <select
@@ -168,7 +171,9 @@ export default function RecordingControls({
             )}
           </div>
           {saveMessage && !isUploaded && (
-            <div className="mt-2 text-[#6C63FF] text-xs sm:text-sm">{saveMessage}</div>
+            <div className="mt-2 text-[#6C63FF] text-xs sm:text-sm">
+              {saveMessage}
+            </div>
           )}
         </div>
       )}

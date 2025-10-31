@@ -8,7 +8,10 @@ import axios from "axios";
 
 const resetPasswordSchema = z
   .object({
-    email: z.string().min(1, "Please enter your email").email("Invalid email address"),
+    email: z
+      .string()
+      .min(1, "Please enter your email")
+      .email("Invalid email address"),
     otp: z.string().min(4, "Please enter the OTP"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
@@ -66,7 +69,8 @@ const ResetPassword = () => {
       const message =
         err instanceof z.ZodError
           ? err.errors[0].message
-          : (axios.isAxiosError(err) && err.response?.data?.error) || "Reset failed.";
+          : (axios.isAxiosError(err) && err.response?.data?.error) ||
+            "Reset failed.";
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -121,7 +125,9 @@ const ResetPassword = () => {
       </div>
       <div
         className={`w-full md:w-1/2 flex justify-center items-center px-4 sm:px-10 lg:px-20 py-10 transition-all duration-700 ease-out pt-24 md:pt-10 ${
-          animatePanel ? "opacity-100 translate-x-0" : "opacity-0 translate-x-10"
+          animatePanel
+            ? "opacity-100 translate-x-0"
+            : "opacity-0 translate-x-10"
         }`}
       >
         <form
@@ -130,7 +136,9 @@ const ResetPassword = () => {
           autoComplete="on"
         >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">Reset Password</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
+              Reset Password
+            </h1>
             <p className="text-sm text-gray-600 font-semibold">
               Enter your email, OTP, and new password to reset your account.
             </p>
@@ -169,7 +177,9 @@ const ResetPassword = () => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2"
             >
               <Image
-                src={showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"}
+                src={
+                  showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"
+                }
                 alt="Toggle Password"
                 width={20}
                 height={20}
@@ -192,7 +202,11 @@ const ResetPassword = () => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2"
             >
               <Image
-                src={showConfirmPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"}
+                src={
+                  showConfirmPassword
+                    ? "/icons/eyeclosed.png"
+                    : "/icons/eyeopen.png"
+                }
                 alt="Toggle Confirm"
                 width={20}
                 height={20}

@@ -124,7 +124,11 @@ export default function VideoPreview({
           tempVideo.preload = "metadata";
 
           tempVideo.onloadedmetadata = () => {
-            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
               setDuration(tempVideo.duration);
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -164,7 +168,7 @@ export default function VideoPreview({
                 setDuration(videoRef.current.duration);
               }
             },
-            { once: true }
+            { once: true },
           );
         }
       };
@@ -219,7 +223,11 @@ export default function VideoPreview({
               .play()
               .then(() => {
                 setTimeout(() => {
-                  if (player.duration && isFinite(player.duration) && player.duration > 0) {
+                  if (
+                    player.duration &&
+                    isFinite(player.duration) &&
+                    player.duration > 0
+                  ) {
                     setDuration(player.duration);
                   }
                   if (!wasPlaying) {
@@ -230,7 +238,11 @@ export default function VideoPreview({
               })
               .catch(() => {
                 // If play fails, just try to get duration anyway
-                if (player.duration && isFinite(player.duration) && player.duration > 0) {
+                if (
+                  player.duration &&
+                  isFinite(player.duration) &&
+                  player.duration > 0
+                ) {
                   setDuration(player.duration);
                 }
               });
@@ -252,7 +264,11 @@ export default function VideoPreview({
         hiddenVideo.src = videoUrl;
 
         hiddenVideo.onloadedmetadata = () => {
-          if (hiddenVideo.duration && isFinite(hiddenVideo.duration) && hiddenVideo.duration > 0) {
+          if (
+            hiddenVideo.duration &&
+            isFinite(hiddenVideo.duration) &&
+            hiddenVideo.duration > 0
+          ) {
             setDuration(hiddenVideo.duration);
           }
           document.body.removeChild(hiddenVideo);
@@ -284,7 +300,11 @@ export default function VideoPreview({
             player.currentTime = 999999;
 
             setTimeout(() => {
-              if (player.duration && isFinite(player.duration) && player.duration > 0) {
+              if (
+                player.duration &&
+                isFinite(player.duration) &&
+                player.duration > 0
+              ) {
                 setDuration(player.duration);
               }
               // Restore original state
@@ -325,7 +345,11 @@ export default function VideoPreview({
             tempVideo.src = URL.createObjectURL(newBlob);
 
             tempVideo.onloadedmetadata = () => {
-              if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+              if (
+                tempVideo.duration &&
+                isFinite(tempVideo.duration) &&
+                tempVideo.duration > 0
+              ) {
                 setDuration(tempVideo.duration);
                 URL.revokeObjectURL(tempVideo.src);
                 return;
@@ -574,8 +598,22 @@ export default function VideoPreview({
             >
               {playing ? (
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <rect x="3" y="3" width="4" height="12" rx="2" fill="currentColor" />
-                  <rect x="11" y="3" width="4" height="12" rx="2" fill="currentColor" />
+                  <rect
+                    x="3"
+                    y="3"
+                    width="4"
+                    height="12"
+                    rx="2"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="11"
+                    y="3"
+                    width="4"
+                    height="12"
+                    rx="2"
+                    fill="currentColor"
+                  />
                 </svg>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -601,7 +639,8 @@ export default function VideoPreview({
               }}
             />
             <span className="text-xs text-[#A594F9] font-mono min-w-[60px] text-right">
-              {formatTime(currentTime)} / {duration > 0 ? formatTime(duration) : "0:00"}
+              {formatTime(currentTime)} /{" "}
+              {duration > 0 ? formatTime(duration) : "0:00"}
             </span>
           </div>
 

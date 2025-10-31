@@ -10,7 +10,12 @@ type EditorControlsProps = {
   duration: number;
 };
 
-const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorControlsProps) => {
+const EditorControls = ({
+  onTrim,
+  processing,
+  videoRef,
+  duration,
+}: EditorControlsProps) => {
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(10);
   const [zoomed, setZoomed] = useState(false);
@@ -118,7 +123,8 @@ const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorContro
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            ⏱ Start Time: <span className="font-mono">{formatTimeFull(start)}</span>
+            ⏱ Start Time:{" "}
+            <span className="font-mono">{formatTimeFull(start)}</span>
           </label>
 
           {/* Manual input for start time */}
@@ -135,7 +141,9 @@ const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorContro
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-gray-50 shadow-sm transition-all duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed cursor-default"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                  <span className="text-xs text-gray-400 font-medium">HH:MM:SS</span>
+                  <span className="text-xs text-gray-400 font-medium">
+                    HH:MM:SS
+                  </span>
                 </div>
               </div>
             </div>
@@ -160,7 +168,8 @@ const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorContro
 
         <div className="pt-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            ⏲ End Time: <span className="font-mono">{formatTimeFull(end)}</span>
+            ⏲ End Time:{" "}
+            <span className="font-mono">{formatTimeFull(end)}</span>
           </label>
 
           {/* Manual input for end time */}
@@ -177,7 +186,9 @@ const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorContro
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm font-mono bg-gray-50 shadow-sm transition-all duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed cursor-default"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                  <span className="text-xs text-gray-400 font-medium">HH:MM:SS</span>
+                  <span className="text-xs text-gray-400 font-medium">
+                    HH:MM:SS
+                  </span>
                 </div>
               </div>
             </div>
@@ -205,10 +216,12 @@ const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorContro
         <p className="mb-1 font-semibold">⌨️ Keyboard Shortcuts:</p>
         <ul className="list-disc list-inside leading-5">
           <li>
-            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek video
+            <kbd className="kbd">←</kbd> / <kbd className="kbd">→</kbd> — Seek
+            video
           </li>
           <li>
-            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust trim range
+            <kbd className="kbd">[</kbd> / <kbd className="kbd">]</kbd> — Adjust
+            trim range
           </li>
           <li>
             <kbd className="kbd">Enter</kbd> — Apply trim
@@ -216,8 +229,8 @@ const EditorControls = ({ onTrim, processing, videoRef, duration }: EditorContro
           <li>🖱️ Click on video to toggle zoom</li>
         </ul>
         <p className="mt-2 text-xs">
-          💡 <strong>Tip:</strong> Use the sliders above to adjust the trim range. Input fields are
-          read-only and update automatically.
+          💡 <strong>Tip:</strong> Use the sliders above to adjust the trim
+          range. Input fields are read-only and update automatically.
         </p>
       </div>
     </div>

@@ -38,7 +38,11 @@ export function useVideoDuration({
           tempVideo.src = URL.createObjectURL(blob);
 
           tempVideo.onloadedmetadata = () => {
-            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
               setVideoDuration(tempVideo.duration);
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -81,7 +85,11 @@ export function useVideoDuration({
           tempVideo.src = URL.createObjectURL(blob);
 
           tempVideo.onloadedmetadata = () => {
-            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
+            if (
+              tempVideo.duration &&
+              isFinite(tempVideo.duration) &&
+              tempVideo.duration > 0
+            ) {
               setVideoDuration(tempVideo.duration);
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -122,7 +130,11 @@ export function useVideoDuration({
         hiddenVideo.src = videoUrl || uploadedFileUrl || "";
 
         hiddenVideo.onloadedmetadata = () => {
-          if (hiddenVideo.duration && isFinite(hiddenVideo.duration) && hiddenVideo.duration > 0) {
+          if (
+            hiddenVideo.duration &&
+            isFinite(hiddenVideo.duration) &&
+            hiddenVideo.duration > 0
+          ) {
             setVideoDuration(hiddenVideo.duration);
           }
           document.body.removeChild(hiddenVideo);
@@ -156,7 +168,11 @@ export function useVideoDuration({
               .play()
               .then(() => {
                 setTimeout(() => {
-                  if (player.duration && isFinite(player.duration) && player.duration > 0) {
+                  if (
+                    player.duration &&
+                    isFinite(player.duration) &&
+                    player.duration > 0
+                  ) {
                     setVideoDuration(player.duration);
                   }
                   // Restore original state
@@ -168,7 +184,11 @@ export function useVideoDuration({
               })
               .catch(() => {
                 // If play fails, just try to get duration anyway
-                if (player.duration && isFinite(player.duration) && player.duration > 0) {
+                if (
+                  player.duration &&
+                  isFinite(player.duration) &&
+                  player.duration > 0
+                ) {
                   setVideoDuration(player.duration);
                 }
               });
@@ -186,5 +206,11 @@ export function useVideoDuration({
         playTimers.forEach((timer) => clearTimeout(timer));
       };
     }
-  }, [videoUrl, uploadedFileUrl, videoDuration, setVideoDuration, videoPlayerRef]);
+  }, [
+    videoUrl,
+    uploadedFileUrl,
+    videoDuration,
+    setVideoDuration,
+    videoPlayerRef,
+  ]);
 }

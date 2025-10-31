@@ -51,7 +51,7 @@ export function useRecorderState() {
 export function useRecordingTimer(
   recording: boolean,
   recordingIntervalRef: React.MutableRefObject<NodeJS.Timeout | null>,
-  setRecordingTimer: (value: number | ((prev: number) => number)) => void
+  setRecordingTimer: (value: number | ((prev: number) => number)) => void,
 ) {
   // Enhanced initialization
   useEffect(() => {

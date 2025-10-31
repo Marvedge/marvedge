@@ -1,5 +1,9 @@
 import SignedLayoutClient from "./SignedLayoutClient";
 
-export default function SignedLayout({ children }: { children: React.ReactNode }) {
+export default function SignedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return <SignedLayoutClient>{children}</SignedLayoutClient>;
 }

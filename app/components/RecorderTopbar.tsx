@@ -13,11 +13,16 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   // Get first name or fallback
   const username =
-    session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")?.[0] || "User";
+    session?.user?.name?.split(" ")[0] ||
+    session?.user?.email?.split("@")?.[0] ||
+    "User";
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setShowDropdown(false);
       }
     };

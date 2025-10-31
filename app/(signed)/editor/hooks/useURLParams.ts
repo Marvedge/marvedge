@@ -70,10 +70,12 @@ export function useURLParams({
         try {
           const segments = JSON.parse(urlSegments);
           console.log("Loaded segments from URL:", segments);
-          const convertedSegments = segments.map((seg: { start: string; end: string }) => ({
-            start: seg.start,
-            end: seg.end,
-          }));
+          const convertedSegments = segments.map(
+            (seg: { start: string; end: string }) => ({
+              start: seg.start,
+              end: seg.end,
+            }),
+          );
           setLoadedSegments(convertedSegments);
           setCurrentSegments(convertedSegments);
         } catch (error) {

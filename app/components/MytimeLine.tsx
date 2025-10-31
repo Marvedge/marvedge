@@ -95,7 +95,7 @@ export function TimelineSlider({
       "Current state - segments:",
       segments.length,
       "removedSegments:",
-      removedSegments.length
+      removedSegments.length,
     );
     console.log("Segments:", segments);
   }, [segments.length, removedSegments.length, segments]);
@@ -105,7 +105,7 @@ export function TimelineSlider({
       "Current state - segments:",
       segments.length,
       "removedSegments:",
-      removedSegments.length
+      removedSegments.length,
     );
     console.log("Segments:", segments);
   }, [segments.length, removedSegments.length, segments]);
@@ -176,7 +176,7 @@ export function TimelineSlider({
       segments.map((seg) => ({
         start: timeFormatter(seg.start),
         end: timeFormatter(seg.end),
-      }))
+      })),
     );
     setHasBeenTrimmed(true);
   }, [segments, duration, ontrim, timeFormatter]);
@@ -291,9 +291,11 @@ export function TimelineSlider({
   const xToTime = useCallback(
     (x: number) => {
       const clamped = Math.max(margin, Math.min(svgWidth - margin, x));
-      return ((clamped - margin) / (svgWidth - 2 * margin)) * (duration || 80.0);
+      return (
+        ((clamped - margin) / (svgWidth - 2 * margin)) * (duration || 80.0)
+      );
     },
-    [duration, margin, svgWidth]
+    [duration, margin, svgWidth],
   );
 
   useEffect(() => {
@@ -318,11 +320,13 @@ export function TimelineSlider({
       //   activeIdx
       // );
       setSegments((segs) => {
-        const updated = segs.map((seg, i) => (i === activeIdx ? { ...seg, [key]: value } : seg));
+        const updated = segs.map((seg, i) =>
+          i === activeIdx ? { ...seg, [key]: value } : seg,
+        );
         return updated;
       });
     },
-    [activeIdx]
+    [activeIdx],
   );
 
   const start = segments[activeIdx]?.start ?? 0;
@@ -421,7 +425,9 @@ export function TimelineSlider({
     onExternalTimeChange,
   ]);
 
-  const handleTimelineClick = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
+  const handleTimelineClick = (
+    e: React.MouseEvent<SVGSVGElement, MouseEvent>,
+  ) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) {
       return;
@@ -453,7 +459,14 @@ export function TimelineSlider({
       setSegments((prev) => prev.slice(0, -1));
       setActiveIdx(Math.min(activeIdx, segments.length - 2));
     }
-  }, [segments, activeIdx, setRemovedSegments, setRemovedActiveIdx, setSegments, setActiveIdx]);
+  }, [
+    segments,
+    activeIdx,
+    setRemovedSegments,
+    setRemovedActiveIdx,
+    setSegments,
+    setActiveIdx,
+  ]);
 
   const handleRedo = useCallback(() => {
     if (removedSegments.length > 0) {
@@ -602,7 +615,10 @@ export function TimelineSlider({
       <div className="space-y-6">
         {progress > 0 && progress < 100 && (
           <div className="w-full h-2 bg-gray-200 rounded mb-2 overflow-hidden">
-            <div className="h-full bg-[#7C5CFC] transition-all" style={{ width: `${progress}%` }} />
+            <div
+              className="h-full bg-[#7C5CFC] transition-all"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         )}
         <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mb-4 w-full">
@@ -625,7 +641,9 @@ export function TimelineSlider({
             </Button>
             <Button
               onClick={handleTrim}
-              disabled={processing || segments.some((seg) => seg.start >= seg.end)}
+              disabled={
+                processing || segments.some((seg) => seg.start >= seg.end)
+              }
               className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold disabled:opacity-60 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
             >
               <span className="flex items-center gap-2">
@@ -644,7 +662,13 @@ export function TimelineSlider({
               className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
             >
               <span className="flex items-center gap-2">
-                <Image src="/icons/+.svg" alt="Add" width={20} height={20} className="w-5 h-5" />
+                <Image
+                  src="/icons/+.svg"
+                  alt="Add"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
                 Add Segment
               </span>
             </Button>
@@ -654,7 +678,13 @@ export function TimelineSlider({
               className="min-w-[90px] h-8 px-3 flex items-center gap-2 font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               <span className="flex items-center gap-2">
-                <Image src="/icons/-.svg" alt="Remove" width={20} height={20} className="w-5 h-5" />
+                <Image
+                  src="/icons/-.svg"
+                  alt="Remove"
+                  width={20}
+                  height={20}
+                  className="w-5 h-5"
+                />
                 Remove Segment
               </span>
             </Button>
@@ -666,14 +696,26 @@ export function TimelineSlider({
               disabled={segments.length <= 1}
               className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Image src="/icons/undo.svg" alt="Undo" width={20} height={20} className="w-5 h-5" />
+              <Image
+                src="/icons/undo.svg"
+                alt="Undo"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
             </Button>
             <Button
               onClick={handleRedo}
               disabled={removedSegments.length === 0}
               className="min-w-[50px] h-8 px-3 flex items-center justify-center font-semibold bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Image src="/icons/redo.svg" alt="Redo" width={20} height={20} className="w-5 h-5" />
+              <Image
+                src="/icons/redo.svg"
+                alt="Redo"
+                width={20}
+                height={20}
+                className="w-5 h-5"
+              />
             </Button>
             {onResetVideo && hasBeenTrimmed && (
               <Button
@@ -700,7 +742,9 @@ export function TimelineSlider({
             <span>📋</span>
             <span>Drag segments to reorder them</span>
             {isDragging && <span className="text-blue-500">(Dragging...)</span>}
-            {dragIndex !== null && <span className="text-green-500">(From: {dragIndex + 1})</span>}
+            {dragIndex !== null && (
+              <span className="text-green-500">(From: {dragIndex + 1})</span>
+            )}
             {dragOverIndex !== null && (
               <span className="text-purple-500">(To: {dragOverIndex + 1})</span>
             )}
@@ -730,7 +774,9 @@ export function TimelineSlider({
                     ? "bg-[#7C5CFC] text-white shadow-lg"
                     : "bg-white text-[#7C5CFC] border border-[#7C5CFC] hover:bg-[#F6F3FF] hover:text-[#7C5CFC] hover:shadow-md"
                 } ${
-                  dragOverIndex === idx ? "ring-2 ring-[#7C5CFC] ring-opacity-50 scale-110" : ""
+                  dragOverIndex === idx
+                    ? "ring-2 ring-[#7C5CFC] ring-opacity-50 scale-110"
+                    : ""
                 } ${dragIndex === idx ? "opacity-50 scale-95 shadow-xl" : ""}`}
               >
                 Segment {idx + 1}
@@ -742,9 +788,15 @@ export function TimelineSlider({
           <div className="text-sm font-medium text-muted-foreground">
             Timeline Duration: {timeFormatter(duration || 80.0)}
           </div>
-          <div className="text-lg font-mono">StartTime : {timeFormatter(start)}</div>
-          <div className="text-lg font-mono">EndTime : {timeFormatter(end)}</div>
-          <div className="text-sm font-medium text-[#7C5CFC]">Active: Segment {activeIdx + 1}</div>
+          <div className="text-lg font-mono">
+            StartTime : {timeFormatter(start)}
+          </div>
+          <div className="text-lg font-mono">
+            EndTime : {timeFormatter(end)}
+          </div>
+          <div className="text-sm font-medium text-[#7C5CFC]">
+            Active: Segment {activeIdx + 1}
+          </div>
         </div>
         <div className="w-full flex justify-center">
           <svg
@@ -774,7 +826,9 @@ export function TimelineSlider({
                 x={isNaN(seg.start) ? margin : timeToX(seg.start)}
                 y={timelineY}
                 width={
-                  isNaN(seg.end) || isNaN(seg.start) ? 0 : timeToX(seg.end) - timeToX(seg.start)
+                  isNaN(seg.end) || isNaN(seg.start)
+                    ? 0
+                    : timeToX(seg.end) - timeToX(seg.start)
                 }
                 height={timelineHeight}
                 fill={idx === activeIdx ? trimColor : "#D1C4E9"}
@@ -955,7 +1009,7 @@ export function TimelineSlider({
                 timelineY + timelineHeight / 2,
                 handleWidth,
                 handleHeight,
-                "up"
+                "up",
               )}
               fill={handleColor}
               stroke={rulerColor}
@@ -979,7 +1033,7 @@ export function TimelineSlider({
                 timelineY + timelineHeight / 2,
                 handleWidth,
                 handleHeight,
-                "up"
+                "up",
               )}
               fill={handleColor}
               stroke={rulerColor}
@@ -1012,7 +1066,7 @@ export function TimelineSlider({
                   timelineY + timelineHeight / 2,
                   handleWidth,
                   handleHeight,
-                  "up"
+                  "up",
                 )}
                 fill={handleColor}
                 stroke={rulerColor}
@@ -1042,7 +1096,7 @@ export function TimelineSlider({
                   timelineY + timelineHeight / 2,
                   handleWidth,
                   handleHeight,
-                  "up"
+                  "up",
                 )}
                 fill={handleColor}
                 stroke={rulerColor}

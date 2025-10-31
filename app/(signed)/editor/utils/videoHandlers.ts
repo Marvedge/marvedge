@@ -24,7 +24,10 @@ export function normalizeTimeFormat(time: string | number): string {
   }
 
   const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(
+    2,
+    "0",
+  );
   const seconds = String(Math.floor(totalSeconds % 60)).padStart(2, "0");
 
   return `${hours}:${minutes}:${seconds}`;
@@ -44,7 +47,7 @@ interface SaveDemoParams {
 
 export async function handleSaveDemo(
   data: { title: string; description: string },
-  params: SaveDemoParams
+  params: SaveDemoParams,
 ) {
   const {
     videoUrl,
@@ -82,8 +85,10 @@ export async function handleSaveDemo(
         const videoBlob = await response.blob();
 
         // Create FormData for Cloudinary upload
-        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+        const CLOUDINARY_CLOUD_NAME =
+          process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+        const CLOUDINARY_UPLOAD_PRESET =
+          process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
 
         const cloudFormData = new FormData();
         cloudFormData.append("file", videoBlob, "video.webm");
@@ -145,7 +150,7 @@ export async function handleSaveDemo(
       if (axios.isAxiosError(error)) {
         if (error.response) {
           console.error(
-            `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
+            `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`,
           );
         } else {
           console.error("Axios error:", error.message);
@@ -181,7 +186,7 @@ interface VideoTrimParams {
 
 export async function videoTrimHandler(
   segments: { start: string; end: string }[],
-  params: VideoTrimParams
+  params: VideoTrimParams,
 ) {
   const { videoUrl, setVideoUrl, setProgress } = params;
 
@@ -223,7 +228,11 @@ export async function videoTrimHandler(
 
     // Use only the first segment for trimming
     const firstSegment = normalizedSegments[0];
-    const trimmedBlob = await videoTrimmer(videoBlob, firstSegment.start, firstSegment.end);
+    const trimmedBlob = await videoTrimmer(
+      videoBlob,
+      firstSegment.start,
+      firstSegment.end,
+    );
     setProgress(95);
 
     const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
@@ -266,8 +275,14 @@ interface ExportVideoParams {
 }
 
 export async function exportVideo(params: ExportVideoParams) {
-  const { videoUrl, selectedBackground, imageMap, sidebarTitle, sidebarDescription, router } =
-    params;
+  const {
+    videoUrl,
+    selectedBackground,
+    imageMap,
+    sidebarTitle,
+    sidebarDescription,
+    router,
+  } = params;
 
   if (!videoUrl) {
     toast.error("No video available to export");
@@ -308,12 +323,17 @@ export async function exportVideo(params: ExportVideoParams) {
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-    const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET as string;
+    const cloudinaryPreset = process.env
+      .NEXT_PUBLIC_CLOUDINARY_PRESET as string;
 
     // Call backend FFmpeg server with axios
-    const serverRes = await axios.post(`${backendUrl}/process-video`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const serverRes = await axios.post(
+      `${backendUrl}/process-video`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    );
 
     const { url } = serverRes.data; // backend returns { url }
 
@@ -340,9 +360,7 @@ export async function exportVideo(params: ExportVideoParams) {
 
     // Navigate to preview page
     router.push(
-      `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(
-        sidebarTitle
-      )}&description=${encodeURIComponent(sidebarDescription || "")}`
+      `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`,
     );
   } catch (err) {
     console.error(err);
