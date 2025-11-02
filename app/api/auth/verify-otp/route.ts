@@ -13,10 +13,7 @@ export async function POST(req: Request) {
   });
 
   if (!valid) {
-    return NextResponse.json(
-      { error: "Invalid or expired OTP" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
   }
 
   return NextResponse.json({ message: "OTP verified" });

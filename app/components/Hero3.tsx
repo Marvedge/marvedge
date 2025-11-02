@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import {
-  motion,
-  useInView,
-  easeOut,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { motion, useInView, easeOut, useScroll, useTransform } from "framer-motion";
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -36,9 +30,7 @@ const Hero3: React.FC = () => {
       return;
     }
 
-    router.push(
-      `/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
-    );
+    router.push(`/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
   };
 
   return (
@@ -103,8 +95,7 @@ const Hero3: React.FC = () => {
               }}
               style={{ fontWeight: 700 }}
             >
-              Ready to Transform Your{" "}
-              <span className="text-[#8A76FC]/70">Product Demos?</span>
+              Ready to Transform Your <span className="text-[#8A76FC]/70">Product Demos?</span>
             </motion.h1>
             <motion.p
               className="text-sm sm:text-base md:text-lg text-gray-700 mb-6 sm:mb-8"
@@ -119,8 +110,8 @@ const Hero3: React.FC = () => {
                 delay: 0.2,
               }}
             >
-              An edge that you will get and let your product{" "}
-              <br className="hidden sm:block" /> speak for itself.
+              An edge that you will get and let your product <br className="hidden sm:block" />{" "}
+              speak for itself.
             </motion.p>
             <motion.ul
               className="text-gray-700 space-y-4 sm:space-y-6 text-sm sm:text-base md:text-lg"
@@ -162,24 +153,12 @@ const Hero3: React.FC = () => {
                   whileHover={{ x: 5, scale: 1.02 }}
                 >
                   <span className="mr-3 shrink-0 flex items-center justify-center">
-                    {item.icon === "check" && (
-                      <Check color="#8C5BFF" size={24} strokeWidth={3} />
-                    )}
+                    {item.icon === "check" && <Check color="#8C5BFF" size={24} strokeWidth={3} />}
                     {item.icon === "briefcase" && (
-                      <Image
-                        src="/solar_card-broken.png"
-                        alt="voiceover"
-                        width={24}
-                        height={24}
-                      />
+                      <Image src="/solar_card-broken.png" alt="voiceover" width={24} height={24} />
                     )}
                     {item.icon === "music" && (
-                      <Image
-                        src="/iconamoon_headphone.png"
-                        alt="editing"
-                        width={24}
-                        height={24}
-                      />
+                      <Image src="/iconamoon_headphone.png" alt="editing" width={24} height={24} />
                     )}
                   </span>
                   {item.label}
@@ -315,12 +294,7 @@ const Hero3: React.FC = () => {
                   delay: 0.9,
                 }}
               >
-                <Image
-                  src="/Group 55.png"
-                  alt="Start Free Trial"
-                  width={20}
-                  height={20}
-                />
+                <Image src="/Group 55.png" alt="Start Free Trial" width={20} height={20} />
                 Start Free trial
               </motion.button>
             </form>

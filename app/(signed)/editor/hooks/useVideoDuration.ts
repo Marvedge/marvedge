@@ -35,11 +35,7 @@ export function useVideoDuration({
           tempVideo.preload = "metadata";
 
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -106,11 +102,7 @@ export function useVideoDuration({
         hiddenVideo.src = videoUrl;
 
         hiddenVideo.onloadedmetadata = () => {
-          if (
-            hiddenVideo.duration &&
-            isFinite(hiddenVideo.duration) &&
-            hiddenVideo.duration > 0
-          ) {
+          if (hiddenVideo.duration && isFinite(hiddenVideo.duration) && hiddenVideo.duration > 0) {
             setDuration(hiddenVideo.duration);
           }
           document.body.removeChild(hiddenVideo);
@@ -146,11 +138,7 @@ export function useVideoDuration({
           if (player) {
             player.currentTime = 999999;
             setTimeout(() => {
-              if (
-                player.duration &&
-                isFinite(player.duration) &&
-                player.duration > 0
-              ) {
+              if (player.duration && isFinite(player.duration) && player.duration > 0) {
                 setDuration(player.duration);
               }
               player.currentTime = 0;
@@ -159,10 +147,7 @@ export function useVideoDuration({
         }
       };
 
-      const timers = [
-        setTimeout(getDurationBySeeking, 70),
-        setTimeout(getDurationBySeeking, 140),
-      ];
+      const timers = [setTimeout(getDurationBySeeking, 70), setTimeout(getDurationBySeeking, 140)];
 
       return () => {
         timers.forEach((timer) => clearTimeout(timer));
@@ -179,11 +164,7 @@ export function useVideoDuration({
           tempVideo.src = videoUrl;
 
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
           };
@@ -215,12 +196,7 @@ export function useVideoDuration({
     if (recordingDuration === 0) {
       const interval = setInterval(() => {
         const video = playerRef.current?.getInternalPlayer();
-        if (
-          video &&
-          !isNaN(video.duration) &&
-          video.duration > 0 &&
-          duration === 0
-        ) {
+        if (video && !isNaN(video.duration) && video.duration > 0 && duration === 0) {
           setDuration(Math.floor(video.duration));
           clearInterval(interval);
         }
@@ -240,11 +216,7 @@ export function useVideoDuration({
           const tempVideo = document.createElement("video");
           tempVideo.src = URL.createObjectURL(videoBlob);
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -283,15 +255,11 @@ export function useVideoDuration({
           video.addEventListener(
             "loadedmetadata",
             () => {
-              if (
-                video.duration &&
-                isFinite(video.duration) &&
-                video.duration > 0
-              ) {
+              if (video.duration && isFinite(video.duration) && video.duration > 0) {
                 setDuration(Math.floor(video.duration));
               }
             },
-            { once: true },
+            { once: true }
           );
         }
       };
@@ -320,11 +288,7 @@ export function useVideoDuration({
           tempVideo.muted = true;
           tempVideo.src = URL.createObjectURL(blob);
           tempVideo.onloadedmetadata = () => {
-            if (
-              tempVideo.duration &&
-              isFinite(tempVideo.duration) &&
-              tempVideo.duration > 0
-            ) {
+            if (tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0) {
               setDuration(Math.floor(tempVideo.duration));
             }
             URL.revokeObjectURL(tempVideo.src);
@@ -357,11 +321,7 @@ export function useVideoDuration({
             player.currentTime = 999999;
 
             setTimeout(() => {
-              if (
-                player.duration &&
-                isFinite(player.duration) &&
-                player.duration > 0
-              ) {
+              if (player.duration && isFinite(player.duration) && player.duration > 0) {
                 setDuration(Math.floor(player.duration));
               }
               player.currentTime = wasTime;

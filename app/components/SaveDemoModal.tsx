@@ -54,10 +54,7 @@ export default function SaveDemoModal({
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop with blur effect */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 transform transition-all duration-300 scale-100">
@@ -76,9 +73,7 @@ export default function SaveDemoModal({
         <div className="space-y-4">
           {/* Title Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Title *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
             <input
               type="text"
               value={title}
@@ -91,9 +86,7 @@ export default function SaveDemoModal({
 
           {/* Description Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -107,12 +100,7 @@ export default function SaveDemoModal({
 
         {/* Actions */}
         <div className="flex gap-3 mt-6">
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="flex-1"
-            disabled={processing}
-          >
+          <Button onClick={onClose} variant="outline" className="flex-1" disabled={processing}>
             Cancel
           </Button>
           <Button

@@ -45,10 +45,7 @@ export default function ConfirmDeleteModal({
   return (
     <div className="fixed inset-0 z-9999 flex items-center justify-center">
       {/* Backdrop with blur effect */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onCancel}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 transform transition-all duration-300 scale-100">
@@ -66,18 +63,13 @@ export default function ConfirmDeleteModal({
         {/* Content */}
         <div className="space-y-4">
           <p className="text-gray-600">
-            Are you sure you want to delete this demo? This action cannot be
-            undone.
+            Are you sure you want to delete this demo? This action cannot be undone.
           </p>
         </div>
 
         {/* Actions */}
         <div className="flex gap-3 mt-6">
-          <Button
-            onClick={onCancel}
-            variant="outline"
-            className="flex-1 cursor-pointer"
-          >
+          <Button onClick={onCancel} variant="outline" className="flex-1 cursor-pointer">
             Cancel
           </Button>
           <Button

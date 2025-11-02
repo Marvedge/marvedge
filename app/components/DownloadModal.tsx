@@ -48,18 +48,13 @@ export default function DownloadModal({
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Download Video
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-800">Download Video</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
@@ -72,9 +67,7 @@ export default function DownloadModal({
         <div className="space-y-4">
           {/* Title Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              File Name *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">File Name *</label>
             <input
               type="text"
               value={title}
@@ -87,9 +80,7 @@ export default function DownloadModal({
 
           {/* Format Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Format *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Format *</label>
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value as "webm" | "mp4")}
@@ -104,12 +95,7 @@ export default function DownloadModal({
 
         {/* Actions */}
         <div className="flex gap-3 mt-6">
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="flex-1"
-            disabled={processing}
-          >
+          <Button onClick={onClose} variant="outline" className="flex-1" disabled={processing}>
             Cancel
           </Button>
           <Button

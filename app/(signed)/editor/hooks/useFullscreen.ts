@@ -5,10 +5,7 @@ interface UseFullscreenProps {
   setIsFullscreen: (isFullscreen: boolean) => void;
 }
 
-export function useFullscreen({
-  videoContainerRef,
-  setIsFullscreen,
-}: UseFullscreenProps) {
+export function useFullscreen({ videoContainerRef, setIsFullscreen }: UseFullscreenProps) {
   const handleFullscreen = useCallback(() => {
     const el = videoContainerRef.current;
     console.log("Fullscreen button clicked", { el });
@@ -22,13 +19,11 @@ export function useFullscreen({
       !document.fullscreenElement &&
       !(
         "webkitFullscreenElement" in document &&
-        (document as Document & { webkitFullscreenElement?: Element })
-          .webkitFullscreenElement
+        (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
       ) &&
       !(
         "msFullscreenElement" in document &&
-        (document as Document & { msFullscreenElement?: Element })
-          .msFullscreenElement
+        (document as Document & { msFullscreenElement?: Element }).msFullscreenElement
       )
     ) {
       if (el.requestFullscreen) {
@@ -37,13 +32,9 @@ export function useFullscreen({
           console.error("Fullscreen error:", err);
         });
       } else if ("webkitRequestFullscreen" in el) {
-        (
-          el as HTMLElement & { webkitRequestFullscreen?: () => void }
-        ).webkitRequestFullscreen?.();
+        (el as HTMLElement & { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.();
       } else if ("msRequestFullscreen" in el) {
-        (
-          el as HTMLElement & { msRequestFullscreen?: () => void }
-        ).msRequestFullscreen?.();
+        (el as HTMLElement & { msRequestFullscreen?: () => void }).msRequestFullscreen?.();
       } else {
         alert("Fullscreen API is not supported in this browser.");
         console.error("Fullscreen API not supported");
@@ -53,13 +44,9 @@ export function useFullscreen({
       if (document.exitFullscreen) {
         document.exitFullscreen();
       } else if ("webkitExitFullscreen" in document) {
-        (
-          document as Document & { webkitExitFullscreen?: () => void }
-        ).webkitExitFullscreen?.();
+        (document as Document & { webkitExitFullscreen?: () => void }).webkitExitFullscreen?.();
       } else if ("msExitFullscreen" in document) {
-        (
-          document as Document & { msExitFullscreen?: () => void }
-        ).msExitFullscreen?.();
+        (document as Document & { msExitFullscreen?: () => void }).msExitFullscreen?.();
       } else {
         alert("Cannot exit fullscreen: API not supported.");
         console.error("Exit Fullscreen API not supported");

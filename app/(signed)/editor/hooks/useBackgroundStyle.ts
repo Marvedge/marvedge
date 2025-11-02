@@ -41,8 +41,7 @@ export function useBackgroundStyle({
     if (selectedBackground.startsWith("gradient:")) {
       const gradientId = selectedBackground.replace("gradient:", "");
       const gradientMap: Record<string, string> = {
-        sunset:
-          "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
+        sunset: "linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)",
         ocean: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         mint: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
         royal: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",

@@ -3,14 +3,7 @@
 import React, { useRef } from "react";
 import Image from "next/image";
 import { FaPlay } from "react-icons/fa6";
-import { Sparkles } from "lucide-react";
-import {
-  motion,
-  useInView,
-  useScroll,
-  useTransform,
-  easeOut,
-} from "framer-motion";
+import { motion, useInView, useScroll, useTransform, easeOut } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -33,8 +26,7 @@ const Hero: React.FC = () => {
     }
   };
 
-  const actionButtonText =
-    status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
+  const actionButtonText = status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
 
   const ref = useRef<HTMLElement>(null);
   // Set `once: true` to trigger isInView only once when the section enters the viewport
@@ -125,10 +117,7 @@ const Hero: React.FC = () => {
             {textSegments.map((segment, segmentIndex) => (
               <span key={segmentIndex} className={segment.color}>
                 {segment.text.split("").map((char, charIndex) => (
-                  <motion.span
-                    key={`${segmentIndex}-${charIndex}`}
-                    variants={letterVariants}
-                  >
+                  <motion.span key={`${segmentIndex}-${charIndex}`} variants={letterVariants}>
                     {char === " " ? "\u00A0" : char}
                   </motion.span>
                 ))}
@@ -143,8 +132,8 @@ const Hero: React.FC = () => {
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
           >
-            Marvedge turns your product into an instant demo — no editing, no
-            team, just click and convert.
+            Marvedge turns your product into an instant demo — no editing, no team, just click and
+            convert.
           </motion.p>
 
           <motion.div
@@ -167,12 +156,7 @@ const Hero: React.FC = () => {
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Image
-                src="/ri_gemini-fill.png"
-                alt="Explore Examples"
-                width={20}
-                height={20}
-              />
+              <Image src="/ri_gemini-fill.png" alt="Explore Examples" width={20} height={20} />
               Explore Examples
             </motion.button>
           </motion.div>
@@ -185,9 +169,11 @@ const Hero: React.FC = () => {
           animate={isInView ? "visible" : "hidden"}
           aria-label="Landing page hero image"
         >
-          <img
+          <Image
             src="/images/landing_image.png"
             alt="Interactive demo showcase"
+            width={1200}
+            height={600}
             className="w-full h-auto object-cover"
           />
         </motion.div>

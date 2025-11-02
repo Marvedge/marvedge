@@ -36,17 +36,9 @@ interface UseOverlaysProps {
   textFont: string;
 }
 
-export function useOverlays({
-  canvasRef,
-  playerRef,
-  tool,
-  textColor,
-  textFont,
-}: UseOverlaysProps) {
+export function useOverlays({ canvasRef, playerRef, tool, textColor, textFont }: UseOverlaysProps) {
   const [drawing, setDrawing] = useState(false);
-  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
 
   // Canvas drawing effect
@@ -159,8 +151,7 @@ export function useOverlays({
 
   const handleUndo = () => setOverlays((prev) => prev.slice(0, -1));
   const handleClear = () => setOverlays([]);
-  const handleSaveOverlays = () =>
-    localStorage.setItem("videoOverlays", JSON.stringify(overlays));
+  const handleSaveOverlays = () => localStorage.setItem("videoOverlays", JSON.stringify(overlays));
   const handleLoadOverlays = () => {
     const saved = localStorage.getItem("videoOverlays");
     if (saved) {

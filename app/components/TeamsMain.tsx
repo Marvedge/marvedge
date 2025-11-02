@@ -13,10 +13,7 @@ type TeamsMainProps = {
   teams: Team[];
 };
 
-export default function TeamsMain({
-  onCreateTeamClick,
-  teams,
-}: TeamsMainProps) {
+export default function TeamsMain({ onCreateTeamClick, teams }: TeamsMainProps) {
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#F5F3FF] overflow-hidden">
       <main className="flex-grow bg-[#EDE9FE] flex items-center justify-center p-6 md:p-8 rounded-none md:rounded-tr-3xl">
@@ -27,9 +24,7 @@ export default function TeamsMain({
           className="flex flex-col items-center text-center"
         >
           <Users size={56} color="#6356D7" />
-          <h2 className="text-2xl font-semibold text-[#7569A5] mt-6">
-            Select a team to manage
-          </h2>
+          <h2 className="text-2xl font-semibold text-[#7569A5] mt-6">Select a team to manage</h2>
           <p className="text-gray-500 text-base mt-2 px-4">
             Choose a team from the sidebar to view members and settings
           </p>
@@ -59,9 +54,7 @@ export default function TeamsMain({
           >
             <p className="text-[#7569A5] font-bold text-base">
               {team.name}
-              <span className="ml-2 text-xs text-gray-500 font-light">
-                {team.plan}
-              </span>
+              <span className="ml-2 text-xs text-gray-500 font-light">{team.plan}</span>
             </p>
             <p className="text-gray-500 text-sm mt-1">{team.description}</p>
           </motion.div>

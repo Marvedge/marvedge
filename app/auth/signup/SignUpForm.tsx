@@ -11,10 +11,7 @@ import { useSearchParams } from "next/navigation";
 const signUpSchema = z
   .object({
     name: z.string().min(1, "Please enter your name"),
-    email: z
-      .string()
-      .min(1, "Please enter your email")
-      .email("Invalid email address"),
+    email: z.string().min(1, "Please enter your email").email("Invalid email address"),
 
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
@@ -72,8 +69,7 @@ const SignUp = () => {
         router.push("/auth/signin");
       }
     } catch (err) {
-      const message =
-        err instanceof z.ZodError ? err.errors[0].message : "Sign-up failed.";
+      const message = err instanceof z.ZodError ? err.errors[0].message : "Sign-up failed.";
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -144,9 +140,7 @@ const SignUp = () => {
 
       <div
         className={`w-full md:w-1/2 flex justify-center items-center px-4 sm:px-10 lg:px-20 py-10 transition-all duration-700 ease-out pt-24 md:pt-10 ${
-          animatePanel
-            ? "opacity-100 translate-x-0"
-            : "opacity-0 translate-x-10"
+          animatePanel ? "opacity-100 translate-x-0" : "opacity-0 translate-x-10"
         }`}
       >
         <form
@@ -155,9 +149,7 @@ const SignUp = () => {
           autoComplete="on"
         >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
-              Create your Account
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">Create your Account</h1>
             <p className="text-sm text-gray-600 font-semibold">
               Already have an account?{" "}
               <button
@@ -207,9 +199,7 @@ const SignUp = () => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
             >
               <Image
-                src={
-                  showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"
-                }
+                src={showPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"}
                 alt="Toggle Password"
                 width={20}
                 height={20}
@@ -233,11 +223,7 @@ const SignUp = () => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
             >
               <Image
-                src={
-                  showConfirmPassword
-                    ? "/icons/eyeclosed.png"
-                    : "/icons/eyeopen.png"
-                }
+                src={showConfirmPassword ? "/icons/eyeclosed.png" : "/icons/eyeopen.png"}
                 alt="Toggle Confirm"
                 width={20}
                 height={20}
@@ -270,12 +256,7 @@ const SignUp = () => {
               className="h-[45px] w-[120px] rounded-md border border-[#D5C9FF] bg-[#F1ECFF] shadow-md hover:shadow-lg transition-all duration-300 active:scale-95 hover:scale-105 flex items-center justify-center cursor-pointer"
               title="Sign up with Google"
             >
-              <Image
-                src="/icons/google.png"
-                alt="Google"
-                width={25}
-                height={25}
-              />
+              <Image src="/icons/google.png" alt="Google" width={25} height={25} />
             </button>
           </div>
         </form>

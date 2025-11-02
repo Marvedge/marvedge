@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 
 const SignedLayoutClient = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
-  const isRecorderOrEditor =
-    pathname.startsWith("/recorder") || pathname.startsWith("/editor");
+  const isRecorderOrEditor = pathname.startsWith("/recorder") || pathname.startsWith("/editor");
 
   return (
     <div className="flex h-screen overflow-hidden">

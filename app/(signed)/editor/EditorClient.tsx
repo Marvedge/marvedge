@@ -34,11 +34,7 @@ import { useTimelineInit } from "./hooks/useTimelineInit";
 
 // Utils
 import { sanitizeFilename } from "@/app/lib/constants";
-import {
-  handleSaveDemo,
-  videoTrimHandler,
-  exportVideo,
-} from "./utils/videoHandlers";
+import { handleSaveDemo, videoTrimHandler, exportVideo } from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 
 export default function EditorPage() {
@@ -224,7 +220,7 @@ export default function EditorPage() {
       setInputStartTime(formatTimeForInput(start));
       setInputEndTime(formatTimeForInput(end));
     },
-    [formatTimeForInput, setInputStartTime, setInputEndTime],
+    [formatTimeForInput, setInputStartTime, setInputEndTime]
   );
 
   // Dashboard menu handlers
@@ -276,11 +272,7 @@ export default function EditorPage() {
   const onZoomEffectCreate = (effect: ZoomEffect) => {
     console.log("Creating zoom effect:", effect);
     console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
-    console.log(
-      "Coordinates:",
-      { x: effect.x, y: effect.y },
-      "Expected: 0-1 range",
-    );
+    console.log("Coordinates:", { x: effect.x, y: effect.y }, "Expected: 0-1 range");
 
     if (effect.zoomLevel <= 1.0) {
       console.warn("⚠️ Zoom level is too low, forcing to 2.0");
@@ -347,13 +339,7 @@ export default function EditorPage() {
               onExportWebM={onExportVideo}
               tool={tool}
               setTool={(t: string) => {
-                if (
-                  t === "none" ||
-                  t === "text" ||
-                  t === "blur" ||
-                  t === "rect" ||
-                  t === "arrow"
-                ) {
+                if (t === "none" || t === "text" || t === "blur" || t === "rect" || t === "arrow") {
                   setTool(t);
                 }
               }}
@@ -441,10 +427,7 @@ export default function EditorPage() {
         {/* Mobile Drawer for SidemenuDashboard */}
         {isDashboardMenuOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-40"
-              onClick={closeDashboardMenu}
-            />
+            <div className="fixed inset-0 bg-black bg-opacity-40" onClick={closeDashboardMenu} />
             <SidemenuDashboard />
           </div>
         )}
@@ -495,22 +478,14 @@ export default function EditorPage() {
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
               {sidebarTitle && (
                 <div className="mb-3">
-                  <span className="text-sm font-medium text-gray-500">
-                    Title:
-                  </span>
-                  <span className="text-xl font-semibold text-gray-800">
-                    {sidebarTitle}
-                  </span>
+                  <span className="text-sm font-medium text-gray-500">Title:</span>
+                  <span className="text-xl font-semibold text-gray-800">{sidebarTitle}</span>
                 </div>
               )}
               {sidebarDescription && (
                 <div>
-                  <span className="text-sm font-medium text-gray-500">
-                    Description:
-                  </span>
-                  <span className="text-gray-600 text-sm">
-                    {sidebarDescription}
-                  </span>
+                  <span className="text-sm font-medium text-gray-500">Description:</span>
+                  <span className="text-gray-600 text-sm">{sidebarDescription}</span>
                 </div>
               )}
             </div>
@@ -564,9 +539,7 @@ export default function EditorPage() {
                       background: "#F6F3FF",
                     }}
                     onError={(e) => console.error("Video failed to load", e)}
-                    onProgress={({ playedSeconds }) =>
-                      setCurrentTime(playedSeconds)
-                    }
+                    onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -585,20 +558,14 @@ export default function EditorPage() {
                         />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
-                      No Video Selected
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      To start editing, please:
-                    </p>
+                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">No Video Selected</h3>
+                    <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
                     <div className="space-y-2 text-sm text-gray-500">
                       <p>
-                        • Go to <strong>Dashboard</strong> and edit an existing
-                        demo
+                        • Go to <strong>Dashboard</strong> and edit an existing demo
                       </p>
                       <p>
-                        • Or go to <strong>Recorder</strong> to record/upload a
-                        new video
+                        • Or go to <strong>Recorder</strong> to record/upload a new video
                       </p>
                     </div>
                     <div className="mt-6 flex gap-3">
@@ -660,31 +627,18 @@ export default function EditorPage() {
                       className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                       title="Back 5 seconds"
                     >
-                      <Image
-                        src="/icons/replay.svg"
-                        alt="Replay"
-                        width={16}
-                        height={16}
-                      />
+                      <Image src="/icons/replay.svg" alt="Replay" width={16} height={16} />
                     </button>
                     <button
                       onClick={() => {
-                        const newTime = Math.min(
-                          displayDuration,
-                          currentTime + 5,
-                        );
+                        const newTime = Math.min(displayDuration, currentTime + 5);
                         setCurrentTime(newTime);
                         playerRef.current?.seekTo(newTime, "seconds");
                       }}
                       className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
                       title="Forward 5 seconds"
                     >
-                      <Image
-                        src="/icons/forward.svg"
-                        alt="Forward"
-                        width={16}
-                        height={16}
-                      />
+                      <Image src="/icons/forward.svg" alt="Forward" width={16} height={16} />
                     </button>
                   </div>
 
@@ -716,10 +670,7 @@ export default function EditorPage() {
                   </div>
 
                   {/* Fullscreen */}
-                  <div
-                    className="flex items-center justify-end"
-                    style={{ minWidth: 40 }}
-                  >
+                  <div className="flex items-center justify-end" style={{ minWidth: 40 }}>
                     <button
                       className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
                       title="Fullscreen"
@@ -793,9 +744,7 @@ export default function EditorPage() {
               ) : (
                 <div className="w-full max-w-6xl mx-auto">
                   <div className="relative h-32 bg-white border-2 border-[#A594F9] rounded-lg flex items-center justify-center">
-                    <span className="text-[#A594F9] font-medium">
-                      Loading timeline...
-                    </span>
+                    <span className="text-[#A594F9] font-medium">Loading timeline...</span>
                   </div>
                 </div>
               )}

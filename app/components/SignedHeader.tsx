@@ -15,18 +15,18 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
 
   // Calculate initials from user's name or email
   const initials = React.useMemo(() => {
-    if (session?.user?.image) {
-      return session.user.image;
-    }
-    return "/icons/status-icon-green.png";
-  }, [session?.user]);
+    const base = session?.user?.name || session?.user?.email?.split("@")[0] || "User";
+    return base
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase())
+      .join("")
+      .slice(0, 2);
+  }, [session?.user?.name, session?.user?.email]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
     }
@@ -39,13 +39,7 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
       <div className="w-full bg-white border-b border-gray-200 flex items-center justify-between px-8 py-4">
         <div className="flex items-center gap-3">
           <span className="mr-2">
-            <Image
-              src={iconSRC}
-              alt={iconALT}
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
+            <Image src={iconSRC} alt={iconALT} width={24} height={24} className="w-6 h-6" />
           </span>
           <span className="text-lg text-gray-400 font-medium">{titleText}</span>
         </div>
@@ -56,9 +50,7 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
           <span className="text-gray-500 text-lg">
             Welcome{" "}
             <span className="text-[#7C5CFC] font-semibold">
-              {session?.user?.name?.split(" ")[0] ||
-                session?.user?.email?.split("@")[0] ||
-                "User"}
+              {session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")[0] || "User"}
             </span>{" "}
             <span className="inline-block">👋</span>
           </span>
@@ -80,8 +72,7 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
               onClick={() => setShowDropdown((v) => !v)}
               title={session?.user?.name || session?.user?.email || undefined}
             >
-              {/* {initials} */}
-              <Image src={initials} alt="user_profile" fill className="rounded-full object-cover" />
+              {initials}
             </button>
             {showDropdown && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">

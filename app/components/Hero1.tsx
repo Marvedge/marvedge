@@ -242,8 +242,7 @@ const Hero1: React.FC = () => {
           }}
           style={{ y, fontFamily: "var(--font-raleway)", fontWeight: 900 }}
         >
-          Convert product into your{" "}
-          <span className="text-[#8A76FC]/70">Best Salesperson</span>
+          Convert product into your <span className="text-[#8A76FC]/70">Best Salesperson</span>
         </motion.h1>
         <motion.p
           className="mt-4 max-sm:mt-8 text-gray-700 text-sm sm:text-base md:text-lg max-w-2xl mx-auto text-center px-2 sm:px-0"
@@ -259,9 +258,8 @@ const Hero1: React.FC = () => {
           }}
           style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
         >
-          Every company should be able to showcase its product in action,
-          without needing a team of developers, editors, designers, or
-          salespeople.
+          Every company should be able to showcase its product in action, without needing a team of
+          developers, editors, designers, or salespeople.
         </motion.p>
 
         <motion.div

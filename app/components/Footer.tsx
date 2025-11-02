@@ -4,13 +4,7 @@ import React, { useRef, useState } from "react";
 import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer, toast } from "react-toastify";
 import Image from "next/image";
-import {
-  motion,
-  useInView,
-  easeOut,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { motion, useInView, easeOut, useScroll, useTransform } from "framer-motion";
 
 const socialIcons = [
   {
@@ -289,9 +283,7 @@ const WaitlistSection: React.FC = () => {
     message: "",
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
@@ -368,8 +360,7 @@ const WaitlistSection: React.FC = () => {
           }}
           transition={{ duration: 0.6, ease: easeOut, delay: 0.2 }}
         >
-          Be among the first to access Marvedge and transform your videos to eye
-          catchy demo
+          Be among the first to access Marvedge and transform your videos to eye catchy demo
         </motion.p>
 
         {/* Form */}
@@ -478,10 +469,7 @@ const Footer: React.FC = () => {
   return (
     <>
       <WaitlistSection />
-      <div
-        ref={sectionRef}
-        className="w-full bg-[#2d2347] min-h-[40vh] relative overflow-hidden"
-      >
+      <div ref={sectionRef} className="w-full bg-[#261753] min-h-[40vh] relative overflow-hidden">
         <motion.div
           className="absolute top-20 left-1/4 w-32 h-32 bg-purple-900 rounded-full opacity-10"
           animate={{
@@ -555,9 +543,8 @@ const Footer: React.FC = () => {
                 className="text-gray-300 text-xs sm:text-sm md:text-base max-w-xs sm:max-w-sm"
                 style={{ fontFamily: "var(--font-raleway)" }}
               >
-                Transform your product URLs into compelling demo videos with the
-                power of AI. Boost conversations and save time with automated
-                video creation.
+                Transform your product URLs into compelling demo videos with the power of AI. Boost
+                conversations and save time with automated video creation.
               </p>
             </motion.div>
           </motion.div>
@@ -578,12 +565,7 @@ const Footer: React.FC = () => {
             style={{ scale }}
           >
             {linkSections.map((section, index) => (
-              <LinkSection
-                key={index}
-                title={section.title}
-                items={section.items}
-                index={index}
-              />
+              <LinkSection key={index} title={section.title} items={section.items} index={index} />
             ))}
           </motion.div>
 
@@ -654,8 +636,7 @@ const Footer: React.FC = () => {
               delay: 1.0,
             }}
           >
-            Copyright © 2025. All rights reserved. Created with 🩶 for better
-            conversation.
+            Copyright © 2025. All rights reserved. Created with 🩶 for better conversation.
           </motion.p>
         </motion.footer>
         <ToastContainer position="top-center" autoClose={3000} />

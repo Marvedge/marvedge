@@ -1,10 +1,6 @@
 import { useRef, useState, useEffect, RefObject } from "react";
 
-const DraggableCameraPreview = ({
-  videoRef,
-}: {
-  videoRef: RefObject<HTMLVideoElement | null>;
-}) => {
+const DraggableCameraPreview = ({ videoRef }: { videoRef: RefObject<HTMLVideoElement | null> }) => {
   const previewRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 20, y: 20 });
   const [dragging, setDragging] = useState(false);
@@ -56,12 +52,7 @@ const DraggableCameraPreview = ({
         height: "120px",
       }}
     >
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full rounded"
-      />
+      <video ref={videoRef} autoPlay playsInline className="w-full h-full rounded" />
     </div>
   );
 };

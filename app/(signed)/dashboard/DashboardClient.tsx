@@ -14,10 +14,7 @@ const DashboardPage = () => {
     );
   }
   return (
-    <div
-      className="overflow-y-auto h-full"
-      style={{ minHeight: "calc(100vh - 80px)" }}
-    >
+    <div className="overflow-y-auto h-full" style={{ minHeight: "calc(100vh - 80px)" }}>
       <div className="flex flex-col gap-3 md:gap-4">
         <SignedHeader
           titleText="Dashboard"

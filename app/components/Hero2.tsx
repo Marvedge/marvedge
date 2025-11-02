@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import {
-  motion,
-  useAnimation,
-  useInView,
-  easeOut,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { motion, useAnimation, useInView, easeOut, useScroll, useTransform } from "framer-motion";
 
 interface ServiceCardProps {
   title: string;
@@ -16,11 +9,7 @@ interface ServiceCardProps {
   icon: string;
 }
 
-const ServiceCard: React.FC<ServiceCardProps> = ({
-  title,
-  description,
-  icon,
-}) => {
+const ServiceCard: React.FC<ServiceCardProps> = ({ title, description, icon }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   // Set `once: true` to trigger only once when card enters viewport
   const isInView = useInView(cardRef, { once: true, margin: "-50px" });
@@ -82,20 +71,17 @@ const Hero2: React.FC = () => {
   const services = [
     {
       title: "Web Development",
-      description:
-        "Build responsive and scalable web applications with cutting-edge technologies.",
+      description: "Build responsive and scalable web applications with cutting-edge technologies.",
       icon: "🌐",
     },
     {
       title: "Mobile Development",
-      description:
-        "Create seamless mobile experiences for iOS and Android platforms.",
+      description: "Create seamless mobile experiences for iOS and Android platforms.",
       icon: "📱",
     },
     {
       title: "UI/UX Design",
-      description:
-        "Design intuitive and engaging user interfaces for better user experiences.",
+      description: "Design intuitive and engaging user interfaces for better user experiences.",
       icon: "🎨",
     },
   ];
