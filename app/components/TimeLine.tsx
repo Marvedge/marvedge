@@ -21,6 +21,8 @@ interface TimelineRulerProps {
   onZoomEffectCreate?: (effect: ZoomEffect) => void;
   initialSegments?: { start: string; end: string }[];
   onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
+  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+  playing: boolean;
 }
 
 export default function TimelineRuler({
@@ -37,6 +39,7 @@ export default function TimelineRuler({
   onResetVideo,
   onZoomEffectCreate,
   initialSegments,
+  setPlaying,
 }: TimelineRulerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [draggingHandle] = useState<"current" | "start" | "end" | null>(null);
@@ -306,14 +309,17 @@ export default function TimelineRuler({
     const onMove = (e: MouseEvent) => {
       updateCurrentTimeFromMouse(e);
     };
-    const onUp = () => setDraggingCurrentTime(false);
+    const onUp = () => {
+      setPlaying(false);
+      setDraggingCurrentTime(false);
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [draggingCurrentTime, updateCurrentTimeFromMouse]);
+  }, [draggingCurrentTime, updateCurrentTimeFromMouse, setPlaying]);
 
   const updateValueFromMouse = useCallback(
     (e: React.MouseEvent | MouseEvent) => {
