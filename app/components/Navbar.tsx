@@ -5,7 +5,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 // import Hero from "./Hero";
-import { useSession } from "next-auth/react";
 
 const NavButton: React.FC<{
   children: React.ReactNode;
@@ -23,26 +22,15 @@ const NavButton: React.FC<{
 const Navbar: React.FC = () => {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { status } = useSession();
 
   const toggleMenu = () => {
     setIsMenuOpen((prev) => !prev);
   };
 
-  const handleActionButtonClick = () => {
-    if (status === "authenticated") {
-      router.push("/dashboard");
-    } else {
-      router.push("/auth/signup");
-    }
-  };
-
-  const actionButtonText = status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
-
   return (
     <>
-      <nav className="fixed top-0 left-0 w-full z-1002 bg-linear-to-tr from-white via-[#f9fef4] to-[#e9f8c5] min-h-20 flex flex-col justify-start">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
+      <nav className="fixed top-0 left-0 w-full z-50 bg-white min-h-20 flex flex-col justify-start">
+        <div className="px-4 sm:px-6 w-full">
           {/* Top Row: Logo, Marvedge text, Hamburger */}
           <div className="flex items-center justify-between w-full pt-2">
             <div className="flex items-center space-x-3">
@@ -72,16 +60,10 @@ const Navbar: React.FC = () => {
           <NavButton onClick={() => router.push("/features")}>Features</NavButton>
           <NavButton onClick={() => router.push("/pricing")}>Pricing</NavButton>
           <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
-          <NavButton
-            onClick={handleActionButtonClick}
-            className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors hover:text-white"
-          >
-            {actionButtonText}
-          </NavButton>
         </div>
         {/* Mobile menu (unchanged) */}
         {isMenuOpen && (
-          <div className="md:hidden absolute top-20 left-0 w-full bg-linear-to-tr from-gray-100 via-[#e6f0e1] to-[#d1e8a3] z-1001 flex flex-col items-start p-4 space-y-3 shadow-md">
+          <div className="md:hidden absolute top-20 left-0 w-full bg-white z-40 flex flex-col items-start p-4 space-y-3 shadow-md">
             <NavButton
               onClick={() => {
                 router.push("/features");
@@ -105,15 +87,6 @@ const Navbar: React.FC = () => {
               }}
             >
               Reviews
-            </NavButton>
-            <NavButton
-              onClick={() => {
-                handleActionButtonClick();
-                toggleMenu();
-              }}
-              className="bg-[#8C5BFF] text-white px-4 py-2 rounded-md hover:bg-[#7b4de5] transition-colors"
-            >
-              {actionButtonText}
             </NavButton>
           </div>
         )}

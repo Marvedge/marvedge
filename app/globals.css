@@ -167,6 +167,15 @@ body {
   body {
     overflow-y: auto !important;
     overflow-x: hidden !important;
+    font-size: 14px;
+  }
+}
+
+/* Mobile-first responsive adjustments */
+@media (max-width: 480px) {
+  html,
+  body {
+    font-size: 13px;
   }
 }
 
