@@ -37,7 +37,7 @@ const TeamPage = () => {
 
   return (
     <div
-      className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
+      className="flex flex-col grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
       style={{ minHeight: "calc(100vh - 80px)" }}
     >
       <SignedHeader titleText="Team" iconSRC="/icons/dash-users.svg" iconALT="team_icon" />

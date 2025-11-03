@@ -11,7 +11,6 @@ import {
   PRIVACY_SETTINGS,
   PREFERENCES_SETTINGS,
 } from "../../lib/constants";
-import SignedHeader from "@/app/components/SignedHeader";
 
 const SettingsPage = () => {
   const { data: session, update } = useSession();
@@ -28,6 +27,8 @@ const SettingsPage = () => {
   });
   const [avatar, setAvatar] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -231,7 +232,116 @@ const SettingsPage = () => {
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
       {/* HEADER BAR */}
-      <SignedHeader titleText="Settings" iconSRC="/icons/bell.png" iconALT="setting_icon" />
+      <div className="w-full bg-white border-b border-gray-200 px-4 sm:px-8 py-4">
+        {/* Mobile: Welcome, Bell, Initials at top */}
+        <div className="flex flex-col sm:hidden w-full mb-2">
+          <div className="flex items-center justify-between w-full gap-2">
+            <span className="text-gray-500 text-base">
+              Welcome{" "}
+              <span className="text-[#7C5CFC] font-semibold">
+                {session?.user?.name?.split(" ")[0] ||
+                  session?.user?.email?.split("@")[0] ||
+                  "User"}
+              </span>{" "}
+              <span className="inline-block">👋</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
+                title="Notifications"
+              >
+                <Image
+                  src="/icons/bell.png"
+                  alt="Notifications"
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                />
+              </button>
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
+                  onClick={() => setShowDropdown((v) => !v)}
+                  title={session?.user?.name || session?.user?.email || undefined}
+                >
+                  {initials}
+                </button>
+                {showDropdown && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
+                    <div className="mb-2 text-base font-bold text-[#7C5CFC]">
+                      {session?.user?.name || "User"}
+                    </div>
+                    <div className="mb-1 text-gray-700 text-xs font-semibold">
+                      {session?.user?.email}
+                    </div>
+                    <button
+                      onClick={() => signOut({ callbackUrl: "/" })}
+                      className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Main header row: logo, user actions (hidden on mobile) */}
+        <div className="hidden sm:flex items-center justify-between w-full">
+          <div className="flex items-center gap-3">
+            <span className="text-lg text-gray-400 font-medium">Settings</span>
+          </div>
+          <div className="flex items-center gap-6 justify-end">
+            <span className="text-gray-500 text-lg">
+              Welcome{" "}
+              <span className="text-[#7C5CFC] font-semibold">
+                {session?.user?.name?.split(" ")[0] ||
+                  session?.user?.email?.split("@")[0] ||
+                  "User"}
+              </span>{" "}
+              <span className="inline-block">👋</span>
+            </span>
+            <button
+              className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
+              title="Notifications"
+            >
+              <Image
+                src="/icons/bell.png"
+                alt="Notifications"
+                width={24}
+                height={24}
+                className="w-6 h-6"
+              />
+            </button>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
+                onClick={() => setShowDropdown((v) => !v)}
+                title={session?.user?.name || session?.user?.email || undefined}
+              >
+                {initials}
+              </button>
+              {showDropdown && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
+                  <div className="mb-2 text-base font-bold text-[#7C5CFC]">
+                    {session?.user?.name || "User"}
+                  </div>
+                  <div className="mb-1 text-gray-700 text-xs font-semibold">
+                    {session?.user?.email}
+                  </div>
+                  <button
+                    onClick={() => signOut({ callbackUrl: "/" })}
+                    className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2 px-2 sm:px-4 md:px-8 pb-3 pt-4 bg-white border-b border-gray-200 overflow-x-auto">
         {TABS.map((tab) => (
           <button
@@ -521,7 +631,7 @@ const SettingsPage = () => {
               </div>
               <div className="flex items-center justify-between bg-white border border-[#f3f0fc] rounded-lg px-6 py-4">
                 <span className="font-medium text-base text-[#1A0033]">
-                  Enable Two- factor authentication
+                  Enable Two-factor authentication
                 </span>
                 <Image
                   src="/icons/shield.png"

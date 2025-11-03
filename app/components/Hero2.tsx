@@ -117,7 +117,10 @@ const Hero2: React.FC = () => {
   }, [isInView, controls]);
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden">
+    <section
+      ref={sectionRef}
+      className="relative overflow-hidden pt-1 sm:pt-3 md:pt-4 pb-4 sm:pb-12 md:pb-16"
+    >
       <motion.div
         className="absolute bottom-1/4 right-10 w-16 h-16 bg-blue-200 rounded-full opacity-20"
         animate={{

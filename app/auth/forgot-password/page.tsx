@@ -97,9 +97,7 @@ const ForgotPassword = () => {
         <div className="absolute bottom-1/5 right-1/3 w-3.5 h-3.5 bg-white/15 rounded-full animate-pulse delay-1200 hover:scale-150 transition-transform duration-300"></div>
       </div>
       <div
-        className={`w-full md:w-1/2 flex justify-center items-center px-4 sm:px-10 lg:px-20 py-10 transition-all duration-700 ease-out pt-24 md:pt-10 ${
-          animatePanel ? "opacity-100 translate-x-0" : "opacity-0 translate-x-10"
-        }`}
+        className={`w-full md:w-1/2 flex justify-center items-center px-4 sm:px-10 lg:px-20 py-10 transition-all duration-700 ease-out pt-24 md:pt-10 ${animatePanel ? "opacity-100 translate-x-0" : "opacity-0 translate-x-10"}`}
       >
         <form
           onSubmit={handleForgot}

@@ -365,7 +365,7 @@ export default function DemosPage() {
                             width={24}
                             height={24}
                             className="w-6 h-6"
-                          />{" "}
+                          />
                         </span>
                         <div>
                           <div className="font-semibold text-lg text-[#1A0033]">{demo.title}</div>

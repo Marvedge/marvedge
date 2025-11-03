@@ -19,14 +19,21 @@ interface TiltCardProps {
   image: string;
   linkText?: string;
   index: number;
+  bgColor?: string;
+}
+
+interface Card extends Omit<TiltCardProps, "index"> {
+  icon: string;
+  bgColor: string;
 }
 
 const TiltCard: React.FC<TiltCardProps> = ({
   title,
   description,
   image,
-  linkText = "Learn more →",
+  linkText = "Learn more >",
   index,
+  bgColor = "bg-gray-100",
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
@@ -61,7 +68,7 @@ const TiltCard: React.FC<TiltCardProps> = ({
   return (
     <motion.div
       ref={cardRef}
-      className="bg-white rounded-xl shadow-lg p-8 text-center w-full"
+      className="bg-white rounded-lg sm:rounded-xl shadow-md sm:shadow-lg p-4 sm:p-6 md:p-8 w-full"
       style={{
         perspective: 1000,
         rotateX,
@@ -72,11 +79,6 @@ const TiltCard: React.FC<TiltCardProps> = ({
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      whileHover={{
-        scale: 1.05,
-        boxShadow: "0 20px 40px rgba(0, 0, 0, 0.15)",
-        y: -10,
-      }}
       initial={{ opacity: 0, y: 60, scale: 0.9, rotateX: -15 }}
       animate={{
         opacity: isInView ? 1 : 0,
@@ -84,40 +86,56 @@ const TiltCard: React.FC<TiltCardProps> = ({
         scale: isInView ? 1 : 0.9,
         rotateX: isInView ? 0 : -15,
       }}
+      whileHover={{
+        scale: 1,
+        y: -6,
+        boxShadow: "0px -8px 30px rgba(0, 0, 0, 0.3)",
+      }}
       transition={{
         duration: 0.8,
         ease: easeOut,
         delay: index * 0.1,
       }}
     >
-      <motion.div
-        className="relative w-16 h-16 mx-auto mb-4 rounded-lg overflow-hidden"
-        // Changed to one-time animation triggered by isInView
-        initial={{ rotate: 0, scale: 0.8 }}
-        animate={{
-          rotate: isInView ? 0 : 0,
-          scale: isInView ? 1 : 0.8,
-        }}
-        transition={{
-          duration: 0.8,
-          ease: easeOut,
-        }}
+      <div className="flex gap-3 sm:gap-4 mb-3 sm:mb-4">
+        <motion.div
+          className={`relative w-10 sm:w-12 h-10 sm:h-12 rounded-lg overflow-hidden shrink-0 flex items-center justify-center ${bgColor}`}
+          // Changed to one-time animation triggered by isInView
+          initial={{ rotate: 0, scale: 0.8 }}
+          animate={{
+            rotate: isInView ? 0 : 0,
+            scale: isInView ? 1 : 0.8,
+          }}
+          transition={{
+            duration: 0.8,
+            ease: easeOut,
+          }}
+        >
+          <Image
+            src={image}
+            alt={title}
+            width={24}
+            height={24}
+            className="object-contain"
+            priority={index < 3}
+          />
+        </motion.div>
+      </div>
+      <h3
+        className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800"
+        style={{ fontFamily: "var(--font-raleway)", fontWeight: 700 }}
       >
-        <Image
-          src={image}
-          alt={title}
-          fill
-          className="object-contain"
-          sizes="64px"
-          priority={index < 3}
-        />
-      </motion.div>
-      <div className="relative w-full h-32 mb-4"></div>
-      <h3 className="text-2xl font-semibold text-gray-800">{title}</h3>
-      <p className="mt-2 text-gray-600 text-base">{description}</p>
+        {title}
+      </h3>
+      <p
+        className="mt-2 text-gray-600 text-sm sm:text-base"
+        style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
+      >
+        {description}
+      </p>
       <motion.a
         href="#"
-        className="mt-4 inline-block text-[#6B46C1] text-base hover:underline"
+        className="mt-4 inline-block text-blue-500 text-base hover:underline"
         whileHover={{ x: 5, scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
@@ -139,20 +157,22 @@ const Hero1: React.FC = () => {
   const y = useTransform(scrollYProgress, [0, 1], [0, -50]);
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1.05, 1]);
 
-  const cards = [
+  const cards: Card[] = [
     {
-      title: "URL to Video Magic",
+      title: "Easy To Use",
       description:
-        "Simply paste your product URL and watch our AI create a professional demo video in minutes, not hours.",
-      icon: "🔗",
-      image: "/icons/Group.svg",
+        "Simply upload or capture your product videos and use our platform to create a professional demo video in minutes, not hours.",
+      icon: "🎨",
+      image: "/easy-to-use-icon 2.svg",
+      bgColor: "bg-purple-100",
     },
     {
       title: "Smart Content Analysis",
       description:
-        "Our AI understands your product features, benefits, and target audience to create relevant, engaging content.",
-      icon: "⚡",
+        "Our platform understands your product features, benefits, and target audience to create relevant, engaging content.",
+      icon: "🧠",
       image: "/icons/Group1.svg",
+      bgColor: "bg-blue-100",
     },
     {
       title: "Conversion Optimized",
@@ -160,34 +180,41 @@ const Hero1: React.FC = () => {
         "Every video is designed with proven conversion techniques to turn viewers into customers effectively.",
       icon: "📈",
       image: "/icons/Group2.svg",
+      bgColor: "bg-green-100",
     },
     {
       title: "Brand Customization",
       description:
         "Automatically apply your brand colors, fonts, and style guidelines to maintain consistent branding.",
-      icon: "🎥",
+      icon: "⭐",
       image: "/icons/Group3.svg",
+      bgColor: "bg-yellow-100",
     },
     {
       title: "Multi-Format Export",
       description:
         "Export videos optimized for web, social media, email campaigns, and presentations with one click.",
-      icon: "⚡",
+      icon: "📱",
       image: "/icons/Group4.svg",
+      bgColor: "bg-blue-100",
     },
     {
       title: "Lightning Fast",
       description:
         "Get professional demo videos in under 2 minutes. No more waiting days for video production.",
-      icon: "👥",
+      icon: "🚀",
       image: "/icons/Group5.svg",
+      bgColor: "bg-red-100",
     },
   ];
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden">
+    <section
+      ref={sectionRef}
+      className="relative overflow-hidden bg-white pt-4 sm:pt-12 md:pt-16 pb-1 sm:pb-3 md:pb-4"
+    >
       <motion.div
-        className="absolute bottom-20 right-1/3 w-24 h-24 bg-blue-100 rounded-full opacity-30"
+        className="absolute bottom-20 right-1/3 w-24 h-24 bg-purple-400 rounded-full opacity-5"
         animate={{
           scale: [1, 1.4, 1],
           y: [0, -30, 0],
@@ -200,9 +227,9 @@ const Hero1: React.FC = () => {
         }}
       />
 
-      <div className="max-w-7xl mx-auto px-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 relative z-10">
         <motion.h1
-          className="mt-6 max-sm:mt-10 text-3xl md:text-4xl font-extrabold text-gray-600 leading-tight text-center"
+          className="mt-2 max-sm:mt-2 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight text-center"
           initial={{ opacity: 0, y: 60, rotateX: -15 }}
           animate={{
             opacity: isInView ? 1 : 0,
@@ -213,12 +240,12 @@ const Hero1: React.FC = () => {
             duration: 0.8,
             ease: easeOut,
           }}
-          style={{ y }}
+          style={{ y, fontFamily: "var(--font-raleway)", fontWeight: 900 }}
         >
-          Automated Video Creation <span className="text-[#6B46C1]">Powered by AI</span>
+          Convert product into your <span className="text-[#8A76FC]/70">Best Salesperson</span>
         </motion.h1>
         <motion.p
-          className="mt-4 max-sm:mt-8 text-gray-600 text-lg max-w-2xl mx-auto text-center translate-x-2 sm:translate-x-4 md:translate-x-6"
+          className="mt-4 max-sm:mt-8 text-gray-700 text-sm sm:text-base md:text-lg max-w-2xl mx-auto text-center px-2 sm:px-0"
           initial={{ opacity: 0, y: 60 }}
           animate={{
             opacity: isInView ? 1 : 0,
@@ -229,12 +256,16 @@ const Hero1: React.FC = () => {
             ease: easeOut,
             delay: 0.2,
           }}
+          style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
         >
-          Our advanced AI technology analyzes your product, understands your audience, and creates
-          compelling demo videos that drive conversions automatically.
+          Every company should be able to showcase its product in action, without needing a team of
+          developers, editors, designers, or salespeople.
         </motion.p>
 
-        <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6" style={{ scale }}>
+        <motion.div
+          className="mt-8 sm:mt-10 md:mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6"
+          style={{ scale }}
+        >
           {cards.slice(0, 3).map((card, index) => (
             <TiltCard
               key={index}
@@ -243,11 +274,15 @@ const Hero1: React.FC = () => {
               icon={card.icon}
               image={card.image}
               index={index}
+              bgColor={card.bgColor}
             />
           ))}
         </motion.div>
 
-        <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6" style={{ scale }}>
+        <motion.div
+          className="mt-8 sm:mt-10 md:mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6"
+          style={{ scale }}
+        >
           {cards.slice(3).map((card, index) => (
             <TiltCard
               key={index}
@@ -255,65 +290,10 @@ const Hero1: React.FC = () => {
               description={card.description}
               icon={card.icon}
               image={card.image}
-              index={index + 3} // Adjust index for staggered delay
+              index={index + 3}
+              bgColor={card.bgColor}
             />
           ))}
-        </motion.div>
-
-        <motion.div
-          className="mt-20 bg-white rounded-xl shadow-lg p-6 flex flex-col md:flex-row items-center justify-between gap-6"
-          initial={{ opacity: 0, y: 60, scale: 0.9 }}
-          animate={{
-            opacity: isInView ? 1 : 0,
-            y: isInView ? 0 : 60,
-            scale: isInView ? 1 : 0.9,
-          }}
-          transition={{
-            duration: 0.8,
-            ease: easeOut,
-            delay: 0.6,
-          }}
-          whileHover={{
-            boxShadow: "0 25px 50px rgba(0, 0, 0, 0.1)",
-            y: -5,
-          }}
-        >
-          <div className="max-w-md">
-            <h2 className="text-3xl md:text-4xl font-semibold text-black leading-tight">
-              See It In Action
-            </h2>
-            <p className="mt-4 text-gray-600 text-lg">
-              Watch how our AI transforms a simple product URL into a compelling demo video that
-              showcases features, benefits, and drives conversions.
-            </p>
-            <ul className="mt-6 space-y-2 text-gray-600">
-              <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Automatic feature detection and
-                highlighting
-              </li>
-              <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Professional voiceover and
-                background music
-              </li>
-              <li className="flex items-center">
-                <span className="mr-2 text-green-600">✔</span> Compelling call-to-action
-                integration
-              </li>
-            </ul>
-            <button className="mt-6 cursor-pointer bg-[#8a6ec5] text-white px-6 py-3 rounded-lg hover:bg-[#6B46C1] transition">
-              Try it for free
-            </button>
-          </div>
-          <div className="w-full md:w-1/2 h-[300px] bg-[#c2b3f5] rounded-lg flex items-center justify-center">
-            <video
-              src="/icons/1.mp4"
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-[90%] sm:w-[85%] h-[85%] rounded-2xl object-cover"
-            />
-          </div>
         </motion.div>
       </div>
     </section>

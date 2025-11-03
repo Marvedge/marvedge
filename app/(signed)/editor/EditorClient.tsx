@@ -478,13 +478,13 @@ export default function EditorPage() {
             <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
               {sidebarTitle && (
                 <div className="mb-3">
-                  <span className="text-sm font-medium text-gray-500">Title: </span>
+                  <span className="text-sm font-medium text-gray-500">Title:</span>
                   <span className="text-xl font-semibold text-gray-800">{sidebarTitle}</span>
                 </div>
               )}
               {sidebarDescription && (
                 <div>
-                  <span className="text-sm font-medium text-gray-500">Description: </span>
+                  <span className="text-sm font-medium text-gray-500">Description:</span>
                   <span className="text-gray-600 text-sm">{sidebarDescription}</span>
                 </div>
               )}

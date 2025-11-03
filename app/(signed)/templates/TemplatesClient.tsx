@@ -216,7 +216,7 @@ export default function TemplatesPage() {
                 {levelDropdownOpen && (
                   <div
                     ref={levelDropdownRef}
-                    className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg z-50 border border-gray-100 min-w-[160px] animate-fade-in"
+                    className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg z-50 border border-gray-100 min-w-40 animate-fade-in"
                   >
                     <div className="flex flex-col divide-y divide-gray-100">
                       <div className="px-6 py-3 cursor-pointer text-center text-green-500 font-medium hover:bg-[#F3F0FC] rounded-t-2xl">

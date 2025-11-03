@@ -340,9 +340,7 @@ export async function exportVideo(params: ExportVideoParams) {
 
     // Navigate to preview page
     router.push(
-      `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(
-        sidebarTitle
-      )}&description=${encodeURIComponent(sidebarDescription || "")}`
+      `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`
     );
   } catch (err) {
     console.error(err);
