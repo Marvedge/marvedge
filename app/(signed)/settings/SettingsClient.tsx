@@ -41,6 +41,8 @@ const SettingsPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [originalForm, setOriginalForm] = useState({ ...form }); // Store original state
   const [imgFile, setImgFile] = useState<File | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const initials = useMemo(() => {
     if (session?.user?.name) {
