@@ -65,6 +65,7 @@ export default function CustomVideoControls({
         playerRef.current.seekTo(value, "seconds");
       }
     }
+    setPlaying(false);
     setDragging(false);
   };
 

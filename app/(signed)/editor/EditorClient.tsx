@@ -749,6 +749,8 @@ export default function EditorPage() {
                   onZoomEffectCreate={onZoomEffectCreate}
                   initialSegments={currentSegments}
                   onTrim={onVideoTrim}
+                  playing={playing}
+                  setPlaying={setPlaying}
                 />
               ) : (
                 <div className="w-full max-w-6xl mx-auto">
