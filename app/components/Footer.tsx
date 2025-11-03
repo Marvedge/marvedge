@@ -33,36 +33,11 @@ const linkSections = [
 
 const SocialIcon: React.FC<{
   image: string;
-  index: number;
   url: string;
   label: string;
-}> = ({ image, index, url, label }) => {
-  const iconRef = useRef<HTMLDivElement>(null);
-  // Set `once: true` to trigger only once when icon enters viewport
-  const isInView = useInView(iconRef, { once: true, margin: "-50px" });
-
+}> = ({ image, url, label }) => {
   return (
-    <motion.div
-      ref={iconRef}
-      className="rounded-[2rem] w-20 h-14 sm:w-24 sm:h-16 md:w-[96px] md:h-[72px] bg-white/5 hover:bg-white/10 backdrop-blur-sm transition flex items-center justify-center overflow-hidden shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
-      initial={{ opacity: 0, scale: 0.8, y: 20 }}
-      animate={{
-        opacity: isInView ? 1 : 0,
-        scale: isInView ? 1 : 0.8,
-        y: isInView ? 0 : 20,
-      }}
-      transition={{
-        duration: 0.5,
-        ease: easeOut,
-        delay: index * 0.1,
-      }}
-      whileHover={{
-        scale: 1.1,
-        boxShadow: "0 10px 20px rgba(166, 140, 255, 0.3)",
-        y: -5,
-      }}
-      whileTap={{ scale: 0.9 }}
-    >
+    <div className="rounded-4xl w-20 h-14 sm:w-24 sm:h-16 md:w-24 md:h-[72px] bg-white/5 hover:bg-white/10 backdrop-blur-sm transition flex items-center justify-center overflow-hidden shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]">
       <a
         href={url}
         target="_blank"
@@ -78,7 +53,7 @@ const SocialIcon: React.FC<{
           className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 object-contain"
         />
       </a>
-    </motion.div>
+    </div>
   );
 };
 
@@ -310,10 +285,43 @@ const WaitlistSection: React.FC = () => {
   };
 
   return (
-    <div className="w-full bg-white pt-6 sm:pt-8 pb-12 sm:pb-16 px-3 sm:px-4 md:px-6 lg:px-8">
+    <div className="w-full bg-white pt-6 sm:pt-8 pb-12 sm:pb-16 px-3 sm:px-4 md:px-6 lg:px-8 relative overflow-hidden">
+      {/* Center Ellipse */}
+      <div className="absolute top-[-10%] left-1/2 transform -translate-x-1/2 w-full max-w-4xl pointer-events-none z-0">
+        <Image
+          src="/Ellipse 24.png"
+          alt="Background ellipse center"
+          width={50}
+          height={50}
+          className="w-full h-auto"
+        />
+      </div>
+
+      {/* Left Ellipse */}
+      <div className="absolute top-[20%] left-[-5%] w-xl max-w-xl pointer-events-none z-0">
+        <Image
+          src="/Ellipse 25.png"
+          alt="Background ellipse left"
+          width={1}
+          height={1}
+          className="w-full h-auto opacity-80"
+        />
+      </div>
+
+      {/* Right Ellipse */}
+      <div className="absolute top-[-30%] right-[-10%] w-xl max-w-xl pointer-events-none z-0">
+        <Image
+          src="/Ellipse 25.png"
+          alt="Background ellipse right"
+          width={1}
+          height={1}
+          className="w-full h-auto opacity-80"
+        />
+      </div>
+
       <motion.div
         ref={formRef}
-        className="max-w-2xl mx-auto text-center"
+        className="max-w-2xl mx-auto text-center relative z-10"
         initial={{ opacity: 0, y: 60 }}
         animate={{
           opacity: isInView ? 1 : 0,
@@ -330,7 +338,10 @@ const WaitlistSection: React.FC = () => {
           }}
           transition={{ duration: 0.5, ease: easeOut }}
         >
-          <p className="text-transparent bg-clip-text bg-linear-to-r from-[#261753] via-[#6B4CAF] to-[#8A76FC] text-sm sm:text-lg md:text-xl font-semibold tracking-widest uppercase mb-3 sm:mb-4">
+          <p
+            className="text-transparent bg-clip-text bg-linear-to-r from-[#261753] via-[#6B4CAF] to-[#8A76FC] text-sm sm:text-lg md:text-xl font-semibold tracking-widest uppercase mb-3 sm:mb-4"
+            style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
+          >
             Get Early Access
           </p>
         </motion.div>
@@ -338,7 +349,7 @@ const WaitlistSection: React.FC = () => {
         {/* Title */}
         <motion.h2
           className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#2d2347] mb-3 sm:mb-4"
-          style={{ fontFamily: "var(--font-raleway)" }}
+          style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
           initial={{ opacity: 0, y: 20 }}
           animate={{
             opacity: isInView ? 1 : 0,
@@ -352,7 +363,7 @@ const WaitlistSection: React.FC = () => {
         {/* Description */}
         <motion.p
           className="text-[#666666] text-sm sm:text-base md:text-lg mb-6 sm:mb-8 px-2 sm:px-0"
-          style={{ fontFamily: "var(--font-raleway)" }}
+          style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
           initial={{ opacity: 0, y: 20 }}
           animate={{
             opacity: isInView ? 1 : 0,
@@ -408,6 +419,7 @@ const WaitlistSection: React.FC = () => {
                   onChange={handleChange}
                   rows={4}
                   className="bg-white text-[#2d2347] w-full placeholder:text-[#999999] rounded-lg px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] resize-none border border-[#e0e0e0]"
+                  style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
                   whileFocus={{
                     scale: 1.02,
                     boxShadow: "0 0 20px rgba(140, 91, 255, 0.2)",
@@ -421,6 +433,7 @@ const WaitlistSection: React.FC = () => {
                   value={form[input.name as keyof typeof form]}
                   onChange={handleChange}
                   className="bg-white text-[#2d2347] w-full placeholder:text-[#999999] rounded-lg px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] border border-[#e0e0e0]"
+                  style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
                   whileFocus={{
                     scale: 1.02,
                     boxShadow: "0 0 20px rgba(140, 91, 255, 0.2)",
@@ -434,6 +447,7 @@ const WaitlistSection: React.FC = () => {
           <motion.button
             type="submit"
             className="bg-[#8C5BFF] text-white font-semibold rounded-lg py-3 text-sm sm:text-base hover:bg-[#7a4fcf] transition cursor-pointer"
+            style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
             whileHover={{
               scale: 1.05,
               boxShadow: "0 10px 25px rgba(140, 91, 255, 0.3)",
@@ -597,13 +611,7 @@ const Footer: React.FC = () => {
               }}
             >
               {socialIcons.map((icon, index) => (
-                <SocialIcon
-                  key={index}
-                  image={icon.image}
-                  index={index}
-                  url={icon.url}
-                  label={icon.label}
-                />
+                <SocialIcon key={index} image={icon.image} url={icon.url} label={icon.label} />
               ))}
             </motion.div>
           </motion.div>
