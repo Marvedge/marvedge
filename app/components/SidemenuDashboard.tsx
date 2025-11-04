@@ -179,9 +179,9 @@ const SidemenuDashboard = () => {
         </ul>
         <div className="mt-8">
           <Link href="/demos" onClick={closeMobileMenu}>
-            <h3 className={`h-10 text-lg font-extralight flex items-center gap-5 pl-2 cursor-pointer transition-colors rounded-lg ${
-              isActive("/demos") ? "bg-[#bcb3f7] text-white" : "text-gray-300 hover:bg-[#bcb3f7]"
-            }`}>
+            <h3
+              className={`h-10 text-lg font-extralight flex items-center gap-5 pl-2 cursor-pointer transition-colors rounded-lg ${isActive("/demos") ? "bg-[#bcb3f7] text-white" : "text-gray-300 hover:bg-[#bcb3f7]"}`}
+            >
               <Clock size={20} />
               Recent
             </h3>

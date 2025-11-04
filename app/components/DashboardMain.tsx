@@ -78,7 +78,10 @@ const DashboardMain = () => {
   };
 
   return (
-    <div className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen" style={{ fontFamily: "var(--font-raleway)" }}>
+    <div
+      className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen"
+      style={{ fontFamily: "var(--font-raleway)" }}
+    >
       <style jsx>{`
         @keyframes starBlink {
           0%,
