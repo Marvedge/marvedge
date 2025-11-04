@@ -540,7 +540,7 @@ const Footer: React.FC = () => {
             >
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <Image
-                  src="/images/Transparent logo.png"
+                  src="/images/Logo.png"
                   alt="Marvedge Logo"
                   width={32}
                   height={32}

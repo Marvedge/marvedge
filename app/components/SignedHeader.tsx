@@ -47,6 +47,21 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
         {/* Removed search bar block */}
 
         <div className="flex items-center gap-6">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search"
+              className="bg-gray-100 text-gray-700 placeholder-gray-400 rounded-full py-2 pl-10 pr-4 w-64 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] transition-all"
+            />
+            <svg
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
           <span className="text-gray-500 text-lg">
             Welcome{" "}
             <span className="text-[#7C5CFC] font-semibold">
@@ -54,42 +69,44 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
             </span>{" "}
             <span className="inline-block">👋</span>
           </span>
-          <button
-            className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
-            title="Notifications"
-          >
-            <Image
-              src="/icons/bell.png"
-              alt="Notifications"
-              width={24}
-              height={24}
-              className="w-6 h-6"
-            />
-          </button>
-          <div className="relative" ref={dropdownRef}>
+          <div className="flex items-center gap-1">
             <button
-              className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
-              onClick={() => setShowDropdown((v) => !v)}
-              title={session?.user?.name || session?.user?.email || undefined}
+              className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
+              title="Notifications"
             >
-              {initials}
+              <Image
+                src="/icons/bell.png"
+                alt="Notifications"
+                width={24}
+                height={24}
+                className="w-6 h-6"
+              />
             </button>
-            {showDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
-                <div className="mb-2 text-base font-bold text-[#6356D7]">
-                  {session?.user?.name || "User"}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
+                onClick={() => setShowDropdown((v) => !v)}
+                title={session?.user?.name || session?.user?.email || undefined}
+              >
+                {initials}
+              </button>
+              {showDropdown && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
+                  <div className="mb-2 text-base font-bold text-[#6356D7]">
+                    {session?.user?.name || "User"}
+                  </div>
+                  <div className="mb-1 text-gray-700 text-xs font-semibold">
+                    {session?.user?.email}
+                  </div>
+                  <button
+                    onClick={() => signOut({ callbackUrl: "/" })}
+                    className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
+                  >
+                    Sign out
+                  </button>
                 </div>
-                <div className="mb-1 text-gray-700 text-xs font-semibold">
-                  {session?.user?.email}
-                </div>
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

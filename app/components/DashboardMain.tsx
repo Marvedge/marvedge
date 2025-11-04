@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import axios from "axios";
 import { formatDate } from "@/app/lib/dateTimeUtils";
+import { Play } from "lucide-react";
 
 import { useRouter } from "next/navigation";
 
@@ -77,7 +78,7 @@ const DashboardMain = () => {
   };
 
   return (
-    <div className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen">
+    <div className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen" style={{ fontFamily: "var(--font-raleway)" }}>
       <style jsx>{`
         @keyframes starBlink {
           0%,
@@ -359,127 +360,98 @@ const DashboardMain = () => {
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
-        <div className="lg:col-span-2 bg-white rounded-xl p-4 shadow-sm h-[410px]  hover:shadow-lg transform">
-          {isLoading ? (
-            // Show loader while fetching
-            <div className="flex flex-col items-center justify-center py-6 text-gray-500">
-              {/* <svg
-                className="animate-spin h-6 w-6 text-[#6356D7] mb-3"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                ></path>
-              </svg> */}
-              <span>Loading demos...</span>
-            </div>
-          ) : demos.length > 0 ? (
-            <div className="flex flex-col divide-y divide-gray-200">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">Recent Demos</h3>
-                {demos.length > 5 && (
-                  <button
-                    className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
-                    onClick={() => router.push("/demos")} // or Link
-                  >
-                    View all
-                  </button>
-                )}
+        <div className="lg:col-span-2 bg-white rounded-xl p-4 shadow-sm h-[410px] hover:shadow-lg transform flex flex-col">
+          {/* Header Section */}
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">Recent Demos</h3>
+            <button
+              className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
+              onClick={() => router.push("/demos")}
+            >
+              View all
+            </button>
+          </div>
+
+          {/* Content Section - grows to fill available space and positions content at bottom */}
+          <div className="flex-1 flex flex-col">
+            {isLoading ? (
+              // Show loader while fetching
+              <div className="flex flex-col items-center justify-center flex-1 text-gray-500">
+                <span>Loading demos...</span>
               </div>
-              {demos.slice(0, 4).map((demo: Demo) => (
-                <div key={demo.id}>
-                  <div
-                    className="flex items-center justify-between py-3 hover:bg-gray-50 px-2 rounded-md cursor-pointer transition"
-                    onClick={() => handleEditDemo(demo)}
-                  >
-                    {/* Left: Icon + Title + Description */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center bg-[#F8F6FF] rounded-lg w-10 h-10">
-                        <Image src="/icons/play-demo.svg" alt="Play" width={20} height={20} />
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-800">{demo.title}</div>
-                        <div className="text-sm text-gray-500 truncate w-40">
-                          {demo.description || "No description"}
+            ) : demos.length > 0 ? (
+              <div className="flex flex-col divide-y divide-gray-200 flex-1">
+                {demos.slice(0, 4).map((demo: Demo) => (
+                  <div key={demo.id}>
+                    <div
+                      className="flex items-center justify-between py-3 hover:bg-gray-50 px-2 rounded-md cursor-pointer transition"
+                      onClick={() => handleEditDemo(demo)}
+                    >
+                      {/* Left: Icon + Title + Description */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center bg-[#F8F6FF] rounded-lg w-10 h-10">
+                          <Image src="/icons/play-demo.svg" alt="Play" width={20} height={20} />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-800">{demo.title}</div>
+                          <div className="text-sm text-gray-500 truncate w-40">
+                            {demo.description || "No description"}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Middle: Status + Updated Date */}
-                    <div className="hidden md:flex items-center gap-10 text-sm text-gray-500">
-                      <div>Draft</div>
-                      <div>{formatDate(demo.updatedAt)}</div>
+                      {/* Middle: Status + Updated Date */}
+                      <div className="hidden md:flex items-center gap-10 text-sm text-gray-500">
+                        <div>Draft</div>
+                        <div>{formatDate(demo.updatedAt)}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
 
-              <div className="mx-auto">
+                <div className="mt-auto flex justify-center">
+                  <Link href={"/recorder"}>
+                    <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform flex items-center gap-2">
+                      <Play size={18} />
+                      Create Demo
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center flex-1">
+                <Image
+                  src="/icons/play fill.png"
+                  alt="Play"
+                  width={40}
+                  height={40}
+                  className="md:w-12 md:h-12"
+                />
+                <div className="text-base md:text-lg font-semibold text-[#6356D7] mt-4">
+                  No demos yet
+                </div>
+                <div className="text-gray-500 text-xs md:text-sm mt-1 text-center">
+                  Create your first demo to get started
+                </div>
                 <Link href={"/recorder"}>
-                  <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF]  transition-all text-sm md:text-base hover:scale-105 transform items-center gap-2">
-                    <Image
-                      src="/icons/play fill.png"
-                      alt="Play"
-                      width={18}
-                      height={18}
-                      className="inline-block"
-                    />
+                  <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform flex items-center gap-2">
+                    <Play size={18} />
                     Create Demo
                   </button>
                 </Link>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-6">
-              <Image
-                src="/icons/play fill.png"
-                alt="Play"
-                width={40}
-                height={40}
-                className="md:w-12 md:h-12"
-              />
-              <div className="text-base md:text-lg font-semibold text-[#6356D7] mt-4">
-                No demos yet
-              </div>
-              <div className="text-gray-500 text-xs md:text-sm mt-1 text-center">
-                Create your first demo to get started
-              </div>
-              <Link href={"/recorder"}>
-                <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform items-center gap-2">
-                  <Image
-                    src="/icons/play fill.png"
-                    alt="Play"
-                    width={18}
-                    height={18}
-                    className="inline-block"
-                  />
-                  Create Demo
-                </button>
-              </Link>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-4 md:gap-8">
-          <div className="bg-[#C6B8F7] rounded-xl p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+          <div className="bg-[#6B5FFC] rounded-xl p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
             <div>
               <div className="flex items-center mb-3 md:mb-4">
-                <span className="inline-block p-2 rounded-lg mr-3 star-blink">
+                <span className="inline-block p-2 rounded-lg mr-3 bg-white/20">
                   <Image
-                    src="/icons/ai-orb-icon.png"
-                    alt="Google"
+                    src="/ri_gemini-fill.png"
+                    alt="AI Assistant"
                     width={20}
                     height={20}
                     className="sm:w-[25px] sm:h-[25px]"
