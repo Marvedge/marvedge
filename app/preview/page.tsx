@@ -316,6 +316,13 @@ export default function PreviewPage() {
             onReady={() => setIsLoading(false)}
             onDuration={setDuration}
             onProgress={handleProgress}
+            config={{
+              file: {
+                attributes: {
+                  crossOrigin: "anonymous",
+                },
+              },
+            }}
             onError={(e) => {
               console.error("Video error:", e);
               toast.error("Error loading video");
@@ -398,7 +405,7 @@ export default function PreviewPage() {
           {description && <p className="text-gray-600 leading-relaxed">{description}</p>}
           <div className="mt-4 flex items-center space-x-4 text-sm text-gray-500">
             <span>Duration: {formatTime(duration)}</span>
-            <span>Format: WebM</span>
+            <span>Format: {videoUrl ? videoUrl.split(".")[3].toUpperCase() : "Not Found"}</span>
           </div>
         </div>
       </div>

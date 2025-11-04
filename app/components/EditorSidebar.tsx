@@ -36,7 +36,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   // setDescription,
   // onDownloadWebM,
   onExportWebM,
-  onDownloadMP4,
+  //onDownloadMP4,
   tool,
   setTool,
   handleUndo,
@@ -52,7 +52,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   customBackground,
   setCustomBackground,
 }) => {
-  const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
+  //const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<MainTab>("background");
   const [bgSubTab, setBgSubTab] = React.useState<BgSubTab>("image");
 
@@ -214,33 +214,40 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       <div className="relative">
         <button
           className="w-full bg-[#A594F9] cursor-pointer hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
-          onClick={() => setExportMenuOpen((v) => !v)} // Only toggle the menu
+          //onClick={() => setExportMenuOpen((v) => !v)} // Only toggle the menu
+          onClick={() => {
+            onExportWebM();
+          }}
         >
           Export Video
         </button>
-        {exportMenuOpen && (
-          <div className="absolute left-0 mt-2 w-full bg-white border border-[#ede7fa] rounded-lg shadow z-10">
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm"
-              onClick={() => {
-                setExportMenuOpen(false);
-                onExportWebM();
-              }}
-            >
-              Export WebM
-            </button>
-            {/* Uncomment onDownloadMP4 if needed */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-b-lg"
-              onClick={() => {
-                setExportMenuOpen(false);
-                onDownloadMP4();
-              }}
-            >
-              Download MP4
-            </button>
-          </div>
-        )}
+
+        {
+          // exportMenuOpen &&
+          //(
+          // <div className="absolute left-0 mt-2 w-full bg-white border border-[#ede7fa] rounded-lg shadow z-10">
+          //   {/* <button
+          //     className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm"
+          //     onClick={() => {
+          //       setExportMenuOpen(false);
+          //       onExportWebM();
+          //     }}
+          //   >
+          //     Export WebM
+          //   </button> */}
+          //   {/* Uncomment onDownloadMP4 if needed */}
+          //   {/* <button
+          //     className="w-full text-left px-4 py-2 hover:bg-[#F6F3FF] text-[#7C5CFC] text-sm rounded-b-lg"
+          //     onClick={() => {
+          //       setExportMenuOpen(false);
+          //       onDownloadMP4();
+          //     }}
+          //   >
+          //     Download MP4
+          //   </button> */}
+          // </div>
+          //)
+        }
       </div>
 
       {/* Demo Properties */}

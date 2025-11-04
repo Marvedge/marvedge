@@ -306,9 +306,9 @@ export async function exportVideo(params: ExportVideoParams) {
       }
     }
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    const backendUrl = process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL;
     const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-    const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET as string;
+    const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string;
 
     // Call backend FFmpeg server with axios
     const serverRes = await axios.post(`${backendUrl}/process-video`, formData, {
