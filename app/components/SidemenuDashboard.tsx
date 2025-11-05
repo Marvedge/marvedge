@@ -159,7 +159,7 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="mr-2 flex items-center justify-center">
-                <Users color="#9ca3af" size={20} />
+                <Users color="#fff" size={20} />
               </span>
               <span className="flex items-center h-full">Team</span>
             </li>
@@ -171,7 +171,7 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="mr-2 flex items-center justify-center">
-                <Settings color="#9ca3af" size={20} />
+                <Settings color="#fff" size={20} />
               </span>
               <span className="flex items-center h-full">Settings</span>
             </li>
@@ -189,19 +189,19 @@ const SidemenuDashboard = () => {
           <ul className="space-y-1 text-base font-normal">
             <li className="w-full h-10 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 px-2 whitespace-nowrap text-purple-200 font-light transition-colors">
               <span className="mr-2 flex items-center justify-center">
-                <Play color="#9ca3af" size={20} />
+                <Play color="#fff" size={20} />
               </span>
               <span className="flex items-center h-full">Product Onboarding</span>
             </li>
             <li className="w-full h-10 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 px-2 whitespace-nowrap text-purple-200 font-light transition-colors">
               <span className="mr-2 flex items-center justify-center">
-                <Play color="#9ca3af" size={20} />
+                <Play color="#fff" size={20} />
               </span>
               <span className="flex items-center h-full">Feature Walkthrough</span>
             </li>
             <li className="w-full h-10 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 px-2 whitespace-nowrap text-purple-200 font-light transition-colors">
               <span className="mr-2 flex items-center justify-center">
-                <Play color="#9ca3af" size={20} />
+                <Play color="#fff" size={20} />
               </span>
               <span className="flex items-center h-full">Sales Demo</span>
             </li>

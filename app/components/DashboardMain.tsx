@@ -367,12 +367,14 @@ const DashboardMain = () => {
           {/* Header Section */}
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">Recent Demos</h3>
-            <button
-              className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
-              onClick={() => router.push("/demos")}
-            >
-              View all
-            </button>
+            {demos.length > 5 && (
+              <button
+                className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
+                onClick={() => router.push("/demos")}
+              >
+                View all
+              </button>
+            )}
           </div>
 
           {/* Content Section - grows to fill available space and positions content at bottom */}
