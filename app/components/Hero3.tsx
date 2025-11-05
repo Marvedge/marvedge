@@ -41,33 +41,6 @@ const Hero3: React.FC = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
         <div className="flex h-auto flex-col md:flex-row items-center justify-between gap-6 sm:gap-8 relative z-10">
           <motion.div
-            className="absolute top-20 left-1/3 w-24 h-24 rounded-full opacity-20"
-            animate={{
-              scale: [1, 1.2, 1],
-              rotate: [0, 180, 360],
-              x: [0, 40, 0],
-            }}
-            transition={{
-              duration: 8,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-          />
-          <motion.div
-            className="absolute bottom-20 right-1/4 w-20 h-20 rounded-full opacity-20"
-            animate={{
-              scale: [1, 1.3, 1],
-              y: [0, -30, 0],
-              rotate: [0, -180, -360],
-            }}
-            transition={{
-              duration: 10,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          />
-
-          <motion.div
             className="text-left flex-1 relative z-10"
             initial={{ opacity: 0, x: -60, rotateY: -15 }}
             animate={{
@@ -95,7 +68,8 @@ const Hero3: React.FC = () => {
               }}
               style={{ fontWeight: 700 }}
             >
-              Ready to Transform Your <span className="text-[#8A76FC]/70">Product Demos?</span>
+              <span className="text-[#494369]">Ready to Transform Your</span>{" "}
+              <span className="text-[#8A76FC]/70">Product Demos?</span>
             </motion.h1>
             <motion.p
               className="text-sm sm:text-base md:text-lg text-gray-700 mb-6 sm:mb-8"
@@ -195,7 +169,8 @@ const Hero3: React.FC = () => {
                 placeholder="Enter your Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white"
+                style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
                 whileFocus={{
                   scale: 1.02,
                   boxShadow: "0 0 20px rgba(255, 255, 255, 0.2)",
@@ -216,7 +191,8 @@ const Hero3: React.FC = () => {
                 placeholder="Full Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white"
+                style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
                 whileFocus={{
                   scale: 1.02,
                   boxShadow: "0 0 20px rgba(255, 255, 255, 0.2)",
@@ -237,7 +213,8 @@ const Hero3: React.FC = () => {
                 placeholder="Company"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
-                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white"
+                style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
                 whileFocus={{
                   scale: 1.02,
                   boxShadow: "0 0 20px rgba(255, 255, 255, 0.2)",
@@ -258,7 +235,8 @@ const Hero3: React.FC = () => {
                 placeholder="Product URL (Optional)"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                className="w-full py-3 sm:py-4 px-4 sm:px-5 rounded-lg bg-[#DCC8FF] text-gray-700 text-sm sm:text-base placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white"
+                style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
                 whileFocus={{
                   scale: 1.02,
                   boxShadow: "0 0 20px rgba(255, 255, 255, 0.2)",
@@ -276,7 +254,7 @@ const Hero3: React.FC = () => {
               />
               <motion.button
                 type="submit"
-                className="w-full cursor-pointer py-3 sm:py-4 bg-white text-purple-600 font-semibold rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base hover:bg-purple-100 transition"
+                className="w-full cursor-pointer py-3 sm:py-4 bg-white text-[#8370F0] font-semibold rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base hover:bg-purple-100 transition"
                 whileHover={{
                   scale: 1.05,
                   boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",

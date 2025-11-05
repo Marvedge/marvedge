@@ -121,20 +121,6 @@ const Hero2: React.FC = () => {
       ref={sectionRef}
       className="relative overflow-hidden pt-1 sm:pt-3 md:pt-4 pb-4 sm:pb-12 md:pb-16"
     >
-      <motion.div
-        className="absolute bottom-1/4 right-10 w-16 h-16 bg-blue-200 rounded-full opacity-20"
-        animate={{
-          scale: [1, 1.3, 1],
-          x: [0, 30, 0],
-          rotate: [0, -180, -360],
-        }}
-        transition={{
-          duration: 10,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      />
-
       <div className="container mx-auto px-2 sm:px-4 relative z-10">
         <motion.div
           className="text-center mb-16"

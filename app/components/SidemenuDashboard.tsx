@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Play, Users, Settings } from "lucide-react";
+import { Menu, X, Play, Users, Settings, Clock } from "lucide-react";
 import Image from "next/image";
 
 const SidemenuDashboard = () => {
@@ -56,7 +56,7 @@ const SidemenuDashboard = () => {
         </button>
 
         <div
-          className="flex cursor-pointer items-center gap-3 mb-6 mt-8 md:mt-0"
+          className="flex cursor-pointer items-center justify-center gap-3 mb-6 mt-8 md:mt-0"
           onClick={() => {
             window.location.href = "/";
           }}
@@ -66,24 +66,24 @@ const SidemenuDashboard = () => {
             alt="Marvedge logo"
             width={40}
             height={40}
-            className="object-contain"
+            className="object-contain brightness-0 invert"
             priority
           />
-          <h2 className="text-2xl">MARVEDGE</h2>
+          <h2 className="text-2xl h-full flex items-center text-white">MARVEDGE</h2>
         </div>
         <Link href="/recorder" onClick={closeMobileMenu}>
-          <button className="w-full bg-white cursor-pointer text-purple-900 font-semibold py-2 rounded mb-6">
-            + Create Demo
+          <button className="w-full bg-white cursor-pointer text-purple-900 font-semibold py-2 rounded mb-6 flex items-center justify-center gap-2 shadow-md">
+            <span className="text-4xl leading-none font-light text-purple-900">+</span> Create Demo
           </button>
         </Link>
         <ul className="space-y-2 text-lg">
           <Link href="/dashboard" onClick={closeMobileMenu}>
             <li
-              className={`flex items-center gap-3 py-2 px-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-3 h-10 px-2 transition-colors cursor-pointer ${
                 isActive("/dashboard") ? activeClass : inactiveClass
               }`}
             >
-              <span className="mr-2">
+              <span className="mr-2 flex items-center justify-center">
                 <Image
                   src="/icons/dash-home.svg"
                   alt="Marvedge logo"
@@ -93,16 +93,16 @@ const SidemenuDashboard = () => {
                   priority
                 />
               </span>
-              Dashboard
+              <span className="flex items-center h-full -ml-2">Dashboard</span>
             </li>
           </Link>
           <Link href="/demos" onClick={closeMobileMenu}>
             <li
-              className={`flex items-center gap-3 py-2 px-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-3 h-10 px-2 transition-colors cursor-pointer ${
                 isActive("/demos") ? activeClass : inactiveClass
               }`}
             >
-              <span className="mr-2">
+              <span className="mr-2 flex items-center justify-center">
                 <Image
                   src="/icons/dash-play.svg"
                   alt="Marvedge logo"
@@ -112,16 +112,16 @@ const SidemenuDashboard = () => {
                   priority
                 />
               </span>
-              My Demos
+              <span className="flex items-center h-full -ml-2">My Demos</span>
             </li>
           </Link>
           <Link href="/templates" onClick={closeMobileMenu}>
             <li
-              className={`flex items-center gap-3 py-2 px-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-3 h-10 px-2 transition-colors cursor-pointer ${
                 isActive("/templates") ? activeClass : inactiveClass
               }`}
             >
-              <span className="mr-2">
+              <span className="mr-2 flex items-center justify-center">
                 <Image
                   src="/icons/dash-file.svg"
                   alt="Marvedge logo"
@@ -131,16 +131,16 @@ const SidemenuDashboard = () => {
                   priority
                 />
               </span>
-              Templates
+              <span className="flex items-center h-full -ml-2">Templates</span>
             </li>
           </Link>
           <Link href="/analytics" onClick={closeMobileMenu}>
             <li
-              className={`flex items-center gap-3 py-2 px-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-3 h-10 px-2 transition-colors cursor-pointer ${
                 isActive("/analytics") ? activeClass : inactiveClass
               }`}
             >
-              <span className="mr-2">
+              <span className="mr-2 flex items-center justify-center">
                 <Image
                   src="/icons/dash-analytics.svg"
                   alt="Notifications"
@@ -149,54 +149,61 @@ const SidemenuDashboard = () => {
                   className="w-5 h-5 sm:w-6 sm:h-6"
                 />{" "}
               </span>
-              Analytics
+              <span className="flex items-center h-full -ml-1">Analytics</span>
             </li>
           </Link>
           <Link href="/team" onClick={closeMobileMenu}>
             <li
-              className={`flex items-center gap-3 py-2 px-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-3 h-10 px-2 transition-colors cursor-pointer ${
                 isActive("/team") ? activeClass : inactiveClass
               }`}
             >
-              <span className="mr-2">
+              <span className="mr-2 flex items-center justify-center">
                 <Users color="#fff" size={20} />
               </span>
-              Team
+              <span className="flex items-center h-full">Team</span>
             </li>
           </Link>
           <Link href="/settings" onClick={closeMobileMenu}>
             <li
-              className={`flex items-center gap-3 py-2 px-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-3 h-10 px-2 transition-colors cursor-pointer ${
                 isActive("/settings") ? activeClass : inactiveClass
               }`}
             >
-              <span className="mr-2">
+              <span className="mr-2 flex items-center justify-center">
                 <Settings color="#fff" size={20} />
               </span>
-              Settings
+              <span className="flex items-center h-full">Settings</span>
             </li>
           </Link>
         </ul>
         <div className="mt-8">
-          <h3 className="text-lg font-extralight text-gray-300">RECENT</h3>
+          <Link href="/demos" onClick={closeMobileMenu}>
+            <h3
+              className={`h-10 text-lg font-extralight flex items-center gap-5 pl-2 cursor-pointer transition-colors rounded-lg ${isActive("/demos") ? "bg-[#bcb3f7] text-white" : "text-gray-300 hover:bg-[#bcb3f7]"}`}
+            >
+              <Clock size={20} />
+              Recent
+            </h3>
+          </Link>
           <ul className="space-y-1 text-base font-normal">
-            <li className="py-2 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 pl-2 whitespace-nowrap text-purple-200 font-light">
-              <span>
+            <li className="w-full h-10 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 px-2 whitespace-nowrap text-purple-200 font-light transition-colors">
+              <span className="mr-2 flex items-center justify-center">
                 <Play color="#fff" size={20} />
               </span>
-              Product Onboarding
+              <span className="flex items-center h-full">Product Onboarding</span>
             </li>
-            <li className="py-2 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 pl-2 whitespace-nowrap text-purple-200 font-light">
-              <span>
+            <li className="w-full h-10 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 px-2 whitespace-nowrap text-purple-200 font-light transition-colors">
+              <span className="mr-2 flex items-center justify-center">
                 <Play color="#fff" size={20} />
               </span>
-              Feature Walkthrough
+              <span className="flex items-center h-full">Feature Walkthrough</span>
             </li>
-            <li className="py-2 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 pl-2 whitespace-nowrap text-purple-200 font-light">
-              <span>
+            <li className="w-full h-10 cursor-pointer text-lg rounded hover:bg-[#bcb3f7] flex items-center gap-3 px-2 whitespace-nowrap text-purple-200 font-light transition-colors">
+              <span className="mr-2 flex items-center justify-center">
                 <Play color="#fff" size={20} />
               </span>
-              Sales Demo
+              <span className="flex items-center h-full">Sales Demo</span>
             </li>
           </ul>
         </div>

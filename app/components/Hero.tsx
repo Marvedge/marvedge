@@ -2,7 +2,6 @@
 
 import React, { useRef } from "react";
 import Image from "next/image";
-import { FaPlay } from "react-icons/fa6";
 import { motion, useInView, useScroll, useTransform, easeOut } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -26,7 +25,7 @@ const Hero: React.FC = () => {
     }
   };
 
-  const actionButtonText = status === "authenticated" ? "Go To Dashboard" : "Start Free Trial";
+  const actionButtonText = status === "authenticated" ? "Go to Dashboard" : "Start Free Trial";
 
   const ref = useRef<HTMLElement>(null);
   // Set `once: true` to trigger isInView only once when the section enters the viewport
@@ -93,9 +92,61 @@ const Hero: React.FC = () => {
         }}
       />
 
+      <motion.div
+        className="absolute top-[55%] left-[22%] w-48 sm:w-[200px] h-48 sm:h-[200px] rounded-full pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, #8A76FC 0%, transparent 45%)",
+          filter: "blur(60px)",
+          transform: "translate(-50%, -50%)",
+          opacity: 0.57,
+        }}
+        animate={{
+          scale: [1, 1.15, 1],
+          y: [0, 15, 0],
+        }}
+        transition={{
+          duration: 6,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
       <div className="w-full px-3 sm:px-4 md:px-6 lg:max-w-6xl lg:mx-auto flex flex-col items-center text-center relative">
+        {/* Center Ellipse */}
+        <div className="absolute top-[-20%] left-1/2 transform -translate-x-1/2 w-full max-w-4xl pointer-events-none z-0">
+          <Image
+            src="/Ellipse 29.png"
+            alt="Background ellipse center"
+            width={600}
+            height={600}
+            className="w-full h-auto"
+          />
+        </div>
+
+        {/* Left Ellipse */}
+        <div className="absolute top-[-10%] left-[-15%] w-full max-w-4xl pointer-events-none z-0">
+          <Image
+            src="/Ellipse 29.png"
+            alt="Background ellipse left"
+            width={600}
+            height={600}
+            className="w-full h-auto"
+          />
+        </div>
+
+        {/* Right Ellipse */}
+        <div className="absolute top-[-30%] right-[-15%] w-full max-w-4xl pointer-events-none z-0">
+          <Image
+            src="/Ellipse 29.png"
+            alt="Background ellipse right"
+            width={600}
+            height={600}
+            className="w-full h-auto"
+          />
+        </div>
+
         <motion.div
-          className="w-full"
+          className="w-full relative z-10"
           variants={fadeInLeft}
           initial="hidden"
           animate={isInView ? "visible" : "hidden"}
@@ -145,16 +196,27 @@ const Hero: React.FC = () => {
             <motion.button
               onClick={handleActionButtonClick}
               className="flex items-center justify-center cursor-pointer gap-2 bg-[#8A76FC] hover:bg-[#7563E8] text-white px-8 sm:px-12 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition whitespace-nowrap"
+              style={{ fontFamily: "var(--font-raleway)", fontWeight: 500 }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
             >
-              <FaPlay className="text-lg sm:text-xl" />
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M4 2L16 10L4 18V2Z" fill="white" />
+              </svg>
               {actionButtonText}
             </motion.button>
             <motion.button
-              className="flex items-center justify-center cursor-pointer gap-2 border-2 border-gray-300 bg-white shadow-md px-8 sm:px-12 py-3 sm:py-4 rounded-lg text-gray-800 text-base sm:text-lg font-semibold hover:shadow-lg transition whitespace-nowrap"
+              className="flex items-center justify-center cursor-pointer gap-2 border-2 border-gray-300 bg-white shadow-md px-8 sm:px-12 py-3 sm:py-4 rounded-lg text-[#261753] text-base sm:text-lg font-semibold hover:shadow-lg transition whitespace-nowrap"
+              style={{ fontFamily: "var(--font-raleway)", fontWeight: 500 }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
+              transition={{ duration: 0.1 }}
             >
               <Image src="/ri_gemini-fill.png" alt="Explore Examples" width={20} height={20} />
               Explore Examples
