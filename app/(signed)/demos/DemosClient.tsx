@@ -145,7 +145,7 @@ export default function DemosPage() {
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
-      <SignedHeader titleText="My Demos" iconSRC="/icons/play.png" iconALT="my_demos_icon" />
+      <SignedHeader titleText="My Demos" iconSRC="/Group.png" iconALT="my_demos_icon" />
 
       <div className="bg-[#F3F0FC] rounded-xl p-8">
         <div className="mb-8">

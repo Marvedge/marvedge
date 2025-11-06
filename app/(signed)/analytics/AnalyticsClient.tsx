@@ -5,12 +5,12 @@ import SignedHeader from "@/app/components/SignedHeader";
 const AnalyticsPage = () => {
   return (
     <div
-      className="flex flex-col flex-grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
+      className="flex flex-col grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
       style={{ minHeight: "calc(100vh - 80px)" }}
     >
       <SignedHeader
         titleText="Analytics"
-        iconSRC="/icons/explore-templates.svg"
+        iconSRC="/majesticons_analytics.png"
         iconALT="analytics_icon"
       />
       <AnalyticsMain />

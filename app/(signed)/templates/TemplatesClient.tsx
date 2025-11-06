@@ -138,37 +138,38 @@ export default function TemplatesPage() {
         iconALT="templates_icon"
       />
       <div
-        className="p-8 bg-[#F3F0FC] h-full overflow-y-auto"
+        className="p-2 sm:p-4 md:p-6 lg:p-8 bg-[#F3F0FC] h-full overflow-y-auto"
         style={{ minHeight: "calc(100vh - 80px)" }}
       >
-        <div className="mb-6">
-          <p className="text-[#8B8B8B] text-lg">
+        <div className="mb-4 sm:mb-6">
+          <p className="text-[#8B8B8B] text-xs sm:text-sm md:text-base lg:text-lg">
             For faster demo creation use the professionally designed templates.
           </p>
-          <div className="flex items-center gap-4 mt-4 mb-6 w-full max-w-full justify-between">
-            <div className="relative flex-1 max-w-xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 md:gap-4 mt-3 sm:mt-4 mb-4 sm:mb-6 w-full max-w-full">
+            <div className="relative flex-1 w-full sm:max-w-xl">
               <input
                 type="text"
                 placeholder="Search templates"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full px-5 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9] shadow-sm pr-12 text-base"
+                className="w-full px-3 sm:px-5 py-2 sm:py-3 rounded-xl border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9] shadow-sm pr-12 text-xs sm:text-base"
               />
             </div>
-            <div className="flex items-center gap-4 ml-4">
-              <button className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 w-full sm:w-auto">
+              <button className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa] text-xs sm:text-sm">
                 <Image
                   src="/icons/down-arrow.svg"
                   alt="Notifications"
                   width={24}
                   height={24}
-                  className="w-6 h-6"
+                  className="w-4 h-4 sm:w-6 sm:h-6"
                 />
-                All Categories
+                <span className="hidden sm:inline">All Categories</span>
+                <span className="sm:hidden">Categories</span>
               </button>
               <div className="relative" ref={ref}>
                 <button
-                  className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
+                  className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa] text-xs sm:text-sm"
                   onClick={() => setOpen((prev) => !prev)}
                 >
                   <span className="material-icons"></span>
@@ -177,22 +178,23 @@ export default function TemplatesPage() {
                     alt="Notifications"
                     width={24}
                     height={24}
-                    className="w-6 h-6"
+                    className="w-4 h-4 sm:w-6 sm:h-6"
                   />
-                  Sort By
+                  <span className="hidden sm:inline">Sort By</span>
+                  <span className="sm:hidden">Sort</span>
                 </button>
                 {open && (
-                  <div className="absolute left-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 z-10">
+                  <div className="absolute left-0 mt-2 w-40 sm:w-48 bg-white rounded-xl shadow-lg border border-gray-100 z-10">
                     {sortOptions.map((option) => (
                       <button
                         key={option.label}
-                        className="flex items-center gap-3 w-full px-5 py-3 text-gray-700 hover:bg-[#f3f0fa] transition"
+                        className="flex items-center gap-2 sm:gap-3 w-full px-3 sm:px-5 py-2 sm:py-3 text-gray-700 hover:bg-[#f3f0fa] transition text-xs sm:text-sm"
                         onClick={() => {
                           // handle sort logic here
                           setOpen(false);
                         }}
                       >
-                        <span>{option.icon}</span>
+                        <span className="w-4 h-4 sm:w-6 sm:h-6">{option.icon}</span>
                         {option.label}
                       </button>
                     ))}
@@ -201,7 +203,7 @@ export default function TemplatesPage() {
               </div>
               <div className="relative">
                 <button
-                  className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
+                  className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa] text-xs sm:text-sm"
                   onClick={() => setLevelDropdownOpen((v) => !v)}
                 >
                   <Image
@@ -209,9 +211,10 @@ export default function TemplatesPage() {
                     alt="Notifications"
                     width={24}
                     height={24}
-                    className="w-6 h-6"
+                    className="w-4 h-4 sm:w-6 sm:h-6"
                   />
-                  All levels
+                  <span className="hidden sm:inline">All levels</span>
+                  <span className="sm:hidden">Filter</span>
                 </button>
                 {levelDropdownOpen && (
                   <div
@@ -219,13 +222,13 @@ export default function TemplatesPage() {
                     className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg z-50 border border-gray-100 min-w-40 animate-fade-in"
                   >
                     <div className="flex flex-col divide-y divide-gray-100">
-                      <div className="px-6 py-3 cursor-pointer text-center text-green-500 font-medium hover:bg-[#F3F0FC] rounded-t-2xl">
+                      <div className="px-4 sm:px-6 py-2 sm:py-3 cursor-pointer text-center text-green-500 font-medium hover:bg-[#F3F0FC] rounded-t-2xl text-xs sm:text-sm">
                         Beginner
                       </div>
-                      <div className="px-6 py-3 cursor-pointer text-center text-yellow-500 font-medium hover:bg-[#F3F0FC]">
+                      <div className="px-4 sm:px-6 py-2 sm:py-3 cursor-pointer text-center text-yellow-500 font-medium hover:bg-[#F3F0FC] text-xs sm:text-sm">
                         Intermediate
                       </div>
-                      <div className="px-6 py-3 cursor-pointer text-center text-red-500 font-medium hover:bg-[#F3F0FC] rounded-b-2xl">
+                      <div className="px-4 sm:px-6 py-2 sm:py-3 cursor-pointer text-center text-red-500 font-medium hover:bg-[#F3F0FC] rounded-b-2xl text-xs sm:text-sm">
                         Advanced
                       </div>
                     </div>
@@ -235,19 +238,21 @@ export default function TemplatesPage() {
             </div>
           </div>
         </div>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-2xl font-semibold text-[#1A0033]">Templates</h3>
-          <span className="text-[#8B8B8B] font-medium">{templates.length}/6 demos</span>
+        <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-[#1A0033]">Templates</h3>
+          <span className="text-[#8B8B8B] font-medium text-xs sm:text-sm">
+            {templates.length}/6 demos
+          </span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 lg:gap-8">
           {templates.map((tpl) => (
             <div
               key={tpl.title}
-              className="bg-white rounded-2xl p-6 flex flex-col shadow-sm border border-[#F3F0FC]"
+              className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 flex flex-col shadow-sm border border-[#F3F0FC]"
             >
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-2">
                 {tpl.popular && (
-                  <span className="bg-[#F8E7A1] text-[#E6B800] text-xs font-semibold px-2 py-1 rounded mr-2">
+                  <span className="bg-[#F8E7A1] text-[#E6B800] text-xs font-semibold px-2 py-1 rounded mr-1 sm:mr-2">
                     ★ Popular
                   </span>
                 )}
@@ -277,9 +282,13 @@ export default function TemplatesPage() {
                   </span>
                 )}
               </div>
-              <div className="font-semibold text-lg text-[#1A0033] mb-1">{tpl.title}</div>
-              <div className="text-[#8B8B8B] text-sm mb-4">{tpl.description}</div>
-              <div className="flex-1 flex items-center justify-center bg-[#F8F6FF] rounded-xl mb-6 min-h-[120px]">
+              <div className="font-semibold text-base sm:text-lg text-[#1A0033] mb-1">
+                {tpl.title}
+              </div>
+              <div className="text-[#8B8B8B] text-xs sm:text-sm mb-3 sm:mb-4">
+                {tpl.description}
+              </div>
+              <div className="flex-1 flex items-center justify-center bg-[#F8F6FF] rounded-xl mb-4 sm:mb-6 min-h-[100px] sm:min-h-[120px]">
                 <svg
                   width="71"
                   height="71"
@@ -308,14 +317,15 @@ export default function TemplatesPage() {
                   />
                 </svg>
               </div>
-              <div className="flex items-center justify-between text-[#8B8B8B] text-base mb-4">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between text-[#8B8B8B] text-xs sm:text-base gap-2 sm:gap-0 mb-3 sm:mb-4">
+                <div className="flex items-center gap-1 sm:gap-2">
                   <svg
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4 sm:w-6 sm:h-6"
                   >
                     <path
                       d="M12 2C17.523 2 22 6.477 22 12C22 17.523 17.523 22 12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2ZM12 4C9.87827 4 7.84344 4.84285 6.34315 6.34315C4.84285 7.84344 4 9.87827 4 12C4 14.1217 4.84285 16.1566 6.34315 17.6569C7.84344 19.1571 9.87827 20 12 20C14.1217 20 16.1566 19.1571 17.6569 17.6569C19.1571 16.1566 20 14.1217 20 12C20 9.87827 19.1571 7.84344 17.6569 6.34315C16.1566 4.84285 14.1217 4 12 4ZM12 6C12.2449 6.00003 12.4813 6.08996 12.6644 6.25272C12.8474 6.41547 12.9643 6.63975 12.993 6.883L13 7V11.586L15.707 14.293C15.8863 14.473 15.9905 14.7144 15.9982 14.9684C16.006 15.2223 15.9168 15.4697 15.7488 15.6603C15.5807 15.8508 15.3464 15.9703 15.0935 15.9944C14.8406 16.0185 14.588 15.9454 14.387 15.79L14.293 15.707L11.293 12.707C11.1376 12.5514 11.0378 12.349 11.009 12.131L11 12V7C11 6.73478 11.1054 6.48043 11.2929 6.29289C11.4804 6.10536 11.7348 6 12 6Z"
@@ -324,15 +334,17 @@ export default function TemplatesPage() {
                     />
                   </svg>
 
-                  {tpl.time}
+                  <span className="hidden sm:inline">{tpl.time}</span>
+                  <span className="sm:hidden text-xs">{tpl.time}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2">
                   <svg
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4 sm:w-6 sm:h-6"
                   >
                     <path
                       d="M13.07 10.41C13.6774 9.5613 14.0041 8.54375 14.0041 7.50004C14.0041 6.45632 13.6774 5.43877 13.07 4.59004C13.6388 4.20257 14.3118 3.99684 15 4.00004C15.9283 4.00004 16.8185 4.36879 17.4749 5.02516C18.1313 5.68154 18.5 6.57178 18.5 7.50004C18.5 8.42829 18.1313 9.31853 17.4749 9.97491C16.8185 10.6313 15.9283 11 15 11C14.3118 11.0032 13.6388 10.7975 13.07 10.41ZM5.5 7.50004C5.5 6.8078 5.70527 6.13111 6.08986 5.55554C6.47444 4.97997 7.02107 4.53137 7.66061 4.26646C8.30015 4.00155 9.00388 3.93224 9.68282 4.06729C10.3617 4.20234 10.9854 4.53568 11.4749 5.02516C11.9644 5.51465 12.2977 6.13829 12.4327 6.81722C12.5678 7.49615 12.4985 8.19989 12.2336 8.83943C11.9687 9.47897 11.5201 10.0256 10.9445 10.4102C10.3689 10.7948 9.69223 11 9 11C8.07174 11 7.1815 10.6313 6.52513 9.97491C5.86875 9.31853 5.5 8.42829 5.5 7.50004ZM7.5 7.50004C7.5 7.79671 7.58797 8.08672 7.7528 8.33339C7.91762 8.58007 8.15189 8.77232 8.42597 8.88586C8.70006 8.99939 9.00166 9.02909 9.29264 8.97121C9.58361 8.91334 9.85088 8.77048 10.0607 8.5607C10.2704 8.35092 10.4133 8.08364 10.4712 7.79267C10.5291 7.5017 10.4994 7.2001 10.3858 6.92601C10.2723 6.65192 10.08 6.41765 9.83335 6.25283C9.58668 6.08801 9.29667 6.00004 9 6.00004C8.60218 6.00004 8.22064 6.15807 7.93934 6.43938C7.65804 6.72068 7.5 7.10221 7.5 7.50004ZM16 17V19H2V17C2 17 2 13 9 13C16 13 16 17 16 17ZM14 17C13.86 16.22 12.67 15 9 15C5.33 15 4.07 16.31 4 17M15.95 13C16.5629 13.4768 17.064 14.0819 17.4182 14.7729C17.7723 15.4639 17.9709 16.2241 18 17V19H22V17C22 17 22 13.37 15.94 13H15.95Z"
@@ -340,15 +352,17 @@ export default function TemplatesPage() {
                       fillOpacity="0.48"
                     />
                   </svg>
-                  0
+                  <span className="hidden sm:inline">0</span>
+                  <span className="sm:hidden">0</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2">
                   <svg
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4 sm:w-6 sm:h-6"
                   >
                     <path
                       d="M21.9199 6.62C21.8185 6.37565 21.6243 6.18147 21.3799 6.08C21.2597 6.02876 21.1306 6.00158 20.9999 6H15.9999C15.7347 6 15.4804 6.10536 15.2928 6.29289C15.1053 6.48043 14.9999 6.73478 14.9999 7C14.9999 7.26522 15.1053 7.51957 15.2928 7.70711C15.4804 7.89464 15.7347 8 15.9999 8H18.5899L12.9999 13.59L9.70994 10.29C9.61698 10.1963 9.50637 10.1219 9.38452 10.0711C9.26266 10.0203 9.13195 9.9942 8.99994 9.9942C8.86793 9.9942 8.73722 10.0203 8.61536 10.0711C8.4935 10.1219 8.3829 10.1963 8.28994 10.29L2.28994 16.29C2.19621 16.383 2.12182 16.4936 2.07105 16.6154C2.02028 16.7373 1.99414 16.868 1.99414 17C1.99414 17.132 2.02028 17.2627 2.07105 17.3846C2.12182 17.5064 2.19621 17.617 2.28994 17.71C2.3829 17.8037 2.4935 17.8781 2.61536 17.9289C2.73722 17.9797 2.86793 18.0058 2.99994 18.0058C3.13195 18.0058 3.26266 17.9797 3.38452 17.9289C3.50637 17.8781 3.61698 17.8037 3.70994 17.71L8.99994 12.41L12.2899 15.71C12.3829 15.8037 12.4935 15.8781 12.6154 15.9289C12.7372 15.9797 12.8679 16.0058 12.9999 16.0058C13.132 16.0058 13.2627 15.9797 13.3845 15.9289C13.5064 15.8781 13.617 15.8037 13.7099 15.71L19.9999 9.41V12C19.9999 12.2652 20.1053 12.5196 20.2928 12.7071C20.4804 12.8946 20.7347 13 20.9999 13C21.2652 13 21.5195 12.8946 21.707 12.7071C21.8946 12.5196 21.9999 12.2652 21.9999 12V7C21.9984 6.86932 21.9712 6.74022 21.9199 6.62Z"
@@ -357,10 +371,11 @@ export default function TemplatesPage() {
                     />
                   </svg>
 
-                  {tpl.type}
+                  <span className="hidden sm:inline">{tpl.type}</span>
+                  <span className="sm:hidden text-xs">{tpl.type}</span>
                 </div>
               </div>
-              <button className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto">
+              <button className="bg-[#A594F9] text-white rounded-lg px-4 sm:px-6 py-2 sm:py-3 w-full text-xs sm:text-base lg:text-lg font-medium flex items-center justify-center gap-2 mt-auto hover:bg-[#9280FF] transition">
                 Use Template
               </button>
             </div>

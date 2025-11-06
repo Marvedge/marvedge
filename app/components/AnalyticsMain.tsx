@@ -29,7 +29,7 @@ const AnalyticsMain = () => {
       trend: "+23.2%",
       trendLabel: "vs last month",
       icon: <Eye className="w-6 h-6 md:w-7 md:h-7 text-[#8A76FC]" />,
-      bgColor: "bg-[#C5B6F1]",
+      bgColor: "bg-[#C5B6F1]/19",
       hoverColor: "from-[#C5B6F1] to-[#8A76FC]",
       shadow: "shadow-[#8A76FC]/50",
       textColor: "text-[#261753]",
@@ -41,7 +41,7 @@ const AnalyticsMain = () => {
       trend: "+5.2%",
       trendLabel: "vs last month",
       icon: <CheckCircle className="w-6 h-6 md:w-7 md:h-7 text-[#2F80EC]" />,
-      bgColor: "bg-[#9BE1F8]",
+      bgColor: "bg-[#9BE1F8]/14",
       hoverColor: "from-[#9BE1F8] to-[#2F80EC]",
       shadow: "shadow-[#2F80EC]/50",
       textColor: "text-[#261753]",
@@ -53,7 +53,7 @@ const AnalyticsMain = () => {
       trend: "+12s",
       trendLabel: "vs last month",
       icon: <Clock className="w-6 h-6 md:w-7 md:h-7 text-[#6356D7]" />,
-      bgColor: "bg-[#E6E1FA]",
+      bgColor: "bg-[#261753]/6",
       hoverColor: "from-[#E6E1FA] to-[#C5B6F1]",
       shadow: "shadow-[#6356D7]/50",
       textColor: "text-[#261753]",
@@ -65,7 +65,7 @@ const AnalyticsMain = () => {
       trend: "+0.3%",
       trendLabel: "vs last month",
       icon: <MousePointerClick className="w-6 h-6 md:w-7 md:h-7 text-[#E33629]" />,
-      bgColor: "bg-[#F9E6E6]",
+      bgColor: "bg-[#DE610E]/10",
       hoverColor: "from-[#F9E6E6] to-[#E33629]",
       shadow: "shadow-[#E33629]/50",
       textColor: "text-[#261753]",
@@ -97,7 +97,7 @@ const AnalyticsMain = () => {
               }
               ${
                 hoveredCard === card.id
-                  ? `scale-110 shadow-2xl ${card.shadow} rotate-2 bg-gradient-to-br ${card.hoverColor}`
+                  ? `scale-110 shadow-2xl ${card.shadow} rotate-2 bg-linear-to-br ${card.hoverColor}`
                   : "hover:scale-105 hover:shadow-lg"
               }
             `}
@@ -106,7 +106,7 @@ const AnalyticsMain = () => {
               <span
                 className={`
                   inline-block p-2 rounded-lg transition-all duration-300
-                  ${hoveredCard === card.id ? "scale-110 bg-opacity-80" : "bg-white/70"}
+                  ${hoveredCard === card.id ? `scale-110 ${card.bgColor}` : card.bgColor}
                 `}
               >
                 {card.icon}
@@ -152,7 +152,7 @@ const AnalyticsMain = () => {
             </h3>
             <p className="text-base text-[#8C82B4] mt-1">Demo views in last 30 days</p>
           </div>
-          <div className="flex-1 rounded-[16px] flex flex-col items-center justify-center px-6 py-10 text-center">
+          <div className="flex-1 rounded-2xl flex flex-col items-center justify-center px-6 py-10 text-center">
             <Eye className="w-10 h-10 text-[#C5B6F1] mb-4" />
             <p className="text-[#7569A5] font-semibold text-base">
               Chart visualization would go here

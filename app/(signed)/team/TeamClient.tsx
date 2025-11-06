@@ -40,7 +40,7 @@ const TeamPage = () => {
       className="flex flex-col grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
       style={{ minHeight: "calc(100vh - 80px)" }}
     >
-      <SignedHeader titleText="Team" iconSRC="/icons/dash-users.svg" iconALT="team_icon" />
+      <SignedHeader titleText="Team" iconSRC="/ant-design_team-outlined.png" iconALT="team_icon" />
 
       <TeamsMain onCreateTeamClick={() => setShowModal(true)} teams={teams} />
 

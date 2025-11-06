@@ -5,6 +5,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { toast } from "sonner";
 import Image from "next/image";
+import SignedHeader from "@/app/components/SignedHeader";
 import {
   TABS,
   NOTIFICATION_SETTINGS,
@@ -27,8 +28,6 @@ const SettingsPage = () => {
   });
   const [avatar, setAvatar] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -65,7 +64,7 @@ const SettingsPage = () => {
         console.log(user.image, user.name);
         setAvatar(user.image || "");
 
-        // ✅ Update form fields from user data
+        //  Update form fields from user data
         setForm((prev) => ({
           ...prev,
           bio: user.bio || "",
@@ -203,7 +202,7 @@ const SettingsPage = () => {
         image: user.image || "",
       });
       setAvatar(user.image || "");
-      setIsDirty(false); // 👈 reset dirty flag
+      setIsDirty(false); //  reset dirty flag
     }
   };
 
@@ -232,115 +231,7 @@ const SettingsPage = () => {
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
       {/* HEADER BAR */}
-      <div className="w-full bg-white border-b border-gray-200 px-4 sm:px-8 py-4">
-        {/* Mobile: Welcome, Bell, Initials at top */}
-        <div className="flex flex-col sm:hidden w-full mb-2">
-          <div className="flex items-center justify-between w-full gap-2">
-            <span className="text-gray-500 text-base">
-              Welcome{" "}
-              <span className="text-[#7C5CFC] font-semibold">
-                {session?.user?.name?.split(" ")[0] ||
-                  session?.user?.email?.split("@")[0] ||
-                  "User"}
-              </span>{" "}
-              <span className="inline-block">👋</span>
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
-                title="Notifications"
-              >
-                <Image
-                  src="/icons/bell.png"
-                  alt="Notifications"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
-                />
-              </button>
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
-                  onClick={() => setShowDropdown((v) => !v)}
-                  title={session?.user?.name || session?.user?.email || undefined}
-                >
-                  {initials}
-                </button>
-                {showDropdown && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
-                    <div className="mb-2 text-base font-bold text-[#7C5CFC]">
-                      {session?.user?.name || "User"}
-                    </div>
-                    <div className="mb-1 text-gray-700 text-xs font-semibold">
-                      {session?.user?.email}
-                    </div>
-                    <button
-                      onClick={() => signOut({ callbackUrl: "/" })}
-                      className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* Main header row: logo, user actions (hidden on mobile) */}
-        <div className="hidden sm:flex items-center justify-between w-full">
-          <div className="flex items-center gap-3">
-            <span className="text-lg text-gray-400 font-medium">Settings</span>
-          </div>
-          <div className="flex items-center gap-6 justify-end">
-            <span className="text-gray-500 text-lg">
-              Welcome{" "}
-              <span className="text-[#7C5CFC] font-semibold">
-                {session?.user?.name?.split(" ")[0] ||
-                  session?.user?.email?.split("@")[0] ||
-                  "User"}
-              </span>{" "}
-              <span className="inline-block">👋</span>
-            </span>
-            <button
-              className="relative p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
-              title="Notifications"
-            >
-              <Image
-                src="/icons/bell.png"
-                alt="Notifications"
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
-            </button>
-            <div className="relative" ref={dropdownRef}>
-              <button
-                className="w-10 h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-lg font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
-                onClick={() => setShowDropdown((v) => !v)}
-                title={session?.user?.name || session?.user?.email || undefined}
-              >
-                {initials}
-              </button>
-              {showDropdown && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-3 z-50 border border-gray-200 animate-fade-in">
-                  <div className="mb-2 text-base font-bold text-[#7C5CFC]">
-                    {session?.user?.name || "User"}
-                  </div>
-                  <div className="mb-1 text-gray-700 text-xs font-semibold">
-                    {session?.user?.email}
-                  </div>
-                  <button
-                    onClick={() => signOut({ callbackUrl: "/" })}
-                    className="mt-3 w-full px-3 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <SignedHeader titleText="Settings" iconSRC="/uil_setting.png" iconALT="settings_icon" />
 
       <div className="flex flex-wrap items-center gap-2 px-2 sm:px-4 md:px-8 pb-3 pt-4 bg-white border-b border-gray-200 overflow-x-auto">
         {TABS.map((tab) => (
@@ -731,46 +622,54 @@ const SettingsPage = () => {
         </div>
       )}
       {activeTab === "Account" && (
-        <div className="px-4 md:px-10 lg:px-16 xl:px-24">
-          <div className="w-full mx-auto mt-8 mb-2">
-            <h2 className="text-2xl font-bold mb-1">Plan and Billing</h2>
+        <div className="px-2 sm:px-4 md:px-8 lg:px-16 xl:px-24 flex flex-col">
+          <div className="w-full mt-8 mb-2">
+            <h2 className="text-xl sm:text-2xl font-bold mb-1">Plan and Billing</h2>
           </div>
-          <div className="w-full mx-auto mb-8 bg-[#F3F0FC] rounded-xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <div className="font-semibold text-lg text-[#1A0033]">Free Plan</div>
-                <div className="text-sm text-gray-500">Create up to 5 demos and basic features</div>
-              </div>
-              <button className="px-6 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition">
-                Upgrade to Pro
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-lg p-6 flex flex-col items-center justify-center">
-                <div className="text-gray-400 text-sm mb-2">Demos created</div>
-                <div className="text-3xl font-bold text-[#7C5CFC]">5</div>
-              </div>
-              <div className="bg-white rounded-lg p-6 flex flex-col items-center justify-center">
-                <div className="text-gray-400 text-sm mb-2">Teams joined</div>
-                <div className="text-3xl font-bold text-[#7C5CFC]">1</div>
-              </div>
-              <div className="bg-white rounded-lg p-6 flex flex-col items-center justify-center">
-                <div className="text-gray-400 text-sm mb-2">Total views</div>
-                <div className="text-3xl font-bold text-[#7C5CFC]">25</div>
-              </div>
-            </div>
-          </div>
-          <div className="w-full mx-auto mb-12">
-            <h2 className="text-2xl font-bold mb-4">Data Management</h2>
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between bg-white rounded-lg border border-[#ede7fa] px-6 py-4">
+          <div className="w-full mb-4 bg-[#F3F0FC] rounded-xl">
+            <div className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
-                  <div className="font-semibold text-base text-[#1A0033]">Export My Data</div>
-                  <div className="text-sm text-gray-400 mt-1">
+                  <div className="font-semibold text-base sm:text-lg text-[#1A0033]">Free Plan</div>
+                  <div className="text-xs sm:text-sm text-gray-500">
+                    Create up to 5 demos and basic features
+                  </div>
+                </div>
+                <button className="px-4 sm:px-6 py-2 rounded-lg bg-[#7C5CFC] text-white text-sm sm:text-base font-semibold shadow hover:bg-[#8A76FC] transition whitespace-nowrap w-full sm:w-auto">
+                  Upgrade to Pro
+                </button>
+              </div>
+            </div>
+            <div className="px-4 sm:px-6 pb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 justify-start">
+                <div className="bg-white rounded-lg p-4 sm:p-6 flex flex-col items-center justify-center">
+                  <div className="text-gray-400 text-xs sm:text-sm mb-2">Demos created</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-[#7C5CFC]">5</div>
+                </div>
+                <div className="bg-white rounded-lg p-4 sm:p-6 flex flex-col items-center justify-center">
+                  <div className="text-gray-400 text-xs sm:text-sm mb-2">Teams joined</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-[#7C5CFC]">1</div>
+                </div>
+                <div className="bg-white rounded-lg p-4 sm:p-6 flex flex-col items-center justify-center">
+                  <div className="text-gray-400 text-xs sm:text-sm mb-2">Total views</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-[#7C5CFC]">25</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="w-full mb-12">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4">Data Management</h2>
+            <div className="flex flex-col gap-3 sm:gap-4 px-4 sm:px-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg border border-[#ede7fa] p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm sm:text-base text-[#1A0033]">
+                    Export My Data
+                  </div>
+                  <div className="text-xs sm:text-sm text-gray-400 mt-1">
                     Download a copy of all your data including demos, teams and settings.
                   </div>
                 </div>
-                <button className="text-[#7C5CFC] text-2xl focus:outline-none">
+                <button className="text-[#7C5CFC] text-xl sm:text-2xl focus:outline-none shrink-0">
                   <Image
                     src="/icons/icon1.png"
                     alt="Chevron Down"
@@ -780,16 +679,18 @@ const SettingsPage = () => {
                   />
                 </button>
               </div>
-              <div className="flex items-center justify-between bg-red-50 rounded-lg border border-red-200 px-6 py-4">
-                <div>
-                  <div className="font-semibold text-base text-[#E53E3E]">Delete Account</div>
-                  <div className="text-sm text-red-400 mt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-red-50 rounded-lg border border-red-200 p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm sm:text-base text-[#E53E3E]">
+                    Delete Account
+                  </div>
+                  <div className="text-xs sm:text-sm text-red-400 mt-1">
                     Once you delete the account, your data cannot be retrieved. Be Certain!
                   </div>
                 </div>
                 <button
                   onClick={handleDeleteAccount}
-                  className="text-[#E53E3E] text-2xl focus:outline-none"
+                  className="text-[#E53E3E] text-xl sm:text-2xl focus:outline-none shrink-0"
                 >
                   <Image
                     src="/icons/icon2.png"

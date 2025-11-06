@@ -79,7 +79,7 @@ const DashboardMain = () => {
 
   return (
     <div
-      className="flex-1 p-4 md:p-8 bg-[#F1ECFF] min-h-screen"
+      className="flex-1 p-2 sm:p-4 md:p-8 bg-[#F1ECFF] min-h-screen mt-2 sm:mt-0 pt-2 sm:pt-0"
       style={{ fontFamily: "var(--font-raleway)" }}
     >
       <style jsx>{`
@@ -280,96 +280,102 @@ const DashboardMain = () => {
           }
         }
       `}</style>
-      <div className="mb-6 md:mb-8">
-        <h2 className="text-base md:text-lg font-light text-gray-400 mb-4">
+      <div className="mb-4 sm:mb-6 md:mb-8">
+        <h2 className="text-xs sm:text-sm md:text-base lg:text-lg font-light text-gray-400 mb-3 sm:mb-4">
           Here&apos;s what happening with your demos today
         </h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-          <div className="bg-[#E6E1FA] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-6">
+          <div className="bg-[#261753]/6 rounded-xl p-3 sm:p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[100px] sm:min-h-[110px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu">
             <div className="mb-2">
-              <span className="inline-block bg-[#B8AAFF] p-2 rounded-lg">
+              <span className="inline-block bg-[#8A76FC]/[0.14] p-1.5 sm:p-2 rounded-lg">
                 <Image
-                  src="/icons/dash-rect.svg"
+                  src="/mingcute_play-fill.png"
                   alt="Play"
-                  width={24}
-                  height={24}
-                  className="md:w-7 md:h-7"
+                  width={18}
+                  height={18}
+                  className="sm:w-6 sm:h-6 md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Total Demos</div>
-            <div className="text-2xl md:text-3xl font-bold text-black">0</div>
+            <div className="text-xs sm:text-sm md:text-lg font-medium text-black">Total Demos</div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +12% <span className="text-gray-500 font-normal">vs last month</span>
+              +12% <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
           </div>
 
-          <div className="bg-[#E6F0FF] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+          <div className="bg-[#9BE1F8]/14 rounded-xl p-3 sm:p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[100px] sm:min-h-[110px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu">
             <div className="mb-2">
-              <span className="inline-block bg-[#B8E0FF] p-2 rounded-lg">
+              <span className="inline-block bg-[#1565D8]/12 p-1.5 sm:p-2 rounded-lg">
                 <Image
                   src="/icons/dash-eye.svg"
                   alt="Views"
-                  width={24}
-                  height={24}
-                  className="md:w-7 md:h-7"
+                  width={18}
+                  height={18}
+                  className="sm:w-6 sm:h-6 md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Total Views</div>
-            <div className="text-2xl md:text-3xl font-bold text-black">0</div>
+            <div className="text-xs sm:text-sm md:text-lg font-medium text-black">Total Views</div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +23% <span className="text-gray-500 font-normal">vs last month</span>
+              +23% <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
           </div>
 
-          <div className="bg-[#E6E1FA] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+          <div className="bg-[#261753]/6 rounded-xl p-3 sm:p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[100px] sm:min-h-[110px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu">
             <div className="mb-2">
-              <span className="inline-block bg-[#B8AAFF] p-2 rounded-lg">
+              <span className="inline-block bg-[#62408F]/13 p-1.5 sm:p-2 rounded-lg">
                 <Image
                   src="/icons/dash-grow.svg"
                   alt="Completion Rate"
-                  width={24}
-                  height={24}
-                  className="md:w-7 md:h-7"
+                  width={18}
+                  height={18}
+                  className="sm:w-6 sm:h-6 md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Completion Rate</div>
-            <div className="text-2xl md:text-3xl font-bold text-black">0%</div>
+            <div className="text-xs sm:text-sm md:text-lg font-medium text-black">
+              Completion Rate
+            </div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0%</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +5% <span className="text-gray-500 font-normal">vs last month</span>
+              +5% <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
           </div>
 
-          <div className="bg-[#F9E6E6] rounded-xl p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[120px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+          <div className="bg-[#DE610E]/10 rounded-xl p-3 sm:p-4 md:p-6 flex flex-col items-start shadow-sm min-h-[100px] sm:min-h-[110px] md:min-h-[140px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu">
             <div className="mb-2">
-              <span className="inline-block bg-[#FFB8B8] p-2 rounded-lg">
+              <span className="inline-block bg-[#DE610E]/15 p-1.5 sm:p-2 rounded-lg">
                 <Image
                   src="/icons/share.png"
                   alt="Shares"
-                  width={24}
-                  height={24}
-                  className="md:w-7 md:h-7"
+                  width={18}
+                  height={18}
+                  className="sm:w-6 sm:h-6 md:w-7 md:h-7"
                 />
               </span>
             </div>
-            <div className="text-sm md:text-lg font-medium text-black">Active shares</div>
-            <div className="text-2xl md:text-3xl font-bold text-black">0</div>
+            <div className="text-xs sm:text-sm md:text-lg font-medium text-black">
+              Active shares
+            </div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +8% <span className="text-gray-500 font-normal">vs last month</span>
+              +8% <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
-        <div className="lg:col-span-2 bg-white rounded-xl p-4 shadow-sm h-[410px] hover:shadow-lg transform flex flex-col">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-8">
+        <div className="lg:col-span-2 bg-white rounded-xl p-3 sm:p-4 shadow-sm min-h-[350px] sm:min-h-[410px] hover:shadow-lg transform flex flex-col">
           {/* Header Section */}
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl md:text-2xl font-semibold text-[#7569A5]">Recent Demos</h3>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-3 sm:mb-4">
+            <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-[#7569A5]">
+              Recent Demos
+            </h3>
             {demos.length > 5 && (
               <button
-                className="text-[#6356D7] font-medium hover:underline text-sm md:text-base"
+                className="text-[#6356D7] font-medium hover:underline text-xs sm:text-sm md:text-base"
                 onClick={() => router.push("/demos")}
               >
                 View all
@@ -389,24 +395,32 @@ const DashboardMain = () => {
                 {demos.slice(0, 4).map((demo: Demo) => (
                   <div key={demo.id}>
                     <div
-                      className="flex items-center justify-between py-3 hover:bg-gray-50 px-2 rounded-md cursor-pointer transition"
+                      className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-2 sm:py-3 hover:bg-gray-50 px-1 sm:px-2 rounded-md cursor-pointer transition gap-2 sm:gap-0"
                       onClick={() => handleEditDemo(demo)}
                     >
                       {/* Left: Icon + Title + Description */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center bg-[#F8F6FF] rounded-lg w-10 h-10">
-                          <Image src="/icons/play-demo.svg" alt="Play" width={20} height={20} />
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                        <div className="flex items-center justify-center bg-[#F8F6FF] rounded-lg w-8 h-8 sm:w-10 sm:h-10 shrink-0">
+                          <Image
+                            src="/icons/play-demo.svg"
+                            alt="Play"
+                            width={16}
+                            height={16}
+                            className="sm:w-5 sm:h-5"
+                          />
                         </div>
-                        <div>
-                          <div className="font-medium text-gray-800">{demo.title}</div>
-                          <div className="text-sm text-gray-500 truncate w-40">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-gray-800 text-sm sm:text-base truncate">
+                            {demo.title}
+                          </div>
+                          <div className="text-xs sm:text-sm text-gray-500 truncate">
                             {demo.description || "No description"}
                           </div>
                         </div>
                       </div>
 
                       {/* Middle: Status + Updated Date */}
-                      <div className="hidden md:flex items-center gap-10 text-sm text-gray-500">
+                      <div className="hidden md:flex items-center gap-8 lg:gap-10 text-xs lg:text-sm text-gray-500 shrink-0">
                         <div>Draft</div>
                         <div>{formatDate(demo.updatedAt)}</div>
                       </div>
@@ -414,33 +428,33 @@ const DashboardMain = () => {
                   </div>
                 ))}
 
-                <div className="mt-auto flex justify-center">
+                <div className="mt-auto flex justify-center w-full">
                   <Link href={"/recorder"}>
-                    <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform flex items-center gap-2">
-                      <Play size={18} />
+                    <button className="mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-xs sm:text-sm md:text-base hover:scale-105 transform flex rounded-15 items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+                      <Play size={16} className="sm:w-[18px] sm:h-[18px]" />
                       Create Demo
                     </button>
                   </Link>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center flex-1">
+              <div className="flex flex-col items-center justify-center flex-1 px-4">
                 <Image
                   src="/icons/play fill.png"
                   alt="Play"
-                  width={40}
-                  height={40}
-                  className="md:w-12 md:h-12"
+                  width={32}
+                  height={32}
+                  className="sm:w-10 sm:h-10 md:w-12 md:h-12"
                 />
-                <div className="text-base md:text-lg font-semibold text-[#6356D7] mt-4">
+                <div className="text-sm sm:text-base md:text-lg font-semibold text-[#6356D7] mt-3 sm:mt-4">
                   No demos yet
                 </div>
-                <div className="text-gray-500 text-xs md:text-sm mt-1 text-center">
+                <div className="text-gray-500 text-xs sm:text-sm mt-1 text-center">
                   Create your first demo to get started
                 </div>
                 <Link href={"/recorder"}>
-                  <button className="mt-4 px-4 py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-sm md:text-base hover:scale-105 transform flex items-center gap-2">
-                    <Play size={18} />
+                  <button className="mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 cursor-pointer bg-[#6356D7] text-white rounded-md font-semibold shadow hover:bg-[#7E5FFF] transition-all text-xs sm:text-sm md:text-base hover:scale-105 transform flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+                    <Play size={16} className="sm:w-[18px] sm:h-[18px]" />
                     Create Demo
                   </button>
                 </Link>
@@ -449,87 +463,92 @@ const DashboardMain = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 md:gap-8">
-          <div className="bg-[#6B5FFC] rounded-xl p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-110 hover:shadow-lg transform-gpu">
+        <div className="flex flex-col gap-3 sm:gap-4 md:gap-8">
+          <div
+            className="bg-[#6B5FFC] rounded-xl p-3 sm:p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-40 sm:min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu"
+            style={{ fontFamily: "var(--font-raleway), sans-serif" }}
+          >
             <div>
-              <div className="flex items-center mb-3 md:mb-4">
-                <span className="inline-block p-2 rounded-lg mr-3 bg-white/20">
+              <div className="flex items-center mb-2 sm:mb-3 md:mb-4">
+                <span className="inline-block p-1.5 sm:p-2 rounded-lg mr-2 sm:mr-3 bg-white/20">
                   <Image
-                    src="/ri_gemini-fill.png"
+                    src="/ri_gemini-fill(1).png"
                     alt="AI Assistant"
-                    width={20}
-                    height={20}
-                    className="sm:w-[25px] sm:h-[25px]"
+                    width={16}
+                    height={16}
+                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
                   />
                 </span>
-                <span className="text-lg md:text-xl font-bold text-white">AI Assistant</span>
+                <span className="text-base sm:text-lg md:text-xl font-bold text-white">
+                  AI Assistant
+                </span>
               </div>
-              <div className="text-white text-sm md:text-base mb-4 md:mb-6">
+              <div className="text-white text-xs sm:text-sm md:text-base mb-3 sm:mb-4 md:mb-6 leading-relaxed">
                 Ready to help you create better demos with smart suggestions and auto generated
                 content.
               </div>
             </div>
-            <button className="w-full py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
+            <button className="w-full py-1.5 sm:py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-xs sm:text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
               Get AI Help
             </button>
           </div>
 
-          <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm hover:shadow-lg transform">
-            <h3 className="text-xl md:text-2xl font-bold text-[#2D2154] mb-4 md:mb-6">
+          <div className="bg-white rounded-xl p-3 sm:p-4 md:p-6 shadow-sm hover:shadow-lg transform">
+            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-[#2D2154] mb-3 sm:mb-4 md:mb-6">
               Popular Templates
             </h3>
-            <div className="flex flex-col gap-3 md:gap-4">
-              <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#C6F7D0] p-2 rounded-lg shrink-0">
+            <div className="flex flex-col gap-2 sm:gap-3 md:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
+                <span className="bg-[#C6F7D0] p-1.5 sm:p-2 rounded-lg shrink-0">
                   <Image
                     src="/icons/dash-users.svg"
                     alt="Google"
-                    width={20}
-                    height={20}
-                    className="sm:w-[25px] sm:h-[25px]"
+                    width={16}
+                    height={16}
+                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
                   />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-sm md:text-base">
+                  <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
                     User Onboarding
                   </div>
-                  <div className="text-gray-500 text-xs md:text-sm">
-                    Guide new users through setup
-                  </div>
+                  <div className="text-gray-500 text-xs">Guide new users through setup</div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#D0F0FF] p-2 rounded-lg shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
+                <span className="bg-[#D0F0FF] p-1.5 sm:p-2 rounded-lg shrink-0">
                   <Image
                     src="/icons/dash-rocket.svg"
                     alt="Google"
-                    width={20}
-                    height={20}
-                    className="sm:w-[25px] sm:h-[25px]"
+                    width={16}
+                    height={16}
+                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
                   />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-sm md:text-base">
+                  <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
                     Feature Launch
                   </div>
-                  <div className="text-gray-500 text-xs md:text-sm">Showcase new capabilities</div>
+                  <div className="text-gray-500 text-xs">Showcase new capabilities</div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#E6E1FA] p-2 rounded-lg shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
+                <span className="bg-[#E6E1FA] p-1.5 sm:p-2 rounded-lg shrink-0">
                   <Image
                     src="/icons/play fill.png"
                     alt="Google"
-                    width={20}
-                    height={20}
-                    className="sm:w-[25px] sm:h-[25px]"
+                    width={16}
+                    height={16}
+                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
                   />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-sm md:text-base">Sales Demo</div>
-                  <div className="text-gray-500 text-xs md:text-sm">Impress prospects</div>
+                  <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
+                    Sales Demo
+                  </div>
+                  <div className="text-gray-500 text-xs">Impress prospects</div>
                 </div>
               </div>
             </div>
