@@ -11,7 +11,7 @@ const SignedLayoutClient = ({ children }: { children: ReactNode }) => {
     <div className="flex h-screen overflow-hidden">
       {!isRecorderOrEditor && <SidemenuDashboard />}
       <main
-        className={`flex-1 bg-[#F1ECFF] pt-16 md:pt-0 overflow-y-auto ${!isRecorderOrEditor ? "md:ml-64" : ""}`}
+        className={`flex-1 bg-[#F1ECFF] pt-14 sm:pt-16 md:pt-0 overflow-y-auto ${!isRecorderOrEditor ? "md:ml-72 sm:ml-64" : ""}`}
         style={{ height: "100vh" }}
       >
         {children}
