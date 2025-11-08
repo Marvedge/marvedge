@@ -56,3 +56,30 @@ export const trianglePoints = (
     return `${x},${y} ${x - w / 2},${y - h} ${x + w / 2},${y - h}`;
   }
 };
+
+// Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
+export function normalizeTimeFormat(time: string | number): string {
+  let totalSeconds: number;
+
+  if (typeof time === "number") {
+    totalSeconds = time;
+  } else if (time.includes(":")) {
+    // Handle "mm:ss" or "hh:mm:ss"
+    const parts = time.split(":").map(Number);
+    if (parts.length === 2) {
+      totalSeconds = parts[0] * 60 + parts[1];
+    } else if (parts.length === 3) {
+      totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else {
+      throw new Error("Invalid time format: " + time);
+    }
+  } else {
+    totalSeconds = Number(time);
+  }
+
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(Math.floor(totalSeconds % 60)).padStart(2, "0");
+
+  return `${hours}:${minutes}:${seconds}`;
+}

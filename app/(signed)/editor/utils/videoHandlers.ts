@@ -2,33 +2,8 @@ import { toast } from "sonner";
 import axios from "axios";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "../hooks/useEditorState";
-
-// Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
-export function normalizeTimeFormat(time: string | number): string {
-  let totalSeconds: number;
-
-  if (typeof time === "number") {
-    totalSeconds = time;
-  } else if (time.includes(":")) {
-    // Handle "mm:ss" or "hh:mm:ss"
-    const parts = time.split(":").map(Number);
-    if (parts.length === 2) {
-      totalSeconds = parts[0] * 60 + parts[1];
-    } else if (parts.length === 3) {
-      totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-    } else {
-      throw new Error("Invalid time format: " + time);
-    }
-  } else {
-    totalSeconds = Number(time);
-  }
-
-  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-  const seconds = String(Math.floor(totalSeconds % 60)).padStart(2, "0");
-
-  return `${hours}:${minutes}:${seconds}`;
-}
+import { normalizeTimeFormat } from "@/app/lib/utils";
+import { CLOUDINARY_CONFIG } from "@/app/config/cloudinary-client";
 
 interface SaveDemoParams {
   videoUrl: string;
@@ -58,6 +33,8 @@ export async function handleSaveDemo(
     setShowSaveDemoModal,
   } = params;
 
+  const { uploadUrl, uploadPreset } = CLOUDINARY_CONFIG;
+
   if (!videoUrl) {
     toast.error("No video available to save");
     return;
@@ -70,54 +47,8 @@ export async function handleSaveDemo(
     const startTime = inputStartTime;
     const endTime = inputEndTime;
 
-    // First, upload video to Cloudinary if it's a blob URL
-    let cloudinaryVideoUrl = videoUrl;
-    if (videoUrl.startsWith("blob:")) {
-      try {
-        // Get the video blob
-        const response = await fetch(videoUrl);
-        if (!response.ok) {
-          throw new Error("Failed to fetch video blob");
-        }
-        const videoBlob = await response.blob();
-
-        // Create FormData for Cloudinary upload
-        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-
-        const cloudFormData = new FormData();
-        cloudFormData.append("file", videoBlob, "video.webm");
-        cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-
-        console.log("Uploading to Cloudinary...");
-
-        try {
-          const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
-          console.log("Upload success:", cloudRes.data);
-          cloudinaryVideoUrl = cloudRes.data.secure_url;
-        } catch (error: unknown) {
-          if (axios.isAxiosError(error)) {
-            console.log("cloudinary failed... ... ");
-            console.error("Cloudinary upload failed:");
-            console.error("Status:", error.response?.status);
-            console.error("Status Text:", error.response?.statusText);
-            console.error("Response Data:", error.response?.data);
-            console.error("Headers:", error.response?.headers);
-          } else {
-            console.error("Unexpected error:", error);
-          }
-        }
-      } catch (cloudError) {
-        console.error("Error uploading to Cloudinary:", cloudError);
-        toast.dismiss();
-        toast.error("Failed to upload video to Cloudinary");
-        return;
-      }
-    }
-
-    // Use current segments from the timeline
-    const segmentsToSave =
+    // Construct editing metadata
+    const trimSegments =
       currentSegments.length > 0
         ? currentSegments
         : [
@@ -127,43 +58,42 @@ export async function handleSaveDemo(
             },
           ];
 
-    // Call the API to save demo with editing object
-    const editingToSave = {
-      segments: segmentsToSave,
+    const editingMetadata = {
+      segments: trimSegments,
       zoom: zoomEffects,
     };
 
-    try {
-      const response = await axios.post("/api/demo", {
+    if (videoUrl.startsWith("blob:")) {
+      // Get the video blob
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch video blob");
+      }
+      const videoBlob = await response.blob();
+
+      // Create FormData for Cloudinary upload
+      const cloudFormData = new FormData();
+      cloudFormData.append("file", videoBlob, "video.webm");
+      cloudFormData.append("upload_preset", uploadPreset);
+
+      const res = await axios.post(uploadUrl, cloudFormData);
+      const cloudinaryVideoUrl = res.data.secure_url;
+
+      await axios.post("/api/demo", {
         title: data.title,
         description: data.description,
         videoUrl: cloudinaryVideoUrl,
-        editing: editingToSave,
+        editing: editingMetadata,
       });
-      console.log("Demo saved:", response.data);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        if (error.response) {
-          console.error(
-            `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
-          );
-        } else {
-          console.error("Axios error:", error.message);
-        }
-      } else if (error instanceof Error) {
-        console.error("Unexpected error:", error.message);
-      } else {
-        console.error("Unknown error:", error);
-      }
-    }
 
-    // Update the sidebar state with the saved data
-    setSidebarTitle(data.title);
-    setSidebarDescription(data.description);
-    toast.dismiss();
-    toast.success("Demo saved successfully!");
-    // Close the modal
-    setShowSaveDemoModal(false);
+      setSidebarTitle(data.title);
+      setSidebarDescription(data.description);
+      toast.dismiss();
+      toast.success("Demo saved successfully!");
+      setShowSaveDemoModal(false);
+    } else {
+      throw new Error("Video URL is not a blob URL");
+    }
   } catch (error) {
     console.error("Error saving demo:", error);
     toast.dismiss();
@@ -223,7 +153,11 @@ export async function videoTrimHandler(
 
     // Use only the first segment for trimming
     const firstSegment = normalizedSegments[0];
-    const trimmedBlob = await videoTrimmer(videoBlob, firstSegment.start, firstSegment.end);
+    const trimmedBlob = await videoTrimmer(
+      videoBlob,
+      firstSegment.start,
+      firstSegment.end
+    );
     setProgress(95);
 
     const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
@@ -266,8 +200,14 @@ interface ExportVideoParams {
 }
 
 export async function exportVideo(params: ExportVideoParams) {
-  const { videoUrl, selectedBackground, imageMap, sidebarTitle, sidebarDescription, router } =
-    params;
+  const {
+    videoUrl,
+    selectedBackground,
+    imageMap,
+    sidebarTitle,
+    sidebarDescription,
+    router,
+  } = params;
 
   if (!videoUrl) {
     toast.error("No video available to export");
@@ -308,12 +248,17 @@ export async function exportVideo(params: ExportVideoParams) {
 
     const backendUrl = process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL;
     const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-    const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string;
+    const cloudinaryPreset = process.env
+      .NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string;
 
     // Call backend FFmpeg server with axios
-    const serverRes = await axios.post(`${backendUrl}/process-video`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const serverRes = await axios.post(
+      `${backendUrl}/process-video`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      }
+    );
 
     const { url } = serverRes.data; // backend returns { url }
 
