@@ -2,13 +2,13 @@
 
 import React, { useEffect, useCallback } from "react";
 import { FaBars } from "react-icons/fa6";
-import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
+//import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
-import Image from "next/image";
+//import Image from "next/image";
 
 // Components
 import SidemenuDashboard from "@/app/components/SidemenuDashboard";
@@ -212,7 +212,7 @@ export default function EditorPage() {
   const setProgress = (_value?: number) => {};
 
   // Use recording duration if available, otherwise use detected duration
-  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+  //const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
 
   // Timeline change handler
   const handleTimelineChange = useCallback(
@@ -456,12 +456,12 @@ export default function EditorPage() {
                 )}
               </div>
 
-              <button
+              {/* <button
                 className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={() => setShowSaveDemoModal(true)}
               >
                 <span className="text-xl"></span> Save Demo
-              </button>
+              </button> */}
 
               {/* Editor Sidebar Toggle for Mobile */}
               <button
@@ -475,19 +475,27 @@ export default function EditorPage() {
           </div>
 
           {(sidebarTitle || sidebarDescription) && (
-            <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200 mx-4 sm:mx-8">
-              {sidebarTitle && (
-                <div className="mb-3">
-                  <span className="text-sm font-medium text-gray-500">Title:</span>
-                  <span className="text-xl font-semibold text-gray-800">{sidebarTitle}</span>
-                </div>
-              )}
-              {sidebarDescription && (
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Description:</span>
-                  <span className="text-gray-600 text-sm">{sidebarDescription}</span>
-                </div>
-              )}
+            <div className="bg-white p-4 mx-4 flex items-center justify-between">
+              <div className="flex flex-col">
+                {sidebarTitle && (
+                  <div>
+                    {/* <span className="text-sm font-medium text-gray-500">Title:</span> */}
+                    <span className="text-[32px] font-medium text-[#261753]">{sidebarTitle}</span>
+                  </div>
+                )}
+                {/* {sidebarDescription && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Description:</span>
+                    <span className="text-[rgba(0,0,0,0.43)] text-lg">{sidebarDescription}</span>
+                  </div>
+                )} */}
+              </div>
+              <button
+                className="flex cursor-pointer items-center justify-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
+                onClick={() => setShowSaveDemoModal(true)}
+              >
+                <span className="text-xl"></span> Save Demo
+              </button>
             </div>
           )}
 
@@ -501,9 +509,9 @@ export default function EditorPage() {
             {/* Video container */}
             <div
               ref={videoContainerRef}
-              className={`relative w-full sm:h-auto sm:aspect-video rounded-2xl border ${
+              className={`relative w-[900px] sm:h-auto sm:aspect-video rounded-2xl border ${
                 isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
-              } flex items-center justify-center transition-all duration-300 mb-4`}
+              } flex flex-col items-center justify-center mb-1 transition-all duration-300`}
               style={{
                 minHeight: "160px",
                 padding: selectedBackground ? "20px" : "0px",
@@ -511,7 +519,7 @@ export default function EditorPage() {
                 ...getBackgroundStyle(),
               }}
             >
-              <div
+              {/* <div
                 style={{
                   width: selectedBackground ? "90%" : "100%",
                   height: selectedBackground ? "80%" : "100%",
@@ -522,7 +530,9 @@ export default function EditorPage() {
                   background: "#F6F3FF",
                   transition: "width 0.3s ease, height 0.3s ease",
                 }}
-              >
+              > */}
+              <div>
+                {/*In FullScreen video require one div, so don't remove div */}
                 {videoUrl ? (
                   <ReactPlayer
                     ref={playerRef}
@@ -533,11 +543,10 @@ export default function EditorPage() {
                     volume={volume}
                     width="100%"
                     height="100%"
-                    style={{
-                      objectFit: "contain",
-                      borderRadius: "1.25rem",
-                      background: "#F6F3FF",
-                    }}
+                    // style={{
+                    // objectFit: "contain",
+                    // background: "#F6F3FF",
+                    // }}
                     config={{
                       file: {
                         attributes: {
@@ -594,6 +603,7 @@ export default function EditorPage() {
                   </div>
                 )}
               </div>
+              {/* </div> */}
 
               {/* Canvas stays on top of video */}
               <canvas
@@ -606,91 +616,28 @@ export default function EditorPage() {
                   borderRadius: "1.25rem",
                 }}
               />
-            </div>
 
-            {/* Controls container - only show when video is available */}
-            {videoUrl && (
-              <div className="w-full flex flex-col gap-3">
-                <CustomVideoControls
-                  playerRef={playerRef}
-                  duration={duration}
-                  currentTime={currentTime}
-                  setCurrentTime={(t) => {
-                    setCurrentTime(t);
-                    playerRef.current?.seekTo(t, "seconds");
-                  }}
-                  recordingDuration={recordingDuration}
-                  setPlaying={setPlaying}
-                  playing={playing}
-                />
-
-                <div className="flex items-center justify-between px-2">
-                  {/* Skip buttons */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const newTime = Math.max(0, currentTime - 5);
-                        setCurrentTime(newTime);
-                        playerRef.current?.seekTo(newTime, "seconds");
-                      }}
-                      className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                      title="Back 5 seconds"
-                    >
-                      <Image src="/icons/replay.svg" alt="Replay" width={16} height={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        const newTime = Math.min(displayDuration, currentTime + 5);
-                        setCurrentTime(newTime);
-                        playerRef.current?.seekTo(newTime, "seconds");
-                      }}
-                      className="rounded-full bg-[#7C5CFC] text-white hover:bg-[#6356D7] p-1.5 transition shadow-sm"
-                      title="Forward 5 seconds"
-                    >
-                      <Image src="/icons/forward.svg" alt="Forward" width={16} height={16} />
-                    </button>
-                  </div>
-
-                  {/* Volume */}
-                  <div className="flex items-center gap-2 flex-1 justify-center">
-                    <button
-                      onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                      className="focus:outline-none"
-                      title={volume === 0 ? "Unmute" : "Mute"}
-                    >
-                      {volume === 0 ? (
-                        <FaVolumeMute className="text-[#7C5CFC] text-2xl" />
-                      ) : (
-                        <FaVolumeUp className="text-[#7C5CFC] text-2xl" />
-                      )}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={volume}
-                      onChange={(e) => setVolume(Number(e.target.value))}
-                      className="accent-[#7C5CFC] w-40 h-2 rounded-lg"
-                    />
-                    <span className="text-xs text-[#7C5CFC] font-mono min-w-10">
-                      {Math.round(volume * 100)}%
-                    </span>
-                  </div>
-
-                  {/* Fullscreen */}
-                  <div className="flex items-center justify-end" style={{ minWidth: 40 }}>
-                    <button
-                      className="text-[#A594F9] hover:text-[#7C5CFC] p-2"
-                      title="Fullscreen"
-                      onClick={handleFullscreen}
-                    >
-                      <FaExpand size={22} />
-                    </button>
-                  </div>
+              {/* Controls container - only show when video is available */}
+              {videoUrl && (
+                <div className="w-full flex flex-col gap-3">
+                  <CustomVideoControls
+                    playerRef={playerRef}
+                    duration={duration}
+                    currentTime={currentTime}
+                    setCurrentTime={(t) => {
+                      setCurrentTime(t);
+                      playerRef.current?.seekTo(t, "seconds");
+                    }}
+                    recordingDuration={recordingDuration}
+                    setPlaying={setPlaying}
+                    playing={playing}
+                    volume={volume}
+                    setVolume={setVolume}
+                    handleFullscreen={handleFullscreen}
+                  />
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {tool === "text" && (
@@ -719,12 +666,14 @@ export default function EditorPage() {
 
           {/* Timeline - only show when video is available */}
           {videoUrl && (
-            <div className="mr-2 mt-10 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
+            <div className="mr-2 mt-8 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
               {duration > 0 ? (
                 <TimelineRuler
                   minValue={0}
                   maxValue={duration}
                   currentValue={Math.max(0, currentTime)}
+                  handleFullscreen={handleFullscreen}
+                  isFullscreen={isFullscreen}
                   onValueChange={(value) => {
                     const clampedValue = Math.max(0, Math.min(duration, value));
                     setCurrentTime(clampedValue);

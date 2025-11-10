@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { ZoomEffect } from "../types/editor/zoom-effect";
+import Linepage from "./Linepage";
 
 interface TimelineRulerProps {
   minValue?: number;
@@ -23,6 +24,8 @@ interface TimelineRulerProps {
   onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
+  isFullscreen: boolean;
+  handleFullscreen: () => void;
 }
 
 export default function TimelineRuler({
@@ -40,6 +43,7 @@ export default function TimelineRuler({
   onZoomEffectCreate,
   initialSegments,
   setPlaying,
+  handleFullscreen,
 }: TimelineRulerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [draggingHandle] = useState<"current" | "start" | "end" | null>(null);
@@ -153,10 +157,10 @@ export default function TimelineRuler({
       (Math.abs(segments[0].start - minValue) > 0.001 ||
         Math.abs(segments[0].end - maxValue) > 0.001));
 
-  const baseTimelineWidth = 1050; // Fixed base width for the timeline
+  const baseTimelineWidth = 956; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
-  const scissorWidth = 48; // Fixed width for scissors (12 * 4 = 48px)
-  const totalContainerWidth = baseTimelineWidth + scissorWidth * 2; // Total container width
+  //const scissorWidth = 48; // Fixed width for scissors (12 * 4 = 48px)
+  //const totalContainerWidth = baseTimelineWidth + scissorWidth * 2; // Total container width
 
   // Keep scrollLeft in range when zoom changes
   useEffect(() => {
@@ -212,12 +216,12 @@ export default function TimelineRuler({
     return () => el.removeEventListener("wheel", handleWheel);
   }, [baseTimelineWidth]);
 
-  const formatTime = (time: number) => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
+  // const formatTime = (time: number) => {
+  //   const minutes = Math.floor(time / 60);
+  //   const seconds = Math.floor(time % 60);
 
-    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  };
+  //   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  // };
 
   useEffect(() => {
     isUpdatingFromPropRef.current = true;
@@ -392,13 +396,13 @@ export default function TimelineRuler({
     };
   }, [isDragging, updateValueFromMouse]);
 
-  const addSegment = () => {
-    const newSegment = { start: minValue, end: maxValue };
-    setSegments([...segments, newSegment]);
-    setActiveSegment(segments.length);
-    setLocalStartTime(newSegment.start);
-    setLocalEndTime(newSegment.end);
-  };
+  // const addSegment = () => {
+  //   const newSegment = { start: minValue, end: maxValue };
+  //   setSegments([...segments, newSegment]);
+  //   setActiveSegment(segments.length);
+  //   setLocalStartTime(newSegment.start);
+  //   setLocalEndTime(newSegment.end);
+  // };
 
   const removeSegment = (idx: number) => {
     const newSegments = segments.filter((_, i) => i !== idx);
@@ -476,84 +480,79 @@ export default function TimelineRuler({
     onValueChangeRef.current?.(localValue);
   }, [localValue]);
 
-  const generateTicks = () => {
-    const ticks: { value: number; type: string; label?: string }[] = [];
+  // const generateTicks = () => {
+  //   const ticks: { value: number; type: string; label?: string }[] = [];
 
-    const totalRange = maxValue - minValue;
-    const targetTickCount = 8 * zoomLevel; // Increase with zoom
-    const roughStep = totalRange / targetTickCount;
+  //   const totalRange = maxValue - minValue;
+  //   const targetTickCount = 8 * zoomLevel; // Increase with zoom
+  //   const roughStep = totalRange / targetTickCount;
 
-    // Round major step to nearest integer second >= 1
-    const majorStep = Math.max(1, Math.round(roughStep));
+  //   // Round major step to nearest integer second >= 1
+  //   const majorStep = Math.max(1, Math.round(roughStep));
 
-    // Always keep an odd number of subdivisions
-    let divisions = 5; // default = 5 ticks (1 major + 4 minors)
-    if (zoomLevel > 3) {
-      divisions = 7;
-    }
-    if (zoomLevel > 6) {
-      divisions = 9;
-    }
-    if (zoomLevel > 10) {
-      divisions = 11;
-    }
+  //   // Always keep an odd number of subdivisions
+  //   let divisions = 5; // default = 5 ticks (1 major + 4 minors)
+  //   if (zoomLevel > 3) {
+  //     divisions = 7;
+  //   }
+  //   if (zoomLevel > 6) {
+  //     divisions = 9;
+  //   }
+  //   if (zoomLevel > 10) {
+  //     divisions = 11;
+  //   }
 
-    const minorStep = majorStep / (divisions - 1);
-    const midIndex = Math.floor(divisions / 2); // middle tick index
+  //   const minorStep = majorStep / (divisions - 1);
+  //   const midIndex = Math.floor(divisions / 2); // middle tick index
 
-    // Start from nearest major tick
-    const startMajorTick = Math.ceil(minValue / majorStep) * majorStep;
+  //   // Start from nearest major tick
+  //   const startMajorTick = Math.ceil(minValue / majorStep) * majorStep;
 
-    for (let v = startMajorTick; v <= maxValue; v += majorStep) {
-      ticks.push({ value: v, type: "major", label: formatTime(v) });
+  //   for (let v = startMajorTick; v <= maxValue; v += majorStep) {
+  //     ticks.push({ value: v, type: "major", label: formatTime(v) });
 
-      // Add subdivisions
-      for (let i = 1; i < divisions; i++) {
-        const tickVal = v + i * minorStep;
-        if (tickVal < v + majorStep && tickVal < maxValue) {
-          ticks.push({
-            value: tickVal,
-            type: i === midIndex ? "middle" : "minor",
-          });
-        }
-      }
-    }
-
-    return ticks;
-  };
+  //     // Add subdivisions
+  //     for (let i = 1; i < divisions; i++) {
+  //       const tickVal = v + i * minorStep;
+  //       if (tickVal < v + majorStep && tickVal < maxValue) {
+  //         ticks.push({
+  //           value: tickVal,
+  //           type: i === midIndex ? "middle" : "minor",
+  //         });
+  //       }
+  //     }
+  //   }
+  //   console.log("ticks", ticks);
+  //   return ticks;
+  // };
 
   const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
-
+  const handleZoomClick = () => {
+    if (!onZoomEffectCreate) {
+      return;
+    }
+    onZoomEffectCreate({
+      id: Date.now().toString(),
+      startTime: Math.max(0, localValue - 1),
+      endTime: Math.min(maxValue, localValue + 2),
+      zoomLevel: 2.0,
+      x: 0.5,
+      y: 0.5,
+    });
+  };
   return (
-    <div className="w-full max-w-6xl mx-auto p-6">
-      <div className="flex flex-row items-center justify-between w-full mb-6 gap-3 sm:gap-6">
-        <div className="flex gap-3 sm:gap-4 items-center flex-wrap">
+    <div className="w-full max-w-6xl mx-auto">
+      <div className="flex flex-row items-center justify-between w-full mb-6 gap-3 sm:gap-6 ">
+        <div className="flex gap-3 sm:gap-4 items-center">
           <button
-            onClick={
-              onZoomEffectCreate
-                ? () =>
-                    onZoomEffectCreate({
-                      id: Date.now().toString(),
-                      startTime: Math.max(0, localValue - 1),
-                      endTime: Math.min(maxValue, localValue + 2),
-                      zoomLevel: 2.0,
-                      x: 0.5,
-                      y: 0.5,
-                    })
-                : undefined
-            }
-            className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+            onClick={handleZoomClick}
+            className="h-[50.85px] w-[111.71px] px-4 flex items-center justify-center gap-1 font-medium bg-white text-[#8A76FC] text-sm rounded-lg hover:shadow-md transition-all duration-200"
           >
-            <Image
-              src="/icons/zoooom.svg"
-              alt="Zoom"
-              width={16}
-              height={16}
-              className="w-5 h-5 brightness-0 invert"
-            />
-            Zoom in
+            <Image src="/icons/zoooom.svg" alt="Zoom" width={26} height={26} />
+            <span className="text-sm font-medium leading-none">Zoom</span>
           </button>
-          <button
+
+          {/* <button
             onClick={addSegment}
             className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           >
@@ -565,24 +564,26 @@ export default function TimelineRuler({
               className="w-5 h-5 brightness-0 invert"
             />
             Add Segment
-          </button>
+          </button> */}
 
           <button
             onClick={handleSmartTrim}
             disabled={processing}
-            className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:from-green-400 disabled:to-green-500"
+            className="h-[50.85px] w-[111.71px] px-4 flex items-center justify-center gap-2 font-medium bg-white text-[#8A76FC] text-sm rounded-lg hover:shadow-md transition-all duration-200"
           >
-            <Image
-              src="/icons/trim-new.svg"
-              alt="Trim"
-              width={16}
-              height={16}
-              className="w-5 h-5 brightness-0 invert"
-            />
-            Add Trim
+            <Image src="/icons/trim-new.svg" alt="Trim" width={16} height={16} />
+            <span className="text-sm font-medium leading-none"> Trim </span>
           </button>
-
-          <button
+          {/* Reset Timeline  */}
+          {onResetVideo && hasBeenTrimmed && (
+            <button
+              onClick={onResetVideo}
+              className="h-[50.85px] w-[163px] px-4 flex items-center justify-center gap-2 font-medium bg-white text-[#8A76FC] text-sm rounded-lg hover:shadow-md transition-all duration-200"
+            >
+              <span className="text-sm font-medium leading-none"> Reset Timeline </span>
+            </button>
+          )}
+          {/* <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0}
             className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:from-red-400 disabled:to-red-500"
@@ -595,9 +596,9 @@ export default function TimelineRuler({
               className="w-5 h-5 brightness-0 invert"
             />
             Delete
-          </button>
+          </button> */}
           {/* Zoom Slider */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-100/80 rounded-lg backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-100/80 rounded-lg backdrop-blur-sm ">
             {/* Minus button */}
             <button
               onClick={() => setZoomLevel((prev) => Math.max(1, prev * 0.8))}
@@ -623,7 +624,7 @@ export default function TimelineRuler({
                 }%, #E9D8FD ${((zoomLevel - 1) / (20 - 1)) * 100}%)`,
               }}
               className="
-                w-32 h-2
+                w-[170px] h-[13px]
                 rounded-full appearance-none cursor-pointer
 
             [&::-webkit-slider-runnable-track]:h-2
@@ -671,31 +672,55 @@ export default function TimelineRuler({
             </button>
 
             {/* Zoom level display */}
-            <span className="text-xs font-medium text-gray-700 ml-1 w-10 text-right">
+            {/* <span className="text-xs font-medium text-gray-700 ml-1 w-10 text-right">
               {zoomLevel.toFixed(1)}x
-            </span>
+            </span> */}
           </div>
         </div>
         <div className="flex gap-2 sm:gap-3 items-center">
-          <div className="flex gap-2 px-2 py-1 bg-gray-100/80 rounded-lg backdrop-blur-sm">
-            <button
-              onClick={handleUndo}
-              disabled={segments.length === 0}
-              className="h-9 px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Undo"
-            >
-              <Image src="/icons/undo.svg" alt="Undo" width={16} height={16} className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleRedo}
-              disabled={removedSegments.length === 0}
-              className="h-9 px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Redo"
-            >
-              <Image src="/icons/redo.svg" alt="Redo" width={16} height={16} className="w-4 h-4" />
-            </button>
-          </div>
-          {onResetVideo && hasBeenTrimmed && (
+          <button
+            onClick={handleFullscreen}
+            disabled={segments.length === 0}
+            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="FullScreen"
+          >
+            <Image src="/icons/Group 316.svg" alt="fullscreen" width={18.67} height={21} />
+          </button>
+          <button
+            onClick={() => removeSegment(activeSegment)}
+            disabled={segments.length === 0}
+            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Delete"
+          >
+            <Image src="/icons/Vector (1) copy.svg" alt="delete_icon" width={18.67} height={21} />
+          </button>
+          <button
+            onClick={() => {
+              console.log("Screen Fliped");
+            }}
+            disabled={segments.length === 0}
+            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Flip Video"
+          >
+            <Image src="/icons/Vector copy.svg" alt="flip_icon" width={23.33} height={23.33} />
+          </button>
+          <button
+            onClick={handleUndo}
+            disabled={segments.length === 0}
+            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Undo"
+          >
+            <Image src="/icons/undo.svg" alt="Undo" width={18.41} height={14.71} />
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={removedSegments.length === 0}
+            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Redo"
+          >
+            <Image src="/icons/redo.svg" alt="Redo" width={18.41} height={14.71} />
+          </button>
+          {/* {onResetVideo && hasBeenTrimmed && (
             <button
               onClick={onResetVideo}
               className="h-10 px-4 flex items-center justify-center gap-2 font-medium bg-linear-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
@@ -709,7 +734,7 @@ export default function TimelineRuler({
               />
               Reset video
             </button>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -720,191 +745,207 @@ export default function TimelineRuler({
       )} */}
 
       {/* Timeline Container - Fixed width */}
-      <div
-        className="relative mx-auto flex items-center bg-transparent"
-        style={{ width: `${totalContainerWidth}px`, height: "123px" }}
-      >
-        {/* Left Scissor - Fixed position and size */}
+      <div className="max-w-[1379px] h-[173px]">
         <div
-          className="
-          flex flex-col items-center justify-between
-          h-full w-8
-          bg-[#8A76FC]
-          rounded-l-lg
-          cursor-ew-resize
-          z-30
-          shrink-0
-          select-none
-          py-3
-        "
-          onMouseDown={() => {
-            setDraggingScissor("left");
-            setScissorPreview(null);
-          }}
+          className=" flex items-center justify-between bg-transparent"
+          style={{ height: "173px" }}
         >
-          {/* Top Line */}
-          <div className="w-px h-12 bg-white/80" />
-
-          {/* Scissor Icon */}
-          <Image
-            src="/icons/trim-new.svg"
-            alt="Trim"
-            width={20}
-            height={20}
-            style={{ filter: "brightness(0) invert(1)" }}
-          />
-
-          {/* Bottom Line */}
-          <div className="w-px h-12 bg-white/80" />
-        </div>
-
-        {/* Scrollable Timeline Container - Fixed width */}
-        <div
-          className="relative shrink-0"
-          style={{ width: `${baseTimelineWidth}px`, height: "100%" }}
-        >
+          {/* Left Scissor - Fixed position and size */}
           <div
-            ref={scrollContainerRef}
-            className={`w-full h-full  overflow-y-hidden ${
-              zoomLevel > 1 ? "overflow-x-auto" : "overflow-x-hidden"
-            }`}
-            onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
+            className="
+            flex flex-col items-center justify-between
+            bg-[#8A76FC]
+            rounded-l-lg
+            cursor-ew-resize
+            z-30
+            shrink-0
+            select-none
+            py-3
+          "
+            style={{ width: "32px", height: "173px" }}
+            onMouseDown={() => {
+              setDraggingScissor("left");
+              setScissorPreview(null);
+            }}
           >
             <div
-              ref={rulerRef}
-              className="relative  bg-white border border-[#A594F9] cursor-pointer"
-              style={{
-                width: `${zoomedTimelineWidth}px`,
-                minWidth: `${baseTimelineWidth}px`,
-                height: "100%",
-                // paddingLeft: "20px",
-                // paddingRight: "20px",
-                boxSizing: "border-box",
-              }}
-              onMouseDown={(e) => {
-                if (!draggingScissor) {
-                  setDraggingCurrentTime(true);
-                  updateCurrentTimeFromMouse(e);
-                  // Switch to non-trim mode when clicking on timeline
-                  switchToNonTrimMode();
-                }
-              }}
-              onClick={(e) => {
-                // Also switch to non-trim mode on click if not on a segment
-                const target = e.target as HTMLElement;
-                if (!target.closest('[class*="segment"]')) {
-                  switchToNonTrimMode();
-                }
-              }}
+              className="
+            flex flex-col items-center justify-between
+            bg-[#8A76FC]
+            rounded-l-lg
+            cursor-ew-resize
+            z-30
+            shrink-0
+            select-none
+            "
+              style={{ width: "20px", height: "143.5px" }}
             >
-              {/* Tick marks */}
-              {generateTicks().map((tick, index) => {
-                const positionPx =
-                  ((tick.value - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+              {/* Top Line */}
+              <div className="w-px bg-white/80" style={{ height: "55.5px" }} />
 
-                return (
-                  <div
-                    key={`${tick.type}-${index}`}
-                    className="absolute"
-                    style={{ left: `${positionPx}px`, top: "0" }}
-                  >
-                    <div
-                      className={`bg-[#A594F9] mx-auto ${
-                        tick.type === "major"
-                          ? "w-0.5 h-6"
-                          : tick.type === "middle"
-                            ? "w-0.5 h-5"
-                            : "w-px h-3"
-                      }`}
-                    />
-                    {tick.type === "major" && (
-                      <div className="absolute top-7 -translate-x-1/2 left-1/2">
-                        <span className="text-xs text-[#A594F9] font-medium">{tick.label}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {/* Scissor Icon */}
+              <Image
+                src="/icons/trim-new.svg"
+                alt="Trim"
+                width={20}
+                height={20}
+                style={{ filter: "brightness(0) invert(1)" }}
+              />
 
-              {/* Current position line + triangle */}
+              {/* Bottom Line */}
+              <div className="w-px bg-white/80" style={{ height: "55.5px" }} />
+            </div>
+          </div>
+
+          {/* Scrollable Timeline Container - Fixed width */}
+          <div
+            className=" flex-1 h-full overflow-hidden"
+            // style={{ width: `${1000}px`, height: "100%" }}
+          >
+            <div
+              ref={scrollContainerRef}
+              className={` w-full h-full overflow-y-hidden ${
+                zoomLevel > 1 ? "overflow-x-auto" : "overflow-x-hidden"
+              }`}
+              onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
+            >
               <div
-                className="absolute top-0 h-full z-40 pointer-events-none"
+                ref={rulerRef}
+                className="relative bg-white border-y border-[#A594F9] cursor-pointer "
                 style={{
-                  left: `${0 + currentPosition - scrollLeft}px`,
+                  width: "100%",
+                  minWidth: `${baseTimelineWidth}px`,
+                  height: "100%",
+                  // paddingLeft: "20px",
+                  // paddingRight: "20px",
+                  boxSizing: "border-box",
+                }}
+                onMouseDown={(e) => {
+                  if (!draggingScissor) {
+                    setDraggingCurrentTime(true);
+                    updateCurrentTimeFromMouse(e);
+                    // Switch to non-trim mode when clicking on timeline
+                    switchToNonTrimMode();
+                  }
+                }}
+                onClick={(e) => {
+                  // Also switch to non-trim mode on click if not on a segment
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('[class*="segment"]')) {
+                    switchToNonTrimMode();
+                  }
                 }}
               >
-                {/* Triangle head */}
+                <Linepage
+                  maxValue={maxValue}
+                  minValue={minValue}
+                  zoomLevel={zoomLevel}
+                  width={zoomedTimelineWidth}
+                />
+                {/* {generateTicks().map((tick, index) => {
+                  const positionPx =
+                    ((tick.value - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+
+                  return (
+                    <div
+                      key={`${tick.type}-${index}`}
+                      className="absolute"
+                      style={{ left: `${positionPx}px`, top: "0" }}
+                    >
+                      <div
+                        className={`bg-[#A594F9] mx-auto ${
+                          tick.type === "major"
+                            ? "w-0.5 h-6"
+                            : tick.type === "middle"
+                              ? "w-0.5 h-5"
+                              : "w-px h-3"
+                        }`}
+                      />
+                      {tick.type === "major" && (
+                        <div className="absolute top-7 -translate-x-1/2 left-1/2">
+                          <span className="text-xs text-[#A594F9] font-medium">{tick.label}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })} */}
+                {/* Current position line + triangle */}
                 <div
-                  className="absolute top-0 left-1/2 -translate-x-1/2
+                  className="absolute top-0 h-full z-40 pointer-events-none"
+                  style={{
+                    left: `${0 + currentPosition - scrollLeft}px`,
+                  }}
+                >
+                  {/* Triangle head */}
+                  <div
+                    className="absolute top-0 left-1/2 -translate-x-1/2
                w-0 h-0 
                border-l-[9px] border-r-[9px] border-t-[9px]
                border-l-transparent border-r-transparent border-t-green-500"
-                />
+                  />
 
-                {/* Vertical line */}
-                <div className="w-0.5 h-full bg-green-500 mx-auto" />
-              </div>
+                  {/* Vertical line */}
+                  <div className="w-0.5 h-full bg-green-500 mx-auto" />
+                </div>
+                {/* Segments */}
+                {segments.map((segment, idx) => {
+                  const startPosition =
+                    ((segment.start - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  const endPosition =
+                    ((segment.end - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  const width = endPosition - startPosition;
 
-              {/* Segments */}
-              {segments.map((segment, idx) => {
-                const startPosition =
-                  ((segment.start - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
-                const endPosition =
-                  ((segment.end - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
-                const width = endPosition - startPosition;
+                  return (
+                    <div
+                      key={`segment-${idx}`}
+                      className={`absolute top-0 h-[84px] mt-[50px] z-10 group cursor-pointer transition-opacity ${
+                        idx === activeSegment
+                          ? "bg-green-400 opacity-70"
+                          : "bg-green-300 opacity-50 hover:opacity-65"
+                      }`}
+                      style={{
+                        left: `${startPosition}px`,
+                        width: `${width}px`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveSegment(idx);
+                        switchToTrimMode(idx);
+                      }}
+                    >
+                      {/* Segment Label */}
+                      <div className="absolute top-2 left-2 text-[11px] font-bold text-green-900 bg-white bg-opacity-80 px-2 py-1 rounded pointer-events-none">
+                        Trim {idx + 1}
+                      </div>
 
-                return (
-                  <div
-                    key={`segment-${idx}`}
-                    className={`absolute top-0 h-full z-10 group cursor-pointer transition-opacity ${
-                      idx === activeSegment
-                        ? "bg-green-400 opacity-70"
-                        : "bg-green-300 opacity-50 hover:opacity-65"
-                    }`}
-                    style={{
-                      left: `${startPosition}px`,
-                      width: `${width}px`,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveSegment(idx);
-                      switchToTrimMode(idx);
-                    }}
-                  >
-                    {/* Segment Label */}
-                    <div className="absolute top-2 left-2 text-[11px] font-bold text-green-900 bg-white bg-opacity-80 px-2 py-1 rounded pointer-events-none">
-                      Trim {idx + 1}
+                      {/* Left Resize Handle */}
+                      <div
+                        className="absolute top-0 -left-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        title="Drag to resize start"
+                      />
+
+                      {/* Right Resize Handle */}
+                      <div
+                        className="absolute top-0 -right-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        title="Drag to resize end"
+                      />
                     </div>
-
-                    {/* Left Resize Handle */}
-                    <div
-                      className="absolute top-0 -left-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                      }}
-                      title="Drag to resize start"
-                    />
-
-                    {/* Right Resize Handle */}
-                    <div
-                      className="absolute top-0 -right-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                      }}
-                      title="Drag to resize end"
-                    />
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Right Scissor - Fixed position and size */}
-        <div
-          className="
+          {/* Right Scissor - Fixed position and size */}
+          <div
+            className="
             flex flex-col items-center justify-between
-            h-full w-8
             bg-[#8A76FC]
             rounded-r-lg
             cursor-ew-resize
@@ -913,25 +954,40 @@ export default function TimelineRuler({
             select-none
             py-3
           "
-          onMouseDown={() => {
-            setDraggingScissor("left");
-            setScissorPreview(null);
-          }}
-        >
-          {/* Top Line */}
-          <div className="w-px h-12 bg-white/80" />
+            style={{ width: "32px", height: "173px" }}
+            onMouseDown={() => {
+              setDraggingScissor("right");
+              setScissorPreview(null);
+            }}
+          >
+            <div
+              className="
+            flex flex-col items-center justify-between
+            bg-[#8A76FC]
+            rounded-r-lg
+            cursor-ew-resize
+            z-30
+            shrink-0
+            select-none
+            "
+              style={{ width: "20px", height: "143.5px" }}
+            >
+              {/* Top Line */}
+              <div className="w-px bg-white/80" style={{ height: "55.5px" }} />
 
-          {/* Scissor Icon */}
-          <Image
-            src="/icons/trim-new.svg"
-            alt="Trim"
-            width={20}
-            height={20}
-            style={{ filter: "brightness(0) invert(1)" }}
-          />
+              {/* Scissor Icon */}
+              <Image
+                src="/icons/trim-new.svg"
+                alt="Trim"
+                width={20}
+                height={20}
+                style={{ filter: "brightness(0) invert(1)", transform: "scaleX(-1)" }}
+              />
 
-          {/* Bottom Line */}
-          <div className="w-px h-12 bg-white/80" />
+              {/* Bottom Line */}
+              <div className="w-px bg-white/80" style={{ height: "55.5px" }} />
+            </div>
+          </div>
         </div>
       </div>
 

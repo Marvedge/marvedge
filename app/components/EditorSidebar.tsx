@@ -203,6 +203,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   //     ))}
   //   </div>
   // );
+  // const [interactionType, setInteractionType] = useState("Click");
 
   return (
     <aside
@@ -213,13 +214,14 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       {/* Export Section */}
       <div className="relative">
         <button
-          className="w-full bg-[#A594F9] cursor-pointer hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
+          className="flex items-center justify-center gap-2 w-full h-[54px] bg-[#A594F9] hover:bg-[#7C5CFC] text-white font-semibold py-1.5 rounded-lg shadow transition text-sm"
           //onClick={() => setExportMenuOpen((v) => !v)} // Only toggle the menu
           onClick={() => {
             onExportWebM();
           }}
         >
-          Export Video
+          <Image src="/icons/bx_export.svg" alt="export_icon" width={24} height={24} />
+          <span className="text-md">Export Video</span>
         </button>
 
         {
