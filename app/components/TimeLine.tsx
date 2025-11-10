@@ -672,9 +672,9 @@ export default function TimelineRuler({
             </button>
 
             {/* Zoom level display */}
-            <span className="text-xs font-medium text-gray-700 ml-1 w-10 text-right">
+            {/* <span className="text-xs font-medium text-gray-700 ml-1 w-10 text-right">
               {zoomLevel.toFixed(1)}x
-            </span>
+            </span> */}
           </div>
         </div>
         <div className="flex gap-2 sm:gap-3 items-center">
