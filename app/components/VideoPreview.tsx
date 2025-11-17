@@ -2,7 +2,6 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import ReactPlayer from "react-player";
-import { FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { formatTime } from "@/app/lib/dateTimeUtils";
 
 interface VideoPreviewProps {
@@ -24,12 +23,14 @@ export default function VideoPreview({
 }: VideoPreviewProps) {
   const playerRef = useRef<ReactPlayer>(null!);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(!isRecording);
-  const [volume, setVolume] = useState(1);
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [showMenu, setShowMenu] = useState(false);
 
   const handlePlayPause = () => {
     if (isRecording) {
@@ -81,6 +82,32 @@ export default function VideoPreview({
     }
     onTimeChange?.(value);
     setDragging(false);
+  };
+
+  const handleFullscreen = () => {
+    if (containerRef.current) {
+      if (!document.fullscreenElement) {
+        containerRef.current.requestFullscreen().catch(() => {
+          console.log("Fullscreen request failed");
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = Number(e.target.value);
+    setVolume(newVolume);
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+    }
+    if (playerRef.current) {
+      const player = playerRef.current.getInternalPlayer();
+      if (player && player.volume !== undefined) {
+        player.volume = newVolume;
+      }
+    }
   };
 
   // Set srcObject when screenStream changes
@@ -368,6 +395,7 @@ export default function VideoPreview({
 
   return (
     <div
+      ref={containerRef}
       className={`relative w-full max-w-[400px] h-[260px] sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300 ${className}`}
       style={{
         minHeight: "160px",
@@ -375,26 +403,6 @@ export default function VideoPreview({
         boxShadow: "0 4px 24px 0 #E6E1FA",
       }}
     >
-      {/* Browser Bar */}
-      <div
-        className="flex items-center justify-between w-full px-2 sm:px-6 py-1 sm:py-2 bg-[#F6F3FF] rounded-t-2xl border-b border-[#E6E1FA]"
-        style={{ minHeight: 32 }}
-      >
-        <div className="flex items-center gap-1 sm:gap-2">
-          <button
-            onClick={() => setVolume(volume === 0 ? 1 : 0)}
-            className="p-1 rounded hover:bg-[#E6E1FA] transition-colors"
-            disabled={isRecording}
-          >
-            {volume === 0 ? (
-              <FaVolumeMute className="w-3 h-3 text-[#A594F9]" />
-            ) : (
-              <FaVolumeUp className="w-3 h-3 text-[#A594F9]" />
-            )}
-          </button>
-        </div>
-      </div>
-
       {/* Video Player */}
       <div
         style={{
@@ -407,6 +415,84 @@ export default function VideoPreview({
           background: "#F6F3FF",
         }}
       >
+        {/* Top Control Bar */}
+        <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l from-black/60 to-transparent rounded-bl-2xl">
+          {/* Volume Control */}
+          <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-2 backdrop-blur-sm">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="text-white"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            </svg>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={volume}
+              onChange={handleVolumeChange}
+              className="w-20 h-1 accent-[#7C5CFC]"
+              style={{ cursor: "pointer" }}
+            />
+          </div>
+
+          {/* Menu Button */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="12" cy="19" r="2" />
+              </svg>
+            </button>
+            {showMenu && (
+              <div className="absolute top-full right-0 mt-2 bg-[#1a1a2e] border border-[#7C5CFC] rounded-lg shadow-lg z-30 min-w-[180px]">
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-white hover:bg-[#7C5CFC]/20 text-sm"
+                >
+                  Download
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-white hover:bg-[#7C5CFC]/20 text-sm border-t border-[#7C5CFC]/20"
+                >
+                  Settings
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Fullscreen Button */}
+          <button
+            onClick={handleFullscreen}
+            className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+          </button>
+        </div>
         {/* Play/Pause Button Overlay - Only show when not recording and video is paused */}
         {!isRecording && !playing && (
           <button

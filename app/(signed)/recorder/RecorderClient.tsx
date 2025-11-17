@@ -21,6 +21,7 @@ import { useVideoDuration } from "./hooks/useVideoDuration";
 import VideoPlayerSection from "@/app/components/VideoPlayerSection";
 import RecordingControls from "@/app/components/RecordingControls";
 import InitialRecorderView from "@/app/components/InitialRecorderView";
+import ScreenShareModal from "@/app/components/ScreenShareModal";
 
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
@@ -50,8 +51,6 @@ export default function RecorderPage() {
     setUploadedFileUrl,
     uploadedFileType,
     setUploadedFileType,
-    format,
-    setFormat,
     saveMessage,
     recordingTimer,
     setRecordingTimer,
@@ -86,6 +85,9 @@ export default function RecorderPage() {
     startScreenShare,
     recordingDuration,
     reset,
+    showScreenShareModal,
+    setShowScreenShareModal,
+    handleConfirmScreenShare,
   } = useScreenRecorder();
 
   const { data: session } = useSession();
@@ -152,7 +154,10 @@ export default function RecorderPage() {
   if (screenStream || uploadedFileUrl) {
     const isUploaded = !!uploadedFileUrl && !screenStream;
     return (
-      <div className="flex flex-col h-screen w-full overflow-hidden">
+      <div
+        className="flex flex-col h-screen w-full overflow-hidden"
+        style={{ fontFamily: "var(--font-raleway)" }}
+      >
         <RecorderTopbar onBack={handleBack} userInitials={initials} />
         <div className="flex flex-1 overflow-hidden">
           {/* Right Panel */}
@@ -165,10 +170,10 @@ export default function RecorderPage() {
                 </div>
                 <div className="text-xs sm:text-sm text-gray-400">Last saved 2 minutes ago</div>
               </div>
-              {!isUploaded && !recording && videoUrl && (
+              {!recording && (videoUrl || uploadedFileUrl) ? (
                 <button
                   onClick={handleSaveAndPublish}
-                  className="mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition flex items-center gap-2 text-sm sm:text-base"
+                  className="mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg bg-[#8A76FC] text-white font-semibold shadow hover:bg-[#8A76FC] transition flex items-center gap-2 text-sm sm:text-base"
                 >
                   <Image
                     src="/icons/1.png"
@@ -179,13 +184,11 @@ export default function RecorderPage() {
                   />
                   Save & Publish
                 </button>
-              )}
+              ) : null}
             </div>
-            <div className="flex-1 px-2 sm:px-4 pb-2 sm:pb-4 overflow-y-auto">
-              <div className="bg-white rounded-2xl shadow p-4 sm:p-8">
-                <h2 className="text-base sm:text-xl font-semibold mb-2 sm:mb-4 text-[#6C63FF]">
-                  Preview
-                </h2>
+            <div className="flex-1 overflow-y-auto flex flex-col">
+              {/*  */}
+              <div className="bg-white rounded-2xl shadow p-4 sm:p-8 flex-1 overflow-y-auto ml-4 sm:ml-12 mr-4 sm:mr-12">
                 <VideoPlayerSection
                   uploadedFileType={uploadedFileType}
                   uploadedFileUrl={uploadedFileUrl}
@@ -209,7 +212,6 @@ export default function RecorderPage() {
                   videoUrl={videoUrl}
                   cameraStream={cameraStream}
                   enableCamera={enableCamera}
-                  format={format}
                   saveMessage={saveMessage}
                   videoPreview={videoPreview}
                   startScreenShare={startScreenShare}
@@ -217,18 +219,35 @@ export default function RecorderPage() {
                   setEnableCamera={setEnableCamera}
                   startCamera={startCamera}
                   stopCamera={stopCamera}
-                  setFormat={setFormat}
                   setUploadedFileUrl={setUploadedFileUrl}
                   setUploadedFileType={setUploadedFileType}
                   setBlob={setBlob}
                   reset={reset}
-                  handleSaveAndPublish={handleSaveAndPublish}
                   onEditVideo={handleEditVideo}
+                  fileInputRef={fileInputRef}
                 />
               </div>
             </div>
           </main>
         </div>
+
+        {/* Hidden file input for upload */}
+        <input
+          type="file"
+          accept="video/mp4,video/webm,video/*"
+          ref={fileInputRef}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const fileUrl = URL.createObjectURL(file);
+              setUploadedFileUrl(fileUrl);
+              setUploadedFileType(file.type);
+              setBlob(file);
+              toast.success("File uploaded successfully!");
+            }
+          }}
+        />
 
         {/* Save Popup Form */}
         <SavePopupForm
@@ -244,7 +263,10 @@ export default function RecorderPage() {
 
   // Initial UI (no recording or uploaded video)
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden">
+    <div
+      className="flex flex-col h-screen w-full overflow-hidden"
+      style={{ fontFamily: "var(--font-raleway)" }}
+    >
       <Toaster position="top-right" />
       <RecorderTopbar onBack={handleBack} userInitials={initials} />
       <InitialRecorderView
@@ -261,6 +283,15 @@ export default function RecorderPage() {
         startScreenShare={startScreenShare}
         toggleMic={toggleMic}
         micEnabled={micEnabled}
+      />
+
+      {/* Screen Share Modal */}
+      <ScreenShareModal
+        isOpen={showScreenShareModal}
+        onCancel={() => setShowScreenShareModal(false)}
+        onShare={handleConfirmScreenShare}
+        micEnabled={micEnabled}
+        onToggleMic={toggleMic}
       />
 
       {/* Save Popup Form */}

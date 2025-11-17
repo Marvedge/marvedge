@@ -3,6 +3,8 @@ import Image from "next/image";
 import VideoPreview from "@/app/components/VideoPreview";
 import SimpleTimeline from "@/app/components/SimpleTimeline";
 import RecordingTimeline from "@/app/components/RecordingTimeline";
+import playIcon from "@/public/mingcute_play-fill.png";
+import React, { useRef, useState } from "react";
 
 interface VideoPlayerSectionProps {
   uploadedFileType: string | null;
@@ -37,10 +39,118 @@ export default function VideoPlayerSection({
   recordingTimer,
   videoPlayerRef,
 }: VideoPlayerSectionProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [volume, setVolume] = useState(1);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const handleFullscreen = () => {
+    if (containerRef.current) {
+      if (!document.fullscreenElement) {
+        containerRef.current.requestFullscreen().catch(() => {
+          console.log("Fullscreen request failed");
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = Number(e.target.value);
+    setVolume(newVolume);
+    if (videoPlayerRef.current) {
+      const player = videoPlayerRef.current.getInternalPlayer();
+      if (player && player.volume !== undefined) {
+        player.volume = newVolume;
+      }
+    }
+  };
+
   const renderVideoPlayer = (url: string, isUploaded: boolean = false) => (
     <div className="w-full max-w-[900px] mx-auto">
-      <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
-        <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
+      <div
+        ref={containerRef}
+        className="bg-white rounded-2xl shadow-md border-2 border-[#7C5CFC] flex flex-col items-center justify-center transition-all duration-300"
+      >
+        <div className="relative w-full h-auto aspect-video bg-white rounded-2xl overflow-hidden group">
+          {/* Top Control Bar */}
+          <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l from-black/60 to-transparent rounded-bl-2xl">
+            {/* Volume Control */}
+            <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-2 backdrop-blur-sm">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="text-white"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              </svg>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={volume}
+                onChange={handleVolumeChange}
+                className="w-20 h-1 accent-[#7C5CFC]"
+                style={{ cursor: "pointer" }}
+              />
+            </div>
+
+            {/* Menu Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="5" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="12" cy="19" r="2" />
+                </svg>
+              </button>
+              {showMenu && (
+                <div className="absolute top-full right-0 mt-2 bg-white border border-[#7C5CFC] rounded-lg shadow-lg z-30 min-w-[180px]">
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-[#1a1a2e] hover:bg-[#F6F3FF] text-sm"
+                  >
+                    Download
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-[#1a1a2e] hover:bg-[#F6F3FF] text-sm border-t border-[#7C5CFC]/20"
+                  >
+                    Settings
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Fullscreen Button */}
+            <button
+              onClick={handleFullscreen}
+              className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+              </svg>
+            </button>
+          </div>
           <ReactPlayer
             ref={videoPlayerRef}
             url={url}
@@ -56,7 +166,6 @@ export default function VideoPlayerSection({
             }}
             progressInterval={50}
             onProgress={({ playedSeconds }) => {
-              // Ensure currentTime starts from 0 immediately
               if (playedSeconds === 0) {
                 setVideoCurrentTime(0);
               } else {
@@ -64,7 +173,6 @@ export default function VideoPlayerSection({
               }
             }}
             onDuration={(dur) => {
-              // Only set videoDuration if recordingDuration is not available (for uploaded videos)
               if (
                 isUploaded &&
                 recordingDuration === 0 &&
@@ -78,19 +186,15 @@ export default function VideoPlayerSection({
               }
             }}
             onStart={() => {
-              // Ensure currentTime starts from 0 when video starts
               setVideoCurrentTime(0);
             }}
             onPlay={() => {
-              // Ensure currentTime is 0 when video starts playing
               setVideoCurrentTime(0);
             }}
             onEnded={() => setVideoPlaying(false)}
             onReady={() => {
               console.log("Video loaded in recorder");
-              // Only try to get duration if recordingDuration is not available (for uploaded videos)
               if (isUploaded && recordingDuration === 0) {
-                // Try to get duration immediately when video is ready
                 setTimeout(() => {
                   if (videoPlayerRef.current) {
                     const player = videoPlayerRef.current.getInternalPlayer();
@@ -105,7 +209,6 @@ export default function VideoPlayerSection({
                   }
                 }, 10);
 
-                // Additional attempts with delays
                 setTimeout(() => {
                   if (videoPlayerRef.current) {
                     const player = videoPlayerRef.current.getInternalPlayer();
@@ -134,7 +237,6 @@ export default function VideoPlayerSection({
                   }
                 }, 500);
               } else if (!isUploaded) {
-                // For recorded videos, try to get duration
                 setTimeout(() => {
                   if (videoPlayerRef.current) {
                     const player = videoPlayerRef.current.getInternalPlayer();
@@ -186,6 +288,17 @@ export default function VideoPlayerSection({
               },
             }}
           />
+
+          {!videoPlaying && (
+            <button
+              onClick={() => setVideoPlaying(true)}
+              className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors"
+            >
+              <div className="bg-white hover:bg-gray-100 rounded-full p-8 transition-all shadow-lg">
+                <Image src={playIcon} alt="Play" width={64} height={64} className="w-16 h-16" />
+              </div>
+            </button>
+          )}
         </div>
         <SimpleTimeline
           videoPlaying={videoPlaying}
@@ -201,49 +314,54 @@ export default function VideoPlayerSection({
   );
 
   return (
-    <div className="flex justify-center mb-4 sm:mb-8">
-      {uploadedFileType?.startsWith("image/") ? (
-        <div
-          className="border-2 border-[#6C63FF] rounded-2xl mx-auto"
-          style={{ maxWidth: 900, background: "#000" }}
-        >
-          <Image
-            src={uploadedFileUrl!}
-            alt="Uploaded preview"
-            style={{
-              width: "100%",
-              height: "auto",
-              objectFit: "contain",
-              background: "#000",
-            }}
-            width={900}
-            height={500}
-          />
-        </div>
-      ) : uploadedFileUrl && uploadedFileType?.startsWith("video/") ? (
-        renderVideoPlayer(uploadedFileUrl, true)
-      ) : videoUrl ? (
-        renderVideoPlayer(videoUrl, false)
-      ) : screenStream ? (
-        <div className="w-full max-w-[900px] mx-auto">
-          <div className="bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300">
-            <div className="w-full h-auto aspect-video bg-[#F6F3FF] rounded-b-2xl overflow-hidden">
-              <VideoPreview
-                videoUrl={null}
-                isRecording={recording}
-                screenStream={screenStream}
-                className="w-full h-full"
-                showControls={false}
-              />
-            </div>
-            {recording && <RecordingTimeline recordingTimer={recordingTimer} />}
+    <div className="flex flex-col items-center mb-4 sm:mb-8 w-full max-w-[900px] mx-auto">
+      <h2 className="text-base sm:text-xl font-semibold mb-3 sm:mb-4 text-[#6C63FF] self-start">
+        Preview
+      </h2>
+      <div className="w-full">
+        {uploadedFileType?.startsWith("image/") ? (
+          <div
+            className="border-2 border-[#6C63FF] rounded-2xl mx-auto"
+            style={{ maxWidth: 900, background: "#000" }}
+          >
+            <Image
+              src={uploadedFileUrl!}
+              alt="Uploaded preview"
+              style={{
+                width: "100%",
+                height: "auto",
+                objectFit: "contain",
+                background: "#000",
+              }}
+              width={900}
+              height={500}
+            />
           </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
-          No preview available. Start screen sharing or upload a video to see the preview.
-        </div>
-      )}
+        ) : uploadedFileUrl && uploadedFileType?.startsWith("video/") ? (
+          renderVideoPlayer(uploadedFileUrl, true)
+        ) : videoUrl ? (
+          renderVideoPlayer(videoUrl, false)
+        ) : screenStream ? (
+          <div className="w-full max-w-[900px] mx-auto">
+            <div className="bg-white rounded-2xl shadow-md border-2 border-[#7C5CFC] flex flex-col items-center justify-center transition-all duration-300">
+              <div className="w-full h-auto aspect-video bg-white rounded-2xl overflow-hidden">
+                <VideoPreview
+                  videoUrl={null}
+                  isRecording={recording}
+                  screenStream={screenStream}
+                  className="w-full h-full"
+                  showControls={false}
+                />
+              </div>
+              {recording && <RecordingTimeline recordingTimer={recordingTimer} />}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-300 rounded-2xl">
+            No preview available. Start screen sharing or upload a video to see the preview.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

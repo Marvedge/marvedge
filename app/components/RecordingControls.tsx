@@ -5,7 +5,6 @@ interface RecordingControlsProps {
   videoUrl: string | null;
   cameraStream: MediaStream | null;
   enableCamera: boolean;
-  format: "webm" | "mp4";
   saveMessage: string;
   videoPreview: React.RefObject<HTMLVideoElement | null>;
   startScreenShare: () => void;
@@ -13,13 +12,12 @@ interface RecordingControlsProps {
   setEnableCamera: (value: boolean | ((prev: boolean) => boolean)) => void;
   startCamera: () => void;
   stopCamera: () => void;
-  setFormat: (format: "webm" | "mp4") => void;
   setUploadedFileUrl: (url: string | null) => void;
   setUploadedFileType: (type: string | null) => void;
   setBlob: (blob: Blob | null) => void;
   reset: () => void;
-  handleSaveAndPublish: () => void;
   onEditVideo?: () => void;
+  fileInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export default function RecordingControls({
@@ -29,7 +27,6 @@ export default function RecordingControls({
   videoUrl,
   cameraStream,
   enableCamera,
-  format,
   saveMessage,
   videoPreview,
   startScreenShare,
@@ -37,13 +34,12 @@ export default function RecordingControls({
   setEnableCamera,
   startCamera,
   stopCamera,
-  setFormat,
   setUploadedFileUrl,
   setUploadedFileType,
   setBlob,
   reset,
-  handleSaveAndPublish,
   onEditVideo,
+  // fileInputRef,
 }: RecordingControlsProps) {
   return (
     <>
@@ -55,77 +51,71 @@ export default function RecordingControls({
                 screenStream.getTracks().forEach((track) => track.stop());
                 startScreenShare();
               }}
-              className="bg-[#7C5CFC] text-white px-4 sm:px-8 py-2 rounded-lg font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base"
+              className="bg-[#8A76FC] text-white px-4 sm:px-8 py-2 rounded-lg font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base"
             >
               Change Tab
             </button>
           </>
         )}
-        {screenStream && recording && !isUploaded && (
-          <>
-            <div className="flex items-center gap-4 justify-start">
-              <div>
-                <button
-                  onClick={stopRecording}
-                  className=" bg-blue-600 text-white px-4 py-2 mx-1 rounded text-sm sm:text-base min-w-[150px] transition"
-                >
-                  Stop Recording
-                </button>
-              </div>
-
-              <div className="">
-                <button
-                  onClick={() => {
-                    setEnableCamera((prev) => !prev);
-                    if (cameraStream) {
-                      stopCamera();
-                    } else {
-                      startCamera();
-                    }
-                  }}
-                  className={`${
-                    cameraStream ? "bg-red-600" : "bg-green-600"
-                  } text-white px-4 py-2 rounded text-sm sm:text-base min-w-[150px] transition mr-30`}
-                >
-                  {cameraStream ? "Stop Camera" : "Start Camera"}
-                </button>
-              </div>
-
-              {enableCamera && (
-                <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
-                  <video
-                    ref={videoPreview}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover rounded-full"
-                  />
-                </div>
-              )}
-            </div>
-          </>
-        )}
       </div>
-      {(videoUrl || isUploaded) && (
-        <div className="flex flex-col gap-2 sm:gap-4 mt-4 sm:mt-6 justify-center items-center">
-          {!isUploaded && (
-            <div className="flex gap-2 items-center mb-2">
-              <label htmlFor="format-select" className="font-medium text-[#6C63FF] text-sm">
-                Download as:
-              </label>
-              <select
-                id="format-select"
-                value={format}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  setFormat(e.target.value as "webm" | "mp4")
+
+      {screenStream && recording && !isUploaded && (
+        <div className="flex flex-col gap-2 mt-4 sm:mt-6 items-start">
+          <div className="flex items-center gap-4 ml-190">
+            <button
+              onClick={stopRecording}
+              className="px-8 py-3 rounded-2xl font-semibold bg-[#8A76FC] text-white shadow-lg hover:bg-[#8A76FC] transition text-sm sm:text-base"
+            >
+              Stop Recording
+            </button>
+
+            <button
+              onClick={() => {
+                setEnableCamera((prev) => !prev);
+                if (cameraStream) {
+                  stopCamera();
+                } else {
+                  startCamera();
                 }
-                className="border border-[#ede7fa] rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] text-xs sm:text-sm"
-              >
-                <option value="webm">WebM (Original)</option>
-                <option value="mp4">MP4 (Video)</option>
-              </select>
-            </div>
-          )}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              }}
+              className={`px-8 py-3 rounded-2xl font-semibold shadow-lg transition text-sm sm:text-base ${
+                cameraStream
+                  ? "bg-[#EF4444] hover:bg-[#EF4444] text-white"
+                  : "bg-white hover:bg-[#F3F0FC] border border-[#ede7fa] text-[#8A76FC]"
+              }`}
+            >
+              {cameraStream ? "Stop Camera" : "Start Camera"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {screenStream && recording && !isUploaded && enableCamera && (
+        <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
+          <video
+            ref={videoPreview}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover rounded-full"
+          />
+        </div>
+      )}
+
+      {(videoUrl || isUploaded) && (
+        <div className="flex flex-col gap-2 mt-4 sm:mt-6 items-end">
+          <div className="flex flex-col sm:flex-row gap-3 justify-end mr-57">
+            <button
+              onClick={onEditVideo}
+              className="px-6 py-2 rounded-lg font-medium bg-[#8A76FC] text-white shadow hover:bg-[#7A66EC] transition text-sm sm:text-base"
+            >
+              Start Editing
+            </button>
+            {/* <button
+              onClick={() => fileInputRef?.current?.click()}
+              className="px-6 py-2 rounded-lg font-normal bg-white border border-[#ede7fa] text-[#8A76FC] shadow hover:bg-[#F3F0FC] transition text-sm sm:text-base"
+            >
+              Upload File
+            </button> */}
             <button
               onClick={() => {
                 if (isUploaded) {
@@ -136,39 +126,13 @@ export default function RecordingControls({
                   reset();
                 }
               }}
-              className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#F44336] text-white shadow-md hover:bg-[#d32f2f] transition flex items-center gap-2 text-base"
+              className="px-6 py-2 rounded-lg font-medium bg-white text-[#8A76FC] shadow hover:bg-[#F3F0FC] transition text-sm sm:text-base border border-[#ede7fa]"
             >
-              Discard Video
+              Discard Recording
             </button>
-            {!isUploaded && (
-              <button
-                onClick={handleSaveAndPublish}
-                className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#7C5CFC] text-white shadow-md hover:bg-[#8A76FC] transition flex items-center gap-2 text-base"
-              >
-                Download Video
-              </button>
-            )}
-            {isUploaded && (
-              <button
-                onClick={onEditVideo}
-                className="px-6 py-3 cursor-pointer rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
-              >
-                Edit Video
-              </button>
-            )}
-            {!isUploaded && (
-              <>
-                <button
-                  onClick={onEditVideo}
-                  className="px-6 py-3 rounded-lg font-semibold bg-[#A594F9] text-white shadow-md hover:bg-[#7C5CFC] transition flex items-center gap-2 text-base"
-                >
-                  Edit Video
-                </button>
-              </>
-            )}
           </div>
           {saveMessage && !isUploaded && (
-            <div className="mt-2 text-[#6C63FF] text-xs sm:text-sm">{saveMessage}</div>
+            <div className="text-[#8A76FC] text-xs sm:text-sm">{saveMessage}</div>
           )}
         </div>
       )}

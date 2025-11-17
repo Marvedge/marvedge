@@ -27,11 +27,9 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
   return (
     <div className="w-full flex items-center justify-between px-4 sm:px-8 py-2 sm:py-4 bg-white border-b border-[#ede7fa] shadow-sm">
       <div className="flex items-center gap-2 sm:gap-6">
-        {/* Mobile: left arrow at the left edge */}
         <button
           onClick={onBack}
-          className="text-[#7C5CFC] text-xl sm:text-2xl hover:bg-[#ede7fa] rounded-full p-1 mr-2 sm:ml-4 sm:order-2 order-1"
-          style={{ order: 1 }}
+          className="text-[#7C5CFC] text-xl sm:text-2xl hover:bg-[#ede7fa] rounded-full p-1"
         >
           <Image
             src="/icons/arrow_left_icon.png"
@@ -41,21 +39,9 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
             className="md:w-6 md:h-6"
           />
         </button>
-        {/* Logo and title */}
-        <span className="ml-2 sm:ml-0 text-lg sm:text-2xl font-extrabold text-[#7C5CFC] tracking-widest flex items-center gap-2 sm:order-1 order-2">
-          <Image
-            src="/images/Transparent logo.png"
-            alt="Marvedge logo"
-            width={32}
-            height={32}
-            className="h-6 w-6 sm:h-8 sm:w-8 object-contain"
-            priority
-          />
-          MARVEDGE
-        </span>
       </div>
-      <div className="flex items-center gap-2 sm:gap-4">
-        <span className="hidden text-[#7C5CFC] font-medium text-base mr-2 sm:flex items-center gap-1">
+      <div className="flex items-center gap-4 sm:gap-6">
+        <span className="hidden text-[#7C5CFC] font-medium text-base mr-[-2] sm:flex items-center gap-0">
           Welcome, {username}
           <span role="img" aria-label="waving hand" className="ml-1">
             👋
