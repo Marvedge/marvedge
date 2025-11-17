@@ -10,8 +10,53 @@ interface SignedHeaderProps {
 
 const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null | undefined>(null);
   const { data: session } = useSession();
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch user image from database
+  useEffect(() => {
+    const fetchUserImage = async () => {
+      try {
+        const res = await fetch("/api/user/get");
+        const data = await res.json();
+        if (data.user?.image) {
+          setProfileImage(data.user.image);
+        } else {
+          setProfileImage(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user image:", error);
+      }
+    };
+
+    if (session?.user) {
+      fetchUserImage();
+    }
+  }, [session]);
+
+  // Listen for photo update events from settings page
+  useEffect(() => {
+    const handlePhotoUpdate = () => {
+      const fetchUserImage = async () => {
+        try {
+          const res = await fetch("/api/user/get");
+          const data = await res.json();
+          if (data.user?.image) {
+            setProfileImage(data.user.image);
+          } else {
+            setProfileImage(null);
+          }
+        } catch (error) {
+          console.error("Error fetching user image:", error);
+        }
+      };
+      fetchUserImage();
+    };
+
+    window.addEventListener("photoUpdated", handlePhotoUpdate);
+    return () => window.removeEventListener("photoUpdated", handlePhotoUpdate);
+  }, []);
 
   // Calculate initials from user's name or email
   const initials = React.useMemo(() => {
@@ -103,11 +148,12 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
                 className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer border-2 sm:border-4 border-white hover:scale-105 transition-all overflow-hidden"
                 onClick={() => setShowDropdown((v) => !v)}
                 title={session?.user?.name || session?.user?.email || undefined}
-                style={session?.user?.image ? {} : { backgroundColor: "#7C5CFC", color: "white" }}
+                style={profileImage ? {} : { backgroundColor: "#7C5CFC", color: "white" }}
               >
-                {session?.user?.image ? (
+                {profileImage ? (
                   <Image
-                    src={session.user.image}
+                    key={profileImage}
+                    src={profileImage}
                     alt="Profile"
                     width={40}
                     height={40}
