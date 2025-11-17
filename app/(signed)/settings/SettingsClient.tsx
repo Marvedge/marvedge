@@ -6,6 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { toast } from "sonner";
 import Image from "next/image";
 import SignedHeader from "@/app/components/SignedHeader";
+import PhotoUploadModal from "@/app/components/PhotoUploadModal";
 import {
   TABS,
   NOTIFICATION_SETTINGS,
@@ -34,6 +35,8 @@ const SettingsPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [originalForm, setOriginalForm] = useState({ ...form }); // Store original state
   const [imgFile, setImgFile] = useState<File | null>(null);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const initials = useMemo(() => {
     if (session?.user?.name) {
@@ -118,26 +121,44 @@ const SettingsPage = () => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file) {
+        const preview = URL.createObjectURL(file);
         setImgFile(file);
-        setAvatar(URL.createObjectURL(file)); // for preview
-        setForm((prev) => ({
-          ...prev,
-          image: URL.createObjectURL(file),
-        }));
-        setIsDirty(true);
+        setPreviewImage(preview);
+        setIsPhotoModalOpen(true);
       }
+    }
+  };
+
+  const handlePhotoModalSave = () => {
+    if (imgFile && previewImage) {
+      setAvatar(previewImage);
+      setForm((prev) => ({
+        ...prev,
+        image: previewImage,
+      }));
+      setIsDirty(true);
+    }
+    setIsPhotoModalOpen(false);
+  };
+
+  const handlePhotoModalCancel = () => {
+    setIsPhotoModalOpen(false);
+    setImgFile(null);
+    setPreviewImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
-    let userProfileCloudUrl;
+    let userProfileCloudUrl = form.image;
     if (imgFile) {
       setIsUploading(true);
       const formData = new FormData();
       formData.append("file", imgFile);
-      formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!); // Set Cloudinary preset
+      formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -148,10 +169,8 @@ const SettingsPage = () => {
       setIsUploading(false);
 
       if (res.ok && data.secure_url) {
-        setIsDirty(true);
         userProfileCloudUrl = data.secure_url;
         setForm((prev) => ({ ...prev, image: data.secure_url }));
-        toast.success("Profile photo uploaded successfully!");
       } else {
         console.error("Cloudinary upload failed:", data);
         toast.error(data.error || "Failed to upload photo.");
@@ -161,7 +180,6 @@ const SettingsPage = () => {
       }
     }
 
-    // Continue to update your user, sending the new image url
     const res = await fetch("/api/user/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -180,6 +198,7 @@ const SettingsPage = () => {
       });
       toast.success("Changes updated successfully!");
       setIsDirty(false);
+      setImgFile(null);
     } else {
       toast(`Update failed: ${data.error}`);
     }
@@ -260,7 +279,10 @@ const SettingsPage = () => {
             onSubmit={handleSave}
           >
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mb-8">
-              <div className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF]">
+              <div
+                className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF] cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => isPhotoModalOpen && handlePhotoModalCancel()}
+              >
                 {avatar ? (
                   <Image
                     src={avatar}
@@ -705,6 +727,12 @@ const SettingsPage = () => {
           </div>
         </div>
       )}
+      <PhotoUploadModal
+        isOpen={isPhotoModalOpen}
+        imagePreview={previewImage}
+        onSave={handlePhotoModalSave}
+        onCancel={handlePhotoModalCancel}
+      />
       <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );

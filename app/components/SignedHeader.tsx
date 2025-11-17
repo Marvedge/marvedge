@@ -100,11 +100,22 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
             </button>
             <div className="relative" ref={dropdownRef}>
               <button
-                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#7C5CFC] text-white flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer border-2 sm:border-4 border-white hover:scale-105 transition-all"
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer border-2 sm:border-4 border-white hover:scale-105 transition-all overflow-hidden"
                 onClick={() => setShowDropdown((v) => !v)}
                 title={session?.user?.name || session?.user?.email || undefined}
+                style={session?.user?.image ? {} : { backgroundColor: "#7C5CFC", color: "white" }}
               >
-                {initials}
+                {session?.user?.image ? (
+                  <Image
+                    src={session.user.image}
+                    alt="Profile"
+                    width={40}
+                    height={40}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  initials
+                )}
               </button>
               {showDropdown && (
                 <div className="absolute right-0 mt-2 w-48 sm:w-56 bg-white rounded-lg shadow-lg p-2 sm:p-3 z-50 border border-gray-200 animate-fade-in">
