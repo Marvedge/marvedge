@@ -11,6 +11,7 @@ export const useScreenRecorder = () => {
   const [micEnabled, setMicEnabled] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const recordingStartTimeRef = useRef<number>(0);
   const setBlob = useBlobStore((state) => state.setBlob);
 
@@ -70,17 +71,24 @@ export const useScreenRecorder = () => {
       setRecording(true);
       recordingStartTimeRef.current = Date.now();
       setRecordingDuration(0);
-      toast("Recording started", { icon: "⏺️" });
     } catch (err) {
       console.error("Recording failed:", err);
       toast.error("Recording failed to start.");
     }
   };
 
-  const startScreenShare = async () => {
+  const startScreenShare = () => {
+    setShowScreenShareModal(true);
+  };
+
+  const handleConfirmScreenShare = async (shareType: "window" | "screen") => {
+    setShowScreenShareModal(false);
+
     try {
       const screen = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: {
+          displaySurface: shareType === "window" ? "window" : "monitor",
+        },
         audio: true,
       });
 
@@ -92,9 +100,7 @@ export const useScreenRecorder = () => {
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          // User clicked "Cancel" or denied permissions
           console.log("User denied screen share.");
-          // toast.error("Screen sharing was denied. Please allow it to continue.");
         } else {
           console.warn("Screen share failed:", err);
           toast.error("Screen share failed. Please try again.");
@@ -130,5 +136,8 @@ export const useScreenRecorder = () => {
     screenStream,
     recordingDuration,
     reset,
+    showScreenShareModal,
+    setShowScreenShareModal,
+    handleConfirmScreenShare,
   };
 };
