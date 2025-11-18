@@ -41,7 +41,6 @@ export default function VideoPlayerSection({
 }: VideoPlayerSectionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(1);
-  const [showMenu, setShowMenu] = useState(false);
 
   const handleFullscreen = () => {
     if (containerRef.current) {
@@ -70,7 +69,7 @@ export default function VideoPlayerSection({
     <div className="w-full max-w-[900px] mx-auto">
       <div
         ref={containerRef}
-        className="bg-white rounded-2xl shadow-md border-2 border-[#7C5CFC] flex flex-col items-center justify-center transition-all duration-300"
+        className="bg-white rounded-2xl shadow-md flex flex-col items-center justify-center transition-all duration-300"
       >
         <div className="relative w-full h-auto aspect-video bg-white rounded-2xl overflow-hidden group">
           {/* Top Control Bar */}
@@ -98,40 +97,6 @@ export default function VideoPlayerSection({
                 className="w-20 h-1 accent-[#7C5CFC]"
                 style={{ cursor: "pointer" }}
               />
-            </div>
-
-            {/* Menu Button */}
-            <div className="relative">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="5" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="12" cy="19" r="2" />
-                </svg>
-              </button>
-              {showMenu && (
-                <div className="absolute top-full right-0 mt-2 bg-white border border-[#7C5CFC] rounded-lg shadow-lg z-30 min-w-[180px]">
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-[#1a1a2e] hover:bg-[#F6F3FF] text-sm"
-                  >
-                    Download
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-[#1a1a2e] hover:bg-[#F6F3FF] text-sm border-t border-[#7C5CFC]/20"
-                  >
-                    Settings
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Fullscreen Button */}
@@ -294,8 +259,8 @@ export default function VideoPlayerSection({
               onClick={() => setVideoPlaying(true)}
               className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors"
             >
-              <div className="bg-white hover:bg-gray-100 rounded-full p-8 transition-all shadow-lg">
-                <Image src={playIcon} alt="Play" width={64} height={64} className="w-16 h-16" />
+              <div className="bg-white hover:bg-gray-100 rounded-full p-4 transition-all shadow-lg">
+                <Image src={playIcon} alt="Play" width={32} height={32} className="w-8 h-8" />
               </div>
             </button>
           )}
@@ -315,13 +280,10 @@ export default function VideoPlayerSection({
 
   return (
     <div className="flex flex-col items-center mb-4 sm:mb-8 w-full max-w-[900px] mx-auto">
-      <h2 className="text-base sm:text-xl font-semibold mb-3 sm:mb-4 text-[#6C63FF] self-start">
-        Preview
-      </h2>
       <div className="w-full">
         {uploadedFileType?.startsWith("image/") ? (
           <div
-            className="border-2 border-[#6C63FF] rounded-2xl mx-auto"
+            className="rounded-2xl mx-auto"
             style={{ maxWidth: 900, background: "#000" }}
           >
             <Image
@@ -343,7 +305,7 @@ export default function VideoPlayerSection({
           renderVideoPlayer(videoUrl, false)
         ) : screenStream ? (
           <div className="w-full max-w-[900px] mx-auto">
-            <div className="bg-white rounded-2xl shadow-md border-2 border-[#7C5CFC] flex flex-col items-center justify-center transition-all duration-300">
+            <div className="bg-white rounded-2xl shadow-md flex flex-col items-center justify-center transition-all duration-300">
               <div className="w-full h-auto aspect-video bg-white rounded-2xl overflow-hidden">
                 <VideoPreview
                   videoUrl={null}

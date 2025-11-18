@@ -286,13 +286,13 @@ export default function RecorderPage() {
       />
 
       {/* Screen Share Modal */}
-      <ScreenShareModal
+      {/* <ScreenShareModal
         isOpen={showScreenShareModal}
         onCancel={() => setShowScreenShareModal(false)}
         onShare={handleConfirmScreenShare}
         micEnabled={micEnabled}
         onToggleMic={toggleMic}
-      />
+      /> */}
 
       {/* Save Popup Form */}
       <SavePopupForm

@@ -32,8 +32,8 @@ export default function InitialRecorderView({
   uploadMessage,
   fileInputRef,
   startScreenShare,
-  // toggleMic,
-  // micEnabled,
+  toggleMic,
+  micEnabled,
 }: InitialRecorderViewProps) {
   const { setBlob } = useBlobStore();
 
@@ -187,7 +187,7 @@ export default function InitialRecorderView({
                 onClick={startScreenShare}
                 className="w-full sm:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition text-sm sm:text-base cursor-pointer"
               >
-                Start Screen Recording
+                Start Screen Share
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -195,7 +195,7 @@ export default function InitialRecorderView({
               >
                 Upload File
               </button>
-              {/* <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-4 mt-2 sm:mt-0 w-full sm:w-auto justify-center">
+              <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-4 mt-2 sm:mt-0 w-full sm:w-auto justify-center">
                 <span className="text-[#888] font-medium text-sm sm:text-base">Microphone</span>
                 <button
                   onClick={toggleMic}
@@ -205,7 +205,7 @@ export default function InitialRecorderView({
                     className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${micEnabled ? "translate-x-4 sm:translate-x-6" : ""}`}
                   />
                 </button>
-              </div> */}
+              </div>
             </div>
             {/* Hidden file input for main area upload */}
             <input
