@@ -21,7 +21,6 @@ import { useVideoDuration } from "./hooks/useVideoDuration";
 import VideoPlayerSection from "@/app/components/VideoPlayerSection";
 import RecordingControls from "@/app/components/RecordingControls";
 import InitialRecorderView from "@/app/components/InitialRecorderView";
-import ScreenShareModal from "@/app/components/ScreenShareModal";
 
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
@@ -85,9 +84,6 @@ export default function RecorderPage() {
     startScreenShare,
     recordingDuration,
     reset,
-    showScreenShareModal,
-    setShowScreenShareModal,
-    handleConfirmScreenShare,
   } = useScreenRecorder();
 
   const { data: session } = useSession();

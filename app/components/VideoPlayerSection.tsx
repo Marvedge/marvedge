@@ -282,10 +282,7 @@ export default function VideoPlayerSection({
     <div className="flex flex-col items-center mb-4 sm:mb-8 w-full max-w-[900px] mx-auto">
       <div className="w-full">
         {uploadedFileType?.startsWith("image/") ? (
-          <div
-            className="rounded-2xl mx-auto"
-            style={{ maxWidth: 900, background: "#000" }}
-          >
+          <div className="rounded-2xl mx-auto" style={{ maxWidth: 900, background: "#000" }}>
             <Image
               src={uploadedFileUrl!}
               alt="Uploaded preview"
