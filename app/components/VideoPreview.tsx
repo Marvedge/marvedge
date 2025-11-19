@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
+import Image from "next/image";
 import ReactPlayer from "react-player";
 import { formatTime } from "@/app/lib/dateTimeUtils";
 
@@ -419,7 +420,7 @@ export default function VideoPreview({
         <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l from-black/60 to-transparent rounded-bl-2xl">
           {/* Volume Control */}
           <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-2 backdrop-blur-sm">
-            <img src="/icons/volume.svg" alt="volume" width="18" height="18" />
+            <Image src="/icons/volume.svg" alt="volume" width={18} height={18} />
             <input
               type="range"
               min="0"
@@ -471,7 +472,7 @@ export default function VideoPreview({
             onClick={handleFullscreen}
             className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
           >
-            <img src="/icons/fullscreen.svg" alt="fullscreen" width="20" height="20" />
+            <Image src="/icons/fullscreen.svg" alt="fullscreen" width={20} height={20} />
           </button>
         </div>
         {/* Play/Pause Button Overlay - Only show when not recording and video is paused */}

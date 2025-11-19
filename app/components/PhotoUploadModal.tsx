@@ -35,8 +35,8 @@ export default function PhotoUploadModal({
   }
 
   return (
-    <div className="fixed inset-0 z-9999 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
 
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 transform transition-all duration-300 scale-100">
         <div className="flex items-center justify-between mb-6">

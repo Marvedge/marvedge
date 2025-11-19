@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState, ChangeEvent, FormEvent } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { toast } from "sonner";
@@ -15,7 +16,8 @@ import {
 } from "../../lib/constants";
 
 const SettingsPage = () => {
-  const { data: session, update } = useSession();
+  const router = useRouter();
+  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState("Profile");
   const [form, setForm] = useState({
     firstName: session?.user?.name?.split(" ")[0] || "",
@@ -129,14 +131,63 @@ const SettingsPage = () => {
     }
   };
 
-  const handlePhotoModalSave = () => {
+  const handlePhotoModalSave = async () => {
     if (imgFile && previewImage) {
-      setAvatar(previewImage);
-      setForm((prev) => ({
-        ...prev,
-        image: previewImage,
-      }));
-      setIsDirty(true);
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", imgFile);
+        formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+
+        if (uploadRes.ok && uploadData.secure_url) {
+          const cloudinaryUrl = uploadData.secure_url;
+
+          const res = await fetch("/api/user/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              firstName: form.firstName,
+              lastName: form.lastName,
+              bio: form.bio,
+              location: form.location,
+              website: form.website,
+              image: cloudinaryUrl,
+            }),
+          });
+
+          const data = await res.json();
+          if (res.ok) {
+            const updatedForm = {
+              ...form,
+              image: cloudinaryUrl,
+            };
+            setAvatar(cloudinaryUrl);
+            setForm(updatedForm);
+            setOriginalForm(updatedForm);
+            setImgFile(null);
+            setPreviewImage(null);
+            setIsDirty(false);
+
+            toast.success("Photo updated successfully!");
+            window.dispatchEvent(new Event("photoUpdated"));
+          } else {
+            toast.error(data.error || "Failed to update photo");
+          }
+        } else {
+          toast.error(uploadData.error || "Failed to upload photo");
+        }
+      } catch (error) {
+        console.error("Error uploading photo:", error);
+        toast.error("Failed to upload photo");
+      } finally {
+        setIsUploading(false);
+      }
     }
     setIsPhotoModalOpen(false);
   };
@@ -147,6 +198,50 @@ const SettingsPage = () => {
     setPreviewImage(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setIsUploading(true);
+    try {
+      const res = await fetch("/api/user/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          bio: form.bio,
+          location: form.location,
+          website: form.website,
+          image: null,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        const updatedForm = {
+          ...form,
+          image: "",
+        };
+        setAvatar("");
+        setForm(updatedForm);
+        setOriginalForm(updatedForm);
+        setImgFile(null);
+        setIsDirty(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+
+        toast.success("Photo removed successfully!");
+        window.dispatchEvent(new Event("photoUpdated"));
+      } else {
+        toast.error(data.error || "Failed to remove photo");
+      }
+    } catch (error) {
+      console.error("Error removing photo:", error);
+      toast.error("Failed to remove photo");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -183,19 +278,13 @@ const SettingsPage = () => {
     const res = await fetch("/api/user/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, image: userProfileCloudUrl }),
+      body: JSON.stringify({ ...form, image: userProfileCloudUrl || null }),
     });
 
     const data = await res.json();
     if (res.ok) {
-      await update({
-        ...session,
-        user: {
-          ...session?.user,
-          name: form.firstName + " " + form.lastName,
-          image: userProfileCloudUrl,
-        },
-      });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      router.refresh();
       toast.success("Changes updated successfully!");
       setIsDirty(false);
       setImgFile(null);
@@ -277,13 +366,14 @@ const SettingsPage = () => {
           <form
             className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-4 sm:p-6 md:p-8 lg:p-10"
             onSubmit={handleSave}
+            noValidate
           >
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mb-8">
               <div
                 className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF] cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => isPhotoModalOpen && handlePhotoModalCancel()}
               >
-                {avatar ? (
+                {avatar && avatar.trim() ? (
                   <Image
                     src={avatar}
                     alt="Avatar"
@@ -304,11 +394,22 @@ const SettingsPage = () => {
                   <>
                     <button
                       type="button"
-                      className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
+                      disabled={isUploading}
+                      className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       Change Photo
                     </button>
+                    {avatar && avatar.trim() && (
+                      <button
+                        type="button"
+                        disabled={isUploading}
+                        className="px-5 py-2 rounded-lg bg-white border border-[#8A76FC] text-[#8A76FC] font-semibold shadow hover:bg-[#F3F0FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={handleRemovePhoto}
+                      >
+                        Remove Photo
+                      </button>
+                    )}
                     <input
                       type="file"
                       accept="image/*"
@@ -318,13 +419,6 @@ const SettingsPage = () => {
                     />
                   </>
                 )}
-                {/* <button
-                  type="button"
-                  className="px-5 py-2 min-w-[120px] rounded-lg bg-white border border-gray-200 text-[#7C5CFC] font-semibold shadow hover:bg-[#ede7fa] transition w-full sm:w-auto"
-                  onClick={handleEdit}
-                >
-                  Edit
-                </button> */}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
@@ -418,7 +512,8 @@ const SettingsPage = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-8 py-3 cursor-pointer rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto"
+                  disabled={isSaving || isUploading}
+                  className="px-8 py-3 cursor-pointer rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSaving ? "Saving..." : "Save Changes"}
                 </button>

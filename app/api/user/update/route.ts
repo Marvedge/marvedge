@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         bio,
         location,
         website,
-        image: image || undefined,
+        image: image === null ? null : image || undefined,
       },
     });
 
