@@ -59,7 +59,7 @@ export default function RecordingControls({
         )}
       </div>
 
-      {screenStream && recording && !isUploaded && (
+      {screenStream && recording && !isUploaded && !videoUrl && (
         <div className="flex flex-col gap-2 mt-4 sm:mt-6 items-start">
           <div className="flex items-center gap-4 ml-190">
             <button
@@ -90,7 +90,7 @@ export default function RecordingControls({
         </div>
       )}
 
-      {screenStream && recording && !isUploaded && enableCamera && (
+      {screenStream && recording && !isUploaded && enableCamera && !videoUrl && (
         <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
           <video
             ref={videoPreview}

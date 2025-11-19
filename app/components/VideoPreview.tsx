@@ -31,7 +31,6 @@ export default function VideoPreview({
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [showMenu, setShowMenu] = useState(false);
 
   const handlePlayPause = () => {
     if (isRecording) {
@@ -397,7 +396,7 @@ export default function VideoPreview({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full max-w-[400px] h-[260px] sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md border border-[#E6E1FA] flex flex-col items-center justify-center transition-all duration-300 ${className}`}
+      className={`relative w-full max-w-[400px] h-[260px] sm:w-full sm:max-w-[900px] sm:h-auto sm:aspect-video bg-white rounded-2xl shadow-md flex flex-col items-center justify-center transition-all duration-300 ${className}`}
       style={{
         minHeight: "160px",
         padding: 0,
@@ -416,75 +415,43 @@ export default function VideoPreview({
           background: "#F6F3FF",
         }}
       >
-        {/* Top Control Bar */}
-        <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l from-black/60 to-transparent rounded-bl-2xl">
-          {/* Volume Control */}
-          <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-2 backdrop-blur-sm">
-            <Image src="/icons/volume.svg" alt="volume" width={18} height={18} />
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={volume}
-              onChange={handleVolumeChange}
-              className="w-20 h-1 accent-[#7C5CFC]"
-              style={{ cursor: "pointer" }}
-            />
-          </div>
+        {/* Top Control Bar - Only show when not recording */}
+        {!isRecording && (
+          <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l from-black/60 to-transparent rounded-bl-2xl">
+            {/* Volume Control */}
+            <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-2 backdrop-blur-sm">
+              <Image src="/icons/volume.svg" alt="volume" width={18} height={18} />
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={volume}
+                onChange={handleVolumeChange}
+                className="w-20 h-1 accent-[#7C5CFC]"
+                style={{ cursor: "pointer" }}
+              />
+            </div>
 
-          {/* Menu Button */}
-          <div className="relative">
+            {/* Fullscreen Button */}
             <button
-              onClick={() => setShowMenu(!showMenu)}
+              onClick={handleFullscreen}
               className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="5" r="2" />
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="12" cy="19" r="2" />
-              </svg>
+              <Image src="/icons/fullscreen.svg" alt="fullscreen" width={20} height={20} />
             </button>
-            {showMenu && (
-              <div className="absolute top-full right-0 mt-2 bg-[#1a1a2e] border border-[#7C5CFC] rounded-lg shadow-lg z-30 min-w-[180px]">
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                  }}
-                  className="w-full text-left px-4 py-2 text-white hover:bg-[#7C5CFC]/20 text-sm"
-                >
-                  Download
-                </button>
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                  }}
-                  className="w-full text-left px-4 py-2 text-white hover:bg-[#7C5CFC]/20 text-sm border-t border-[#7C5CFC]/20"
-                >
-                  Settings
-                </button>
-              </div>
-            )}
           </div>
-
-          {/* Fullscreen Button */}
-          <button
-            onClick={handleFullscreen}
-            className="bg-black/40 hover:bg-black/60 text-white rounded-full p-2 transition backdrop-blur-sm"
-          >
-            <Image src="/icons/fullscreen.svg" alt="fullscreen" width={20} height={20} />
-          </button>
-        </div>
+        )}
         {/* Play/Pause Button Overlay - Only show when not recording and video is paused */}
         {!isRecording && !playing && (
           <button
             onClick={handlePlayPause}
-            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 rounded-full bg-black/50 hover:bg-black/70 text-white p-4 transition-all duration-200"
+            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 rounded-full bg-black/50 hover:bg-black/70 text-white p-2 transition-all duration-200"
             style={{
               backdropFilter: "blur(4px)",
             }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M8 5V19L19 12L8 5Z" fill="currentColor" />
             </svg>
           </button>
@@ -746,11 +713,6 @@ export default function VideoPreview({
                   />
                 </svg>
               </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#A594F9] font-mono">
-                {isRecording ? "Recording..." : "Preview"}
-              </span>
             </div>
           </div>
         </div>

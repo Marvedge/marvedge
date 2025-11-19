@@ -77,8 +77,8 @@ export const useScreenRecorder = () => {
     }
   };
 
-  const startScreenShare = () => {
-    setShowScreenShareModal(true);
+  const startScreenShare = async () => {
+    handleConfirmScreenShare("window");
   };
 
   const handleConfirmScreenShare = async (shareType: "window" | "screen") => {

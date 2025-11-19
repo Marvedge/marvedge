@@ -7,7 +7,6 @@ import "react-toastify/dist/ReactToastify.css";
 import { toast } from "sonner";
 import Image from "next/image";
 import SignedHeader from "@/app/components/SignedHeader";
-import PhotoUploadModal from "@/app/components/PhotoUploadModal";
 import {
   TABS,
   NOTIFICATION_SETTINGS,
@@ -31,14 +30,12 @@ const SettingsPage = () => {
   });
   const [avatar, setAvatar] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [originalForm, setOriginalForm] = useState({ ...form }); // Store original state
-  const [imgFile, setImgFile] = useState<File | null>(null);
-  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [originalForm, setOriginalForm] = useState({ ...form });
 
   const initials = useMemo(() => {
     if (session?.user?.name) {
@@ -119,24 +116,42 @@ const SettingsPage = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handlePhotoChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file) {
-        const preview = URL.createObjectURL(file);
-        setImgFile(file);
-        setPreviewImage(preview);
-        setIsPhotoModalOpen(true);
-      }
+      setPhotoFile(file);
+      setIsDirty(true);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAvatar(event.target.result as string);
+          setForm((prev) => ({ ...prev, image: event.target?.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handlePhotoModalSave = async () => {
-    if (imgFile && previewImage) {
-      setIsUploading(true);
-      try {
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    setAvatar("");
+    setForm((prev) => ({ ...prev, image: "" }));
+    setIsDirty(true);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      let imageUrl = form.image;
+
+      if (photoFile) {
+        setIsUploading(true);
         const formData = new FormData();
-        formData.append("file", imgFile);
+        formData.append("file", photoFile);
         formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
 
         const uploadRes = await fetch("/api/upload", {
@@ -145,153 +160,44 @@ const SettingsPage = () => {
         });
         const uploadData = await uploadRes.json();
 
-        if (uploadRes.ok && uploadData.secure_url) {
-          const cloudinaryUrl = uploadData.secure_url;
-
-          const res = await fetch("/api/user/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              firstName: form.firstName,
-              lastName: form.lastName,
-              bio: form.bio,
-              location: form.location,
-              website: form.website,
-              image: cloudinaryUrl,
-            }),
-          });
-
-          const data = await res.json();
-          if (res.ok) {
-            const updatedForm = {
-              ...form,
-              image: cloudinaryUrl,
-            };
-            setAvatar(cloudinaryUrl);
-            setForm(updatedForm);
-            setOriginalForm(updatedForm);
-            setImgFile(null);
-            setPreviewImage(null);
-            setIsDirty(false);
-
-            toast.success("Photo updated successfully!");
-            window.dispatchEvent(new Event("photoUpdated"));
-          } else {
-            toast.error(data.error || "Failed to update photo");
-          }
-        } else {
+        if (!uploadRes.ok || !uploadData.secure_url) {
           toast.error(uploadData.error || "Failed to upload photo");
+          setIsUploading(false);
+          setIsSaving(false);
+          return;
         }
-      } catch (error) {
-        console.error("Error uploading photo:", error);
-        toast.error("Failed to upload photo");
-      } finally {
+
+        imageUrl = uploadData.secure_url;
         setIsUploading(false);
       }
-    }
-    setIsPhotoModalOpen(false);
-  };
 
-  const handlePhotoModalCancel = () => {
-    setIsPhotoModalOpen(false);
-    setImgFile(null);
-    setPreviewImage(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const handleRemovePhoto = async () => {
-    setIsUploading(true);
-    try {
       const res = await fetch("/api/user/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName: form.lastName,
-          bio: form.bio,
-          location: form.location,
-          website: form.website,
-          image: null,
-        }),
+        body: JSON.stringify({ ...form, image: imageUrl }),
       });
 
       const data = await res.json();
       if (res.ok) {
-        const updatedForm = {
-          ...form,
-          image: "",
-        };
-        setAvatar("");
-        setForm(updatedForm);
-        setOriginalForm(updatedForm);
-        setImgFile(null);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        router.refresh();
+        toast.success("Changes updated successfully!");
         setIsDirty(false);
+        setOriginalForm({ ...form, image: imageUrl });
+        setPhotoFile(null);
+        window.dispatchEvent(new Event("photoUpdated"));
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
-
-        toast.success("Photo removed successfully!");
-        window.dispatchEvent(new Event("photoUpdated"));
       } else {
-        toast.error(data.error || "Failed to remove photo");
+        toast(`Update failed: ${data.error}`);
       }
-    } catch (error) {
-      console.error("Error removing photo:", error);
-      toast.error("Failed to remove photo");
+    } catch {
+      toast("Failed to save changes");
     } finally {
+      setIsSaving(false);
       setIsUploading(false);
     }
-  };
-
-  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSaving(true);
-    let userProfileCloudUrl = form.image;
-    if (imgFile) {
-      setIsUploading(true);
-      const formData = new FormData();
-      formData.append("file", imgFile);
-      formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      console.log("data", data);
-      setIsUploading(false);
-
-      if (res.ok && data.secure_url) {
-        userProfileCloudUrl = data.secure_url;
-        setForm((prev) => ({ ...prev, image: data.secure_url }));
-      } else {
-        console.error("Cloudinary upload failed:", data);
-        toast.error(data.error || "Failed to upload photo.");
-        setIsUploading(false);
-        setIsSaving(false);
-        return;
-      }
-    }
-
-    const res = await fetch("/api/user/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, image: userProfileCloudUrl || null }),
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      router.refresh();
-      toast.success("Changes updated successfully!");
-      setIsDirty(false);
-      setImgFile(null);
-    } else {
-      toast(`Update failed: ${data.error}`);
-    }
-    setIsSaving(false);
   };
 
   const handleCancel = async () => {
@@ -310,7 +216,11 @@ const SettingsPage = () => {
         image: user.image || "",
       });
       setAvatar(user.image || "");
-      setIsDirty(false); //  reset dirty flag
+      setPhotoFile(null);
+      setIsDirty(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -369,10 +279,7 @@ const SettingsPage = () => {
             noValidate
           >
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mb-8">
-              <div
-                className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF] cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => isPhotoModalOpen && handlePhotoModalCancel()}
-              >
+              <div className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF] cursor-pointer hover:opacity-80 transition-opacity">
                 {avatar && avatar.trim() ? (
                   <Image
                     src={avatar}
@@ -386,39 +293,31 @@ const SettingsPage = () => {
                 )}
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
-                {isUploading ? (
-                  <div className="flex items-center gap-2 text-[#7C5CFC] font-medium px-4 py-2">
-                    Uploading...
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={isUploading}
-                      className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Change Photo
-                    </button>
-                    {avatar && avatar.trim() && (
-                      <button
-                        type="button"
-                        disabled={isUploading}
-                        className="px-5 py-2 rounded-lg bg-white border border-[#8A76FC] text-[#8A76FC] font-semibold shadow hover:bg-[#F3F0FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={handleRemovePhoto}
-                      >
-                        Remove Photo
-                      </button>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      ref={fileInputRef}
-                      className="hidden"
-                      onChange={handlePhotoChange}
-                    />
-                  </>
+                <button
+                  type="button"
+                  disabled={isSaving || isUploading}
+                  className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Change Photo
+                </button>
+                {avatar && avatar.trim() && (
+                  <button
+                    type="button"
+                    disabled={isSaving || isUploading}
+                    className="px-5 py-2 rounded-lg bg-white border border-[#8A76FC] text-[#8A76FC] font-semibold shadow hover:bg-[#F3F0FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleRemovePhoto}
+                  >
+                    Remove Photo
+                  </button>
                 )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
@@ -822,12 +721,6 @@ const SettingsPage = () => {
           </div>
         </div>
       )}
-      <PhotoUploadModal
-        isOpen={isPhotoModalOpen}
-        imagePreview={previewImage}
-        onSave={handlePhotoModalSave}
-        onCancel={handlePhotoModalCancel}
-      />
       <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
