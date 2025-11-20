@@ -11,6 +11,7 @@ interface SaveDemoModalProps {
   initialTitle?: string;
   initialDescription?: string;
   processing?: boolean;
+  isSaved?: boolean;
 }
 
 export default function SaveDemoModal({
@@ -20,6 +21,7 @@ export default function SaveDemoModal({
   initialTitle = "",
   initialDescription = "",
   processing = false,
+  isSaved = false,
 }: SaveDemoModalProps) {
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
@@ -105,11 +107,15 @@ export default function SaveDemoModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!title.trim() || processing}
-            className="flex-1 bg-[#7C5CFC] hover:bg-[#8A76FC] text-white flex items-center gap-2"
+            disabled={!title.trim() || processing || isSaved}
+            className={`flex-1 flex items-center gap-2 text-white ${
+              isSaved
+                ? "bg-green-600 hover:bg-green-600 cursor-not-allowed"
+                : "bg-[#7C5CFC] hover:bg-[#8A76FC]"
+            }`}
           >
             <Image src="/icons/1.png" alt="Save" width={16} height={16} />
-            {processing ? "Saving..." : "Save Demo"}
+            {isSaved ? "✓ Saved" : processing ? "Saving..." : "Save Demo"}
           </Button>
         </div>
       </div>

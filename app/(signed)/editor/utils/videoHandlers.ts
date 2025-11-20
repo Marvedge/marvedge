@@ -40,6 +40,9 @@ interface SaveDemoParams {
   setSidebarTitle: (title: string) => void;
   setSidebarDescription: (description: string) => void;
   setShowSaveDemoModal: (show: boolean) => void;
+  setDemoSaved?: (saved: boolean) => void;
+  setSavedDemoId?: (id: string | null) => void;
+  onSaveSuccess?: () => void;
 }
 
 export async function handleSaveDemo(
@@ -56,6 +59,9 @@ export async function handleSaveDemo(
     setSidebarTitle,
     setSidebarDescription,
     setShowSaveDemoModal,
+    setDemoSaved,
+    setSavedDemoId,
+    onSaveSuccess,
   } = params;
 
   if (!videoUrl) {
@@ -141,9 +147,34 @@ export async function handleSaveDemo(
         editing: editingToSave,
       });
       console.log("Demo saved:", response.data);
+
+      // Set the saved state
+      if (setDemoSaved) {
+        setDemoSaved(true);
+      }
+      if (setSavedDemoId && response.data.demo?.id) {
+        setSavedDemoId(response.data.demo.id);
+      }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         if (error.response) {
+          if (error.response.status === 409) {
+            // Demo already exists
+            console.log("Demo already saved:", error.response.data);
+            if (setDemoSaved) {
+              setDemoSaved(true);
+            }
+            if (setSavedDemoId && error.response.data.demo?.id) {
+              setSavedDemoId(error.response.data.demo.id);
+            }
+            if (onSaveSuccess) {
+              onSaveSuccess();
+            }
+            toast.dismiss();
+            toast.warning("This demo has already been saved!");
+            setShowSaveDemoModal(false);
+            return;
+          }
           console.error(
             `Failed to save demo: ${error.response.status} - ${JSON.stringify(error.response.data)}`
           );
@@ -155,6 +186,7 @@ export async function handleSaveDemo(
       } else {
         console.error("Unknown error:", error);
       }
+      throw error;
     }
 
     // Update the sidebar state with the saved data
@@ -162,6 +194,10 @@ export async function handleSaveDemo(
     setSidebarDescription(data.description);
     toast.dismiss();
     toast.success("Demo saved successfully!");
+    // Call success callback to update parent component tracking
+    if (onSaveSuccess) {
+      onSaveSuccess();
+    }
     // Close the modal
     setShowSaveDemoModal(false);
   } catch (error) {

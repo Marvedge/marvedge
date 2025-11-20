@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useRef } from "react";
 import { FaBars } from "react-icons/fa6";
 //import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
-import { Toaster } from "react-hot-toast";
+import { Toaster, toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
@@ -40,6 +40,9 @@ import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 export default function EditorPage() {
   const router = useRouter();
 
+  // Track saved demos in this session to prevent duplicates
+  const savedDemosRef = useRef<Set<string>>(new Set());
+
   // Custom hooks for state management
   const editorState = useEditorState();
   const {
@@ -69,6 +72,9 @@ export default function EditorPage() {
     setShowSaveDemoModal,
     savingDemo,
     setSavingDemo,
+    demoSaved,
+    setDemoSaved,
+    setSavedDemoId,
     isSidebarOpen,
     setIsSidebarOpen,
     isDashboardMenuOpen,
@@ -197,6 +203,13 @@ export default function EditorPage() {
     }
   }, [recordedVideoUrl, params, setVideoUrl]);
 
+  // Reset demoSaved state when video changes (allows saving again with different video)
+  useEffect(() => {
+    if (videoUrl) {
+      setDemoSaved(false);
+    }
+  }, [videoUrl, setDemoSaved]);
+
   // User initials
   const initials = session?.user?.name
     ? session.user.name
@@ -234,6 +247,19 @@ export default function EditorPage() {
 
   // Save demo handler
   const onSaveDemo = async (data: { title: string; description: string }) => {
+    if (demoSaved) {
+      return;
+    }
+
+    // Create a unique key for this demo to prevent duplicates in this session
+    const demoKey = `${data.title}|${videoUrl}|${data.description}`;
+
+    // Check if this exact demo was already saved in this session
+    if (savedDemosRef.current.has(demoKey)) {
+      toast.error("This demo has already been saved in this session!");
+      return;
+    }
+
     await handleSaveDemo(data, {
       videoUrl: videoUrl!,
       inputStartTime,
@@ -244,6 +270,12 @@ export default function EditorPage() {
       setSidebarTitle,
       setSidebarDescription,
       setShowSaveDemoModal,
+      setDemoSaved,
+      setSavedDemoId,
+      onSaveSuccess: () => {
+        // Track this demo as saved
+        savedDemosRef.current.add(demoKey);
+      },
     });
   };
 
@@ -739,6 +771,7 @@ export default function EditorPage() {
         initialTitle={sidebarTitle}
         initialDescription={sidebarDescription}
         processing={savingDemo}
+        isSaved={demoSaved}
       />
     </main>
   );

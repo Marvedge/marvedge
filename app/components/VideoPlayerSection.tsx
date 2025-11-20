@@ -73,7 +73,7 @@ export default function VideoPlayerSection({
       >
         <div className="relative w-full h-auto aspect-video bg-white rounded-2xl overflow-hidden group">
           {/* Top Control Bar */}
-          <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l from-black/60 to-transparent rounded-bl-2xl">
+          <div className="absolute top-0 right-0 z-20 flex items-center gap-2 p-4 bg-linear-to-l rounded-bl-2xl">
             {/* Volume Control */}
             <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-2 backdrop-blur-sm">
               <svg

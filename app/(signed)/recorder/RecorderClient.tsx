@@ -25,6 +25,8 @@ import InitialRecorderView from "@/app/components/InitialRecorderView";
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
   const router = useRouter();
+  const saveSessionRef = useRef<Set<string>>(new Set());
+  const isProcessingRef = useRef(false);
 
   const handleBack = useCallback(() => {
     try {
@@ -65,6 +67,8 @@ export default function RecorderPage() {
     setVideoDuration,
     sidebarOpen,
     setSidebarOpen,
+    isSavePublishDisabled,
+    setIsSavePublishDisabled,
     fileInputRef,
     recordingIntervalRef,
   } = useRecorderState();
@@ -112,11 +116,38 @@ export default function RecorderPage() {
     if (!blob) {
       return;
     }
+
+    // Prevent multiple clicks using useRef (most reliable)
+    if (isProcessingRef.current) {
+      toast.error("Already processing, please wait!");
+      return;
+    }
+
+    // Prevent multiple saves
+    if (isSavePublishDisabled) {
+      return;
+    }
+
+    // Create unique key for this recording
+    const recordKey = `${blob.size}|${videoUrl || ""}|${new Date().toISOString().split("T")[0]}`;
+
+    // Check if this recording was already saved in this session
+    if (saveSessionRef.current.has(recordKey)) {
+      toast.error("This recording has already been saved in this session!");
+      return;
+    }
+
+    // Mark as processing and track this save
+    isProcessingRef.current = true;
+    setIsSavePublishDisabled(true);
+    saveSessionRef.current.add(recordKey);
+
     setShowSavePopup(true);
   };
 
   const handlePopupDownload = async (data: { title: string; format: string }) => {
     if (!blob) {
+      isProcessingRef.current = false;
       return;
     }
 
@@ -141,6 +172,8 @@ export default function RecorderPage() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to download video.");
+      // Reset processing flag on error so user can try again
+      isProcessingRef.current = false;
     } finally {
       setProcessingDownload(false);
     }
@@ -169,7 +202,15 @@ export default function RecorderPage() {
               {!recording && (videoUrl || uploadedFileUrl) ? (
                 <button
                   onClick={handleSaveAndPublish}
-                  className="mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg bg-[#8A76FC] text-white font-semibold shadow hover:bg-[#8A76FC] transition flex items-center gap-2 text-sm sm:text-base"
+                  disabled={isSavePublishDisabled}
+                  className={`mt-2 sm:mt-0 px-4 sm:px-5 py-2 rounded-lg text-white font-semibold shadow 
+                  transition flex items-center gap-2 text-sm sm:text-base
+                  backdrop-blur-sm bg-[#8A76FC]/80 
+                  ${
+                    isSavePublishDisabled
+                      ? "opacity-60 cursor-not-allowed"
+                      : "hover:bg-[#8A76FC]/90"
+                  }`}
                 >
                   <Image
                     src="/icons/1.png"
@@ -178,7 +219,7 @@ export default function RecorderPage() {
                     height={20}
                     className="md:w-6 md:h-6"
                   />
-                  Save & Publish
+                  {isSavePublishDisabled ? " Saved" : "Save & Publish"}
                 </button>
               ) : null}
             </div>
@@ -248,7 +289,10 @@ export default function RecorderPage() {
         {/* Save Popup Form */}
         <SavePopupForm
           isOpen={showSavePopup}
-          onClose={() => setShowSavePopup(false)}
+          onClose={() => {
+            setShowSavePopup(false);
+            isProcessingRef.current = false;
+          }}
           onDownload={handlePopupDownload}
           initialTitle={title}
           processing={processingDownload}
@@ -293,7 +337,10 @@ export default function RecorderPage() {
       {/* Save Popup Form */}
       <SavePopupForm
         isOpen={showSavePopup}
-        onClose={() => setShowSavePopup(false)}
+        onClose={() => {
+          setShowSavePopup(false);
+          isProcessingRef.current = false;
+        }}
         onDownload={handlePopupDownload}
         initialTitle={title}
         processing={processingDownload}
