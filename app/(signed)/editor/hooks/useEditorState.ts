@@ -30,6 +30,8 @@ export function useEditorState() {
   // Modal state
   const [showSaveDemoModal, setShowSaveDemoModal] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
+  const [demoSaved, setDemoSaved] = useState(false);
+  const [savedDemoId, setSavedDemoId] = useState<string | null>(null);
 
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -89,6 +91,10 @@ export function useEditorState() {
     setShowSaveDemoModal,
     savingDemo,
     setSavingDemo,
+    demoSaved,
+    setDemoSaved,
+    savedDemoId,
+    setSavedDemoId,
     isSidebarOpen,
     setIsSidebarOpen,
     isDashboardMenuOpen,

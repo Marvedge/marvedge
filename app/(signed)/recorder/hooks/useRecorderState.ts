@@ -15,6 +15,7 @@ export function useRecorderState() {
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSavePublishDisabled, setIsSavePublishDisabled] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -43,6 +44,8 @@ export function useRecorderState() {
     setVideoDuration,
     sidebarOpen,
     setSidebarOpen,
+    isSavePublishDisabled,
+    setIsSavePublishDisabled,
     fileInputRef,
     recordingIntervalRef,
   };

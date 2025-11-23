@@ -74,6 +74,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Check if a demo with the same title and videoUrl already exists for this user
+    const existingDemo = await prisma.demo.findFirst({
+      where: {
+        userId: user.id,
+        title,
+        videoUrl,
+      },
+    });
+
+    if (existingDemo) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Demo with this title and video already exists",
+          demo: existingDemo,
+        },
+        { status: 409 }
+      );
+    }
+
     const demo = await prisma.demo.create({
       data: {
         title,
