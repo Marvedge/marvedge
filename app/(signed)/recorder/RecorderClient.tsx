@@ -21,7 +21,7 @@ import { useVideoDuration } from "./hooks/useVideoDuration";
 import VideoPlayerSection from "@/app/components/VideoPlayerSection";
 import RecordingControls from "@/app/components/RecordingControls";
 import InitialRecorderView from "@/app/components/InitialRecorderView";
-import { TutorialRecorder } from "@/app/components/TutorialRecorder";
+//import { TutorialRecorder } from "@/app/components/TutorialRecorder";
 
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
@@ -331,9 +331,9 @@ export default function RecorderPage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 overflow-hidden">
+          {/* <div className="flex-1 overflow-hidden">
             <TutorialRecorder />
-          </div>
+          </div> */}
         </div>
       </div>
     );
