@@ -14,19 +14,19 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
   const { data: session } = useSession();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch user image from database
   useEffect(() => {
     const fetchUserImage = async () => {
       try {
         const res = await fetch("/api/user/get");
         const data = await res.json();
-        if (data.user?.image) {
-          setProfileImage(data.user.image);
+        if (data.user?.image && data.user.image.trim()) {
+          setProfileImage(data.user.image + `?t=${Date.now()}`);
         } else {
           setProfileImage(null);
         }
       } catch (error) {
         console.error("Error fetching user image:", error);
+        setProfileImage(null);
       }
     };
 
@@ -35,20 +35,22 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
     }
   }, [session]);
 
-  // Listen for photo update events from settings page
   useEffect(() => {
     const handlePhotoUpdate = () => {
       const fetchUserImage = async () => {
         try {
           const res = await fetch("/api/user/get");
           const data = await res.json();
-          if (data.user?.image) {
-            setProfileImage(data.user.image);
+          console.log("Navbar fetched user image:", data.user?.image);
+          if (data.user?.image && data.user.image.trim()) {
+            setProfileImage(data.user.image + `?t=${Date.now()}`);
           } else {
+            console.log("No valid image, showing initials");
             setProfileImage(null);
           }
         } catch (error) {
           console.error("Error fetching user image:", error);
+          setProfileImage(null);
         }
       };
       fetchUserImage();
@@ -58,7 +60,6 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
     return () => window.removeEventListener("photoUpdated", handlePhotoUpdate);
   }, []);
 
-  // Calculate initials from user's name or email
   const initials = React.useMemo(() => {
     const base = session?.user?.name || session?.user?.email?.split("@")[0] || "User";
     return base
@@ -99,8 +100,6 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
             {titleText}
           </span>
         </div>
-
-        {/* Removed search bar block */}
 
         <div className="flex items-center gap-1 sm:gap-2 md:gap-3 min-w-0">
           <div className="relative flex-1 sm:flex-none">
@@ -158,6 +157,7 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
                     width={40}
                     height={40}
                     className="w-full h-full object-cover"
+                    unoptimized
                   />
                 ) : (
                   initials

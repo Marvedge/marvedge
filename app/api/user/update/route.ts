@@ -13,6 +13,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { firstName, lastName, bio, location, website, image } = body;
 
+  console.log("Update User Request - Image:", image);
+
   try {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -29,10 +31,11 @@ export async function POST(req: NextRequest) {
         bio,
         location,
         website,
-        image: image === null ? null : image || undefined,
+        image: image && image.trim() ? image : null,
       },
     });
 
+    console.log("Updated User Image:", updatedUser.image);
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error) {
     console.error("[UPDATE_USER_ERROR]", error);

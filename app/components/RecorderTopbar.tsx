@@ -10,11 +10,56 @@ type RecorderTopbarProps = {
 function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
   const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null | undefined>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  // Get first name or fallback
+
   const username =
     session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")?.[0] || "User";
-  // Close dropdown on outside click
+
+  useEffect(() => {
+    const fetchUserImage = async () => {
+      try {
+        const res = await fetch("/api/user/get");
+        const data = await res.json();
+        if (data.user?.image && data.user.image.trim()) {
+          setProfileImage(data.user.image + `?t=${Date.now()}`);
+        } else {
+          setProfileImage(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user image:", error);
+        setProfileImage(null);
+      }
+    };
+
+    if (session?.user) {
+      fetchUserImage();
+    }
+  }, [session]);
+
+  useEffect(() => {
+    const handlePhotoUpdate = () => {
+      const fetchUserImage = async () => {
+        try {
+          const res = await fetch("/api/user/get");
+          const data = await res.json();
+          if (data.user?.image && data.user.image.trim()) {
+            setProfileImage(data.user.image + `?t=${Date.now()}`);
+          } else {
+            setProfileImage(null);
+          }
+        } catch (error) {
+          console.error("Error fetching user image:", error);
+          setProfileImage(null);
+        }
+      };
+      fetchUserImage();
+    };
+
+    window.addEventListener("photoUpdated", handlePhotoUpdate);
+    return () => window.removeEventListener("photoUpdated", handlePhotoUpdate);
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -59,11 +104,24 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
         </button>
         <div className="relative" ref={dropdownRef}>
           <button
-            className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#6356D7] text-white flex items-center justify-center text-lg md:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all"
+            className="w-10 h-10 md:w-12 md:h-12 rounded-full text-white flex items-center justify-center text-lg md:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all overflow-hidden flex-shrink-0"
             onClick={() => setShowDropdown((v) => !v)}
             title={session?.user?.name || session?.user?.email || undefined}
+            style={profileImage ? {} : { backgroundColor: "#6356D7" }}
           >
-            {userInitials}
+            {profileImage ? (
+              <Image
+                key={profileImage}
+                src={profileImage}
+                alt="Profile"
+                width={48}
+                height={48}
+                className="w-full h-full object-cover"
+                unoptimized
+              />
+            ) : (
+              userInitials
+            )}
           </button>
           {showDropdown && (
             <div className="absolute right-0 mt-2 w-56 md:w-64 bg-white rounded-lg shadow-lg p-3 md:p-4 z-50 border border-gray-200 animate-fade-in">
