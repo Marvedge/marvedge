@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { useBlobStore } from "@/app/store/blobStore";
@@ -21,12 +21,14 @@ import { useVideoDuration } from "./hooks/useVideoDuration";
 import VideoPlayerSection from "@/app/components/VideoPlayerSection";
 import RecordingControls from "@/app/components/RecordingControls";
 import InitialRecorderView from "@/app/components/InitialRecorderView";
+import { TutorialRecorder } from "@/app/components/TutorialRecorder";
 
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
   const router = useRouter();
   const saveSessionRef = useRef<Set<string>>(new Set());
   const isProcessingRef = useRef(false);
+  const [recordingMode, setRecordingMode] = useState<"standard" | "tutorial">("standard");
 
   const handleBack = useCallback(() => {
     try {
@@ -302,6 +304,41 @@ export default function RecorderPage() {
   }
 
   // Initial UI (no recording or uploaded video)
+  if (recordingMode === "tutorial") {
+    return (
+      <div
+        className="flex flex-col h-screen w-full overflow-hidden"
+        style={{ fontFamily: "var(--font-raleway)" }}
+      >
+        <Toaster position="top-right" />
+        <RecorderTopbar onBack={handleBack} userInitials={initials} />
+        <div className="flex flex-col h-full overflow-hidden">
+          <div className="border-b border-gray-200 bg-white">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setRecordingMode("standard")}
+                  className="px-4 py-3 text-gray-700 font-medium border-b-2 border-transparent hover:border-gray-300"
+                >
+                  Standard Recording
+                </button>
+                <button
+                  onClick={() => setRecordingMode("tutorial")}
+                  className="px-4 py-3 text-blue-600 font-medium border-b-2 border-blue-600"
+                >
+                  Tutorial Slideshow
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <TutorialRecorder />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col h-screen w-full overflow-hidden"
@@ -309,6 +346,24 @@ export default function RecorderPage() {
     >
       <Toaster position="top-right" />
       <RecorderTopbar onBack={handleBack} userInitials={initials} />
+      <div className="border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setRecordingMode("standard")}
+              className="px-4 py-3 text-blue-600 font-medium border-b-2 border-blue-600"
+            >
+              Standard Recording
+            </button>
+            <button
+              onClick={() => setRecordingMode("tutorial")}
+              className="px-4 py-3 text-gray-700 font-medium border-b-2 border-transparent hover:border-gray-300"
+            >
+              Tutorial Slideshow
+            </button>
+          </div>
+        </div>
+      </div>
       <InitialRecorderView
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}

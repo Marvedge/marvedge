@@ -31,6 +31,8 @@ const SettingsPage = () => {
   const [avatar, setAvatar] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [showPhotoCard, setShowPhotoCard] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -66,7 +68,6 @@ const SettingsPage = () => {
         console.log(user.image, user.name);
         setAvatar(user.image || "");
 
-        //  Update form fields from user data
         setForm((prev) => ({
           ...prev,
           bio: user.bio || "",
@@ -101,7 +102,7 @@ const SettingsPage = () => {
           image: user.image || "",
         };
         setForm(userFormData);
-        setOriginalForm(userFormData); // Set original state
+        setOriginalForm(userFormData);
       }
     };
     fetchUser();
@@ -119,6 +120,10 @@ const SettingsPage = () => {
   const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please upload an image file");
+        return;
+      }
       setPhotoFile(file);
       setIsDirty(true);
       const reader = new FileReader();
@@ -133,6 +138,7 @@ const SettingsPage = () => {
   };
 
   const handleRemovePhoto = () => {
+    console.log("Remove photo clicked");
     setPhotoFile(null);
     setAvatar("");
     setForm((prev) => ({ ...prev, image: "" }));
@@ -160,16 +166,31 @@ const SettingsPage = () => {
         });
         const uploadData = await uploadRes.json();
 
-        if (!uploadRes.ok || !uploadData.secure_url) {
+        console.log("Upload Status:", uploadRes.status);
+        console.log("Upload Data:", uploadData);
+
+        if (!uploadRes.ok) {
+          console.error("Upload failed with status:", uploadRes.status);
           toast.error(uploadData.error || "Failed to upload photo");
           setIsUploading(false);
           setIsSaving(false);
           return;
         }
 
+        if (!uploadData.secure_url) {
+          console.error("No secure_url in response:", uploadData);
+          toast.error(uploadData.error || "Failed to get image URL from upload");
+          setIsUploading(false);
+          setIsSaving(false);
+          return;
+        }
+
         imageUrl = uploadData.secure_url;
+        console.log("Image URL after upload:", imageUrl);
         setIsUploading(false);
       }
+
+      console.log("Saving with image URL:", imageUrl);
 
       const res = await fetch("/api/user/update", {
         method: "POST",
@@ -178,6 +199,8 @@ const SettingsPage = () => {
       });
 
       const data = await res.json();
+      console.log("Save response:", data);
+
       if (res.ok) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         router.refresh();
@@ -185,6 +208,8 @@ const SettingsPage = () => {
         setIsDirty(false);
         setOriginalForm({ ...form, image: imageUrl });
         setPhotoFile(null);
+        setAvatar(imageUrl || "");
+        console.log("Dispatching photoUpdated event");
         window.dispatchEvent(new Event("photoUpdated"));
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
@@ -246,9 +271,49 @@ const SettingsPage = () => {
     }
   };
 
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      const file = files[0];
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please upload an image file");
+        return;
+      }
+      setPhotoFile(file);
+      setIsDirty(true);
+      setShowPhotoCard(false);
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAvatar(event.target.result as string);
+          setForm((prev) => ({ ...prev, image: event.target?.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
-      {/* HEADER BAR */}
       <SignedHeader titleText="Settings" iconSRC="/uil_setting.png" iconALT="settings_icon" />
 
       <div className="flex flex-wrap items-center gap-2 px-2 sm:px-4 md:px-8 pb-3 pt-4 bg-white border-b border-gray-200 overflow-x-auto">
@@ -274,30 +339,47 @@ const SettingsPage = () => {
             <p className="text-gray-500 mb-6">Manage your profile settings here.</p>
           </div>
           <form
-            className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-4 sm:p-6 md:p-8 lg:p-10"
+            className="w-full mx-auto mt-2 mb-12 bg-white rounded-xl border border-[#ede7fa] shadow-none p-4 sm:p-6 md:p-8 lg:p-10 relative"
             onSubmit={handleSave}
             noValidate
           >
+            {/* <button
+              type="button"
+              className="absolute top-4 right-4 sm:top-6 sm:right-6 md:top-8 md:right-8 rounded-full p-3  transition-colors shadow-lg flex items-center justify-center w-12 h-12"
+              onClick={() => fileInputRef.current?.click()}
+              title="Edit photo"
+            >
+              <Image
+                src="/icons/lets-icons_edit-fill.png"
+                alt="Edit"
+                width={24}
+                height={24}
+              />
+            </button> */}
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mb-8">
-              <div className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF] cursor-pointer hover:opacity-80 transition-opacity">
-                {avatar && avatar.trim() ? (
-                  <Image
-                    src={avatar}
-                    alt="Avatar"
-                    width={96}
-                    height={96}
-                    className="w-full h-full object-cover rounded-full"
-                  />
-                ) : (
-                  initials
-                )}
+              <div className="w-24 h-24">
+                <div className="w-24 h-24 rounded-full bg-[#F3F0FC] flex items-center justify-center text-3xl font-bold text-[#7C5CFC] border-2 border-[#E0D7FF] cursor-pointer hover:opacity-80 transition-opacity">
+                  {avatar && avatar.trim() ? (
+                    <Image
+                      key={avatar}
+                      src={avatar}
+                      alt="Avatar"
+                      width={96}
+                      height={96}
+                      className="w-full h-full object-cover rounded-full"
+                      unoptimized
+                    />
+                  ) : (
+                    initials
+                  )}
+                </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
                 <button
                   type="button"
                   disabled={isSaving || isUploading}
                   className="px-5 py-2 rounded-lg bg-[#7C5CFC] text-white font-semibold shadow hover:bg-[#8A76FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setShowPhotoCard(true)}
                 >
                   Change Photo
                 </button>
@@ -305,9 +387,10 @@ const SettingsPage = () => {
                   <button
                     type="button"
                     disabled={isSaving || isUploading}
-                    className="px-5 py-2 rounded-lg bg-white border border-[#8A76FC] text-[#8A76FC] font-semibold shadow hover:bg-[#F3F0FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2 rounded-lg bg-white border  text-[#8A76FC] font-semibold shadow hover:bg-[#F3F0FC] transition w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     onClick={handleRemovePhoto}
                   >
+                    <Image src="/icons/si_bin-line.png" alt="Remove" width={18} height={18} />
                     Remove Photo
                   </button>
                 )}
@@ -320,6 +403,60 @@ const SettingsPage = () => {
                 />
               </div>
             </div>
+
+            {showPhotoCard && (
+              <div
+                className="fixed inset-0 backdrop-blur-lg bg-white/15 flex items-center justify-center z-50 p-4"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setShowPhotoCard(false);
+                  }
+                }}
+              >
+                <div
+                  className={`bg-[#F3F0FC] rounded-3xl max-w-md w-full p-12 border-2 transition-all ${
+                    isDragging
+                      ? "border-solid border-[#7C5CFC] bg-[#FFFBFE] shadow-lg"
+                      : "border-dashed border-[#A594F9]"
+                  }`}
+                >
+                  <div className="flex flex-col items-center pointer-events-none">
+                    <Image
+                      src="/icons/zondicons_upload.png"
+                      alt="Upload"
+                      width={56}
+                      height={56}
+                      className={`mb-6 transition-transform ${isDragging ? "scale-110" : ""}`}
+                    />
+
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 text-center">
+                      {isDragging ? "Drop your image here" : "Drag and Drop files to upload"}
+                    </h3>
+
+                    <p className="text-gray-500 text-center mb-5">or</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPhotoCard(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full px-8 py-2.5 bg-[#7C5CFC] text-white font-semibold rounded-lg hover:bg-[#8A76FC] transition mb-4"
+                  >
+                    Browse
+                  </button>
+
+                  <p className="text-gray-500 text-xs text-center">
+                    Supported files: JPEG, PNG, GIF
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
               <div>
                 <label className="block text-gray-600 mb-2">First Name</label>
@@ -388,17 +525,6 @@ const SettingsPage = () => {
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-[#F8F6FF] text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9] shadow-sm"
                 />
               </div>
-              {/* <div className="sm:col-span-2">
-                <label className="block text-gray-600 mb-2">Timezone</label>
-                <input
-                  type="text"
-                  name="timezone"
-                  value={form.timezone}
-                  onChange={handleInputChange}
-                  placeholder="UTC, Coordinated Universal Time"
-                  className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-[#F8F6FF] text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9] shadow-sm"
-                />
-              </div> */}
             </div>
             {isDirty && hasChanges && (
               <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 mt-8">
