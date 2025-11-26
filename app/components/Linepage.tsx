@@ -5,9 +5,18 @@ interface TimelineProps {
   maxValue?: number;
   zoomLevel?: number;
   width?: number;
+  setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom">>;
+  setActiveZoomIdx: React.Dispatch<React.SetStateAction<number>>;
 }
 
-const Linepage = ({ minValue = 0, maxValue = 5, zoomLevel = 1, width = 800 }: TimelineProps) => {
+const Linepage = ({
+  minValue = 0,
+  maxValue = 5,
+  zoomLevel = 1,
+  width = 800,
+  setMode,
+  setActiveZoomIdx,
+}: TimelineProps) => {
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
@@ -57,14 +66,21 @@ const Linepage = ({ minValue = 0, maxValue = 5, zoomLevel = 1, width = 800 }: Ti
         }
       }
     }
-    console.log("ticks", ticks);
+    //console.log("ticks", ticks);
     return ticks;
   };
 
   const ticks = generateTicks();
 
   return (
-    <div className="relative bg-white h-full" style={{ width }}>
+    <div
+      className="relative bg-white h-full select-none"
+      style={{ width }}
+      onClick={() => {
+        setMode("main");
+        setActiveZoomIdx(-1);
+      }}
+    >
       {ticks.map((tick, index) => {
         const padding = 20; // space on left & right
         const paddedWidth = width - padding * 2;

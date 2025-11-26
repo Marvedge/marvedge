@@ -3,6 +3,8 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { ZoomEffect } from "../types/editor/zoom-effect";
 import Linepage from "./Linepage";
+//import { start } from "nprogress";
+import ReactPlayer from "react-player";
 
 interface TimelineRulerProps {
   minValue?: number;
@@ -19,13 +21,27 @@ interface TimelineRulerProps {
   onEndTimeChange?: (value: number) => void;
   processing?: boolean;
   onResetVideo?: () => void;
-  onZoomEffectCreate?: (effect: ZoomEffect) => void;
-  initialSegments?: { start: string; end: string }[];
-  onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
+  //onZoomEffectCreate?: (effect: ZoomEffect) => void;
+  //initialSegments?: { start: string; end: string }[];
+  //onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
   isFullscreen: boolean;
   handleFullscreen: () => void;
+  //videourl: string;
+  //setVideoUrl: React.Dispatch<React.SetStateAction<string | null>>;
+  mode: "main" | "trim" | "zoom";
+  setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom">>;
+  playerRef: React.RefObject<ReactPlayer>;
+  setChildHandleProgress: (fn: (data: { playedSeconds: number }) => void) => void;
+  //onZoomChange?: (activeZoom: ZoomEffect | null) => void;
+  zoomSegments: ZoomEffect[];
+  setZoomSegments: React.Dispatch<React.SetStateAction<ZoomEffect[]>>;
+  activeZoomIdx: number;
+  setActiveZoomIdx: React.Dispatch<React.SetStateAction<number>>;
+  //open: boolean;
+  //setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  zoomLevelDepth: number;
 }
 
 export default function TimelineRuler({
@@ -40,10 +56,24 @@ export default function TimelineRuler({
   onEndTimeChange,
   processing = false,
   onResetVideo,
-  onZoomEffectCreate,
-  initialSegments,
+  //onZoomEffectCreate,
+  // initialSegments,
   setPlaying,
   handleFullscreen,
+  // videourl,
+  // setVideoUrl,
+  // onTrim,
+  mode,
+  setMode,
+  playerRef,
+  setChildHandleProgress,
+  //onZoomChange,
+  zoomSegments,
+  setZoomSegments,
+  activeZoomIdx,
+  setActiveZoomIdx,
+  //setOpen,
+  zoomLevelDepth,
 }: TimelineRulerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [draggingHandle] = useState<"current" | "start" | "end" | null>(null);
@@ -54,16 +84,33 @@ export default function TimelineRuler({
   // Initialize with full duration by default
   const [localStartTime, setLocalStartTime] = useState(startTime ?? minValue);
   const [localEndTime, setLocalEndTime] = useState(endTime ?? maxValue);
-
-  const [segments, setSegments] = useState<{ start: number; end: number }[]>(
-    initialSegments
-      ? initialSegments.map((seg) => ({
-          start: parseFloat(seg.start),
-          end: parseFloat(seg.end),
-        }))
-      : [{ start: minValue, end: maxValue }] // Initialize with full duration segment
-  );
-  const [activeSegment, setActiveSegment] = useState(0);
+  //console.log("Intial segemnt = ", initialSegments, minValue, maxValue);
+  // const [segments, setSegments] = useState<{ start: number; end: number }[]>(
+  //   initialSegments
+  //     ? initialSegments.map((seg) => ({
+  //         start: parseFloat(seg.start),
+  //         end: parseFloat(seg.end),
+  //       }))
+  //     : [{ start: minValue, end: maxValue }] // Initialize with full duration segment
+  // );
+  const [segments, setSegments] = useState<{ start: number; end: number }[]>([
+    {
+      start: minValue,
+      end: maxValue / 3,
+    },
+  ]);
+  // const [zoomSegment, setZoomSegment] = useState<ZoomEffect[]>([
+  //   {
+  //     id: "1",
+  //     startTime: 0,
+  //     endTime: 2,
+  //     zoomLevel: 2,
+  //     x: 0.5,
+  //     y: 0.5,
+  //   },
+  // ]);
+  //console.log("Intital Value", segments);
+  const [activeSegment, setActiveSegment] = useState<number>(0);
   const [removedSegments, setRemovedSegments] = useState<{ start: number; end: number }[]>([]);
   const [draggingScissor, setDraggingScissor] = useState<"left" | "right" | null>(null);
   const [scissorPreview, setScissorPreview] = useState<number | null>(null);
@@ -449,29 +496,235 @@ export default function TimelineRuler({
       setRemovedSegments((prev) => prev.slice(0, -1));
     }
   };
+  // function formatToHHMMSS(seconds: number) {
+  //   const hrs = String(Math.floor(seconds / 3600)).padStart(2, "0");
+  //   const mins = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+  //   const secs = String(Math.floor(seconds % 60)).padStart(2, "0");
+  //   return `${hrs}:${mins}:${secs}`;
+  // }
 
-  const handleSmartTrim = () => {
+  const handleSmartTrim = async () => {
     const currentTime = localValue;
     const startTime = Math.max(minValue, currentTime);
     const endTime = Math.min(maxValue, currentTime + FIXED_TRIM_DURATION);
 
     const newSegment = { start: startTime, end: endTime };
+
+    // Update segments and active segment together
+    console.log("Start time", startTime, " ", endTime);
     setSegments((prev) => {
       const newSegments = [...prev, newSegment];
       setActiveSegment(newSegments.length - 1);
       return newSegments;
     });
 
+    // ⚠️ Compute sendData including the new segment
+    //const allSegments = [...segments, newSegment];
+    // const sendData = allSegments.map((seg) => ({
+    //   start: formatToHHMMSS(seg.start),
+    //   end: formatToHHMMSS(seg.end),
+    // }));
+
     setLocalStartTime(startTime);
     setLocalEndTime(endTime);
 
     console.log(`Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`);
+
+    // const sTime = formatToHHMMSS(startTime);
+    // const eTime = formatToHHMMSS(endTime);
+    //onTrim?.([{ start: sTime, end: eTime }]);
+    // try {
+    //   const mp4VideoUrl = videourl.endsWith(".webm") ? videourl.replace(".webm", ".mp4") : videourl;
+
+    //   const res = await fetch(mp4VideoUrl);
+    //   const blob = await res.blob();
+
+    //   const formData = new FormData();
+    //   formData.append("video", blob, "video.mp4");
+    //   formData.append("segments", JSON.stringify(sendData));
+
+    //   console.log("Send Data", sendData);
+
+    //   const TRIMURL = `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`;
+    //   const resp = await axios.post(TRIMURL, formData, {
+    //     headers: { "Content-Type": "multipart/form-data" },
+    //     responseType: "blob",
+    //   });
+
+    //   const videoBlob = new Blob([resp?.data], { type: "video/mp4" });
+    //   const newVideoUrl = URL.createObjectURL(videoBlob);
+    //   setVideoUrl(newVideoUrl);
+
+    //   console.log("Trimmed video URL:", newVideoUrl);
+    // } catch (err) {
+    //   console.error("Error during video trimming:", err);
+    // }
   };
 
-  // Auto-play playhead movement intentionally disabled. Legacy block removed.
+  // Play trim segment
+  const playTrimSegment = (segment: { start: number; end: number }, idx: number) => {
+    const video = playerRef.current;
+    if (!video) {
+      return;
+    }
 
-  // Separate effect to call onValueChange callback after localValue updates
-  // But skip if the update came from a prop change
+    setMode("trim");
+    setActiveSegment(idx);
+    setActiveZoomIdx(-1);
+    video.seekTo(segment.start, "seconds");
+    setPlaying(true);
+  };
+
+  const handleProgress = useCallback(
+    ({ playedSeconds }: { playedSeconds: number }) => {
+      const player = playerRef.current;
+      if (!player) {
+        return;
+      }
+
+      if (mode === "main") {
+        for (const segment of segments) {
+          if (playedSeconds >= segment.start && playedSeconds < segment.end) {
+            player.seekTo(segment.end, "seconds");
+          }
+        }
+      }
+
+      if (mode === "trim" && segments[activeSegment]) {
+        const trim = segments[activeSegment];
+        if (trim && playedSeconds >= trim.end) {
+          player.seekTo(trim.start, "seconds");
+        }
+      }
+    },
+    [mode, segments, activeSegment]
+  );
+
+  useEffect(() => {
+    setChildHandleProgress(() => handleProgress);
+  }, [handleProgress, setChildHandleProgress]);
+
+  type DragState =
+    | {
+        mode: "edge"; // trim handle dragging
+        index: number;
+        side: "left" | "right";
+        startX: number;
+        startValue: number;
+      }
+    | {
+        mode: "segment"; // whole-segment dragging
+        index: number;
+        startX: number;
+        startValue: number;
+        endValue: number;
+      };
+
+  const [dragState, setDragState] = useState<DragState | null>(null);
+
+  useEffect(() => {
+    if (!dragState) {
+      return;
+    }
+
+    const onMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - dragState.startX;
+      const pixelsPerUnit = zoomedTimelineWidth / (maxValue - minValue);
+      const deltaValue = deltaX / pixelsPerUnit;
+
+      setSegments((prev) =>
+        prev.map((seg, i) => {
+          if (i !== dragState.index) {
+            return seg;
+          }
+
+          // ---------------------------
+          // MODE: TRIM HANDLE DRAGGING
+          // ---------------------------
+          if (dragState.mode === "edge") {
+            let newStart = seg.start;
+            let newEnd = seg.end;
+
+            if (dragState.side === "left") {
+              newStart = dragState.startValue + deltaValue;
+
+              if (newStart <= seg.end - 0.01) {
+                newStart = Math.max(minValue, newStart);
+              } else {
+                // flip
+                const flippedStart = seg.end;
+                const flippedEnd = Math.min(maxValue, newStart);
+                newStart = flippedStart;
+                newEnd = flippedEnd;
+
+                // auto change handle
+                setDragState((d) =>
+                  d && d.mode === "edge"
+                    ? { ...d, side: "right", startValue: flippedEnd, startX: e.clientX }
+                    : d
+                );
+              }
+            }
+
+            if (dragState.side === "right") {
+              newEnd = dragState.startValue + deltaValue;
+
+              if (newEnd >= seg.start + 0.01) {
+                newEnd = Math.min(maxValue, newEnd);
+              } else {
+                const flippedEnd = seg.start;
+                const flippedStart = Math.max(minValue, newEnd);
+                newStart = flippedStart;
+                newEnd = flippedEnd;
+
+                // auto change handle
+                setDragState((d) =>
+                  d && d.mode === "edge"
+                    ? { ...d, side: "left", startValue: flippedStart, startX: e.clientX }
+                    : d
+                );
+              }
+            }
+
+            return { ...seg, start: newStart, end: newEnd };
+          }
+
+          // ---------------------------
+          // MODE: DRAG WHOLE SEGMENT
+          // ---------------------------
+          if (dragState.mode === "segment") {
+            const width = dragState.endValue - dragState.startValue;
+
+            let newStart = dragState.startValue + deltaValue;
+            let newEnd = dragState.endValue + deltaValue;
+
+            if (newStart < minValue) {
+              newStart = minValue;
+              newEnd = minValue + width;
+            } else if (newEnd > maxValue) {
+              newEnd = maxValue;
+              newStart = maxValue - width;
+            }
+
+            return { ...seg, start: newStart, end: newEnd };
+          }
+
+          return seg;
+        })
+      );
+    };
+
+    const onUp = () => setDragState(null);
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragState, maxValue, minValue, zoomedTimelineWidth]);
+
   useEffect(() => {
     if (isUpdatingFromPropRef.current) {
       isUpdatingFromPropRef.current = false;
@@ -526,20 +779,185 @@ export default function TimelineRuler({
   //   return ticks;
   // };
 
-  const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
-  const handleZoomClick = () => {
-    if (!onZoomEffectCreate) {
+  // const [zoomActive, setZoomActive] = useState<number>(0);
+  type DragZoomState =
+    | {
+        mode: "edge"; // trim handle dragging
+        index: number;
+        side: "left" | "right";
+        startX: number;
+        startValue: number;
+      }
+    | {
+        mode: "segment"; // whole-segment dragging
+        index: number;
+        startX: number;
+        startValue: number;
+        endValue: number;
+      };
+
+  const playZoomSegment = (segment: ZoomEffect, idx: number) => {
+    const video = playerRef.current;
+    if (!video) {
       return;
     }
-    onZoomEffectCreate({
-      id: Date.now().toString(),
-      startTime: Math.max(0, localValue - 1),
-      endTime: Math.min(maxValue, localValue + 2),
-      zoomLevel: 2.0,
-      x: 0.5,
-      y: 0.5,
-    });
+
+    // Set active zoom index
+    setActiveZoomIdx(idx);
+
+    // Notify parent so VideoPlayer applies zoom
+    //onZoomChange?.(segment);
+    setMode("zoom");
+    //setOpen(true);
+    // Jump video to zoom start
+    video.seekTo(segment.startTime, "seconds");
+    setPlaying(true);
   };
+
+  const [dragZoomState, setDragZoomState] = useState<DragZoomState | null>(null);
+
+  useEffect(() => {
+    if (!dragZoomState) {
+      return;
+    }
+
+    const onMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - dragZoomState.startX;
+      const pixelsPerUnit = zoomedTimelineWidth / (maxValue - minValue);
+      const deltaValue = deltaX / pixelsPerUnit;
+
+      setZoomSegments((prev) =>
+        prev.map((seg, i) => {
+          console.log("zoom", i, dragZoomState);
+          if (i !== dragZoomState.index) {
+            return seg;
+          }
+          // ---------------------------
+          // MODE: TRIM HANDLE DRAGGING
+          // ---------------------------
+          if (dragZoomState.mode === "edge") {
+            console.log("zoom runn in edge");
+            let newStart = seg.startTime;
+            let newEnd = seg.endTime;
+
+            if (dragZoomState.side === "left") {
+              newStart = dragZoomState.startValue + deltaValue;
+
+              if (newStart <= seg.endTime - 0.01) {
+                newStart = Math.max(minValue, newStart);
+              } else {
+                // flip
+                const flippedStart = seg.endTime;
+                const flippedEnd = Math.min(maxValue, newStart);
+                newStart = flippedStart;
+                newEnd = flippedEnd;
+
+                // auto change handle
+                setDragZoomState((d) =>
+                  d && d.mode === "edge"
+                    ? { ...d, side: "right", startValue: flippedEnd, startX: e.clientX }
+                    : d
+                );
+              }
+            }
+
+            if (dragZoomState.side === "right") {
+              newEnd = dragZoomState.startValue + deltaValue;
+
+              if (newEnd >= seg.startTime + 0.01) {
+                newEnd = Math.min(maxValue, newEnd);
+              } else {
+                const flippedEnd = seg.startTime;
+                const flippedStart = Math.max(minValue, newEnd);
+                newStart = flippedStart;
+                newEnd = flippedEnd;
+
+                // auto change handle
+                setDragZoomState((d) =>
+                  d && d.mode === "edge"
+                    ? { ...d, side: "left", startValue: flippedStart, startX: e.clientX }
+                    : d
+                );
+              }
+            }
+
+            return { ...seg, startTime: newStart, endTime: newEnd };
+          }
+
+          // ---------------------------
+          // MODE: DRAG WHOLE SEGMENT
+          // ---------------------------
+          if (dragZoomState.mode === "segment") {
+            const width = dragZoomState.endValue - dragZoomState.startValue;
+
+            let newStart = dragZoomState.startValue + deltaValue;
+            let newEnd = dragZoomState.endValue + deltaValue;
+
+            if (newStart < minValue) {
+              newStart = minValue;
+              newEnd = minValue + width;
+            } else if (newEnd > maxValue) {
+              newEnd = maxValue;
+              newStart = maxValue - width;
+            }
+
+            return { ...seg, startTime: newStart, endTime: newEnd };
+          }
+
+          return seg;
+        })
+      );
+    };
+
+    const onUp = () => setDragZoomState(null);
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragZoomState, maxValue, minValue, zoomedTimelineWidth]);
+
+  const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+  const handleZoomClick = () => {
+    //console.log("hlo-rer");
+    // if (!onZoomEffectCreate) {
+    //   return;
+    // }
+    const startTime = Math.max(0, localValue - 1);
+    const endTime = Math.min(maxValue, localValue + 2);
+
+    const newSegment = {
+      id: Date.now().toString(),
+      startTime: startTime,
+      endTime: endTime,
+      zoomLevel: zoomLevelDepth,
+      x: 0.9,
+      y: 0.1,
+    };
+
+    console.log("Start time", startTime, " ", endTime);
+    setZoomSegments((prev) => {
+      const newSegments = [...prev, newSegment];
+      //setActiveSegment(newSegments.length - 1);
+      return newSegments;
+    });
+
+    setLocalStartTime(startTime);
+    setLocalEndTime(endTime);
+
+    // onZoomEffectCreate({
+    //   id: Date.now().toString(),
+    //   startTime: Math.max(0, localValue - 1),
+    //   endTime: Math.min(maxValue, localValue + 2),
+    //   zoomLevel: 2.0,
+    //   x: 0.5,
+    //   y: 0.5,
+    // });
+  };
+  // const [open, setOpen] = useState(false);
   return (
     <div className="w-full max-w-6xl mx-auto">
       <div className="flex flex-row items-center justify-between w-full mb-6 gap-3 sm:gap-6 ">
@@ -747,12 +1165,13 @@ export default function TimelineRuler({
       {/* Timeline Container - Fixed width */}
       <div className="max-w-[1379px] h-[173px]">
         <div
-          className=" flex items-center justify-between bg-transparent"
+          className=" flex items-center justify-center bg-transparent"
           style={{ height: "173px" }}
         >
           {/* Left Scissor - Fixed position and size */}
           <div
             className="
+            flex-none
             flex flex-col items-center justify-between
             bg-[#8A76FC]
             rounded-l-lg
@@ -789,6 +1208,7 @@ export default function TimelineRuler({
                 alt="Trim"
                 width={20}
                 height={20}
+                className="pointer-events-none select-none"
                 style={{ filter: "brightness(0) invert(1)" }}
               />
 
@@ -799,7 +1219,7 @@ export default function TimelineRuler({
 
           {/* Scrollable Timeline Container - Fixed width */}
           <div
-            className=" flex-1 h-full overflow-hidden"
+            className="h-full overflow-hidden"
             // style={{ width: `${1000}px`, height: "100%" }}
           >
             <div
@@ -822,6 +1242,7 @@ export default function TimelineRuler({
                 }}
                 onMouseDown={(e) => {
                   if (!draggingScissor) {
+                    setPlaying(false);
                     setDraggingCurrentTime(true);
                     updateCurrentTimeFromMouse(e);
                     // Switch to non-trim mode when clicking on timeline
@@ -830,6 +1251,8 @@ export default function TimelineRuler({
                 }}
                 onClick={(e) => {
                   // Also switch to non-trim mode on click if not on a segment
+                  //console.log("hlo-1");
+                  //playMainVideo();
                   const target = e.target as HTMLElement;
                   if (!target.closest('[class*="segment"]')) {
                     switchToNonTrimMode();
@@ -841,6 +1264,8 @@ export default function TimelineRuler({
                   minValue={minValue}
                   zoomLevel={zoomLevel}
                   width={zoomedTimelineWidth}
+                  setMode={setMode}
+                  setActiveZoomIdx={setActiveZoomIdx}
                 />
                 {/* {generateTicks().map((tick, index) => {
                   const positionPx =
@@ -898,10 +1323,10 @@ export default function TimelineRuler({
                   return (
                     <div
                       key={`segment-${idx}`}
-                      className={`absolute top-0 h-[84px] mt-[50px] z-10 group cursor-pointer transition-opacity ${
+                      className={`absolute top-0 h-[84px] mt-[50px] group cursor-grab transition-opacity ${
                         idx === activeSegment
-                          ? "bg-green-400 opacity-70"
-                          : "bg-green-300 opacity-50 hover:opacity-65"
+                          ? "bg-[#FF3939]/54 opacity-70 z-10 hover:border-2 border-black rounded-md"
+                          : "bg-[#FF3939]/35 opacity-50 hover:opacity-65 z-8"
                       }`}
                       style={{
                         left: `${startPosition}px`,
@@ -909,32 +1334,161 @@ export default function TimelineRuler({
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setActiveSegment(idx);
                         switchToTrimMode(idx);
+                        playTrimSegment(segment, idx);
+                        //setActiveSegment(idx);
+                      }}
+                      onMouseDown={(e) => {
+                        setDragState({
+                          mode: "segment",
+                          index: idx,
+                          startX: e.clientX,
+                          startValue: segment.start,
+                          endValue: segment.end,
+                        });
                       }}
                     >
                       {/* Segment Label */}
-                      <div className="absolute top-2 left-2 text-[11px] font-bold text-green-900 bg-white bg-opacity-80 px-2 py-1 rounded pointer-events-none">
-                        Trim {idx + 1}
+                      <div className="w-full h-full flex justify-center items-center ">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-transparent pointer-events-none overflow-hidden">
+                          <Image
+                            src="/icons/Violet_scissor.svg"
+                            alt="Trim"
+                            width={14.89}
+                            height={14.89}
+                            className="select-none"
+                          />
+                          <div className="text-base font-bold text-[#8A76FC] select-none">Trim</div>
+                        </div>
                       </div>
 
                       {/* Left Resize Handle */}
                       <div
-                        className="absolute top-0 -left-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
+                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#FF3939]/54 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
                         onMouseDown={(e) => {
                           e.stopPropagation();
+                          setDragState({
+                            mode: "edge",
+                            index: idx,
+                            side: "left",
+                            startX: e.clientX,
+                            startValue: segment.start,
+                          });
                         }}
+                        aria-label="Resize start"
                         title="Drag to resize start"
-                      />
+                      >
+                        <div className="w-px h-[60px] bg-white/80" />
+                      </div>
 
                       {/* Right Resize Handle */}
                       <div
-                        className="absolute top-0 -right-1 h-full w-2 bg-green-600 opacity-0 group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-green-700 hover:w-3"
+                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#FF3939]/54 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
                         onMouseDown={(e) => {
                           e.stopPropagation();
+                          setDragState({
+                            mode: "edge",
+                            index: idx,
+                            side: "right",
+                            startX: e.clientX,
+                            startValue: segment.end,
+                          });
                         }}
                         title="Drag to resize end"
-                      />
+                        aria-label="Resize end"
+                      >
+                        <div className="w-px h-[60px] bg-white/80" />
+                      </div>
+                    </div>
+                  );
+                })}
+                {zoomSegments.map((segment: ZoomEffect, idx) => {
+                  const startPosition =
+                    ((segment.startTime - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  const endPosition =
+                    ((segment.endTime - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  const width = endPosition - startPosition;
+
+                  return (
+                    <div
+                      key={`segment-${idx}`}
+                      className={`absolute top-0 h-[84px] mt-[50px] group cursor-grab transition-opacity ${
+                        idx == activeZoomIdx
+                          ? "bg-[#FF3939]/54 opacity-70 z-10 hover:border-2 border-yellow-400 rounded-md"
+                          : "bg-[#FF3939]/35 opacity-50 hover:opacity-65 z-8"
+                      }`}
+                      style={{
+                        left: `${startPosition}px`,
+                        width: `${width}px`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        //setZoomActive(idx);
+                        //switchToTrimMode(idx);
+                        playZoomSegment(segment, idx);
+                        //setActiveSegment(idx);
+                      }}
+                      onMouseDown={(e) => {
+                        setDragZoomState({
+                          mode: "segment",
+                          index: idx,
+                          startX: e.clientX,
+                          startValue: segment.startTime,
+                          endValue: segment.endTime,
+                        });
+                      }}
+                    >
+                      {/* Segment Label */}
+                      <div className="w-full h-full flex justify-center items-center ">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-transparent pointer-events-none overflow-hidden">
+                          <Image
+                            src="/icons/Violet_scissor.svg"
+                            alt="Trim"
+                            width={14.89}
+                            height={14.89}
+                            className="select-none"
+                          />
+                          <div className="text-base font-bold text-[#8A76FC] select-none">Zoom</div>
+                        </div>
+                      </div>
+
+                      {/* Left Resize Handle */}
+                      <div
+                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#FF3939]/54 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setDragZoomState({
+                            mode: "edge",
+                            index: idx,
+                            side: "left",
+                            startX: e.clientX,
+                            startValue: segment.startTime,
+                          });
+                        }}
+                        aria-label="Resize start"
+                        title="Drag to resize start"
+                      >
+                        <div className="w-px h-[60px] bg-white/80" />
+                      </div>
+
+                      {/* Right Resize Handle */}
+                      <div
+                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#FF3939]/54 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setDragZoomState({
+                            mode: "edge",
+                            index: idx,
+                            side: "right",
+                            startX: e.clientX,
+                            startValue: segment.endTime,
+                          });
+                        }}
+                        title="Drag to resize end"
+                        aria-label="Resize end"
+                      >
+                        <div className="w-px h-[60px] bg-white/80" />
+                      </div>
                     </div>
                   );
                 })}
@@ -945,6 +1499,7 @@ export default function TimelineRuler({
           {/* Right Scissor - Fixed position and size */}
           <div
             className="
+            flex-none
             flex flex-col items-center justify-between
             bg-[#8A76FC]
             rounded-r-lg
@@ -981,6 +1536,7 @@ export default function TimelineRuler({
                 alt="Trim"
                 width={20}
                 height={20}
+                className="pointer-events-none select-none"
                 style={{ filter: "brightness(0) invert(1)", transform: "scaleX(-1)" }}
               />
 
