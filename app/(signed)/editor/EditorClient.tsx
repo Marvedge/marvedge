@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useCallback, useRef } from "react";
+import React, { useEffect, useCallback, useState, useRef } from "react";
 import { FaBars } from "react-icons/fa6";
 //import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
@@ -34,8 +34,9 @@ import { useTimelineInit } from "./hooks/useTimelineInit";
 
 // Utils
 import { sanitizeFilename } from "@/app/lib/constants";
-import { handleSaveDemo, videoTrimHandler, exportVideo } from "./utils/videoHandlers";
+import { handleSaveDemo, exportVideo } from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
+import ZoomModal from "@/app/components/ZoomModal";
 
 export default function EditorPage() {
   const router = useRouter();
@@ -280,13 +281,13 @@ export default function EditorPage() {
   };
 
   // Video trim handler
-  const onVideoTrim = async (segments: { start: string; end: string }[]) => {
-    await videoTrimHandler(segments, {
-      videoUrl: videoUrl!,
-      setVideoUrl,
-      setProgress,
-    });
-  };
+  // const onVideoTrim = async (segments: { start: string; end: string }[]) => {
+  //   await videoTrimHandler(segments, {
+  //     videoUrl: videoUrl!,
+  //     setVideoUrl,
+  //     setProgress,
+  //   });
+  // };
 
   // Export video handler
   const onExportVideo = async () => {
@@ -301,23 +302,71 @@ export default function EditorPage() {
   };
 
   // Zoom effects handlers
-  const onZoomEffectCreate = (effect: ZoomEffect) => {
-    console.log("Creating zoom effect:", effect);
-    console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
-    console.log("Coordinates:", { x: effect.x, y: effect.y }, "Expected: 0-1 range");
+  // const onZoomEffectCreate = (effect: ZoomEffect) => {
+  //   console.log("Creating zoom effect:", effect);
+  //   console.log("Zoom level:", effect.zoomLevel, "Expected: > 1.0");
+  //   console.log("Coordinates:", { x: effect.x, y: effect.y }, "Expected: 0-1 range");
 
-    if (effect.zoomLevel <= 1.0) {
-      console.warn("⚠️ Zoom level is too low, forcing to 2.0");
-      effect.zoomLevel = 2.0;
-    }
+  //   if (effect.zoomLevel <= 1.0) {
+  //     console.warn("⚠️ Zoom level is too low, forcing to 2.0");
+  //     effect.zoomLevel = 2.0;
+  //   }
 
-    setZoomEffects((prev) => [...prev, effect]);
-    console.log("Total zoom effects:", [...zoomEffects, effect].length);
-  };
+  //   setZoomEffects((prev) => [...prev, effect]);
+  //   console.log("Total zoom effects:", [...zoomEffects, effect].length);
+  // };
 
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
   };
+
+  //useEffect(() => {}, [videoUrl]);
+  const [mode, setMode] = useState<"main" | "trim" | "zoom">("main");
+  const [childHandleProgress, setChildHandleProgress] = useState<
+    null | ((data: { playedSeconds: number }) => void)
+  >(null);
+
+  const [zoomActive, setZoomActive] = useState(false);
+  const [activeZoomIdx, setActiveZoomIdx] = useState<number>(-1);
+  const [zoomSegments, setZoomSegments] = useState<ZoomEffect[]>([
+    {
+      id: "1",
+      startTime: 1,
+      endTime: 4,
+      zoomLevel: 2,
+      x: 0.5,
+      y: 0.5,
+    },
+  ]);
+  const [zoomLevel, setZoomLevel] = useState(1);
+
+  useEffect(() => {
+    if (!currentTime) {
+      return;
+    }
+    const active = zoomSegments.some(
+      (segment) => currentTime >= segment.startTime && currentTime <= segment.endTime
+    );
+    setZoomActive(active);
+    const segment = zoomSegments.find(
+      (z) => currentTime >= z.startTime && currentTime <= z.endTime
+    );
+
+    // if segment exist
+    if (segment) {
+      setZoomLevel(segment.zoomLevel);
+    } else {
+      setZoomLevel(1); // normal zoom
+    }
+    if (mode === "zoom" && activeZoomIdx != -1) {
+      const zoomInfo = zoomSegments[activeZoomIdx];
+      if (zoomInfo && currentTime >= zoomInfo.endTime) {
+        playerRef.current.seekTo(zoomInfo.startTime, "seconds");
+      }
+    }
+  }, [activeZoomIdx, currentTime, mode, playerRef, zoomSegments]);
+
+  //const [open, setOpen] = useState(true);
 
   return (
     <main className="flex flex-col min-h-screen w-full bg-gray-50 overflow-hidden">
@@ -347,7 +396,7 @@ export default function EditorPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Sidebar for Desktop */}
         <div className="hidden md:block w-80 bg-white shadow-lg z-40">
-          <div className="w-full h-full">
+          <div className="w-full h-full relative">
             <EditorSidebar
               title={sidebarTitle}
               setTitle={setSidebarTitle}
@@ -387,6 +436,19 @@ export default function EditorPage() {
               customBackground={customBackground}
               setCustomBackground={setCustomBackground}
             />
+            {activeZoomIdx != -1 ? (
+              <ZoomModal
+                //isOpen={open}
+                onClose={() => setActiveZoomIdx(-1)}
+                activeZoomIdx={activeZoomIdx}
+                setZoomSegments={setZoomSegments}
+                zoomSegments={zoomSegments}
+                // videourl={videoUrl}
+                // playerRef={playerRef}
+              />
+            ) : (
+              <div></div>
+            )}
           </div>
         </div>
 
@@ -534,9 +596,9 @@ export default function EditorPage() {
           {/* Video Wrapper */}
           <div
             className={
-              "flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl shadow-lg bg-white"
+              "flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl bg-transparent"
             }
-            style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
+            //style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
           >
             {/* Video container */}
             <div
@@ -546,96 +608,121 @@ export default function EditorPage() {
               } flex flex-col items-center justify-center mb-1 transition-all duration-300`}
               style={{
                 minHeight: "160px",
-                padding: selectedBackground ? "20px" : "0px",
+                padding: selectedBackground ? "0px" : "5px",
                 boxShadow: "0 4px 24px 0 #E6E1FA",
                 ...getBackgroundStyle(),
               }}
             >
-              {/* <div
+              <div
+                className=""
                 style={{
                   width: selectedBackground ? "90%" : "100%",
-                  height: selectedBackground ? "80%" : "100%",
+                  height: selectedBackground
+                    ? `${isFullscreen ? "73%" : "81%"}`
+                    : `${isFullscreen ? "81%" : "100%"}`,
                   position: "relative",
-                  zIndex: 1,
+                  //zIndex: 1,
                   borderRadius: "1.25rem",
                   overflow: "hidden",
                   background: "#F6F3FF",
                   transition: "width 0.3s ease, height 0.3s ease",
+                  //transform: "scale(1)",
                 }}
-              > */}
-              <div>
-                {/*In FullScreen video require one div, so don't remove div */}
-                {videoUrl ? (
-                  <ReactPlayer
-                    ref={playerRef}
-                    url={videoUrl}
-                    playing={playing}
-                    controls={false}
-                    muted={false}
-                    volume={volume}
-                    width="100%"
-                    height="100%"
-                    // style={{
-                    // objectFit: "contain",
-                    // background: "#F6F3FF",
-                    // }}
-                    config={{
-                      file: {
-                        attributes: {
-                          crossOrigin: "anonymous",
-                        },
-                      },
-                    }}
-                    onError={(e) => console.error("Video failed to load", e)}
-                    onProgress={({ playedSeconds }) => setCurrentTime(playedSeconds)}
-                    onEnded={() => setPlaying(false)}
-                    progressInterval={50}
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                    <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
-                      <svg
-                        className="w-8 h-8 text-[#7C5CFC]"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </div>
-                    <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">No Video Selected</h3>
-                    <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
-                    <div className="space-y-2 text-sm text-gray-500">
-                      <p>
-                        • Go to <strong>Dashboard</strong> and edit an existing demo
-                      </p>
-                      <p>
-                        • Or go to <strong>Recorder</strong> to record/upload a new video
-                      </p>
-                    </div>
-                    <div className="mt-6 flex gap-3">
-                      <button
-                        onClick={() => router.push("/dashboard")}
-                        className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
-                      >
-                        Go to Dashboard
-                      </button>
-                      <button
-                        onClick={() => router.push("/recorder")}
-                        className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
-                      >
-                        Go to Recorder
-                      </button>
-                    </div>
+              >
+                <div
+                  className="absolute w-full h-fit z-100"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    // width: "100%",
+                    height: "100%",
+                    //border: "4px solid green",
+                    borderRadius: "1.25rem",
+                    transform: zoomActive ? `scale(${zoomLevel})` : "scale(1)", // zoom only here
+                    transformOrigin: zoomActive ? "50% 50% -10px" : "center", // zoom from center
+                    transition: "transform 0.4s ease",
+                  }}
+                >
+                  <div className="">
+                    {/*In FullScreen video require one div, so don't remove div */}
+                    {videoUrl ? (
+                      <ReactPlayer
+                        ref={playerRef}
+                        url={videoUrl}
+                        playing={playing}
+                        controls={false}
+                        muted={false}
+                        volume={volume}
+                        width="100%"
+                        height="100%"
+                        // style={{
+                        // objectFit: "contain",
+                        // background: "#F6F3FF",
+                        // }}
+                        config={{
+                          file: {
+                            attributes: {
+                              crossOrigin: "anonymous",
+                            },
+                          },
+                        }}
+                        onError={(e) => console.error("Video failed to load", e)}
+                        onProgress={(data) => {
+                          setCurrentTime(data.playedSeconds);
+                          childHandleProgress?.(data);
+                        }}
+                        onEnded={() => setPlaying(false)}
+                        progressInterval={50}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                        <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
+                          <svg
+                            className="w-8 h-8 text-[#7C5CFC]"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
+                          No Video Selected
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
+                        <div className="space-y-2 text-sm text-gray-500">
+                          <p>
+                            • Go to <strong>Dashboard</strong> and edit an existing demo
+                          </p>
+                          <p>
+                            • Or go to <strong>Recorder</strong> to record/upload a new video
+                          </p>
+                        </div>
+                        <div className="mt-6 flex gap-3">
+                          <button
+                            onClick={() => router.push("/dashboard")}
+                            className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
+                          >
+                            Go to Dashboard
+                          </button>
+                          <button
+                            onClick={() => router.push("/recorder")}
+                            className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
+                          >
+                            Go to Recorder
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
-              {/* </div> */}
 
               {/* Canvas stays on top of video */}
               <canvas
@@ -651,7 +738,7 @@ export default function EditorPage() {
 
               {/* Controls container - only show when video is available */}
               {videoUrl && (
-                <div className="w-full flex flex-col gap-3">
+                <div className="w-full flex flex-col gap-3 mt-5">
                   <CustomVideoControls
                     playerRef={playerRef}
                     duration={duration}
@@ -727,11 +814,23 @@ export default function EditorPage() {
                   }}
                   processing={processing}
                   onResetVideo={resetVideo}
-                  onZoomEffectCreate={onZoomEffectCreate}
-                  initialSegments={currentSegments}
-                  onTrim={onVideoTrim}
+                  //onZoomEffectCreate={onZoomEffectCreate}
+                  //initialSegments={currentSegments}
+                  //onTrim={onVideoTrim}
                   playing={playing}
                   setPlaying={setPlaying}
+                  //videourl={videoUrl}
+                  //setVideoUrl={setVideoUrl}
+                  mode={mode}
+                  setMode={setMode}
+                  playerRef={playerRef}
+                  setChildHandleProgress={setChildHandleProgress}
+                  zoomSegments={zoomSegments}
+                  setZoomSegments={setZoomSegments}
+                  activeZoomIdx={activeZoomIdx}
+                  setActiveZoomIdx={setActiveZoomIdx}
+                  //setOpen={setOpen}
+                  zoomLevelDepth={zoomLevel}
                 />
               ) : (
                 <div className="w-full max-w-6xl mx-auto">
