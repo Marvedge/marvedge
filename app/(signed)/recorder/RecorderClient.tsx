@@ -6,7 +6,7 @@ import { useBlobStore } from "@/app/store/blobStore";
 import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import RecorderTopbar from "@/app/components/RecorderTopbar";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
-import Image from "next/image";
+// import Image from "next/image";
 import { toast, Toaster } from "sonner";
 import { useSession } from "next-auth/react";
 import SavePopupForm from "@/app/components/SavePopupForm";
@@ -21,14 +21,13 @@ import { useVideoDuration } from "./hooks/useVideoDuration";
 import VideoPlayerSection from "@/app/components/VideoPlayerSection";
 import RecordingControls from "@/app/components/RecordingControls";
 import InitialRecorderView from "@/app/components/InitialRecorderView";
-//import { TutorialRecorder } from "@/app/components/TutorialRecorder";
-
+// import { TutorialRecorder } from "@/app/components/TutorialRecorder";
 export default function RecorderPage() {
   const videoPlayerRef = useRef<ReactPlayer>(null);
   const router = useRouter();
-  const saveSessionRef = useRef<Set<string>>(new Set());
+  //const saveSessionRef = useRef<Set<string>>(new Set());
   const isProcessingRef = useRef(false);
-  const [recordingMode, setRecordingMode] = useState<"standard" | "tutorial">("standard");
+  // const [recordingMode, setRecordingMode] = useState<"standard" | "tutorial">("standard");
 
   const handleBack = useCallback(() => {
     try {
@@ -69,8 +68,8 @@ export default function RecorderPage() {
     setVideoDuration,
     sidebarOpen,
     setSidebarOpen,
-    isSavePublishDisabled,
-    setIsSavePublishDisabled,
+    // isSavePublishDisabled,
+    // setIsSavePublishDisabled,
     fileInputRef,
     recordingIntervalRef,
   } = useRecorderState();
@@ -114,38 +113,38 @@ export default function RecorderPage() {
     videoPlayerRef,
   });
 
-  const handleSaveAndPublish = () => {
-    if (!blob) {
-      return;
-    }
+  // const handleSaveAndPublish = () => {
+  //   if (!blob) {
+  //     return;
+  //   }
 
-    // Prevent multiple clicks using useRef (most reliable)
-    if (isProcessingRef.current) {
-      toast.error("Already processing, please wait!");
-      return;
-    }
+  //   // Prevent multiple clicks using useRef (most reliable)
+  //   if (isProcessingRef.current) {
+  //     toast.error("Already processing, please wait!");
+  //     return;
+  //   }
 
-    // Prevent multiple saves
-    if (isSavePublishDisabled) {
-      return;
-    }
+  //   // Prevent multiple saves
+  //   if (isSavePublishDisabled) {
+  //     return;
+  //   }
 
-    // Create unique key for this recording
-    const recordKey = `${blob.size}|${videoUrl || ""}|${new Date().toISOString().split("T")[0]}`;
+  //   // Create unique key for this recording
+  //   const recordKey = `${blob.size}|${videoUrl || ""}|${new Date().toISOString().split("T")[0]}`;
 
-    // Check if this recording was already saved in this session
-    if (saveSessionRef.current.has(recordKey)) {
-      toast.error("This recording has already been saved in this session!");
-      return;
-    }
+  //   // Check if this recording was already saved in this session
+  //   if (saveSessionRef.current.has(recordKey)) {
+  //     toast.error("This recording has already been saved in this session!");
+  //     return;
+  //   }
 
-    // Mark as processing and track this save
-    isProcessingRef.current = true;
-    setIsSavePublishDisabled(true);
-    saveSessionRef.current.add(recordKey);
+  //   // Mark as processing and track this save
+  //   isProcessingRef.current = true;
+  //   setIsSavePublishDisabled(true);
+  //   saveSessionRef.current.add(recordKey);
 
-    setShowSavePopup(true);
-  };
+  //   setShowSavePopup(true);
+  // };
 
   const handlePopupDownload = async (data: { title: string; format: string }) => {
     if (!blob) {
@@ -201,7 +200,7 @@ export default function RecorderPage() {
                 </div>
                 <div className="text-xs sm:text-sm text-gray-400">Last saved 2 minutes ago</div>
               </div>
-              {!recording && (videoUrl || uploadedFileUrl) ? (
+              {/* {!recording && (videoUrl || uploadedFileUrl) ? (
                 <button
                   onClick={handleSaveAndPublish}
                   disabled={isSavePublishDisabled}
@@ -223,7 +222,7 @@ export default function RecorderPage() {
                   />
                   {isSavePublishDisabled ? " Saved" : "Save & Publish"}
                 </button>
-              ) : null}
+              ) : null} */}
             </div>
             <div className="flex-1 overflow-y-auto flex flex-col">
               {/*  */}
@@ -304,40 +303,41 @@ export default function RecorderPage() {
   }
 
   // Initial UI (no recording or uploaded video)
-  if (recordingMode === "tutorial") {
-    return (
-      <div
-        className="flex flex-col h-screen w-full overflow-hidden"
-        style={{ fontFamily: "var(--font-raleway)" }}
-      >
-        <Toaster position="top-right" />
-        <RecorderTopbar onBack={handleBack} userInitials={initials} />
-        <div className="flex flex-col h-full overflow-hidden">
-          <div className="border-b border-gray-200 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setRecordingMode("standard")}
-                  className="px-4 py-3 text-gray-700 font-medium border-b-2 border-transparent hover:border-gray-300"
-                >
-                  Standard Recording
-                </button>
-                <button
-                  onClick={() => setRecordingMode("tutorial")}
-                  className="px-4 py-3 text-blue-600 font-medium border-b-2 border-blue-600"
-                >
-                  Tutorial Slideshow
-                </button>
-              </div>
-            </div>
-          </div>
-          {/* <div className="flex-1 overflow-hidden">
-            <TutorialRecorder />
-          </div> */}
-        </div>
-      </div>
-    );
-  }
+  // TUTORIAL MODE COMMENTED OUT - Only standard recording mode is available
+  // if (recordingMode === "tutorial") {
+  //   return (
+  //     <div
+  //       className="flex flex-col h-screen w-full overflow-hidden"
+  //       style={{ fontFamily: "var(--font-raleway)" }}
+  //     >
+  //       <Toaster position="top-right" />
+  //       <RecorderTopbar onBack={handleBack} userInitials={initials} />
+  //       <div className="flex flex-col h-full overflow-hidden">
+  //         <div className="border-b border-gray-200 bg-white">
+  //           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+  //             <div className="flex gap-4">
+  //               <button
+  //                 onClick={() => setRecordingMode("standard")}
+  //                 className="px-4 py-3 text-gray-700 font-medium border-b-2 border-transparent hover:border-gray-300"
+  //               >
+  //                 Standard Recording
+  //               </button>
+  //               <button
+  //                 onClick={() => setRecordingMode("tutorial")}
+  //                 className="px-4 py-3 text-blue-600 font-medium border-b-2 border-blue-600"
+  //               >
+  //                 Tutorial Slideshow
+  //               </button>
+  //             </div>
+  //           </div>
+  //         </div>
+  //         <div className="flex-1 overflow-hidden">
+  //           <TutorialRecorder />
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div
@@ -346,7 +346,8 @@ export default function RecorderPage() {
     >
       <Toaster position="top-right" />
       <RecorderTopbar onBack={handleBack} userInitials={initials} />
-      <div className="border-b border-gray-200 bg-white">
+      {/* MODE SELECTOR COMMENTED OUT - Only standard recording is available */}
+      {/* <div className="border-b border-gray-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-4">
             <button
@@ -363,7 +364,7 @@ export default function RecorderPage() {
             </button>
           </div>
         </div>
-      </div>
+      </div> */}
       <InitialRecorderView
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}

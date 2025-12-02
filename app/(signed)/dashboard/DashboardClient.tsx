@@ -1,8 +1,11 @@
 "use client";
 import { useSession } from "next-auth/react";
-import SignedHeader from "@/app/components/SignedHeader";
 import DashboardMain from "@/app/components/DashboardMain";
 
+export const metadata = {
+  iconSRC: "/icons/Vector (1).svg",
+  iconALT: "dashboard_icon",
+};
 const DashboardPage = () => {
   const { status } = useSession();
 
@@ -17,16 +20,10 @@ const DashboardPage = () => {
     <div
       className="overflow-y-auto h-full"
       style={{
-        minHeight: "calc(100vh - 80px)",
         fontFamily: "var(--font-raleway)",
       }}
     >
       <div className="flex flex-col gap-3 md:gap-4">
-        <SignedHeader
-          titleText="Dashboard"
-          iconSRC="/icons/Vector (1).svg"
-          iconALT="dashboard_icon"
-        />
         <DashboardMain />
       </div>
     </div>

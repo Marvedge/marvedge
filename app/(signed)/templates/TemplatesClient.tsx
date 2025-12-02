@@ -1,8 +1,11 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import SignedHeader from "@/app/components/SignedHeader";
 
+export const metadata = {
+  titleText: "Explore Templates",
+  iconSRC: "/icons/explore-templates.svg",
+};
 const templates = [
   {
     title: "SaaS Product Onboarding",
@@ -132,11 +135,6 @@ export default function TemplatesPage() {
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
-      <SignedHeader
-        titleText="Explore Templates"
-        iconSRC="/icons/explore-templates.svg"
-        iconALT="templates_icon"
-      />
       <div
         className="p-2 sm:p-4 md:p-6 lg:p-8 bg-[#F3F0FC] h-full overflow-y-auto"
         style={{ minHeight: "calc(100vh - 80px)" }}

@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !session.user?.email) {
+    if (!session || !session.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -65,19 +65,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Title, videoUrl are required" }, { status: 400 });
     }
 
-    // Get logged-in user
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const userId = session.user.id as string;
 
     // Check if a demo with the same title and videoUrl already exists for this user
     const existingDemo = await prisma.demo.findFirst({
       where: {
-        userId: user.id,
+        userId,
         title,
         videoUrl,
       },
@@ -100,7 +93,7 @@ export async function POST(req: NextRequest) {
         description: description || "",
         videoUrl,
         editing: editing || null,
-        userId: user.id, // attach logged-in user
+        userId, // attach logged-in user
       },
     });
 

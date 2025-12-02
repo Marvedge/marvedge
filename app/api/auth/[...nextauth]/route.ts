@@ -77,47 +77,56 @@ const handler = NextAuth({
 
   callbacks: {
     async jwt({ token, user, trigger, session }) {
-      // Persist user info to token when user is first authenticated
-      if (trigger === "update") {
-        if (session?.user?.image) {
-          token.picture = session.user.image;
+      try {
+        if (trigger === "update") {
+          if (session?.user?.image) {
+            token.picture = session.user.image;
+          }
+          if (session?.user?.name) {
+            token.name = session.user.name;
+          }
         }
-        if (session?.user?.name) {
-          token.name = session.user.name;
+        if (user) {
+          token.id = user.id;
+          token.email = user.email;
+          token.name = user.name;
+          token.picture = user.image || null;
         }
+        return token;
+      } catch (error) {
+        console.error("JWT callback error:", error);
+        return token;
       }
-      if (user) {
-        console.log("user info", user);
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
-        token.picture = user.image || null;
-      }
-      return token;
     },
 
     async session({ session, token }) {
-      if (token && session.user) {
-        console.log("session info", session);
-        // Add token info to session
-        // @ts-expect-error: `id` property does not exist on session.user by default, but we add it for frontend use
-        session.user.id = token.id || token.sub;
-        session.user.email = token.email;
-        session.user.name = token.name;
-        session.user.image = token.picture;
+      try {
+        if (session?.user) {
+          session.user.id = (token.id as string) || (token.sub as string) || "";
+          session.user.email = (token.email as string) || "";
+          session.user.name = (token.name as string) || "";
+          session.user.image = (token.picture as string | null) || null;
+        }
+        return session;
+      } catch (error) {
+        console.error("Session callback error:", error);
+        return session;
       }
-      return session;
     },
 
     async redirect({ url, baseUrl }) {
-      // Handle redirects safely
-      if (url === baseUrl || url === "/") {
-        return "/dashboard";
+      try {
+        if (url === baseUrl || url === "/") {
+          return "/dashboard";
+        }
+        if (url.includes("/dashboard")) {
+          return "/dashboard";
+        }
+        return baseUrl;
+      } catch (error) {
+        console.error("Redirect callback error:", error);
+        return baseUrl;
       }
-      if (url.includes("/dashboard")) {
-        return "/dashboard";
-      }
-      return baseUrl;
     },
   },
 

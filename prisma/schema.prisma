@@ -9,20 +9,21 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String     @id @default(cuid())
   name          String?
-  email         String?   @unique
+  email         String?    @unique
   emailVerified DateTime?
   image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   password      String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
   bio           String?
   location      String?
   website       String?
   accounts      Account[]
-  sessions      Session[]
   Demo          Demo[]
+  sessions      Session[]
+  tutorials     Tutorial[] @relation("UserTutorials")
 }
 
 model Account {
@@ -80,9 +81,32 @@ model Demo {
   title       String
   description String?
   videoUrl    String
-  editing     Json? // Store editing data (segments, zoom, etc.)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  editing     Json?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Tutorial {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  slides      Slide[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      String
+  user        User     @relation("UserTutorials", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Slide {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String
+  clicks      Json?
+  timestamp   Int
+  createdAt   DateTime @default(now())
+  tutorialId  String
+  tutorial    Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
 }

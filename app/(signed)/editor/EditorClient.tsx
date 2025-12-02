@@ -568,7 +568,7 @@ export default function EditorPage() {
             </div>
           </div>
 
-          {(sidebarTitle || sidebarDescription) && (
+          {(sidebarTitle || sidebarDescription) && !demoSaved && (
             <div className="bg-white p-4 mx-4 flex items-center justify-between">
               <div className="flex flex-col">
                 {sidebarTitle && (
@@ -587,12 +587,23 @@ export default function EditorPage() {
               <button
                 className="flex cursor-pointer items-center justify-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
                 onClick={() => setShowSaveDemoModal(true)}
+                disabled={demoSaved || savingDemo}
               >
-                <span className="text-xl"></span> Save Demo
+                <span className="text-xl"></span> {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
               </button>
             </div>
           )}
-
+          {videoUrl && (
+            <div className="flex justify-center mt-6 mb-6 ml-">
+              <button
+                onClick={() => setShowSaveDemoModal(true)}
+                disabled={demoSaved || savingDemo}
+                className={`px-8 py-3 rounded-lg font-semibold shadow transition text-base whitespace-nowrap ${demoSaved || savingDemo ? "bg-[#8A76FC] text-white opacity-70 cursor-not-allowed" : "bg-[#8A76FC] text-white hover:bg-[#7A66EC]"}`}
+              >
+                {savingDemo ? "Saving..." : demoSaved ? "Saved" : "Save Demo"}
+              </button>
+            </div>
+          )}
           {/* Video Wrapper */}
           <div
             className={
@@ -758,7 +769,6 @@ export default function EditorPage() {
               )}
             </div>
           </div>
-
           {tool === "text" && (
             <div className="flex gap-3 items-center mb-6 sm:mb-0 mx-4 sm:mx-8">
               <label className="text-sm">Text Color:</label>

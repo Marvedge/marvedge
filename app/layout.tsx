@@ -15,8 +15,9 @@ export const metadata = {
   icons: {
     icon: "/icons/Transparent logo.png",
   },
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes",
 };
+
+export const viewport = "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

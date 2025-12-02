@@ -3,14 +3,16 @@ import { useState } from "react";
 import TeamsMain from "@/app/components/TeamsMain";
 import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
-import SignedHeader from "@/app/components/SignedHeader";
 
 type Team = {
   name: string;
   plan: string;
   description: string;
 };
-
+export const metadata = {
+  titleText: "Team",
+  iconSRC: "/ant-design_team-outlined.png",
+};
 const TeamPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [teams, setTeams] = useState<Team[]>([
@@ -36,12 +38,7 @@ const TeamPage = () => {
   };
 
   return (
-    <div
-      className="flex flex-col grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto"
-      style={{ minHeight: "calc(100vh - 80px)" }}
-    >
-      <SignedHeader titleText="Team" iconSRC="/ant-design_team-outlined.png" iconALT="team_icon" />
-
+    <div className="flex flex-col grow h-full bg-[#F4F1FD] text-[#2D2154] relative overflow-y-auto">
       <TeamsMain onCreateTeamClick={() => setShowModal(true)} teams={teams} />
 
       {showModal && (

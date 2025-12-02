@@ -18,8 +18,11 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { formatDate, formatTime_2 } from "@/app/lib/dateTimeUtils";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
-import SignedHeader from "@/app/components/SignedHeader";
 
+export const metadata = {
+  titleText: "My Demos",
+  iconSRC: "/Group.png",
+};
 interface Demo {
   id: string;
   title: string;
@@ -145,8 +148,6 @@ export default function DemosPage() {
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
-      <SignedHeader titleText="My Demos" iconSRC="/Group.png" iconALT="my_demos_icon" />
-
       <div className="bg-[#F3F0FC] rounded-xl p-8">
         <div className="mb-8">
           <h2 className="text-2xl font-normal text-[#8B8B8B] mb-2">

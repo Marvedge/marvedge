@@ -104,7 +104,7 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
         </button>
         <div className="relative" ref={dropdownRef}>
           <button
-            className="w-10 h-10 md:w-12 md:h-12 rounded-full text-white flex items-center justify-center text-lg md:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all overflow-hidden flex-shrink-0"
+            className="w-10 h-10 md:w-12 md:h-12 rounded-full text-white flex items-center justify-center text-lg md:text-xl font-bold shadow cursor-pointer border-4 border-white hover:scale-105 transition-all overflow-hidden "
             onClick={() => setShowDropdown((v) => !v)}
             title={session?.user?.name || session?.user?.email || undefined}
             style={profileImage ? {} : { backgroundColor: "#6356D7" }}
