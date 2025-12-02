@@ -23,7 +23,7 @@ interface TimelineRulerProps {
   onResetVideo?: () => void;
   //onZoomEffectCreate?: (effect: ZoomEffect) => void;
   //initialSegments?: { start: string; end: string }[];
-  //onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
+  onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
   isFullscreen: boolean;
@@ -42,6 +42,8 @@ interface TimelineRulerProps {
   //open: boolean;
   //setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   zoomLevelDepth: number;
+  segments: { start: number; end: number }[];
+  setSegments: React.Dispatch<React.SetStateAction<{ start: number; end: number }[]>>;
 }
 
 export default function TimelineRuler({
@@ -74,6 +76,8 @@ export default function TimelineRuler({
   setActiveZoomIdx,
   //setOpen,
   zoomLevelDepth,
+  segments,
+  setSegments,
 }: TimelineRulerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [draggingHandle] = useState<"current" | "start" | "end" | null>(null);
@@ -93,12 +97,7 @@ export default function TimelineRuler({
   //       }))
   //     : [{ start: minValue, end: maxValue }] // Initialize with full duration segment
   // );
-  const [segments, setSegments] = useState<{ start: number; end: number }[]>([
-    {
-      start: minValue,
-      end: maxValue / 3,
-    },
-  ]);
+  // const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
   // const [zoomSegment, setZoomSegment] = useState<ZoomEffect[]>([
   //   {
   //     id: "1",
@@ -110,7 +109,7 @@ export default function TimelineRuler({
   //   },
   // ]);
   //console.log("Intital Value", segments);
-  const [activeSegment, setActiveSegment] = useState<number>(0);
+  const [activeSegment, setActiveSegment] = useState<number>(-1);
   const [removedSegments, setRemovedSegments] = useState<{ start: number; end: number }[]>([]);
   const [draggingScissor, setDraggingScissor] = useState<"left" | "right" | null>(null);
   const [scissorPreview, setScissorPreview] = useState<number | null>(null);
@@ -455,7 +454,7 @@ export default function TimelineRuler({
     const newSegments = segments.filter((_, i) => i !== idx);
     setSegments(newSegments);
     const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
-    setActiveSegment(newActiveSegment);
+    setActiveSegment(-1);
     if (newSegments[newActiveSegment]) {
       setLocalStartTime(newSegments[newActiveSegment].start);
       setLocalEndTime(newSegments[newActiveSegment].end);
@@ -514,9 +513,9 @@ export default function TimelineRuler({
     console.log("Start time", startTime, " ", endTime);
     setSegments((prev) => {
       const newSegments = [...prev, newSegment];
-      setActiveSegment(newSegments.length - 1);
       return newSegments;
     });
+    setActiveSegment(segments.length - 1);
 
     // ⚠️ Compute sendData including the new segment
     //const allSegments = [...segments, newSegment];
@@ -530,9 +529,10 @@ export default function TimelineRuler({
 
     console.log(`Created segment from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s`);
 
-    // const sTime = formatToHHMMSS(startTime);
-    // const eTime = formatToHHMMSS(endTime);
+    //const sTime = formatToHHMMSS(startTime);
+    //const eTime = formatToHHMMSS(endTime);
     //onTrim?.([{ start: sTime, end: eTime }]);
+    //console.log("onfssf", onTrim?.([{ start: sTime, end: eTime }]));
     // try {
     //   const mp4VideoUrl = videourl.endsWith(".webm") ? videourl.replace(".webm", ".mp4") : videourl;
 
@@ -808,6 +808,7 @@ export default function TimelineRuler({
     // Notify parent so VideoPlayer applies zoom
     //onZoomChange?.(segment);
     setMode("zoom");
+    setActiveSegment(-1);
     //setOpen(true);
     // Jump video to zoom start
     video.seekTo(segment.startTime, "seconds");
@@ -1106,7 +1107,7 @@ export default function TimelineRuler({
           </button>
           <button
             onClick={() => removeSegment(activeSegment)}
-            disabled={segments.length === 0}
+            disabled={segments.length === 0 || activeSegment === -1 || mode === "main"}
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Delete"
           >
@@ -1233,7 +1234,7 @@ export default function TimelineRuler({
                 ref={rulerRef}
                 className="relative bg-white border-y border-[#A594F9] cursor-pointer "
                 style={{
-                  width: "100%",
+                  width: `${baseTimelineWidth * zoomLevel}px`,
                   minWidth: `${baseTimelineWidth}px`,
                   height: "100%",
                   // paddingLeft: "20px",
@@ -1266,6 +1267,7 @@ export default function TimelineRuler({
                   width={zoomedTimelineWidth}
                   setMode={setMode}
                   setActiveZoomIdx={setActiveZoomIdx}
+                  setActiveSegment={setActiveSegment}
                 />
                 {/* {generateTicks().map((tick, index) => {
                   const positionPx =
@@ -1324,7 +1326,7 @@ export default function TimelineRuler({
                     <div
                       key={`segment-${idx}`}
                       className={`absolute top-0 h-[84px] mt-[50px] group cursor-grab transition-opacity ${
-                        idx === activeSegment
+                        idx === activeSegment && activeSegment != -1
                           ? "bg-[#FF3939]/54 opacity-70 z-10 hover:border-2 border-black rounded-md"
                           : "bg-[#FF3939]/35 opacity-50 hover:opacity-65 z-8"
                       }`}
