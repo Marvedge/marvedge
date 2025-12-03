@@ -5,6 +5,10 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 
+export const metadata = {
+  title: "Settings",
+  icon: "/icons/settings.svg",
+};
 const AnalyticsMain = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);

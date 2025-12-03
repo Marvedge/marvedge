@@ -16,7 +16,7 @@ type TeamsMainProps = {
 export default function TeamsMain({ onCreateTeamClick, teams }: TeamsMainProps) {
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#F5F3FF] overflow-hidden">
-      <main className="flex-grow bg-[#EDE9FE] flex items-center justify-center p-6 md:p-8 rounded-none md:rounded-tr-3xl">
+      <main className="grow bg-[#EDE9FE] flex items-center justify-center p-6 md:p-8 rounded-none md:rounded-tr-3xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

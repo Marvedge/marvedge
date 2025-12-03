@@ -4,9 +4,9 @@ import bcrypt from "bcrypt";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password } = await req.json();
+    const body = await req.json();
+    const { name, email, password } = body || {};
 
-    // Validate inputs
     if (!name || !email || !password) {
       return NextResponse.json(
         { error: "Name, email, and password are required" },
@@ -29,12 +29,23 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(
-      { user: { id: user.id, email: user.email, name: user.name } },
-      { status: 201 }
-    );
+    const response = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+    };
+
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error("Signup error:", error);
-    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to create user",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
   }
 }

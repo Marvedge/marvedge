@@ -6,9 +6,10 @@ interface SignedHeaderProps {
   titleText: string;
   iconSRC: string;
   iconALT: string;
+  className?: string;
 }
 
-const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
+const SignedHeader = ({ titleText, iconSRC, iconALT, className }: SignedHeaderProps) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null | undefined>(null);
   const { data: session } = useSession();
@@ -17,15 +18,20 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
   useEffect(() => {
     const fetchUserImage = async () => {
       try {
-        const res = await fetch("/api/user/get");
+        const res = await fetch("/api/user/get", {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          setProfileImage(null);
+          return;
+        }
         const data = await res.json();
         if (data.user?.image && data.user.image.trim()) {
           setProfileImage(data.user.image + `?t=${Date.now()}`);
         } else {
           setProfileImage(null);
         }
-      } catch (error) {
-        console.error("Error fetching user image:", error);
+      } catch {
         setProfileImage(null);
       }
     };
@@ -39,17 +45,20 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
     const handlePhotoUpdate = () => {
       const fetchUserImage = async () => {
         try {
-          const res = await fetch("/api/user/get");
+          const res = await fetch("/api/user/get", {
+            credentials: "include",
+          });
+          if (!res.ok) {
+            setProfileImage(null);
+            return;
+          }
           const data = await res.json();
-          console.log("Navbar fetched user image:", data.user?.image);
           if (data.user?.image && data.user.image.trim()) {
             setProfileImage(data.user.image + `?t=${Date.now()}`);
           } else {
-            console.log("No valid image, showing initials");
             setProfileImage(null);
           }
-        } catch (error) {
-          console.error("Error fetching user image:", error);
+        } catch {
           setProfileImage(null);
         }
       };
@@ -82,21 +91,24 @@ const SignedHeader = ({ titleText, iconSRC, iconALT }: SignedHeaderProps) => {
 
   return (
     <>
-      <div className="w-full bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-6 md:px-8 py-2.5 sm:py-4 gap-2">
-        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-          <span className="mr-0 sm:mr-1 flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6">
-            <Image
-              src={iconSRC}
-              alt={iconALT}
-              width={20}
-              height={20}
-              className="w-full h-full object-contain"
-              style={{ filter: "invert(0.35) sepia(0.5) saturate(2) hue-rotate(240deg)" }}
-              priority
-              unoptimized
-            />
-          </span>
-          <span className="text-sm sm:text-base md:text-lg text-gray-400 font-medium truncate">
+      <div
+        className={`w-full  bg-white  border-b border-gray-200 flex items-center justify-between px-3 sm:px-6 md:px-8 py-2.5 sm:py-4 gap-2 ${className || ""}`}
+      >
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 ml-70">
+          {iconSRC && (
+            <span className="mr-0 sm:mr-1 flex items-center justify-center shrink-0">
+              <Image
+                src={iconSRC}
+                alt={iconALT}
+                width={24}
+                height={24}
+                className="w-5 h-5 sm:w-6 sm:h-6 object-contain"
+                style={{ filter: "invert(0.35) sepia(0.5) saturate(2) hue-rotate(240deg)" }}
+                unoptimized
+              />
+            </span>
+          )}
+          <span className="text-sm sm:text-base md:text-lg text-gray-500 font-medium truncate">
             {titleText}
           </span>
         </div>

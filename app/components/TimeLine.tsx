@@ -597,7 +597,7 @@ export default function TimelineRuler({
         }
       }
     },
-    [mode, segments, activeSegment]
+    [playerRef, mode, segments, activeSegment]
   );
 
   useEffect(() => {
@@ -919,7 +919,7 @@ export default function TimelineRuler({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [dragZoomState, maxValue, minValue, zoomedTimelineWidth]);
+  }, [dragZoomState, maxValue, minValue, setZoomSegments, zoomedTimelineWidth]);
 
   const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
   const handleZoomClick = () => {

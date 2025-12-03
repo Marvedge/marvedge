@@ -6,7 +6,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { toast } from "sonner";
 import Image from "next/image";
-import SignedHeader from "@/app/components/SignedHeader";
+
 import {
   TABS,
   NOTIFICATION_SETTINGS,
@@ -14,6 +14,10 @@ import {
   PREFERENCES_SETTINGS,
 } from "../../lib/constants";
 
+export const metadata = {
+  titleText: "Analytics",
+  iconSRC: "/majesticons_analytics.png",
+};
 const SettingsPage = () => {
   const router = useRouter();
   const { data: session } = useSession();
@@ -314,8 +318,6 @@ const SettingsPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F0FC]">
-      <SignedHeader titleText="Settings" iconSRC="/uil_setting.png" iconALT="settings_icon" />
-
       <div className="flex flex-wrap items-center gap-2 px-2 sm:px-4 md:px-8 pb-3 pt-4 bg-white border-b border-gray-200 overflow-x-auto">
         {TABS.map((tab) => (
           <button

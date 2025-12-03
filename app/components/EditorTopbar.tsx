@@ -140,8 +140,8 @@ const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps)
             👋
           </span>
         </span>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="relative text-[#7C5CFC] hover:bg-[#ede7fa] rounded-full p-1 w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center flex-shrink-0 hidden sm:block">
+        <div className="flex items-center gap-2 shrink-0">
+          <button className="relative text-[#7C5CFC] hover:bg-[#ede7fa] rounded-full p-1 w-8 h-8 sm:w-10 sm:h-10  items-center justify-center shrink-0 hidden sm:block">
             <Image
               src="/icons/bell.png"
               alt="Notifications"
@@ -152,7 +152,7 @@ const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps)
           </button>
           <div className="relative" ref={dropdownRef}>
             <button
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full text-white flex items-center justify-center text-base sm:text-lg font-bold shadow cursor-pointer border-2 border-white hover:scale-105 transition-all block flex-shrink-0 overflow-hidden"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full text-white  items-center justify-center text-base sm:text-lg font-bold shadow cursor-pointer border-2 border-white hover:scale-105 transition-all block shrink-0 overflow-hidden"
               onClick={() => setShowDropdown((v) => !v)}
               title={session?.user?.name || session?.user?.email || undefined}
               style={profileImage ? {} : { backgroundColor: "#6356D7" }}
