@@ -213,13 +213,23 @@ interface VideoTrimParams {
   videoUrl: string;
   setVideoUrl: (url: string) => void;
   setProgress: (progress: number) => void;
+  duration: number;
 }
-
+function parseTimeToSeconds(str: string): number {
+  const [h, m, s] = str.split(":").map(Number);
+  return h * 3600 + m * 60 + s;
+}
+function secondsToTime(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 export async function videoTrimHandler(
-  segments: { start: string; end: string }[],
+  segments: { start: number; end: number }[],
   params: VideoTrimParams
 ) {
-  const { videoUrl, setVideoUrl, setProgress } = params;
+  const { videoUrl, setVideoUrl, setProgress, duration } = params;
 
   try {
     setProgress(1);
@@ -231,44 +241,123 @@ export async function videoTrimHandler(
       return;
     }
 
-    const normalizedSegments = segments.map((seg) => ({
-      start: normalizeTimeFormat(seg.start),
-      end: normalizeTimeFormat(seg.end),
-    }));
+    // const normalizedSegments = segments.map((seg) => ({
+    //   start: normalizeTimeFormat(seg.start),
+    //   end: normalizeTimeFormat(seg.end),
+    // }));
+    // normalizedSegments.push({
+    //   start: normalizeTimeFormat(segments[0].end),
+    //   end: normalizeTimeFormat(8),
+    // });
+    // 1. Normalize and convert to SECONDS
+    const normalizedSegments = segments
+      .map((seg) => ({
+        start: parseTimeToSeconds(normalizeTimeFormat(seg.start)),
+        end: parseTimeToSeconds(normalizeTimeFormat(seg.end)),
+      }))
+      .sort((a, b) => a.start - b.start); // 2. SORT REMOVE SEGMENTS
+
+    // 3. Build KEEP segments from gaps
+    const keepSegments = [];
+    let cursor = 0;
+
+    for (const seg of normalizedSegments) {
+      // Keep any time between cursor → segment.start
+      if (cursor < seg.start) {
+        keepSegments.push({
+          start: cursor,
+          end: seg.start,
+        });
+      }
+
+      // move cursor to end of REMOVE segment
+      cursor = seg.end;
+    }
+
+    // 4. Final segment after last trimmed part
+    if (cursor < duration) {
+      keepSegments.push({
+        start: cursor,
+        end: duration,
+      });
+    }
+
+    // 5. Convert back to HH:MM:SS for your existing ffmpeg code
+    const newNormalizedSegments = keepSegments.map((seg) => {
+      console.log("dgfg", seg);
+      return {
+        start: secondsToTime(seg.start),
+        end: secondsToTime(seg.end),
+      };
+    });
+
+    console.log("Segments to KEEP:", newNormalizedSegments);
 
     console.log("Starting trim process...");
     console.log("Video URL:", videoUrl);
     console.log("Segments:", segments);
+    console.log("normalizedSegments", normalizedSegments);
 
     // Validate segments
     if (!segments || segments.length === 0) {
       throw new Error("No segments provided");
     }
+    const mp4VideoUrl = videoUrl.endsWith(".webm") ? videoUrl.replace(".webm", ".mp4") : videoUrl;
 
-    // Get the current video blob
-    const response = await fetch(videoUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch video: ${response.status}`);
-    }
-    const videoBlob = await response.blob();
-    console.log("Video blob size:", videoBlob.size);
+    const res = await fetch(mp4VideoUrl);
+    const blob = await res.blob();
 
-    // Use client-side WASM FFmpeg trimmer
-    console.log("Processing trim on client side...");
-    const { videoTrimmer } = await import("@/app/lib/ffmpeg");
+    const formData = new FormData();
+    formData.append("video", blob, "video.mp4");
+    formData.append("segments", JSON.stringify(newNormalizedSegments));
 
-    // Use only the first segment for trimming
-    const firstSegment = normalizedSegments[0];
-    const trimmedBlob = await videoTrimmer(videoBlob, firstSegment.start, firstSegment.end);
+    console.log("Send Data", newNormalizedSegments);
+
+    const TRIMURL = `${process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL}/api/trim`;
+    const resp = await axios.post(TRIMURL, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      responseType: "blob",
+    });
     setProgress(95);
 
-    const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
+    const videoBlob = new Blob([resp?.data], { type: "video/mp4" });
+    const newVideoUrl = URL.createObjectURL(videoBlob);
+    //setVideoUrl(newVideoUrl);
 
-    if (trimmedVideoUrl) {
+    console.log("Trimmed video URL:", newVideoUrl);
+    // Get the current video blob
+    // const response = await fetch(videoUrl);
+    // if (!response.ok) {
+    //   throw new Error(`Failed to fetch video: ${response.status}`);
+    // }
+    // const videoBlob = await response.blob();
+    // console.log("Video blob size:", videoBlob.size);
+
+    // // Use client-side WASM FFmpeg trimmer
+    // console.log("Processing trim on client side...");
+    // const { videoTrimmer } = await import("@/app/lib/ffmpeg");
+
+    // // Use only the first segment for trimming
+    // const firstSegment = normalizedSegments[0];
+    // const trimmedBlob = await videoTrimmer(videoBlob, firstSegment.start, firstSegment.end);
+    // setProgress(95);
+
+    // const trimmedVideoUrl = URL.createObjectURL(trimmedBlob);
+
+    // if (trimmedVideoUrl) {
+    //   toast.dismiss();
+    //   toast.success("Video trimmed successfully!");
+    //   setVideoUrl(trimmedVideoUrl);
+    //   setProgress(100);
+    // } else {
+    //   toast.error("Failed to trim video - no trimmedUrl returned");
+    // }
+    if (newVideoUrl) {
       toast.dismiss();
       toast.success("Video trimmed successfully!");
-      setVideoUrl(trimmedVideoUrl);
+      setVideoUrl(newVideoUrl);
       setProgress(100);
+      return newVideoUrl;
     } else {
       toast.error("Failed to trim video - no trimmedUrl returned");
     }
@@ -285,6 +374,7 @@ export async function videoTrimHandler(
       toast.dismiss();
       toast.error("Something went wrong");
     }
+    return err;
   } finally {
     setProgress(0);
   }
@@ -299,11 +389,25 @@ interface ExportVideoParams {
   router: {
     push: (url: string) => void;
   };
+  segments: { start: number; end: number }[];
+  setVideoUrl: (url: string) => void;
+  setProgress: (progress: number) => void;
+  duration: number;
 }
 
 export async function exportVideo(params: ExportVideoParams) {
-  const { videoUrl, selectedBackground, imageMap, sidebarTitle, sidebarDescription, router } =
-    params;
+  const {
+    videoUrl,
+    selectedBackground,
+    imageMap,
+    sidebarTitle,
+    sidebarDescription,
+    router,
+    segments,
+    setVideoUrl,
+    setProgress,
+    duration,
+  } = params;
 
   if (!videoUrl) {
     toast.error("No video available to export");
@@ -312,11 +416,43 @@ export async function exportVideo(params: ExportVideoParams) {
 
   try {
     console.log("sending from here #linex 1228");
-    toast.loading("Processing video...");
+    //toast.loading("Processing video...1");
     console.log(selectedBackground);
-
+    let vidURl: unknown = undefined;
+    if (segments.length > 0) {
+      try {
+        console.log("videoUrl in trimPart", videoUrl);
+        const onVideoTrim = async (segments: { start: number; end: number }[]) => {
+          const resp = await videoTrimHandler(segments, {
+            videoUrl: videoUrl!,
+            setVideoUrl,
+            setProgress,
+            duration,
+          });
+          toast.loading("Processing video...");
+          return resp;
+        };
+        vidURl = await onVideoTrim(segments);
+        console.log("return trimmed video url", vidURl);
+        //if (vidURl === null) return;
+        //return;
+      } catch (err) {
+        console.log("Error in trim part", err);
+        toast.dismiss();
+        return;
+      }
+    }
+    if (!vidURl && !videoUrl) {
+      console.error("No video URL available");
+      toast.dismiss();
+      //toast.dismiss();
+      return;
+    }
+    //toast.loading("Processing video...");
+    console.log("video-videoURL", videoUrl);
     // Fetch blob from ReactPlayer video
-    const res = await fetch(videoUrl);
+    //const finalVideoUrl = vidURl || videoUrl;
+    const res = await fetch(videoUrl); // Yha pr finalVideoUrl use hona chahyie but linting aa rha hain, pta ni kyu??...so i used "videoUrl"
     const videoBlob = await res.blob();
 
     const formData = new FormData();

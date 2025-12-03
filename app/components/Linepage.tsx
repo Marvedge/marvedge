@@ -7,6 +7,7 @@ interface TimelineProps {
   width?: number;
   setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom">>;
   setActiveZoomIdx: React.Dispatch<React.SetStateAction<number>>;
+  setActiveSegment: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const Linepage = ({
@@ -16,6 +17,7 @@ const Linepage = ({
   width = 800,
   setMode,
   setActiveZoomIdx,
+  setActiveSegment,
 }: TimelineProps) => {
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -79,6 +81,7 @@ const Linepage = ({
       onClick={() => {
         setMode("main");
         setActiveZoomIdx(-1);
+        setActiveSegment(-1);
       }}
     >
       {ticks.map((tick, index) => {

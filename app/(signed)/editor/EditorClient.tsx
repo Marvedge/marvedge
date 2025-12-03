@@ -281,13 +281,16 @@ export default function EditorPage() {
   };
 
   // Video trim handler
-  // const onVideoTrim = async (segments: { start: string; end: string }[]) => {
+  // const onVideoTrim = async (segments: { start: number; end: number }[]) => {
   //   await videoTrimHandler(segments, {
   //     videoUrl: videoUrl!,
   //     setVideoUrl,
   //     setProgress,
+  //     duration: 0,
   //   });
   // };
+
+  const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
 
   // Export video handler
   const onExportVideo = async () => {
@@ -298,6 +301,10 @@ export default function EditorPage() {
       sidebarTitle,
       sidebarDescription,
       router,
+      segments,
+      setVideoUrl,
+      setProgress,
+      duration,
     });
   };
 
@@ -831,6 +838,8 @@ export default function EditorPage() {
                   setActiveZoomIdx={setActiveZoomIdx}
                   //setOpen={setOpen}
                   zoomLevelDepth={zoomLevel}
+                  segments={segments}
+                  setSegments={setSegments}
                 />
               ) : (
                 <div className="w-full max-w-6xl mx-auto">
