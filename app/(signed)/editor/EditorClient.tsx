@@ -589,7 +589,8 @@ export default function EditorPage() {
                 onClick={() => setShowSaveDemoModal(true)}
                 disabled={demoSaved || savingDemo}
               >
-                <span className="text-xl"></span> {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
+                <span className="text-xl"></span>
+                {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
               </button>
             </div>
           )}

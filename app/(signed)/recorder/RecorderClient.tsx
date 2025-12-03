@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback } from "react";
 import ReactPlayer from "react-player";
 import { useRouter } from "next/navigation";
 import { useBlobStore } from "@/app/store/blobStore";
