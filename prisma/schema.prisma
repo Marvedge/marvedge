@@ -83,7 +83,9 @@ model Demo {
   videoUrl    String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  editing     Json?
+  editing     Json? 
+  publicLink  String @unique
+  isPublic    Boolean  @default(false)
   userId      String
   user        User     @relation(fields: [userId], references: [id])
 }
