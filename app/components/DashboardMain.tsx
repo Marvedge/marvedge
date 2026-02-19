@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import axios from "axios";
 import { formatDate } from "@/app/lib/dateTimeUtils";
 import { Play } from "lucide-react";
 
@@ -10,10 +9,10 @@ import { useRouter } from "next/navigation";
 interface Demo {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   videoUrl: string;
-  startTime: string;
-  endTime: string;
+  startTime?: string | null;
+  endTime?: string | null;
   segments?: unknown;
   createdAt: string;
   updatedAt: string;
@@ -22,41 +21,20 @@ interface Demo {
     zoom?: unknown;
   };
 }
-const DashboardMain = () => {
-  const [demos, setDemos] = useState<Demo[]>([]);
+
+interface DashboardMainProps {
+  initialDemos: Demo[];
+  totalCount: number;
+}
+
+const DashboardMain = ({ initialDemos, totalCount }: DashboardMainProps) => {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchDemos = async () => {
-      try {
-        setIsLoading(true);
-        const response = await axios.get("/api/demo");
-        console.log("Fetched demos:", response.data);
-        setDemos(response.data.demos || []);
-      } catch (err: unknown) {
-        console.error("Error fetching demos:", err);
-
-        if (axios.isAxiosError(err)) {
-          const errMsg = err.response?.data?.message || "Failed to fetch demos";
-          console.log(errMsg);
-        } else {
-          const errMsg = "Failed to fetch demos";
-          console.log(errMsg);
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDemos();
-  }, []);
 
   const handleEditDemo = (demo: Demo) => {
     const params = new URLSearchParams({
       video: demo.videoUrl,
-      startTime: demo.startTime,
-      endTime: demo.endTime,
+      ...(demo.startTime && { startTime: demo.startTime }),
+      ...(demo.endTime && { endTime: demo.endTime }),
       title: demo.title || "",
       description: demo.description || "",
     });
@@ -76,6 +54,9 @@ const DashboardMain = () => {
 
     router.push(`/editor?${params.toString()}`);
   };
+  const isLoading = false;
+
+  const demos = initialDemos;
 
   return (
     <div
@@ -298,7 +279,9 @@ const DashboardMain = () => {
               </span>
             </div>
             <div className="text-xs sm:text-sm md:text-lg font-medium text-black">Total Demos</div>
-            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">
+              {totalCount}
+            </div>
             <div className="text-xs text-green-600 font-semibold mt-1">
               +12% <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
@@ -319,7 +302,7 @@ const DashboardMain = () => {
             <div className="text-xs sm:text-sm md:text-lg font-medium text-black">Total Views</div>
             <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +23% <span className="text-gray-500 font-normal text-xs">vs last month</span>
+              +23%{""} <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
           </div>
 
@@ -361,7 +344,7 @@ const DashboardMain = () => {
             </div>
             <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
             <div className="text-xs text-green-600 font-semibold mt-1">
-              +8% <span className="text-gray-500 font-normal text-xs">vs last month</span>
+              +8%{""} <span className="text-gray-500 font-normal text-xs"> vs last month</span>
             </div>
           </div>
         </div>
@@ -484,8 +467,7 @@ const DashboardMain = () => {
                 </span>
               </div>
               <div className="text-white text-xs sm:text-sm md:text-base mb-3 sm:mb-4 md:mb-6 leading-relaxed">
-                Ready to help you create better demos with smart suggestions and auto generated
-                content.
+                Ready to help you create better demos with smart suggestions and content.
               </div>
             </div>
             <button className="w-full py-1.5 sm:py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-xs sm:text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
@@ -512,7 +494,7 @@ const DashboardMain = () => {
                   <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
                     User Onboarding
                   </div>
-                  <div className="text-gray-500 text-xs">Guide new users through setup</div>
+                  <div className="text-gray-500 text-xs"> Guide new users through setup</div>
                 </div>
               </div>
 

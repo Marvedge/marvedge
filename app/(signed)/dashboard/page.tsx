@@ -1,8 +1,45 @@
 import { getPageMetadata } from "@/app/lib/metadata";
+import { getServerSession } from "next-auth";
 import DashboardClient from "./DashboardClient";
+import { prisma } from "@/app/lib/prisma";
+import { authOptions } from "@/app/lib/auth/options";
 
 export const metadata = getPageMetadata("dashboard");
 
-export default function Page() {
-  return <DashboardClient />;
+export default async function Page() {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.id) {
+    return null;
+  }
+
+  //query the total count
+  const totalCount = await prisma.demo.count({
+    where: {
+      userId: session.user.id,
+    },
+  });
+
+  //querying the recent demos(list)
+  const recentDemos = await prisma.demo.findMany({
+    where: {
+      userId: session.user.id,
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+  });
+
+  const cleanDemos = recentDemos.map((demo) => ({
+    id: demo.id,
+    title: demo.title,
+    description: demo.description,
+    videoUrl: demo.videoUrl,
+    startTime: demo.startTime,
+    endTime: demo.endTime,
+    createdAt: demo.createdAt.toISOString(),
+    updatedAt: demo.updatedAt.toISOString(),
+  }));
+
+  return <DashboardClient totalCount={totalCount} initialDemos={cleanDemos} />;
 }

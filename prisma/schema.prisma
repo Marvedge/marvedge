@@ -81,10 +81,13 @@ model Demo {
   title       String
   description String?
   videoUrl    String
+  startTime   String?
+  endTime     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   editing     Json? 
-  publicLink  String @unique
+  publicLink  String? @unique
+  views View[]
   isPublic    Boolean  @default(false)
   userId      String
   user        User     @relation(fields: [userId], references: [id])
@@ -111,4 +114,12 @@ model Slide {
   createdAt   DateTime @default(now())
   tutorialId  String
   tutorial    Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+}
+
+model View {
+  id String  @id @default(cuid())  
+  demoId String
+  demo Demo @relation(fields: [demoId], references : [id])
+  timestamp DateTime @default(now())
+  duration Int?
 }

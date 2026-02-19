@@ -35,6 +35,9 @@ export const formatDate = (dateString: string) => {
 
 export const formatTime_2 = (timeString: string) => {
   // Check if timeString is in "HH:MM:SS" format
+  if (!timeString) {
+    return "00:00:00";
+  }
   if (timeString.includes(":")) {
     const parts = timeString.split(":").map(Number);
     if (parts.length === 3) {
