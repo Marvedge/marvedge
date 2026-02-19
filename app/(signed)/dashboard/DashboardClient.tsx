@@ -6,7 +6,21 @@ export const metadata = {
   iconSRC: "/icons/Vector (1).svg",
   iconALT: "dashboard_icon",
 };
-const DashboardPage = () => {
+
+interface DashboardClientProps {
+  totalCount: number;
+  initialDemos: {
+    id: string;
+    title: string;
+    description: string | null;
+    videoUrl: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+}
+const DashboardPage = ({ totalCount, initialDemos }: DashboardClientProps) => {
   const { status } = useSession();
 
   if (status === "loading") {
@@ -24,7 +38,7 @@ const DashboardPage = () => {
       }}
     >
       <div className="flex flex-col gap-3 md:gap-4">
-        <DashboardMain />
+        <DashboardMain totalCount={totalCount} initialDemos={initialDemos} />
       </div>
     </div>
   );

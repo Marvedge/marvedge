@@ -3,6 +3,6 @@ import DemosClient from "./DemosClient";
 
 export const metadata = getPageMetadata("demos");
 
-export default function Page() {
+export default async function Page() {
   return <DemosClient />;
 }

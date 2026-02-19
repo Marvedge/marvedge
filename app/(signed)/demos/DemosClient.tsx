@@ -18,18 +18,20 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { formatDate, formatTime_2 } from "@/app/lib/dateTimeUtils";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
+import ShareModal from "../../components/ShareModal";
 
 export const metadata = {
   titleText: "My Demos",
   iconSRC: "/Group.png",
 };
+
 interface Demo {
   id: string;
   title: string;
   description: string;
   videoUrl: string;
-  startTime: string;
-  endTime: string;
+  startTime?: string;
+  endTime?: string;
   segments?: unknown;
   createdAt: string;
   updatedAt: string;
@@ -52,6 +54,7 @@ export default function DemosPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selectedDemoId, setSelectedDemoId] = useState<string | null>(null);
 
   const fetchDemos = async () => {
     try {
@@ -99,8 +102,8 @@ export default function DemosPage() {
   const handleEditDemo = (demo: Demo) => {
     const params = new URLSearchParams({
       video: demo.videoUrl,
-      startTime: demo.startTime,
-      endTime: demo.endTime,
+      startTime: demo.startTime || "",
+      endTime: demo.endTime || "",
       title: demo.title || "",
       description: demo.description || "",
     });
@@ -329,11 +332,20 @@ export default function DemosPage() {
                   </div>
                   <div className="text-sm text-[#8B8B8B] mb-4">
                     <div>
-                      Duration: {formatTime_2(demo.startTime)} - {formatTime_2(demo.endTime)}
+                      Duration: {formatTime_2(demo.startTime || "")} -{" "}
+                      {formatTime_2(demo.endTime || "")}
                     </div>
                     <div className="truncate">{demo.description || "No description"}</div>
                   </div>
-                  <button className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto">
+                  {/* this is the shareable links  */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log(`selected : ${selectedDemoId}`);
+                      setSelectedDemoId(demo.id);
+                    }}
+                    className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto cursor-pointer"
+                  >
                     <FaShareAlt /> Share
                   </button>
                 </div>
@@ -386,7 +398,11 @@ export default function DemosPage() {
                       <td className="py-4 px-6 flex gap-4 items-center">
                         <button
                           className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            console.log(`selected : ${selectedDemoId}`);
+                            setSelectedDemoId(demo.id);
+                          }}
                         >
                           <FaShareAlt />
                         </button>
@@ -415,6 +431,9 @@ export default function DemosPage() {
           )}
         </div>
       </div>
+      {selectedDemoId && (
+        <ShareModal demoId={selectedDemoId} onClose={() => setSelectedDemoId(null)} />
+      )}
 
       <ConfirmDeleteModal
         isOpen={isModalOpen}
