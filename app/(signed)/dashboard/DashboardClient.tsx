@@ -19,8 +19,16 @@ interface DashboardClientProps {
     createdAt: string;
     updatedAt: string;
   }[];
+  totalViews: number;
+  activeShares: number;
 }
-const DashboardPage = ({ totalCount, initialDemos }: DashboardClientProps) => {
+
+const DashboardPage = ({
+  totalCount,
+  initialDemos,
+  totalViews,
+  activeShares,
+}: DashboardClientProps) => {
   const { status } = useSession();
 
   if (status === "loading") {
@@ -38,7 +46,12 @@ const DashboardPage = ({ totalCount, initialDemos }: DashboardClientProps) => {
       }}
     >
       <div className="flex flex-col gap-3 md:gap-4">
-        <DashboardMain totalCount={totalCount} initialDemos={initialDemos} />
+        <DashboardMain
+          totalCount={totalCount}
+          initialDemos={initialDemos}
+          totalViews={totalViews}
+          activeShares={activeShares}
+        />
       </div>
     </div>
   );

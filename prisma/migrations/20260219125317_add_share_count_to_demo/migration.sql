@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Demo" ADD COLUMN     "shareCount" INTEGER NOT NULL DEFAULT 0;

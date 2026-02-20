@@ -30,6 +30,19 @@ export default async function Page() {
     },
   });
 
+  const totalViews = await prisma.view.count({
+    where: {
+      demo: {
+        userId: session.user.id,
+      },
+    },
+  });
+
+  const activeShares = await prisma.demo.aggregate({
+    where: { userId: session.user.id },
+    _sum: { shareCount: true },
+  });
+
   const cleanDemos = recentDemos.map((demo) => ({
     id: demo.id,
     title: demo.title,
@@ -41,5 +54,12 @@ export default async function Page() {
     updatedAt: demo.updatedAt.toISOString(),
   }));
 
-  return <DashboardClient totalCount={totalCount} initialDemos={cleanDemos} />;
+  return (
+    <DashboardClient
+      totalCount={totalCount}
+      initialDemos={cleanDemos}
+      totalViews={totalViews}
+      activeShares={activeShares._sum.shareCount ?? 0}
+    />
+  );
 }
