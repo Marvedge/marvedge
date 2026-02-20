@@ -6,6 +6,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     where: { id },
   });
 
+  await prisma.view.create({
+    data: {
+      demoId: id,
+    },
+  });
+  console.log(id);
+
   if (!video) {
     return <div>Video not found</div>;
   }

@@ -25,9 +25,16 @@ interface Demo {
 interface DashboardMainProps {
   initialDemos: Demo[];
   totalCount: number;
+  totalViews: number;
+  activeShares: number;
 }
 
-const DashboardMain = ({ initialDemos, totalCount }: DashboardMainProps) => {
+const DashboardMain = ({
+  initialDemos,
+  totalCount,
+  totalViews,
+  activeShares,
+}: DashboardMainProps) => {
   const router = useRouter();
 
   const handleEditDemo = (demo: Demo) => {
@@ -300,7 +307,9 @@ const DashboardMain = ({ initialDemos, totalCount }: DashboardMainProps) => {
               </span>
             </div>
             <div className="text-xs sm:text-sm md:text-lg font-medium text-black">Total Views</div>
-            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">
+              {totalViews}
+            </div>
             <div className="text-xs text-green-600 font-semibold mt-1">
               +23%{""} <span className="text-gray-500 font-normal text-xs">vs last month</span>
             </div>
@@ -342,7 +351,9 @@ const DashboardMain = ({ initialDemos, totalCount }: DashboardMainProps) => {
             <div className="text-xs sm:text-sm md:text-lg font-medium text-black">
               Active shares
             </div>
-            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">0</div>
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[#261753]/72">
+              {activeShares}
+            </div>
             <div className="text-xs text-green-600 font-semibold mt-1">
               +8%{""} <span className="text-gray-500 font-normal text-xs"> vs last month</span>
             </div>
