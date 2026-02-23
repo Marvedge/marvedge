@@ -274,7 +274,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
         </button>
       </div>
 
-      {/* BACKGROUND TAB */}
+      {/* cd  TAB */}
       {activeTab === "background" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">

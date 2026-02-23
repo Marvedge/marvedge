@@ -284,7 +284,7 @@ export async function videoTrimHandler(
 
     // 5. Convert back to HH:MM:SS for your existing ffmpeg code
     const newNormalizedSegments = keepSegments.map((seg) => {
-      console.log("dgfg", seg);
+      console.log("newNormalizedSegments", seg);
       return {
         start: secondsToTime(seg.start),
         end: secondsToTime(seg.end),

@@ -8,7 +8,7 @@ export async function POST() {
   return NextResponse.json(
     {
       error:
-        "Video trimming has been moved to client-side processing. Use the videoTrimmer function from app/lib/ffmpeg.ts instead.",
+        "Video trimming has been moved to client-side processing.   Use the videoTrimmer function from app/lib/ffmpeg.ts instead.",
     },
     { status: 501 }
   );
