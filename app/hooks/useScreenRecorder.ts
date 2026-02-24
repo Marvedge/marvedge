@@ -19,6 +19,8 @@ export const useScreenRecorder = () => {
 
   const startRecording = async () => {
     try {
+      const audioContext = new AudioContext();
+      const destination = audioContext.createMediaStreamDestination();
       if (!screenStreamRef.current) {
         return;
       }
@@ -35,10 +37,20 @@ export const useScreenRecorder = () => {
         }
       }
 
+      if (screenStreamRef.current.getAudioTracks().length > 0) {
+        const tabSource = audioContext.createMediaStreamSource(
+          new MediaStream(screenStreamRef.current.getAudioTracks())
+        );
+        tabSource.connect(destination);
+      }
+      if (micStream) {
+        const micSource = audioContext.createMediaStreamSource(micStream);
+        micSource.connect(destination);
+      }
+
       const combinedStream = new MediaStream([
         ...screenStreamRef.current.getVideoTracks(),
-        ...screenStreamRef.current.getAudioTracks(),
-        ...(micStream ? micStream.getAudioTracks() : []),
+        ...destination.stream.getAudioTracks(),
       ]);
 
       const chunks: Blob[] = [];

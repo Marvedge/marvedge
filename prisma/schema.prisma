@@ -85,7 +85,8 @@ model Demo {
   endTime     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  editing     Json? 
+  editing     Json?
+  subtitles   Json?
   shareCount Int @default(0)
   publicLink  String? @unique
   views View[]
@@ -123,4 +124,4 @@ model View {
   demo Demo @relation(fields: [demoId], references : [id])
   timestamp DateTime @default(now())
   duration Int?
-}
+} 

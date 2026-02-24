@@ -34,7 +34,6 @@ const nextConfig: NextConfig = {
         ...config.externals,
         "fluent-ffmpeg": "fluent-ffmpeg",
         "ffmpeg-static": "ffmpeg-static",
-        "@ffmpeg/ffmpeg": "commonjs @ffmpeg/ffmpeg",
       };
     } else {
       // For server, mark these as external to avoid module resolution issues

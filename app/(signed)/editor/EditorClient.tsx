@@ -8,6 +8,7 @@ import { Toaster, toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
+import { videoTrimmer } from "@/app/lib/ffmpeg";
 //import Image from "next/image";
 
 // Components
@@ -244,6 +245,43 @@ export default function EditorPage() {
 
   const toggleDashboardMenu = () => {
     setIsDashboardMenuOpen(!isDashboardMenuOpen);
+  };
+
+  // Delete Trim handler
+  const onDeleteTrimmedDemo = async (segmentToDelete: { start: number; end: number }) => {
+    if (!videoUrl) {
+      return;
+    }
+
+    //convert seconds to hh:mm:ss
+    const secondsToTime = (sec: number): string => {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    };
+
+    const response = await fetch(videoUrl);
+    let currentBlob = await response.blob();
+
+    //getting all the segments
+    const sortedSegments = [...segments]
+      .filter((seg) =>
+        seg.start === segmentToDelete.start && seg.end === segmentToDelete.end ? true : true
+      )
+      .sort((a, b) => b.start - a.start);
+
+    for (const seg of sortedSegments) {
+      const start = secondsToTime(seg.start);
+      const end = secondsToTime(seg.end);
+      currentBlob = await videoTrimmer(currentBlob, start, end);
+    }
+
+    const newUrl = URL.createObjectURL(currentBlob);
+    setVideoUrl(newUrl);
+    setDuration(0);
+
+    setSegments([]);
   };
 
   // Save demo handler
@@ -601,7 +639,7 @@ export default function EditorPage() {
               </button>
             </div>
           )}
-          {videoUrl && (
+          {/* {videoUrl && (
             <div className="flex justify-center mt-6 mb-6 ml-">
               <button
                 onClick={() => setShowSaveDemoModal(true)}
@@ -611,7 +649,8 @@ export default function EditorPage() {
                 {savingDemo ? "Saving..." : demoSaved ? "Saved" : "Save Demo"}
               </button>
             </div>
-          )}
+          )} */}
+          <div className="mt-5"></div>
           {/* Video Wrapper */}
           <div
             className={
@@ -622,7 +661,7 @@ export default function EditorPage() {
             {/* Video container */}
             <div
               ref={videoContainerRef}
-              className={`relative w-[900px] sm:h-auto sm:aspect-video rounded-2xl border ${
+              className={`relative w-[1000px] sm:h-auto sm:aspect-video rounded-2xl border ${
                 isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
               } flex flex-col items-center justify-center mb-1 transition-all duration-300`}
               style={{
@@ -806,6 +845,7 @@ export default function EditorPage() {
             <div className="mr-2 mt-8 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
               {duration > 0 ? (
                 <TimelineRuler
+                  onDeleteSegment={onDeleteTrimmedDemo}
                   minValue={0}
                   maxValue={duration}
                   currentValue={Math.max(0, currentTime)}

@@ -9,7 +9,7 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js",
   });
   if (!ffmpeg.isLoaded()) {
     await ffmpeg.load();
@@ -40,43 +40,73 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
   ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
 
   // Get video duration
-  let duration = 0;
+
   // Skipping log parsing for duration due to lack of public API in ffmpeg.wasm
   // Instead, fallback to a large number (should be longer than any real video)
-  duration = 999999;
-
   const startSec = toSeconds(start);
   const endSec = toSeconds(end);
 
-  // Compose filter_complex for trim and concat
-  // [0:v]trim=0:start,setpts=PTS-STARTPTS[v0];[0:a]atrim=0:start,asetpts=PTS-STARTPTS[a0];
-  // [0:v]trim=end:duration,setpts=PTS-STARTPTS[v1];[0:a]atrim=end:duration,asetpts=PTS-STARTPTS[a1];
-  // [v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]
-  const filter =
-    `[0:v]trim=0:${startSec},setpts=PTS-STARTPTS[v0];` +
-    `[0:a]atrim=0:${startSec},asetpts=PTS-STARTPTS[a0];` +
-    `[0:v]trim=${endSec}:${duration},setpts=PTS-STARTPTS[v1];` +
-    `[0:a]atrim=${endSec}:${duration},asetpts=PTS-STARTPTS[a1];` +
-    "[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]";
+  // // Audio+Video filter (works when recording has audio)
+  // const filterWithAudio =
+  //   `[0:v]trim=0:${startSec},setpts=PTS-STARTPTS[v0];` +
+  //   `[0:a]atrim=0:${startSec},asetpts=PTS-STARTPTS[a0];` +
+  //   `[0:v]trim=${endSec}:${duration},setpts=PTS-STARTPTS[v1];` +
+  //   `[0:a]atrim=${endSec}:${duration},asetpts=PTS-STARTPTS[a1];` +
+  //   "[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]";
 
+  // // Video-only filter (fallback when no audio stream exists)
+  // const filterVideoOnly =
+  //   `[0:v]trim=0:${startSec},setpts=PTS-STARTPTS[v0];` +
+  //   `[0:v]trim=${endSec}:${duration},setpts=PTS-STARTPTS[v1];` +
+  //   "[v0][v1]concat=n=2:v=1:a=0[outv]";
+
+  // Concat demuxer approach: split into parts → join with stream copy
+  // filter_complex always re-encodes even with -c copy. Concat demuxer is truly instant.
+
+  // Step 1: Extract the parts to KEEP (inverse of the cut segment)
+  // Part 1: 0 → startSec
+  // Part 2: endSec → end of video
+  const parts: string[] = [];
+
+  if (startSec > 0) {
+    const part1Name = "part1.webm";
+    try {
+      await ffmpeg.run(
+        "-i",
+        inputName,
+        "-ss",
+        "0",
+        "-to",
+        String(startSec),
+        "-c",
+        "copy",
+        part1Name
+      );
+      ffmpeg.FS("readFile", part1Name); // verify it exists
+      parts.push(part1Name);
+    } catch {
+      console.warn("Part 1 extraction failed");
+    }
+  }
+
+  const part2Name = "part2.webm";
   try {
-    await ffmpeg.run(
-      "-i",
-      inputName,
-      "-filter_complex",
-      filter,
-      "-map",
-      "[outv]",
-      "-map",
-      "[outa]",
-      "-c:v",
-      "libvpx",
-      "-c:a",
-      "libvorbis",
-      outputName
-    );
+    await ffmpeg.run("-i", inputName, "-ss", String(endSec), "-c", "copy", part2Name);
+    ffmpeg.FS("readFile", part2Name); // verify it exists
+    parts.push(part2Name);
+  } catch {
+    console.warn("Part 2 extraction failed");
+  }
+
+  // Step 2: Write concat list file
+  const concatList = parts.map((p) => `file '${p}'`).join("\n");
+  ffmpeg.FS("writeFile", "concat.txt", new TextEncoder().encode(concatList));
+
+  // Step 3: Join parts with stream copy (instant)
+  try {
+    await ffmpeg.run("-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", outputName);
   } catch (err) {
-    console.error("FFmpeg filter_complex error", err);
+    console.error("Concat failed:", err);
     throw new Error("Failed to trim and concatenate video segments");
   }
 
@@ -93,7 +123,7 @@ export const videoToMP4 = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js",
   });
   if (!ffmpeg.isLoaded()) {
     await ffmpeg.load();
@@ -122,7 +152,7 @@ export const videoToThumbnail = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js",
   });
   if (!ffmpeg.isLoaded()) {
     await ffmpeg.load();
@@ -144,7 +174,7 @@ export const videoToMP4WithOverlays = async (
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js",
   });
   if (!ffmpeg.isLoaded()) {
     await ffmpeg.load();
@@ -192,7 +222,7 @@ function generateFFmpegFilters(overlays: Overlay[]): string {
         case "rect":
           return `drawbox=x=${o.x}:y=${o.y}:w=${o.w}:h=${o.h}:color=red@0.6:t=2`;
         case "arrow":
-          return `drawbox=x=${o.x}:y=${o.y}:w=2:h=2:color=yellow@1.0:t=fill`; // Approximation
+          return `drawbox=x=${o.x}:y=${o.y}:w=2:h=2:color=yellow@1.0:t=fill`;
         case "text":
           return `drawtext=text='${o.text}':x=${o.x}:y=${o.y}:fontsize=20:fontcolor=white`;
       }
@@ -204,7 +234,7 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   const { createFFmpeg } = await import("@ffmpeg/ffmpeg");
   const ffmpeg = createFFmpeg({
     log: true,
-    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0",
+    corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js",
   });
   if (!ffmpeg.isLoaded()) {
     await ffmpeg.load();

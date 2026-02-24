@@ -28,6 +28,8 @@ interface TimelineRulerProps {
   playing: boolean;
   isFullscreen: boolean;
   handleFullscreen: () => void;
+  //to handle the trimmed video part
+  onDeleteSegment: (segment: { start: number; end: number }) => void;
   //videourl: string;
   //setVideoUrl: React.Dispatch<React.SetStateAction<string | null>>;
   mode: "main" | "trim" | "zoom";
@@ -68,6 +70,7 @@ export default function TimelineRuler({
   mode,
   setMode,
   playerRef,
+  onDeleteSegment,
   setChildHandleProgress,
   //onZoomChange,
   zoomSegments,
@@ -451,8 +454,10 @@ export default function TimelineRuler({
   // };
 
   const removeSegment = (idx: number) => {
+    onDeleteSegment(segments[idx]);
     const newSegments = segments.filter((_, i) => i !== idx);
     setSegments(newSegments);
+
     const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
     setActiveSegment(-1);
     if (newSegments[newActiveSegment]) {
@@ -960,6 +965,7 @@ export default function TimelineRuler({
   };
   // const [open, setOpen] = useState(false);
   return (
+    //this is to handle zoom click
     <div className="w-full max-w-6xl mx-auto">
       <div className="flex flex-row items-center justify-between w-full mb-6 gap-3 sm:gap-6 ">
         <div className="flex gap-3 sm:gap-4 items-center">
@@ -984,7 +990,7 @@ export default function TimelineRuler({
             />
             Add Segment
           </button> */}
-
+          {/* this is to handle the trim */}
           <button
             onClick={handleSmartTrim}
             disabled={processing}
@@ -1105,6 +1111,7 @@ export default function TimelineRuler({
           >
             <Image src="/icons/Group 316.svg" alt="fullscreen" width={18.67} height={21} />
           </button>
+          {/* this is delete button */}
           <button
             onClick={() => removeSegment(activeSegment)}
             disabled={segments.length === 0 || activeSegment === -1 || mode === "main"}
