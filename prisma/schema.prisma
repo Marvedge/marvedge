@@ -86,23 +86,24 @@ model Demo {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   editing     Json?
-  subtitles   Json?
-  shareCount Int @default(0)
-  publicLink  String? @unique
-  views View[]
-  isPublic    Boolean  @default(false)
   userId      String
+  isPublic    Boolean  @default(false)
+  publicLink  String?  @unique
+  shareCount  Int      @default(0)
+  subtitles   Json?
+  exportedUrl String?
   user        User     @relation(fields: [userId], references: [id])
+  views       View[]
 }
 
 model Tutorial {
   id          String   @id @default(cuid())
   title       String
   description String?
-  slides      Slide[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   userId      String
+  slides      Slide[]
   user        User     @relation("UserTutorials", fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -119,9 +120,9 @@ model Slide {
 }
 
 model View {
-  id String  @id @default(cuid())  
-  demoId String
-  demo Demo @relation(fields: [demoId], references : [id])
+  id        String   @id @default(cuid())
+  demoId    String
   timestamp DateTime @default(now())
-  duration Int?
-} 
+  duration  Int?
+  demo      Demo     @relation(fields: [demoId], references: [id])
+}

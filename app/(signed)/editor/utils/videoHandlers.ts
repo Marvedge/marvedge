@@ -390,23 +390,22 @@ interface ExportVideoParams {
     push: (url: string) => void;
   };
   segments: { start: number; end: number }[];
+  zoomSegments: ZoomEffect[];
   setVideoUrl: (url: string) => void;
   setProgress: (progress: number) => void;
   duration: number;
+  savedDemoId?: string | null;
 }
 
 export async function exportVideo(params: ExportVideoParams) {
   const {
     videoUrl,
-    selectedBackground,
-    imageMap,
     sidebarTitle,
     sidebarDescription,
     router,
     segments,
-    setVideoUrl,
-    setProgress,
-    duration,
+    zoomSegments,
+    savedDemoId,
   } = params;
 
   if (!videoUrl) {
@@ -415,108 +414,74 @@ export async function exportVideo(params: ExportVideoParams) {
   }
 
   try {
-    console.log("sending from here #linex 1228");
-    //toast.loading("Processing video...1");
-    console.log(selectedBackground);
-    let vidURl: unknown = undefined;
+    toast.loading("Processing video...", { id: "export" });
+
+    // 1. Fetch the original video blob
+    const res = await fetch(videoUrl);
+    let videoBlob = await res.blob();
+
+    // 2. Apply trim segments (client-side WASM FFmpeg)
     if (segments.length > 0) {
-      try {
-        console.log("videoUrl in trimPart", videoUrl);
-        const onVideoTrim = async (segments: { start: number; end: number }[]) => {
-          const resp = await videoTrimHandler(segments, {
-            videoUrl: videoUrl!,
-            setVideoUrl,
-            setProgress,
-            duration,
-          });
-          toast.loading("Processing video...");
-          return resp;
-        };
-        vidURl = await onVideoTrim(segments);
-        console.log("return trimmed video url", vidURl);
-        //if (vidURl === null) return;
-        //return;
-      } catch (err) {
-        console.log("Error in trim part", err);
-        toast.dismiss();
-        return;
+      console.log("Applying trim segments:", segments);
+      toast.loading("Applying trims...", { id: "export" });
+      const { videoTrimmer } = await import("@/app/lib/ffmpeg");
+
+      // Process segments from end to start so timestamps stay valid
+      const sortedSegments = [...segments].sort((a, b) => b.start - a.start);
+      for (const seg of sortedSegments) {
+        const start = secondsToTime(seg.start);
+        const end = secondsToTime(seg.end);
+        videoBlob = await videoTrimmer(videoBlob, start, end);
       }
-    }
-    if (!vidURl && !videoUrl) {
-      console.error("No video URL available");
-      toast.dismiss();
-      //toast.dismiss();
-      return;
-    }
-    //toast.loading("Processing video...");
-    console.log("video-videoURL", videoUrl);
-    // Fetch blob from ReactPlayer video
-    //const finalVideoUrl = vidURl || videoUrl;
-    const res = await fetch(videoUrl); // Yha pr finalVideoUrl use hona chahyie but linting aa rha hain, pta ni kyu??...so i used "videoUrl"
-    const videoBlob = await res.blob();
-
-    const formData = new FormData();
-    formData.append("video", videoBlob, "video.webm");
-
-    // Handle background
-    if (selectedBackground) {
-      const backgroundPath = imageMap[selectedBackground];
-      console.log(backgroundPath);
-      if (backgroundPath) {
-        const bgUrl = `${window.location.origin}${backgroundPath}`;
-        console.log("Fetching background from:", bgUrl);
-
-        const bgRes = await fetch(bgUrl);
-        if (!bgRes.ok) {
-          throw new Error(`Failed to fetch background: ${bgUrl}`);
-        }
-
-        const bgBlob = await bgRes.blob();
-        console.log("Background blob:", bgBlob);
-
-        formData.append("background", bgBlob, "background.svg");
-      }
+      console.log("Trim complete, blob size:", videoBlob.size);
     }
 
-    const backendUrl = process.env.NEXT_PUBLIC_VIDEO_PROCESSING_BACKEND_URL;
-    const cloudinaryUrl = process.env.NEXT_PUBLIC_CLOUDINARY_URL as string;
-    const cloudinaryPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string;
+    // 3. Apply zoom effects (client-side WASM FFmpeg)
+    if (zoomSegments.length > 0) {
+      console.log("Applying zoom effects:", zoomSegments);
+      toast.loading("Applying zoom effects...", { id: "export" });
+      const { videoWithZoomEffects } = await import("@/app/lib/ffmpeg");
+      videoBlob = await videoWithZoomEffects(videoBlob, zoomSegments);
+      console.log("Zoom complete, blob size:", videoBlob.size);
+    }
 
-    // Call backend FFmpeg server with axios
-    const serverRes = await axios.post(`${backendUrl}/process-video`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    // 4. Upload processed video directly to Cloudinary (no backend needed)
+    toast.loading("Uploading to Cloudinary...", { id: "export" });
 
-    const { url } = serverRes.data; // backend returns { url }
+    const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+    const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+    const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
 
-    // Fetch processed video (mp4) from backend
-    const processedRes = await axios.get(`${backendUrl}${url}`, {
-      responseType: "blob",
-    });
-    const processedBlob = processedRes.data;
-
-    // Upload processed video to Cloudinary with axios
     const cloudFormData = new FormData();
-    cloudFormData.append("file", processedBlob, "final.mp4");
-    cloudFormData.append("upload_preset", cloudinaryPreset);
+    cloudFormData.append("file", videoBlob, "exported-video.webm");
+    cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
-    const cloudRes = await axios.post(cloudinaryUrl, cloudFormData, {
+    const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
 
-    const cloudData = cloudRes.data;
+    const exportedUrl = cloudRes.data.secure_url;
+    console.log("Exported video URL:", exportedUrl);
 
-    console.log("backend url is ", cloudData.secure_url);
-    toast.dismiss();
-    toast.success("Video exported with background!");
+    // 5. Save exportedUrl to DB if we have a saved demo
+    if (savedDemoId) {
+      try {
+        await axios.patch("/api/demo", { id: savedDemoId, exportedUrl });
+        console.log("Saved exportedUrl to demo:", savedDemoId);
+      } catch (patchErr) {
+        console.error("Failed to save exportedUrl to DB:", patchErr);
+        // Don't fail the export — the video is already uploaded
+      }
+    }
+
+    toast.success("Video exported successfully!", { id: "export" });
 
     // Navigate to preview page
     router.push(
-      `/preview?video=${encodeURIComponent(cloudData.secure_url)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`
+      `/preview?video=${encodeURIComponent(exportedUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`
     );
   } catch (err) {
-    console.error(err);
-    toast.dismiss();
-    toast.error("Export failed");
+    console.error("Export failed:", err);
+    toast.error("Export failed", { id: "export" });
   }
 }

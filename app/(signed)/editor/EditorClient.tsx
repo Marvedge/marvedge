@@ -8,7 +8,7 @@ import { Toaster, toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
-import { videoTrimmer } from "@/app/lib/ffmpeg";
+//import { videoTrimmer } from "@/app/lib/ffmpeg"; // Moved to export handler
 //import Image from "next/image";
 
 // Components
@@ -143,8 +143,16 @@ export default function EditorPage() {
     setLoadedSegments,
     setCurrentSegments,
     setZoomEffects,
+    setSavedDemoId,
     formatTimeForInput,
   });
+
+  // Bridge recorder → editor: if no video URL from URL params, use blob from Zustand
+  useEffect(() => {
+    if (!videoUrl && blob) {
+      setVideoUrl(URL.createObjectURL(blob));
+    }
+  }, [videoUrl, blob, setVideoUrl]);
 
   // Video duration detection
   useVideoDuration({
@@ -212,6 +220,25 @@ export default function EditorPage() {
     }
   }, [videoUrl, setDemoSaved]);
 
+  // Restore editing state (trim/zoom blocks) from saved demo URL params
+  useEffect(() => {
+    // Restore trim segments from saved editing data
+    if (currentSegments.length > 0 && segments.length === 0) {
+      const numeric = currentSegments.map((s) => ({
+        start: typeof s.start === 'string' ? parseFloat(s.start) : Number(s.start),
+        end: typeof s.end === 'string' ? parseFloat(s.end) : Number(s.end),
+      })).filter((s) => !isNaN(s.start) && !isNaN(s.end));
+      if (numeric.length > 0) {
+        setSegments(numeric);
+      }
+    }
+    // Restore zoom segments from saved editing data
+    if (zoomEffects.length > 0 && zoomSegments.length === 0) {
+      setZoomSegments(zoomEffects);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSegments, zoomEffects]);
+
   // User initials
   const initials = session?.user?.name
     ? session.user.name
@@ -247,42 +274,8 @@ export default function EditorPage() {
     setIsDashboardMenuOpen(!isDashboardMenuOpen);
   };
 
-  // Delete Trim handler
-  const onDeleteTrimmedDemo = async (segmentToDelete: { start: number; end: number }) => {
-    if (!videoUrl) {
-      return;
-    }
-
-    //convert seconds to hh:mm:ss
-    const secondsToTime = (sec: number): string => {
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = Math.floor(sec % 60);
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    };
-
-    const response = await fetch(videoUrl);
-    let currentBlob = await response.blob();
-
-    //getting all the segments
-    const sortedSegments = [...segments]
-      .filter((seg) =>
-        seg.start === segmentToDelete.start && seg.end === segmentToDelete.end ? true : true
-      )
-      .sort((a, b) => b.start - a.start);
-
-    for (const seg of sortedSegments) {
-      const start = secondsToTime(seg.start);
-      const end = secondsToTime(seg.end);
-      currentBlob = await videoTrimmer(currentBlob, start, end);
-    }
-
-    const newUrl = URL.createObjectURL(currentBlob);
-    setVideoUrl(newUrl);
-    setDuration(0);
-
-    setSegments([]);
-  };
+  // Delete handler is now UI-only — handled inside TimeLine.tsx
+  // Video trimming happens at export time in videoHandlers.ts
 
   // Save demo handler
   const onSaveDemo = async (data: { title: string; description: string }) => {
@@ -303,8 +296,8 @@ export default function EditorPage() {
       videoUrl: videoUrl!,
       inputStartTime,
       inputEndTime,
-      currentSegments,
-      zoomEffects,
+      currentSegments: segments.map((s) => ({ start: String(s.start), end: String(s.end) })),
+      zoomEffects: zoomSegments,
       setSavingDemo,
       setSidebarTitle,
       setSidebarDescription,
@@ -330,7 +323,6 @@ export default function EditorPage() {
 
   const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
 
-  // Export video handler
   const onExportVideo = async () => {
     await exportVideo({
       videoUrl: videoUrl!,
@@ -340,9 +332,11 @@ export default function EditorPage() {
       sidebarDescription,
       router,
       segments,
+      zoomSegments,
       setVideoUrl,
       setProgress,
       duration,
+      savedDemoId: editorState.savedDemoId,
     });
   };
 
@@ -364,6 +358,8 @@ export default function EditorPage() {
   const onZoomEffectsChange = (effects: ZoomEffect[]) => {
     setZoomEffects(effects);
   };
+
+  // Zoom effects are now applied at export time, not immediately
 
   //useEffect(() => {}, [videoUrl]);
   const [mode, setMode] = useState<"main" | "trim" | "zoom">("main");
@@ -639,7 +635,7 @@ export default function EditorPage() {
               </button>
             </div>
           )}
-          {/* {videoUrl && (
+          {videoUrl && !demoSaved && !sidebarTitle && (
             <div className="flex justify-center mt-6 mb-6 ml-">
               <button
                 onClick={() => setShowSaveDemoModal(true)}
@@ -649,7 +645,7 @@ export default function EditorPage() {
                 {savingDemo ? "Saving..." : demoSaved ? "Saved" : "Save Demo"}
               </button>
             </div>
-          )} */}
+          )}
           <div className="mt-5"></div>
           {/* Video Wrapper */}
           <div
@@ -706,6 +702,7 @@ export default function EditorPage() {
                     {/*In FullScreen video require one div, so don't remove div */}
                     {videoUrl ? (
                       <ReactPlayer
+                        key={videoUrl}
                         ref={playerRef}
                         url={videoUrl}
                         playing={playing}
@@ -793,7 +790,7 @@ export default function EditorPage() {
                   borderRadius: "1.25rem",
                 }}
               />
-
+           
               {/* Controls container - only show when video is available */}
               {videoUrl && (
                 <div className="w-full flex flex-col gap-3 mt-5">
@@ -845,7 +842,6 @@ export default function EditorPage() {
             <div className="mr-2 mt-8 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
               {duration > 0 ? (
                 <TimelineRuler
-                  onDeleteSegment={onDeleteTrimmedDemo}
                   minValue={0}
                   maxValue={duration}
                   currentValue={Math.max(0, currentTime)}
@@ -872,13 +868,8 @@ export default function EditorPage() {
                   }}
                   processing={processing}
                   onResetVideo={resetVideo}
-                  //onZoomEffectCreate={onZoomEffectCreate}
-                  //initialSegments={currentSegments}
-                  //onTrim={onVideoTrim}
                   playing={playing}
                   setPlaying={setPlaying}
-                  //videourl={videoUrl}
-                  //setVideoUrl={setVideoUrl}
                   mode={mode}
                   setMode={setMode}
                   playerRef={playerRef}
@@ -887,7 +878,6 @@ export default function EditorPage() {
                   setZoomSegments={setZoomSegments}
                   activeZoomIdx={activeZoomIdx}
                   setActiveZoomIdx={setActiveZoomIdx}
-                  //setOpen={setOpen}
                   zoomLevelDepth={zoomLevel}
                   segments={segments}
                   setSegments={setSegments}

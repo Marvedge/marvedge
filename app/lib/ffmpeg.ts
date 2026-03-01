@@ -37,77 +37,176 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
     return parseFloat(t);
   }
 
-  ffmpeg.FS("writeFile", inputName, new Uint8Array(await inputBlob.arrayBuffer()));
-
-  // Get video duration
-
-  // Skipping log parsing for duration due to lack of public API in ffmpeg.wasm
-  // Instead, fallback to a large number (should be longer than any real video)
-  const startSec = toSeconds(start);
-  const endSec = toSeconds(end);
-
-  // // Audio+Video filter (works when recording has audio)
-  // const filterWithAudio =
-  //   `[0:v]trim=0:${startSec},setpts=PTS-STARTPTS[v0];` +
-  //   `[0:a]atrim=0:${startSec},asetpts=PTS-STARTPTS[a0];` +
-  //   `[0:v]trim=${endSec}:${duration},setpts=PTS-STARTPTS[v1];` +
-  //   `[0:a]atrim=${endSec}:${duration},asetpts=PTS-STARTPTS[a1];` +
-  //   "[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]";
-
-  // // Video-only filter (fallback when no audio stream exists)
-  // const filterVideoOnly =
-  //   `[0:v]trim=0:${startSec},setpts=PTS-STARTPTS[v0];` +
-  //   `[0:v]trim=${endSec}:${duration},setpts=PTS-STARTPTS[v1];` +
-  //   "[v0][v1]concat=n=2:v=1:a=0[outv]";
-
-  // Concat demuxer approach: split into parts → join with stream copy
-  // filter_complex always re-encodes even with -c copy. Concat demuxer is truly instant.
-
-  // Step 1: Extract the parts to KEEP (inverse of the cut segment)
-  // Part 1: 0 → startSec
-  // Part 2: endSec → end of video
-  const parts: string[] = [];
-
-  if (startSec > 0) {
-    const part1Name = "part1.webm";
+  // Helper: get file size in ffmpeg FS (returns 0 if file doesn't exist)
+  function getFileSize(name: string): number {
     try {
-      await ffmpeg.run(
-        "-i",
-        inputName,
-        "-ss",
-        "0",
-        "-to",
-        String(startSec),
-        "-c",
-        "copy",
-        part1Name
-      );
-      ffmpeg.FS("readFile", part1Name); // verify it exists
-      parts.push(part1Name);
+      const d = ffmpeg.FS("readFile", name);
+      return d.length;
     } catch {
-      console.warn("Part 1 extraction failed");
+      return 0;
     }
   }
 
-  const part2Name = "part2.webm";
-  try {
-    await ffmpeg.run("-i", inputName, "-ss", String(endSec), "-c", "copy", part2Name);
-    ffmpeg.FS("readFile", part2Name); // verify it exists
-    parts.push(part2Name);
-  } catch {
-    console.warn("Part 2 extraction failed");
+  // Helper: check if a file exists and has reasonable size in ffmpeg FS
+  function fileExistsAndValid(name: string, minBytes = 1000): boolean {
+    return getFileSize(name) >= minBytes;
   }
 
-  // Step 2: Write concat list file
-  const concatList = parts.map((p) => `file '${p}'`).join("\n");
-  ffmpeg.FS("writeFile", "concat.txt", new TextEncoder().encode(concatList));
+  // Helper: clean up intermediate files (ignore errors)
+  function cleanupFiles(...names: string[]) {
+    for (const n of names) {
+      try { ffmpeg.FS("unlink", n); } catch { /* ignore */ }
+    }
+  }
 
-  // Step 3: Join parts with stream copy (instant)
+  const inputData = new Uint8Array(await inputBlob.arrayBuffer());
+  const inputSize = inputData.length;
+  ffmpeg.FS("writeFile", inputName, inputData);
+
+  const startSec = toSeconds(start);
+  const endSec = toSeconds(end);
+
+  // ── Strategy 1: Stream-copy (fast, no quality loss) ──────────────────
+  // This works when recording has proper audio (mic on / tab audio).
+  // It may fail with synthetic silent audio (mic off) because webm/opus
+  // timestamps from a silent oscillator don't split cleanly with -c copy.
+  let streamCopySuccess = false;
+
   try {
-    await ffmpeg.run("-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", outputName);
+    const parts: string[] = [];
+
+    if (startSec > 0) {
+      const part1Name = "part1.webm";
+      try {
+        await ffmpeg.run(
+          "-i", inputName,
+          "-ss", "0",
+          "-to", String(startSec),
+          "-c", "copy",
+          part1Name
+        );
+        if (fileExistsAndValid(part1Name)) {
+          parts.push(part1Name);
+        }
+      } catch {
+        console.warn("Stream-copy: Part 1 extraction failed");
+      }
+    }
+
+    const part2Name = "part2.webm";
+    try {
+      await ffmpeg.run(
+        "-i", inputName,
+        "-ss", String(endSec),
+        "-c", "copy",
+        part2Name
+      );
+      if (fileExistsAndValid(part2Name)) {
+        parts.push(part2Name);
+      }
+    } catch {
+      console.warn("Stream-copy: Part 2 extraction failed");
+    }
+
+    if (parts.length > 0) {
+      const concatList = parts.map((p) => `file '${p}'`).join("\n");
+      ffmpeg.FS("writeFile", "concat.txt", new TextEncoder().encode(concatList));
+
+      await ffmpeg.run(
+        "-f", "concat", "-safe", "0",
+        "-i", "concat.txt",
+        "-c", "copy",
+        outputName
+      );
+
+      const outSize = getFileSize(outputName);
+      // Trim should ALWAYS produce a smaller file — if output is bigger
+      // than input, the stream-copy produced corrupt/inflated output
+      if (outSize >= 1000 && outSize < inputSize) {
+        streamCopySuccess = true;
+        console.log("Trim succeeded with stream-copy", { inputSize, outSize });
+      } else if (outSize > 0) {
+        console.warn("Stream-copy output looks wrong (size mismatch)", { inputSize, outSize });
+      }
+    }
   } catch (err) {
-    console.error("Concat failed:", err);
-    throw new Error("Failed to trim and concatenate video segments");
+    console.warn("Stream-copy trim failed, will try re-encode fallback:", err);
+  }
+
+  // ── Strategy 2: Re-encode fallback (handles mic-off / silent audio) ──
+  // When stream-copy fails or produces a corrupt file, re-encode to fix
+  // audio timestamps. Uses libvpx for video and libopus for audio.
+  if (!streamCopySuccess) {
+    console.log("Falling back to re-encode trim...");
+
+    // Clean up any leftover files from strategy 1
+    cleanupFiles("part1.webm", "part2.webm", "concat.txt", outputName);
+
+    const parts: string[] = [];
+
+    if (startSec > 0) {
+      const part1Name = "re_part1.webm";
+      try {
+        await ffmpeg.run(
+          "-i", inputName,
+          "-ss", "0",
+          "-to", String(startSec),
+          "-c:v", "libvpx",
+          "-crf", "10",
+          "-b:v", "0",
+          "-c:a", "libopus",
+          part1Name
+        );
+        if (fileExistsAndValid(part1Name)) {
+          parts.push(part1Name);
+        }
+      } catch {
+        console.warn("Re-encode: Part 1 extraction failed");
+      }
+    }
+
+    const part2Name = "re_part2.webm";
+    try {
+      await ffmpeg.run(
+        "-i", inputName,
+        "-ss", String(endSec),
+        "-c:v", "libvpx",
+        "-crf", "10",
+        "-b:v", "0",
+        "-c:a", "libopus",
+        part2Name
+      );
+      if (fileExistsAndValid(part2Name)) {
+        parts.push(part2Name);
+      }
+    } catch {
+      console.warn("Re-encode: Part 2 extraction failed");
+    }
+
+    if (parts.length === 0) {
+      throw new Error("Failed to extract any video segments for trimming");
+    }
+
+    const concatList = parts.map((p) => `file '${p}'`).join("\n");
+    ffmpeg.FS("writeFile", "re_concat.txt", new TextEncoder().encode(concatList));
+
+    try {
+      await ffmpeg.run(
+        "-f", "concat", "-safe", "0",
+        "-i", "re_concat.txt",
+        "-c", "copy",
+        outputName
+      );
+    } catch (err) {
+      console.error("Re-encode concat failed:", err);
+      throw new Error("Failed to trim and concatenate video segments");
+    }
+
+    if (!fileExistsAndValid(outputName)) {
+      throw new Error("Re-encode trim produced no valid output");
+    }
+
+    console.log("Trim succeeded with re-encode fallback");
   }
 
   try {
@@ -248,3 +347,8 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   const data = ffmpeg.FS("readFile", outputName);
   return new Blob([data.slice(0).buffer], { type: "audio/mp3" });
 };
+
+
+/// when i try to trim out a part in a video + audio is toggled on , it successfully happens 
+/// but when i try to trim out a part in a video + audio is toggled off , it doesn't happen
+/// 

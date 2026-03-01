@@ -30,6 +30,7 @@ interface Demo {
   title: string;
   description: string;
   videoUrl: string;
+  exportedUrl?: string;
   startTime?: string;
   endTime?: string;
   segments?: unknown;
@@ -106,6 +107,7 @@ export default function DemosPage() {
       endTime: demo.endTime || "",
       title: demo.title || "",
       description: demo.description || "",
+      demoId: demo.id,
     });
 
     // Add segments and zoom data if available in editing

@@ -37,15 +37,31 @@ export const useScreenRecorder = () => {
         }
       }
 
+      let hasAudioSource = false;
+
       if (screenStreamRef.current.getAudioTracks().length > 0) {
         const tabSource = audioContext.createMediaStreamSource(
           new MediaStream(screenStreamRef.current.getAudioTracks())
         );
         tabSource.connect(destination);
+        hasAudioSource = true;
       }
       if (micStream) {
         const micSource = audioContext.createMediaStreamSource(micStream);
         micSource.connect(destination);
+        hasAudioSource = true;
+      }
+
+      // If no real audio source, add a silent oscillator so the recording
+      // always has a valid audio track. This is required because FFmpeg's
+      // stream-copy trim needs audio timestamps to produce correct duration.
+      if (!hasAudioSource) {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        gain.gain.value = 0; // complete silence
+        oscillator.connect(gain);
+        gain.connect(destination);
+        oscillator.start();
       }
 
       const combinedStream = new MediaStream([
@@ -55,9 +71,15 @@ export const useScreenRecorder = () => {
 
       const chunks: Blob[] = [];
 
-      mediaRecorder.current = new MediaRecorder(combinedStream, {
-        mimeType: "video/webm; codecs=vp8,opus",
-      });
+      const mimeType = MediaRecorder.isTypeSupported("video/webm; codecs=vp8,opus")
+        ? "video/webm; codecs=vp8,opus"
+        : MediaRecorder.isTypeSupported("video/webm")
+          ? "video/webm"
+          : "";
+
+      mediaRecorder.current = mimeType
+        ? new MediaRecorder(combinedStream, { mimeType })
+        : new MediaRecorder(combinedStream);
 
       mediaRecorder.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -66,7 +88,8 @@ export const useScreenRecorder = () => {
       };
 
       mediaRecorder.current.onstop = () => {
-        const blob = new Blob(chunks, { type: "video/webm" });
+        const blobType = mediaRecorder.current?.mimeType || "video/webm";
+        const blob = new Blob(chunks, { type: blobType });
         const url = URL.createObjectURL(blob);
         setBlob(blob);
         setVideoUrl(url);
@@ -153,3 +176,13 @@ export const useScreenRecorder = () => {
     handleConfirmScreenShare,
   };
 };
+
+
+// the main issue leading to the editor page was it always expected me to provide a audio and when it was not there 
+// it produced an error and i was not able to proceed to the editor page 
+// so i have to make sure that the audio is optional and if it is not there then it should not produce an error 
+// and it should work fine 
+
+
+// still not fixed and keeps failing , there is a deeper issue with this that needs to be fixed 
+// i am not sure if it is a browser issue or a code issue , kya ho rha hai bhai 

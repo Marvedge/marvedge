@@ -13,6 +13,7 @@ interface UseURLParamsProps {
   setLoadedSegments: (segments: Segment[] | null) => void;
   setCurrentSegments: (segments: Segment[]) => void;
   setZoomEffects: (effects: ZoomEffect[]) => void;
+  setSavedDemoId: (id: string | null) => void;
   formatTimeForInput: (seconds: number) => string;
 }
 
@@ -27,6 +28,7 @@ export function useURLParams({
   setLoadedSegments,
   setCurrentSegments,
   setZoomEffects,
+  setSavedDemoId,
   formatTimeForInput,
 }: UseURLParamsProps) {
   useEffect(() => {
@@ -41,6 +43,7 @@ export function useURLParams({
     const urlZoom = params.get("zoom");
     const urlTitle = params.get("title");
     const urlDescription = params.get("description");
+    const urlDemoId = params.get("demoId");
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
@@ -63,6 +66,10 @@ export function useURLParams({
 
       if (urlDescription) {
         setSidebarDescription(urlDescription);
+      }
+
+      if (urlDemoId) {
+        setSavedDemoId(urlDemoId);
       }
 
       // Load segments if provided
@@ -103,6 +110,7 @@ export function useURLParams({
     setLoadedSegments,
     setCurrentSegments,
     setZoomEffects,
+    setSavedDemoId,
     formatTimeForInput,
   ]);
 }

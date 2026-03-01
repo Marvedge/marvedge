@@ -29,20 +29,15 @@ interface TimelineRulerProps {
   isFullscreen: boolean;
   handleFullscreen: () => void;
   //to handle the trimmed video part
-  onDeleteSegment: (segment: { start: number; end: number }) => void;
-  //videourl: string;
-  //setVideoUrl: React.Dispatch<React.SetStateAction<string | null>>;
+  //onDeleteSegment removed — delete is now UI-only, handled internally
   mode: "main" | "trim" | "zoom";
   setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom">>;
   playerRef: React.RefObject<ReactPlayer>;
   setChildHandleProgress: (fn: (data: { playedSeconds: number }) => void) => void;
-  //onZoomChange?: (activeZoom: ZoomEffect | null) => void;
   zoomSegments: ZoomEffect[];
   setZoomSegments: React.Dispatch<React.SetStateAction<ZoomEffect[]>>;
   activeZoomIdx: number;
   setActiveZoomIdx: React.Dispatch<React.SetStateAction<number>>;
-  //open: boolean;
-  //setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   zoomLevelDepth: number;
   segments: { start: number; end: number }[];
   setSegments: React.Dispatch<React.SetStateAction<{ start: number; end: number }[]>>;
@@ -70,7 +65,6 @@ export default function TimelineRuler({
   mode,
   setMode,
   playerRef,
-  onDeleteSegment,
   setChildHandleProgress,
   //onZoomChange,
   zoomSegments,
@@ -114,6 +108,15 @@ export default function TimelineRuler({
   //console.log("Intital Value", segments);
   const [activeSegment, setActiveSegment] = useState<number>(-1);
   const [removedSegments, setRemovedSegments] = useState<{ start: number; end: number }[]>([]);
+
+  // Unified action history for undo/redo (supports both trim and zoom)
+  type EditorAction =
+    | { type: 'add-trim'; segment: { start: number; end: number } }
+    | { type: 'remove-trim'; segment: { start: number; end: number }; index: number }
+    | { type: 'add-zoom'; segment: ZoomEffect }
+    | { type: 'remove-zoom'; segment: ZoomEffect; index: number };
+  const [undoStack, setUndoStack] = useState<EditorAction[]>([]);
+  const [redoStack, setRedoStack] = useState<EditorAction[]>([]);
   const [draggingScissor, setDraggingScissor] = useState<"left" | "right" | null>(null);
   const [scissorPreview, setScissorPreview] = useState<number | null>(null);
   const [draggingCurrentTime, setDraggingCurrentTime] = useState(false);
@@ -454,7 +457,12 @@ export default function TimelineRuler({
   // };
 
   const removeSegment = (idx: number) => {
-    onDeleteSegment(segments[idx]);
+    const removed = segments[idx];
+    // Push to undo stack (UI-only, no video processing)
+    setUndoStack((prev) => [...prev, { type: 'remove-trim', segment: removed, index: idx }]);
+    setRedoStack([]); // clear redo on new action
+    setRemovedSegments((prev) => [...prev, removed]);
+
     const newSegments = segments.filter((_, i) => i !== idx);
     setSegments(newSegments);
 
@@ -470,34 +478,73 @@ export default function TimelineRuler({
     }
   };
 
+  const removeZoomSegment = (idx: number) => {
+    const removed = zoomSegments[idx];
+    setUndoStack((prev) => [...prev, { type: 'remove-zoom', segment: removed, index: idx }]);
+    setRedoStack([]);
+    setZoomSegments((prev) => prev.filter((_, i) => i !== idx));
+    setActiveZoomIdx(-1);
+    if (zoomSegments.length <= 1) {
+      setMode("main");
+    }
+  };
+
   const handleUndo = () => {
-    if (segments.length > 0) {
-      const lastSegment = segments[segments.length - 1];
-      setRemovedSegments((prev) => [...prev, lastSegment]);
-      setSegments((prev) => {
-        const newSegments = prev.slice(0, -1);
-        const newActiveSegment = Math.min(activeSegment, newSegments.length - 1);
-        setActiveSegment(newActiveSegment);
-        if (newSegments[newActiveSegment]) {
-          setLocalStartTime(newSegments[newActiveSegment].start);
-          setLocalEndTime(newSegments[newActiveSegment].end);
-        }
+    if (undoStack.length === 0) return;
+    const lastAction = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, lastAction]);
 
-        // If all segments are deleted, switch to NON-TRIM mode for continuous playback
-        if (newSegments.length === 0) {
-          switchToNonTrimMode();
-        }
-
-        return newSegments;
-      });
+    switch (lastAction.type) {
+      case 'add-trim':
+        // Undo adding a trim → remove it
+        setSegments((prev) => prev.filter((s) => s !== lastAction.segment));
+        if (segments.length <= 1) switchToNonTrimMode();
+        break;
+      case 'remove-trim':
+        // Undo removing a trim → restore it
+        setSegments((prev) => {
+          const newSegs = [...prev];
+          newSegs.splice(lastAction.index, 0, lastAction.segment);
+          return newSegs;
+        });
+        setRemovedSegments((prev) => prev.filter((s) => s !== lastAction.segment));
+        break;
+      case 'add-zoom':
+        // Undo adding zoom → remove it
+        setZoomSegments((prev) => prev.filter((s) => s !== lastAction.segment));
+        break;
+      case 'remove-zoom':
+        // Undo removing zoom → restore it
+        setZoomSegments((prev) => {
+          const newSegs = [...prev];
+          newSegs.splice(lastAction.index, 0, lastAction.segment);
+          return newSegs;
+        });
+        break;
     }
   };
 
   const handleRedo = () => {
-    if (removedSegments.length > 0) {
-      const segmentToRestore = removedSegments[removedSegments.length - 1];
-      setSegments((prev) => [...prev, segmentToRestore]);
-      setRemovedSegments((prev) => prev.slice(0, -1));
+    if (redoStack.length === 0) return;
+    const lastAction = redoStack[redoStack.length - 1];
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [...prev, lastAction]);
+
+    switch (lastAction.type) {
+      case 'add-trim':
+        setSegments((prev) => [...prev, lastAction.segment]);
+        break;
+      case 'remove-trim':
+        setSegments((prev) => prev.filter((_, i) => i !== lastAction.index));
+        if (segments.length <= 1) switchToNonTrimMode();
+        break;
+      case 'add-zoom':
+        setZoomSegments((prev) => [...prev, lastAction.segment]);
+        break;
+      case 'remove-zoom':
+        setZoomSegments((prev) => prev.filter((_, i) => i !== lastAction.index));
+        break;
     }
   };
   // function formatToHHMMSS(seconds: number) {
@@ -513,6 +560,10 @@ export default function TimelineRuler({
     const endTime = Math.min(maxValue, currentTime + FIXED_TRIM_DURATION);
 
     const newSegment = { start: startTime, end: endTime };
+
+    // Track in undo stack
+    setUndoStack((prev) => [...prev, { type: 'add-trim', segment: newSegment }]);
+    setRedoStack([]);
 
     // Update segments and active segment together
     console.log("Start time", startTime, " ", endTime);
@@ -928,14 +979,10 @@ export default function TimelineRuler({
 
   const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
   const handleZoomClick = () => {
-    //console.log("hlo-rer");
-    // if (!onZoomEffectCreate) {
-    //   return;
-    // }
     const startTime = Math.max(0, localValue - 1);
     const endTime = Math.min(maxValue, localValue + 2);
 
-    const newSegment = {
+    const newSegment: ZoomEffect = {
       id: Date.now().toString(),
       startTime: startTime,
       endTime: endTime,
@@ -944,10 +991,13 @@ export default function TimelineRuler({
       y: 0.1,
     };
 
+    // Track in undo stack
+    setUndoStack((prev) => [...prev, { type: 'add-zoom', segment: newSegment }]);
+    setRedoStack([]);
+
     console.log("Start time", startTime, " ", endTime);
     setZoomSegments((prev) => {
       const newSegments = [...prev, newSegment];
-      //setActiveSegment(newSegments.length - 1);
       return newSegments;
     });
 
@@ -976,6 +1026,8 @@ export default function TimelineRuler({
             <Image src="/icons/zoooom.svg" alt="Zoom" width={26} height={26} />
             <span className="text-sm font-medium leading-none">Zoom</span>
           </button>
+
+          {/* Apply Zooms button removed — zoom effects are applied at export time */}
 
           {/* <button
             onClick={addSegment}
@@ -1111,10 +1163,16 @@ export default function TimelineRuler({
           >
             <Image src="/icons/Group 316.svg" alt="fullscreen" width={18.67} height={21} />
           </button>
-          {/* this is delete button */}
+          {/* Delete button — works for both trim and zoom segments */}
           <button
-            onClick={() => removeSegment(activeSegment)}
-            disabled={segments.length === 0 || activeSegment === -1 || mode === "main"}
+            onClick={() => {
+              if (mode === "trim" && activeSegment >= 0 && activeSegment < segments.length) {
+                removeSegment(activeSegment);
+              } else if (mode === "zoom" && activeZoomIdx >= 0 && activeZoomIdx < zoomSegments.length) {
+                removeZoomSegment(activeZoomIdx);
+              }
+            }}
+            disabled={mode === "main" || (mode === "trim" && (segments.length === 0 || activeSegment === -1)) || (mode === "zoom" && (zoomSegments.length === 0 || activeZoomIdx === -1))}
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Delete"
           >
@@ -1132,7 +1190,7 @@ export default function TimelineRuler({
           </button>
           <button
             onClick={handleUndo}
-            disabled={segments.length === 0}
+            disabled={undoStack.length === 0}
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Undo"
           >
@@ -1140,7 +1198,7 @@ export default function TimelineRuler({
           </button>
           <button
             onClick={handleRedo}
-            disabled={removedSegments.length === 0}
+            disabled={redoStack.length === 0}
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Redo"
           >
