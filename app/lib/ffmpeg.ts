@@ -55,7 +55,11 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
   // Helper: clean up intermediate files (ignore errors)
   function cleanupFiles(...names: string[]) {
     for (const n of names) {
-      try { ffmpeg.FS("unlink", n); } catch { /* ignore */ }
+      try {
+        ffmpeg.FS("unlink", n);
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -79,10 +83,14 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
       const part1Name = "part1.webm";
       try {
         await ffmpeg.run(
-          "-i", inputName,
-          "-ss", "0",
-          "-to", String(startSec),
-          "-c", "copy",
+          "-i",
+          inputName,
+          "-ss",
+          "0",
+          "-to",
+          String(startSec),
+          "-c",
+          "copy",
           part1Name
         );
         if (fileExistsAndValid(part1Name)) {
@@ -95,12 +103,7 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
 
     const part2Name = "part2.webm";
     try {
-      await ffmpeg.run(
-        "-i", inputName,
-        "-ss", String(endSec),
-        "-c", "copy",
-        part2Name
-      );
+      await ffmpeg.run("-i", inputName, "-ss", String(endSec), "-c", "copy", part2Name);
       if (fileExistsAndValid(part2Name)) {
         parts.push(part2Name);
       }
@@ -112,12 +115,7 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
       const concatList = parts.map((p) => `file '${p}'`).join("\n");
       ffmpeg.FS("writeFile", "concat.txt", new TextEncoder().encode(concatList));
 
-      await ffmpeg.run(
-        "-f", "concat", "-safe", "0",
-        "-i", "concat.txt",
-        "-c", "copy",
-        outputName
-      );
+      await ffmpeg.run("-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", outputName);
 
       const outSize = getFileSize(outputName);
       // Trim should ALWAYS produce a smaller file — if output is bigger
@@ -126,7 +124,10 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
         streamCopySuccess = true;
         console.log("Trim succeeded with stream-copy", { inputSize, outSize });
       } else if (outSize > 0) {
-        console.warn("Stream-copy output looks wrong (size mismatch)", { inputSize, outSize });
+        console.warn("Stream-copy output looks wrong (size mismatch)", {
+          inputSize,
+          outSize,
+        });
       }
     }
   } catch (err) {
@@ -148,13 +149,20 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
       const part1Name = "re_part1.webm";
       try {
         await ffmpeg.run(
-          "-i", inputName,
-          "-ss", "0",
-          "-to", String(startSec),
-          "-c:v", "libvpx",
-          "-crf", "10",
-          "-b:v", "0",
-          "-c:a", "libopus",
+          "-i",
+          inputName,
+          "-ss",
+          "0",
+          "-to",
+          String(startSec),
+          "-c:v",
+          "libvpx",
+          "-crf",
+          "10",
+          "-b:v",
+          "0",
+          "-c:a",
+          "libopus",
           part1Name
         );
         if (fileExistsAndValid(part1Name)) {
@@ -168,12 +176,18 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
     const part2Name = "re_part2.webm";
     try {
       await ffmpeg.run(
-        "-i", inputName,
-        "-ss", String(endSec),
-        "-c:v", "libvpx",
-        "-crf", "10",
-        "-b:v", "0",
-        "-c:a", "libopus",
+        "-i",
+        inputName,
+        "-ss",
+        String(endSec),
+        "-c:v",
+        "libvpx",
+        "-crf",
+        "10",
+        "-b:v",
+        "0",
+        "-c:a",
+        "libopus",
         part2Name
       );
       if (fileExistsAndValid(part2Name)) {
@@ -192,9 +206,14 @@ export const videoTrimmer = async (inputBlob: Blob, start: string, end: string):
 
     try {
       await ffmpeg.run(
-        "-f", "concat", "-safe", "0",
-        "-i", "re_concat.txt",
-        "-c", "copy",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        "re_concat.txt",
+        "-c",
+        "copy",
         outputName
       );
     } catch (err) {
@@ -348,7 +367,6 @@ export const videoToMP3 = async (inputBlob: Blob): Promise<Blob> => {
   return new Blob([data.slice(0).buffer], { type: "audio/mp3" });
 };
 
-
-/// when i try to trim out a part in a video + audio is toggled on , it successfully happens 
+/// when i try to trim out a part in a video + audio is toggled on , it successfully happens
 /// but when i try to trim out a part in a video + audio is toggled off , it doesn't happen
-/// 
+///

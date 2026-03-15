@@ -85,8 +85,10 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   }, [customBackground]);
 
   const handleBackgroundSelect = (value: string | null) => {
-    setLocalSelectedBackground(value);
-    setSelectedBackground?.(value);
+    // Toggle behavior: clicking the active background again removes it.
+    const nextValue = localSelectedBackground === value ? null : value;
+    setLocalSelectedBackground(nextValue);
+    setSelectedBackground?.(nextValue);
   };
 
   const handleCustomBackgroundUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

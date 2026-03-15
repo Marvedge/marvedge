@@ -1,177 +1,215 @@
 import { ZoomEffect } from "../types/editor/zoom-effect";
 
+/**
+ * Easing function: cubic ease-in-out for smooth zoom transitions.
+ * Maps t ∈ [0,1] → [0,1] with smooth acceleration and deceleration.
+ */
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 export const createEnhancedZoomProcessor = async (
   videoBlob: Blob,
   zoomEffects: ZoomEffect[]
 ): Promise<Blob> => {
-  try {
-    console.log("=== ENHANCED ZOOM PROCESSING ===");
-    console.log("Input video size:", videoBlob.size);
-    console.log("Zoom effects:", zoomEffects);
+  console.log("=== ENHANCED ZOOM PROCESSING (v2 — requestVideoFrameCallback) ===");
+  console.log("Input video size:", videoBlob.size);
+  console.log("Zoom effects:", zoomEffects);
 
-    if (zoomEffects.length === 0) {
-      console.log("No zoom effects, returning original video");
-      return videoBlob;
+  if (zoomEffects.length === 0) {
+    console.log("No zoom effects, returning original video");
+    return videoBlob;
+  }
+
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      reject(new Error("Failed to get 2D context"));
+      return;
     }
 
-    return new Promise((resolve, reject) => {
-      console.log("Creating video and canvas elements...");
-      const video = document.createElement("video");
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d")!;
+    // Match the source video resolution (set in onloadedmetadata)
+    canvas.width = 1920;
+    canvas.height = 1080;
 
-      if (!ctx) {
-        reject(new Error("Failed to get 2D context"));
-        return;
+    // High-quality rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    const chunks: Blob[] = [];
+
+    // Capture at 60fps for smooth output
+    const stream = canvas.captureStream(60);
+    if (!stream) {
+      reject(new Error("Failed to capture stream from canvas"));
+      return;
+    }
+
+    // Try best available codec with high bitrate
+    let mimeType = "video/webm;codecs=vp9";
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = "video/webm;codecs=vp8";
+    }
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = "video/webm";
+    }
+
+    console.log("Using MIME type:", mimeType);
+
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 8_000_000, // 8 Mbps for high quality
+    });
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
       }
+    };
 
-      // Use high resolution for best quality
-      canvas.width = 1920;
-      canvas.height = 1080;
+    mediaRecorder.onstop = () => {
+      const finalBlob = new Blob(chunks, { type: "video/webm" });
+      console.log("Zoom processing completed. Output size:", finalBlob.size);
+      URL.revokeObjectURL(video.src);
+      resolve(finalBlob);
+    };
 
-      // Enable high-quality rendering
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+    /**
+     * Render one frame to the canvas. Called per-frame by
+     * requestVideoFrameCallback (preferred) or requestAnimationFrame (fallback).
+     */
+    const renderFrame = () => {
+      const currentTime = video.currentTime;
 
-      console.log("Canvas setup complete:", {
-        width: canvas.width,
-        height: canvas.height,
-      });
+      // Find active zoom effect for this timestamp
+      const activeEffect = zoomEffects.find(
+        (effect) => currentTime >= effect.startTime && currentTime <= effect.endTime
+      );
 
-      const chunks: Blob[] = [];
+      // Calculate smooth transition progress with easing
+      let transitionProgress = 0;
+      if (activeEffect) {
+        const effectDuration = activeEffect.endTime - activeEffect.startTime;
+        const timeInEffect = currentTime - activeEffect.startTime;
+        // Transition in/out over 0.3s or 1/6 of effect duration, whichever is smaller
+        const transitionDuration = Math.min(0.3, effectDuration / 6);
 
-      // Try to get a stream from the canvas
-      const stream = canvas.captureStream(60);
-      if (!stream) {
-        reject(new Error("Failed to capture stream from canvas"));
-        return;
-      }
-
-      // Try different MIME types for better compatibility
-      let mimeType = "video/webm;codecs=vp9";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "video/webm;codecs=vp8";
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "video/webm";
-      }
-
-      console.log("Using MIME type:", mimeType);
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: mimeType,
-      });
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
+        if (timeInEffect < transitionDuration) {
+          // Zooming in
+          transitionProgress = easeInOutCubic(timeInEffect / transitionDuration);
+        } else if (timeInEffect > effectDuration - transitionDuration) {
+          // Zooming out
+          transitionProgress = easeInOutCubic((effectDuration - timeInEffect) / transitionDuration);
+        } else {
+          // Fully zoomed
+          transitionProgress = 1;
         }
-      };
+      }
 
-      mediaRecorder.onstop = () => {
-        const finalBlob = new Blob(chunks, { type: "video/webm" });
-        console.log("Enhanced zoom processing completed. Output size:", finalBlob.size);
-        resolve(finalBlob);
-      };
+      // Clear canvas
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      video.onloadedmetadata = () => {
-        console.log("Video loaded, starting enhanced processing...");
-        video.currentTime = 0;
-        mediaRecorder.start();
-      };
+      if (activeEffect && transitionProgress > 0) {
+        // Use the exact zoomLevel from the effect (Shallow=2, Medium=3, Deep=4)
+        const targetZoom = activeEffect.zoomLevel;
+        const smoothZoomLevel = 1 + (targetZoom - 1) * transitionProgress;
 
-      video.ontimeupdate = () => {
-        const currentTime = video.currentTime;
+        // Center point from the effect (normalized 0-1)
+        const centerX = activeEffect.x;
+        const centerY = activeEffect.y;
 
-        // Find active zoom effect
-        const activeEffect = zoomEffects.find(
-          (effect) => currentTime >= effect.startTime && currentTime <= effect.endTime
+        // Calculate the visible region of the source video when zoomed
+        const srcW = canvas.width / smoothZoomLevel;
+        const srcH = canvas.height / smoothZoomLevel;
+
+        // Position the crop region centered on (centerX, centerY), clamped to bounds
+        const srcX = Math.max(0, Math.min(canvas.width - srcW, centerX * canvas.width - srcW / 2));
+        const srcY = Math.max(
+          0,
+          Math.min(canvas.height - srcH, centerY * canvas.height - srcH / 2)
         );
 
-        // Calculate smooth transition
-        let transitionProgress = 0;
-        if (activeEffect) {
-          const effectDuration = activeEffect.endTime - activeEffect.startTime;
-          const timeInEffect = currentTime - activeEffect.startTime;
-          const transitionDuration = Math.min(0.3, effectDuration / 6);
+        // Draw the zoomed portion of the video to fill the entire canvas
+        ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+      } else {
+        // No zoom — draw full video frame
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }
+    };
 
-          if (timeInEffect < transitionDuration) {
-            transitionProgress = timeInEffect / transitionDuration;
-          } else if (timeInEffect > effectDuration - transitionDuration) {
-            transitionProgress = (effectDuration - timeInEffect) / transitionDuration;
-          } else {
-            transitionProgress = 1;
+    /**
+     * Schedule the next frame render using the best available API.
+     * requestVideoFrameCallback fires once per decoded video frame (ideal).
+     * Falls back to requestAnimationFrame if RVFC is unavailable.
+     */
+    const scheduleNextFrame = () => {
+      if (video.ended || video.paused) {
+        return;
+      }
+
+      if ("requestVideoFrameCallback" in video) {
+        (
+          video as HTMLVideoElement & {
+            requestVideoFrameCallback: (cb: () => void) => void;
           }
+        ).requestVideoFrameCallback(() => {
+          renderFrame();
+          scheduleNextFrame();
+        });
+      } else {
+        // Fallback: requestAnimationFrame (fires at display refresh rate, ~60Hz)
+        requestAnimationFrame(() => {
+          renderFrame();
+          scheduleNextFrame();
+        });
+      }
+    };
+
+    video.onloadedmetadata = () => {
+      // Match canvas to source video dimensions for best quality
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        console.log(`Canvas matched to video: ${canvas.width}x${canvas.height}`);
+      }
+
+      console.log("Video loaded, starting frame-accurate zoom processing...");
+      video.currentTime = 0;
+    };
+
+    video.onseeked = () => {
+      // Start recording and playback once seeked to 0
+      if (video.currentTime === 0) {
+        mediaRecorder.start(100); // Collect data every 100ms
+        video.play();
+        scheduleNextFrame();
+      }
+    };
+
+    video.onended = () => {
+      console.log("Video ended, finalizing...");
+      // Render the very last frame
+      renderFrame();
+      // Small delay to ensure last frame is captured by MediaRecorder
+      setTimeout(() => {
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.stop();
         }
+      }, 200);
+    };
 
-        // Clear canvas
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    video.onerror = (error) => {
+      console.error("Video error:", error);
+      reject(error);
+    };
 
-        if (activeEffect && transitionProgress > 0) {
-          // Enhanced zoom effect with smooth transitions
-          const baseZoomLevel = Math.max(1.3, activeEffect.zoomLevel);
-          const smoothZoomLevel = 1 + (baseZoomLevel - 1) * transitionProgress;
-          const centerX = activeEffect.x * canvas.width;
-          const centerY = activeEffect.y * canvas.height;
-
-          // Calculate zoom parameters with better precision
-          const scaledWidth = canvas.width / smoothZoomLevel;
-          const scaledHeight = canvas.height / smoothZoomLevel;
-          const sourceX = Math.max(
-            0,
-            Math.min(canvas.width - scaledWidth, centerX - scaledWidth / 2)
-          );
-          const sourceY = Math.max(
-            0,
-            Math.min(canvas.height - scaledHeight, centerY - scaledHeight / 2)
-          );
-
-          // Apply high-quality zoom
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, canvas.width, canvas.height);
-          ctx.clip();
-
-          // Draw zoomed video with enhanced quality
-          ctx.drawImage(
-            video,
-            sourceX,
-            sourceY,
-            scaledWidth,
-            scaledHeight,
-            0,
-            0,
-            canvas.width,
-            canvas.height
-          );
-
-          ctx.restore();
-
-          console.log(
-            `Enhanced zoom applied: ${smoothZoomLevel.toFixed(2)}x at (${centerX.toFixed(0)}, ${centerY.toFixed(0)}) - Progress: ${(transitionProgress * 100).toFixed(1)}%`
-          );
-        } else {
-          // Draw normal video
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
-      };
-
-      video.onended = () => {
-        console.log("Video ended, stopping enhanced processing");
-        mediaRecorder.stop();
-      };
-
-      video.onerror = (error) => {
-        console.error("Video error:", error);
-        reject(error);
-      };
-
-      video.src = URL.createObjectURL(videoBlob);
-      video.play();
-    });
-  } catch (error) {
-    console.error("Enhanced zoom processing error:", error);
-    throw error;
-  }
+    // Prevent the video from being muted (we want audio in output)
+    video.muted = true; // Must be muted for autoplay policy; audio comes from original
+    video.playsInline = true;
+    video.src = URL.createObjectURL(videoBlob);
+  });
 };

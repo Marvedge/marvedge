@@ -107,14 +107,17 @@ export default function TimelineRuler({
   // ]);
   //console.log("Intital Value", segments);
   const [activeSegment, setActiveSegment] = useState<number>(-1);
-  const [removedSegments, setRemovedSegments] = useState<{ start: number; end: number }[]>([]);
 
   // Unified action history for undo/redo (supports both trim and zoom)
   type EditorAction =
-    | { type: 'add-trim'; segment: { start: number; end: number } }
-    | { type: 'remove-trim'; segment: { start: number; end: number }; index: number }
-    | { type: 'add-zoom'; segment: ZoomEffect }
-    | { type: 'remove-zoom'; segment: ZoomEffect; index: number };
+    | { type: "add-trim"; segment: { start: number; end: number } }
+    | {
+        type: "remove-trim";
+        segment: { start: number; end: number };
+        index: number;
+      }
+    | { type: "add-zoom"; segment: ZoomEffect }
+    | { type: "remove-zoom"; segment: ZoomEffect; index: number };
   const [undoStack, setUndoStack] = useState<EditorAction[]>([]);
   const [redoStack, setRedoStack] = useState<EditorAction[]>([]);
   const [draggingScissor, setDraggingScissor] = useState<"left" | "right" | null>(null);
@@ -459,9 +462,8 @@ export default function TimelineRuler({
   const removeSegment = (idx: number) => {
     const removed = segments[idx];
     // Push to undo stack (UI-only, no video processing)
-    setUndoStack((prev) => [...prev, { type: 'remove-trim', segment: removed, index: idx }]);
+    setUndoStack((prev) => [...prev, { type: "remove-trim", segment: removed, index: idx }]);
     setRedoStack([]); // clear redo on new action
-    setRemovedSegments((prev) => [...prev, removed]);
 
     const newSegments = segments.filter((_, i) => i !== idx);
     setSegments(newSegments);
@@ -480,7 +482,7 @@ export default function TimelineRuler({
 
   const removeZoomSegment = (idx: number) => {
     const removed = zoomSegments[idx];
-    setUndoStack((prev) => [...prev, { type: 'remove-zoom', segment: removed, index: idx }]);
+    setUndoStack((prev) => [...prev, { type: "remove-zoom", segment: removed, index: idx }]);
     setRedoStack([]);
     setZoomSegments((prev) => prev.filter((_, i) => i !== idx));
     setActiveZoomIdx(-1);
@@ -490,31 +492,35 @@ export default function TimelineRuler({
   };
 
   const handleUndo = () => {
-    if (undoStack.length === 0) return;
+    if (undoStack.length === 0) {
+      return;
+    }
     const lastAction = undoStack[undoStack.length - 1];
     setUndoStack((prev) => prev.slice(0, -1));
     setRedoStack((prev) => [...prev, lastAction]);
 
     switch (lastAction.type) {
-      case 'add-trim':
+      case "add-trim":
         // Undo adding a trim → remove it
         setSegments((prev) => prev.filter((s) => s !== lastAction.segment));
-        if (segments.length <= 1) switchToNonTrimMode();
+        if (segments.length <= 1) {
+          switchToNonTrimMode();
+        }
         break;
-      case 'remove-trim':
+      case "remove-trim":
         // Undo removing a trim → restore it
         setSegments((prev) => {
           const newSegs = [...prev];
           newSegs.splice(lastAction.index, 0, lastAction.segment);
           return newSegs;
         });
-        setRemovedSegments((prev) => prev.filter((s) => s !== lastAction.segment));
+
         break;
-      case 'add-zoom':
+      case "add-zoom":
         // Undo adding zoom → remove it
         setZoomSegments((prev) => prev.filter((s) => s !== lastAction.segment));
         break;
-      case 'remove-zoom':
+      case "remove-zoom":
         // Undo removing zoom → restore it
         setZoomSegments((prev) => {
           const newSegs = [...prev];
@@ -526,23 +532,27 @@ export default function TimelineRuler({
   };
 
   const handleRedo = () => {
-    if (redoStack.length === 0) return;
+    if (redoStack.length === 0) {
+      return;
+    }
     const lastAction = redoStack[redoStack.length - 1];
     setRedoStack((prev) => prev.slice(0, -1));
     setUndoStack((prev) => [...prev, lastAction]);
 
     switch (lastAction.type) {
-      case 'add-trim':
+      case "add-trim":
         setSegments((prev) => [...prev, lastAction.segment]);
         break;
-      case 'remove-trim':
+      case "remove-trim":
         setSegments((prev) => prev.filter((_, i) => i !== lastAction.index));
-        if (segments.length <= 1) switchToNonTrimMode();
+        if (segments.length <= 1) {
+          switchToNonTrimMode();
+        }
         break;
-      case 'add-zoom':
+      case "add-zoom":
         setZoomSegments((prev) => [...prev, lastAction.segment]);
         break;
-      case 'remove-zoom':
+      case "remove-zoom":
         setZoomSegments((prev) => prev.filter((_, i) => i !== lastAction.index));
         break;
     }
@@ -562,7 +572,7 @@ export default function TimelineRuler({
     const newSegment = { start: startTime, end: endTime };
 
     // Track in undo stack
-    setUndoStack((prev) => [...prev, { type: 'add-trim', segment: newSegment }]);
+    setUndoStack((prev) => [...prev, { type: "add-trim", segment: newSegment }]);
     setRedoStack([]);
 
     // Update segments and active segment together
@@ -716,7 +726,12 @@ export default function TimelineRuler({
                 // auto change handle
                 setDragState((d) =>
                   d && d.mode === "edge"
-                    ? { ...d, side: "right", startValue: flippedEnd, startX: e.clientX }
+                    ? {
+                        ...d,
+                        side: "right",
+                        startValue: flippedEnd,
+                        startX: e.clientX,
+                      }
                     : d
                 );
               }
@@ -736,7 +751,12 @@ export default function TimelineRuler({
                 // auto change handle
                 setDragState((d) =>
                   d && d.mode === "edge"
-                    ? { ...d, side: "left", startValue: flippedStart, startX: e.clientX }
+                    ? {
+                        ...d,
+                        side: "left",
+                        startValue: flippedStart,
+                        startX: e.clientX,
+                      }
                     : d
                 );
               }
@@ -912,7 +932,12 @@ export default function TimelineRuler({
                 // auto change handle
                 setDragZoomState((d) =>
                   d && d.mode === "edge"
-                    ? { ...d, side: "right", startValue: flippedEnd, startX: e.clientX }
+                    ? {
+                        ...d,
+                        side: "right",
+                        startValue: flippedEnd,
+                        startX: e.clientX,
+                      }
                     : d
                 );
               }
@@ -932,7 +957,12 @@ export default function TimelineRuler({
                 // auto change handle
                 setDragZoomState((d) =>
                   d && d.mode === "edge"
-                    ? { ...d, side: "left", startValue: flippedStart, startX: e.clientX }
+                    ? {
+                        ...d,
+                        side: "left",
+                        startValue: flippedStart,
+                        startX: e.clientX,
+                      }
                     : d
                 );
               }
@@ -986,20 +1016,22 @@ export default function TimelineRuler({
       id: Date.now().toString(),
       startTime: startTime,
       endTime: endTime,
-      zoomLevel: zoomLevelDepth,
-      x: 0.9,
-      y: 0.1,
+      zoomLevel: Math.max(2, zoomLevelDepth),
+      x: 0.5,
+      y: 0.5,
     };
 
     // Track in undo stack
-    setUndoStack((prev) => [...prev, { type: 'add-zoom', segment: newSegment }]);
+    setUndoStack((prev) => [...prev, { type: "add-zoom", segment: newSegment }]);
     setRedoStack([]);
 
     console.log("Start time", startTime, " ", endTime);
-    setZoomSegments((prev) => {
-      const newSegments = [...prev, newSegment];
-      return newSegments;
-    });
+    const nextIdx = zoomSegments.length;
+    setZoomSegments((prev) => [...prev, newSegment]);
+    setActiveZoomIdx(nextIdx);
+    setMode("zoom");
+    playerRef.current?.seekTo(startTime, "seconds");
+    setPlaying(true);
 
     setLocalStartTime(startTime);
     setLocalEndTime(endTime);
@@ -1168,11 +1200,19 @@ export default function TimelineRuler({
             onClick={() => {
               if (mode === "trim" && activeSegment >= 0 && activeSegment < segments.length) {
                 removeSegment(activeSegment);
-              } else if (mode === "zoom" && activeZoomIdx >= 0 && activeZoomIdx < zoomSegments.length) {
+              } else if (
+                mode === "zoom" &&
+                activeZoomIdx >= 0 &&
+                activeZoomIdx < zoomSegments.length
+              ) {
                 removeZoomSegment(activeZoomIdx);
               }
             }}
-            disabled={mode === "main" || (mode === "trim" && (segments.length === 0 || activeSegment === -1)) || (mode === "zoom" && (zoomSegments.length === 0 || activeZoomIdx === -1))}
+            disabled={
+              mode === "main" ||
+              (mode === "trim" && (segments.length === 0 || activeSegment === -1)) ||
+              (mode === "zoom" && (zoomSegments.length === 0 || activeZoomIdx === -1))
+            }
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Delete"
           >
@@ -1604,7 +1644,10 @@ export default function TimelineRuler({
                 width={20}
                 height={20}
                 className="pointer-events-none select-none"
-                style={{ filter: "brightness(0) invert(1)", transform: "scaleX(-1)" }}
+                style={{
+                  filter: "brightness(0) invert(1)",
+                  transform: "scaleX(-1)",
+                }}
               />
 
               {/* Bottom Line */}

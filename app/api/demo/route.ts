@@ -119,10 +119,7 @@ export async function PATCH(req: NextRequest) {
     const { id, exportedUrl } = await req.json();
 
     if (!id || !exportedUrl) {
-      return NextResponse.json(
-        { error: "id and exportedUrl are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "id and exportedUrl are required" }, { status: 400 });
     }
 
     // Verify the demo belongs to the user

@@ -177,12 +177,10 @@ export const useScreenRecorder = () => {
   };
 };
 
+// the main issue leading to the editor page was it always expected me to provide a audio and when it was not there
+// it produced an error and i was not able to proceed to the editor page
+// so i have to make sure that the audio is optional and if it is not there then it should not produce an error
+// and it should work fine
 
-// the main issue leading to the editor page was it always expected me to provide a audio and when it was not there 
-// it produced an error and i was not able to proceed to the editor page 
-// so i have to make sure that the audio is optional and if it is not there then it should not produce an error 
-// and it should work fine 
-
-
-// still not fixed and keeps failing , there is a deeper issue with this that needs to be fixed 
-// i am not sure if it is a browser issue or a code issue , kya ho rha hai bhai 
+// still not fixed and keeps failing , there is a deeper issue with this that needs to be fixed
+// i am not sure if it is a browser issue or a code issue , kya ho rha hai bhai

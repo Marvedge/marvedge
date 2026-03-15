@@ -31,6 +31,14 @@ const pageMetadata: Record<string, { title: string; navbar: NavbarConfig }> = {
       iconALT: "my_demos_icon",
     },
   },
+  "exported-videos": {
+    title: "Exported Videos",
+    navbar: {
+      titleText: "Exported Videos",
+      iconSRC: "/Group.png",
+      iconALT: "exported_videos_icon",
+    },
+  },
   editor: {
     title: "Editor",
     navbar: {

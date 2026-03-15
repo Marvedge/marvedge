@@ -125,6 +125,25 @@ const SidemenuDashboard = () => {
               <span>My Demos</span>
             </li>
           </Link>
+          <Link href="/exported-videos" onClick={closeMobileMenu}>
+            <li
+              className={`flex items-center justify-start gap-1 sm:gap-3 h-8 sm:h-10 px-1 sm:px-2 transition-colors cursor-pointer text-xs sm:text-base ${
+                isActive("/exported-videos") ? activeClass : inactiveClass
+              }`}
+            >
+              <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
+                <Image
+                  src="/icons/dash-play.svg"
+                  alt="Exported Videos"
+                  width={22}
+                  height={22}
+                  className="object-contain sm:w-[30px] sm:h-[30px]"
+                  priority
+                />
+              </span>
+              <span>Exported Videos</span>
+            </li>
+          </Link>
           <Link href="/templates" onClick={closeMobileMenu}>
             <li
               className={`flex items-center justify-start gap-1 sm:gap-3 h-8 sm:h-10 px-1 sm:px-2 transition-colors cursor-pointer text-xs sm:text-base ${

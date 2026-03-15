@@ -36,6 +36,7 @@ interface SaveDemoParams {
   inputEndTime: string;
   currentSegments: Segment[];
   zoomEffects: ZoomEffect[];
+  selectedBackground?: string | null;
   setSavingDemo: (saving: boolean) => void;
   setSidebarTitle: (title: string) => void;
   setSidebarDescription: (description: string) => void;
@@ -55,6 +56,7 @@ export async function handleSaveDemo(
     inputEndTime,
     currentSegments,
     zoomEffects,
+    selectedBackground,
     setSavingDemo,
     setSidebarTitle,
     setSidebarDescription,
@@ -137,6 +139,7 @@ export async function handleSaveDemo(
     const editingToSave = {
       segments: segmentsToSave,
       zoom: zoomEffects,
+      background: selectedBackground ?? null,
     };
 
     try {
@@ -382,106 +385,277 @@ export async function videoTrimHandler(
 
 interface ExportVideoParams {
   videoUrl: string;
-  selectedBackground: string | null;
+  selectedBackground: string;
+  customBackgroundUrl: string | null;
   imageMap: Record<string, string>;
   sidebarTitle: string;
   sidebarDescription: string;
-  router: {
-    push: (url: string) => void;
-  };
   segments: { start: number; end: number }[];
   zoomSegments: ZoomEffect[];
-  setVideoUrl: (url: string) => void;
-  setProgress: (progress: number) => void;
-  duration: number;
+  setProgress: (p: number) => void;
+  duration?: number;
   savedDemoId?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  settings?: any; // The new export settings
 }
 
-export async function exportVideo(params: ExportVideoParams) {
-  const {
-    videoUrl,
-    sidebarTitle,
-    sidebarDescription,
-    router,
-    segments,
-    zoomSegments,
-    savedDemoId,
-  } = params;
+interface ExportVideoResult {
+  exportedUrl: string;
+  sourceVideoUrl: string;
+  downloadAsMp4: (url: string) => Promise<void>;
+}
 
-  if (!videoUrl) {
-    toast.error("No video available to export");
-    return;
+async function uploadImageBlobToCloudinary(imageBlob: Blob): Promise<string> {
+  const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+  const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+  const CLOUDINARY_IMAGE_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+  const formData = new FormData();
+  formData.append("file", imageBlob, "background.png");
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const cloudRes = await axios.post(CLOUDINARY_IMAGE_API_URL, formData);
+  return cloudRes.data.secure_url as string;
+}
+
+async function rasterizeSvgToPngBlob(svgPath: string, width = 1920, height = 1080): Promise<Blob> {
+  // Convert selected frontend SVG background into a PNG so backend FFmpeg can consume it.
+  const absoluteSvgUrl = svgPath.startsWith("http")
+    ? svgPath
+    : `${window.location.origin}${svgPath}`;
+
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error(`Failed to load SVG: ${absoluteSvgUrl}`));
+    img.src = absoluteSvgUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Canvas context unavailable while rasterizing background");
   }
+
+  // Match editor page base behind SVG art so exports don't get white edge artifacts.
+  ctx.fillStyle = "#F1ECFF";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const pngBlob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/png", 1);
+  });
+
+  if (!pngBlob) {
+    throw new Error("Failed converting SVG to PNG blob");
+  }
+
+  return pngBlob;
+}
+
+export const exportVideo = async ({
+  videoUrl,
+  selectedBackground,
+  customBackgroundUrl,
+  imageMap,
+  sidebarTitle,
+  sidebarDescription,
+  segments,
+  zoomSegments,
+  setProgress,
+  duration,
+  savedDemoId,
+  settings,
+}: ExportVideoParams): Promise<ExportVideoResult | null> => {
+  const toastId = toast.loading("Preparing to export...");
+  const exportSettings = settings || {
+    quality: "720p",
+    fps: "30 FPS",
+    compression: "Web",
+    speed: "Default",
+  };
 
   try {
-    toast.loading("Processing video...", { id: "export" });
-
-    // 1. Fetch the original video blob
-    const res = await fetch(videoUrl);
-    let videoBlob = await res.blob();
-
-    // 2. Apply trim segments (client-side WASM FFmpeg)
-    if (segments.length > 0) {
-      console.log("Applying trim segments:", segments);
-      toast.loading("Applying trims...", { id: "export" });
-      const { videoTrimmer } = await import("@/app/lib/ffmpeg");
-
-      // Process segments from end to start so timestamps stay valid
-      const sortedSegments = [...segments].sort((a, b) => b.start - a.start);
-      for (const seg of sortedSegments) {
-        const start = secondsToTime(seg.start);
-        const end = secondsToTime(seg.end);
-        videoBlob = await videoTrimmer(videoBlob, start, end);
+    let backgroundToUse = "transparent";
+    let resolvedCustomBackgroundUrl: string | null = null;
+    if (selectedBackground === "custom" && customBackgroundUrl) {
+      try {
+        toast.loading("Uploading custom background...", { id: toastId });
+        const response = await fetch(customBackgroundUrl);
+        if (!response.ok) {
+          throw new Error("Failed to read custom background");
+        }
+        const bgBlob = await response.blob();
+        resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(bgBlob);
+        backgroundToUse = "custom";
+      } catch (bgError) {
+        console.error("Custom background upload failed:", bgError);
+        backgroundToUse = "transparent";
       }
-      console.log("Trim complete, blob size:", videoBlob.size);
+    } else if (
+      selectedBackground &&
+      selectedBackground !== "none" &&
+      selectedBackground !== "transparent"
+    ) {
+      // For built-in image backgrounds (bg1..bg8), convert exact selected SVG to PNG and upload.
+      // This gives backend FFmpeg a real image input matching frontend selection.
+      const mappedValue = imageMap[selectedBackground];
+      if (mappedValue) {
+        try {
+          toast.loading("Preparing selected background...", { id: toastId });
+          const pngBlob = await rasterizeSvgToPngBlob(mappedValue, 1920, 1080);
+          resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(pngBlob);
+          backgroundToUse = "custom";
+        } catch (svgBgError) {
+          console.error("Failed to rasterize/upload selected SVG background:", svgBgError);
+          // Fallback to key so worker still applies a deterministic style.
+          backgroundToUse = selectedBackground;
+        }
+      } else {
+        // gradient:* / color:* paths
+        backgroundToUse = selectedBackground;
+      }
     }
 
-    // 3. Apply zoom effects (client-side WASM FFmpeg)
-    if (zoomSegments.length > 0) {
-      console.log("Applying zoom effects:", zoomSegments);
-      toast.loading("Applying zoom effects...", { id: "export" });
-      const { videoWithZoomEffects } = await import("@/app/lib/ffmpeg");
-      videoBlob = await videoWithZoomEffects(videoBlob, zoomSegments);
-      console.log("Zoom complete, blob size:", videoBlob.size);
+    toast.loading("Preparing video for backend...", { id: toastId });
+
+    let cloudinaryVideoUrl = videoUrl;
+    // If it's a blob, upload it to Cloudinary first so the backend worker can access it
+    if (videoUrl.startsWith("blob:")) {
+      try {
+        const response = await fetch(videoUrl);
+        if (!response.ok) {
+          throw new Error("Failed to fetch video blob");
+        }
+        const videoBlob = await response.blob();
+
+        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+
+        const cloudFormData = new FormData();
+        cloudFormData.append("file", videoBlob, "video.webm");
+        cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+
+        toast.loading("Uploading raw video to Cloudinary...", { id: toastId });
+        const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
+        cloudinaryVideoUrl = cloudRes.data.secure_url;
+      } catch (cloudError) {
+        console.error("Error uploading to Cloudinary:", cloudError);
+        toast.error("Failed to upload video to Cloudinary", { id: toastId });
+        return null;
+      }
     }
 
-    // 4. Upload processed video directly to Cloudinary (no backend needed)
-    toast.loading("Uploading to Cloudinary...", { id: "export" });
+    // 1. Initiate job on the backend
+    toast.loading("Sending job to server...", { id: toastId });
 
-    const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-    const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-    const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-
-    const cloudFormData = new FormData();
-    cloudFormData.append("file", videoBlob, "exported-video.webm");
-    cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-    const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData, {
-      headers: { "Content-Type": "multipart/form-data" },
+    const createRes = await axios.post("/api/jobs/create", {
+      videoUrl: cloudinaryVideoUrl,
+      title: sidebarTitle || "Untitled Demo",
+      description: sidebarDescription || "",
+      demoId: savedDemoId || null,
+      segments,
+      zoomEffects: zoomSegments,
+      duration: duration || 0,
+      selectedBackground: backgroundToUse,
+      customBackgroundUrl: resolvedCustomBackgroundUrl,
+      imageMap,
+      settings: exportSettings,
     });
 
-    const exportedUrl = cloudRes.data.secure_url;
-    console.log("Exported video URL:", exportedUrl);
-
-    // 5. Save exportedUrl to DB if we have a saved demo
-    if (savedDemoId) {
-      try {
-        await axios.patch("/api/demo", { id: savedDemoId, exportedUrl });
-        console.log("Saved exportedUrl to demo:", savedDemoId);
-      } catch (patchErr) {
-        console.error("Failed to save exportedUrl to DB:", patchErr);
-        // Don't fail the export — the video is already uploaded
-      }
+    const { jobId } = createRes.data;
+    if (!jobId) {
+      throw new Error("No job ID returned");
     }
 
-    toast.success("Video exported successfully!", { id: "export" });
+    toast.loading("Processing video...", { id: toastId });
+    const downloadAsMp4 = async (url: string) => {
+      const safeName = (sidebarTitle || "Exported_Demo")
+        .replace(/[^\w\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "_");
+      const filename = `${safeName || "Exported_Demo"}.mp4`;
 
-    // Navigate to preview page
-    router.push(
-      `/preview?video=${encodeURIComponent(exportedUrl)}&title=${encodeURIComponent(sidebarTitle)}&description=${encodeURIComponent(sidebarDescription || "")}`
-    );
-  } catch (err) {
-    console.error("Export failed:", err);
-    toast.error("Export failed", { id: "export" });
+      try {
+        const response = await fetch(url, { mode: "cors" });
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const localUrl = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
+        const link = document.createElement("a");
+        link.href = localUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(localUrl);
+      } catch (err) {
+        console.error("Blob download failed, falling back to direct link:", err);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    };
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // 2. Poll for job status every 5s
+    const MAX_POLLS = 180; // 15 minutes max (180 × 5s)
+    for (let pollCount = 0; pollCount < MAX_POLLS; pollCount++) {
+      try {
+        const statusRes = await axios.get(`/api/jobs/${jobId}`);
+        const { state, progress, exportedUrl, error } = statusRes.data;
+
+        if (state === "active" || state === "waiting" || state === "delayed") {
+          setProgress(progress || 0);
+          toast.loading(`Processing... ${progress || 0}%`, { id: toastId });
+          await sleep(5000);
+          continue;
+        }
+
+        if (state === "completed") {
+          if (!exportedUrl) {
+            throw new Error("Export completed but no output URL was returned");
+          }
+
+          setProgress(100);
+          toast.success("Export complete!", { id: toastId });
+
+          return {
+            exportedUrl,
+            sourceVideoUrl: cloudinaryVideoUrl,
+            downloadAsMp4,
+          };
+        }
+
+        if (state === "failed") {
+          throw new Error(error || "Unknown error");
+        }
+      } catch (err) {
+        console.error("Error polling job status", err);
+        const message = err instanceof Error ? err.message : "Lost connection to processing server";
+        toast.error(`Export failed: ${message}`, { id: toastId });
+        return null;
+      }
+
+      await sleep(5000);
+    }
+
+    toast.error("Export timed out after 15 minutes", { id: toastId });
+    return null;
+  } catch (error) {
+    console.error("Export error:", error);
+    toast.error("Failed to start export", { id: toastId });
+    return null;
   }
-}
+};

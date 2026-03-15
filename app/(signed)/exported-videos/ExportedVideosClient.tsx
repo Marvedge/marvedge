@@ -1,6 +1,8 @@
 "use client";
+
 import { useState, useRef, useEffect } from "react";
 import {
+  FaShareAlt,
   FaTh,
   FaThList,
   FaFilter,
@@ -13,60 +15,45 @@ import {
   FaPlusSquare,
 } from "react-icons/fa";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import axios from "axios";
-import { formatDate, formatTime_2 } from "@/app/lib/dateTimeUtils";
+import { formatDate } from "@/app/lib/dateTimeUtils";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 
-export const metadata = {
-  titleText: "My Demos",
-  iconSRC: "/Group.png",
-};
-
-interface Demo {
+interface ExportedVideo {
   id: string;
   title: string;
-  description: string;
-  videoUrl: string;
-  exportedUrl?: string;
-  startTime?: string;
-  endTime?: string;
-  segments?: unknown;
+  description: string | null;
+  exportedUrl: string;
+  shareableUrl: string;
   createdAt: string;
   updatedAt: string;
-  editing?: {
-    segments?: unknown;
-    zoom?: unknown;
-  };
 }
 
-export default function DemosPage() {
-  const router = useRouter();
+export default function ExportedVideosClient() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState("list");
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
-  const [demos, setDemos] = useState<Demo[]>([]);
+  const [videos, setVideos] = useState<ExportedVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const fetchDemos = async () => {
+  const fetchExportedVideos = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get("/api/demo");
-      setDemos(response.data.demos || []);
+      const response = await axios.get("/api/exported-videos");
+      setVideos(response.data.exportedVideos || []);
     } catch (err: unknown) {
-      console.error("Error fetching demos:", err);
-
+      console.error("Error fetching exported videos:", err);
       if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to fetch demos");
+        setError(err.response?.data?.message || "Failed to fetch exported videos");
       } else {
-        setError("Failed to fetch demos");
+        setError("Failed to fetch exported videos");
       }
     } finally {
       setLoading(false);
@@ -74,7 +61,7 @@ export default function DemosPage() {
   };
 
   useEffect(() => {
-    fetchDemos();
+    fetchExportedVideos();
   }, []);
 
   useEffect(() => {
@@ -90,40 +77,28 @@ export default function DemosPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filter demos based on search
-  const filteredDemos = demos.filter(
-    (demo) =>
-      demo.title.toLowerCase().includes(search.toLowerCase()) ||
-      demo.description.toLowerCase().includes(search.toLowerCase())
+  const filteredVideos = videos.filter(
+    (video) =>
+      video.title.toLowerCase().includes(search.toLowerCase()) ||
+      (video.description || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleEditDemo = (demo: Demo) => {
-    const params = new URLSearchParams({
-      video: demo.videoUrl,
-      startTime: demo.startTime || "",
-      endTime: demo.endTime || "",
-      title: demo.title || "",
-      description: demo.description || "",
-      demoId: demo.id,
-    });
-
-    // Add segments and zoom data if available in editing
-    if (demo.editing) {
-      if (demo.editing.segments) {
-        params.append("segments", JSON.stringify(demo.editing.segments));
-      }
-      if (demo.editing.zoom) {
-        params.append("zoom", JSON.stringify(demo.editing.zoom));
-      }
-    } else if (demo.segments) {
-      // fallback for old demos
-      params.append("segments", JSON.stringify(demo.segments));
+  const openVideo = (url: string) => {
+    if (!url) {
+      return;
     }
-
-    router.push(`/editor?${params.toString()}`);
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const handleDeleteDemo = (id: string) => {
+  const copyShareLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch (copyError) {
+      console.error("Failed to copy share link:", copyError);
+    }
+  };
+
+  const handleDeleteVideo = (id: string) => {
     setDeleteId(id);
     setIsModalOpen(true);
   };
@@ -133,15 +108,13 @@ export default function DemosPage() {
       return;
     }
     try {
-      await axios.delete("/api/demo/", {
-        params: {
-          id: deleteId,
-        },
+      await axios.delete("/api/exported-videos", {
+        params: { id: deleteId },
       });
-      await fetchDemos();
-    } catch (error) {
-      console.error("Error deleting demo:", error);
-      setError("Failed to delete demo");
+      await fetchExportedVideos();
+    } catch (deleteError) {
+      console.error("Error deleting exported video:", deleteError);
+      setError("Failed to delete exported video");
     } finally {
       setIsModalOpen(false);
       setDeleteId(null);
@@ -153,12 +126,12 @@ export default function DemosPage() {
       <div className="bg-[#F3F0FC] rounded-xl p-8">
         <div className="mb-8">
           <h2 className="text-2xl font-normal text-[#8B8B8B] mb-2">
-            Manage and organize all your interactive demos.
+            Manage and organize all your exported videos.
           </h2>
           <div className="flex flex-wrap gap-4 items-center mt-6">
             <input
               type="text"
-              placeholder="Search your demos"
+              placeholder="Search your exported videos"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[300px] px-4 py-3 rounded-lg bg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
@@ -179,11 +152,11 @@ export default function DemosPage() {
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
                       <Image
                         src="/icons/all-status.svg"
-                        alt="Notifications"
+                        alt="All status"
                         width={24}
                         height={24}
                         className="w-6 h-6"
-                      />{" "}
+                      />
                       All Status
                     </div>
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
@@ -192,21 +165,21 @@ export default function DemosPage() {
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
                       <Image
                         src="/icons/publish.svg"
-                        alt="Notifications"
+                        alt="Published"
                         width={24}
                         height={24}
                         className="w-6 h-6"
-                      />{" "}
+                      />
                       Published
                     </div>
                     <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
                       <Image
                         src="/icons/aarcheive.svg"
-                        alt="Notifications"
+                        alt="Archived"
                         width={24}
                         height={24}
                         className="w-6 h-6"
-                      />{" "}
+                      />
                       Archived
                     </div>
                   </div>
@@ -266,39 +239,41 @@ export default function DemosPage() {
             </div>
           </div>
         </div>
+
         <div className="mt-8">
-          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
+          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Exported Videos</h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
-            {filteredDemos.length}/{demos.length} demos
+            {filteredVideos.length}/{videos.length} videos
           </div>
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-[#A594F9] text-lg">Loading demos...</div>
+              <div className="text-[#A594F9] text-lg">Loading exported videos...</div>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-red-500 text-lg">{error}</div>
             </div>
-          ) : filteredDemos.length === 0 ? (
+          ) : filteredVideos.length === 0 ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-[#8B8B8B] text-lg">No demos found</div>
+              <div className="text-[#8B8B8B] text-lg">No exported videos found</div>
             </div>
           ) : view === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
-              {filteredDemos.map((demo: Demo) => (
+              {filteredVideos.map((video) => (
                 <div
-                  key={demo.id}
+                  key={video.id}
                   className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm cursor-pointer hover:shadow-md transition"
-                  onClick={() => handleEditDemo(demo)}
+                  onClick={() => openVideo(video.exportedUrl)}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-2xl text-[#8B8B8B] font-normal">{demo.title}</div>
+                    <div className="text-2xl text-[#8B8B8B] font-normal">{video.title}</div>
                     <div className="flex items-center gap-4">
                       <button
                         className="text-red-400 hover:text-red-600 text-xl"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteDemo(demo.id);
+                          handleDeleteVideo(video.id);
                         }}
                       >
                         <Image
@@ -314,7 +289,7 @@ export default function DemosPage() {
                   <div className="flex-1 flex items-center justify-center bg-[#F8F6FF] rounded-xl mb-6 min-h-[180px]">
                     <Image
                       src="/icons/play-demo.svg"
-                      alt="Notifications"
+                      alt="Preview"
                       width={24}
                       height={24}
                       className="w-6 h-6"
@@ -325,17 +300,22 @@ export default function DemosPage() {
                       <FaEye className="text-lg" /> 0
                     </div>
                     <div className="flex items-center gap-2">
-                      <FaRegCalendarAlt className="text-lg" /> {formatDate(demo.updatedAt)}
+                      <FaRegCalendarAlt className="text-lg" /> {formatDate(video.updatedAt)}
                     </div>
-                    <div>Draft</div>
+                    <div>Published</div>
                   </div>
                   <div className="text-sm text-[#8B8B8B] mb-4">
-                    <div>
-                      Duration: {formatTime_2(demo.startTime || "")} -{" "}
-                      {formatTime_2(demo.endTime || "")}
-                    </div>
-                    <div className="truncate">{demo.description || "No description"}</div>
+                    <div className="truncate">{video.description || "No description"}</div>
                   </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyShareLink(video.shareableUrl || video.exportedUrl);
+                    }}
+                    className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto cursor-pointer"
+                  >
+                    <FaShareAlt /> Share
+                  </button>
                 </div>
               ))}
             </div>
@@ -344,52 +324,56 @@ export default function DemosPage() {
               <table className="w-full text-left">
                 <thead className="bg-[#F3F0FC] text-[#8B8B8B] text-lg">
                   <tr>
-                    <th className="py-4 px-6 font-medium">Demos</th>
-                    {/* <th className="py-4 px-6 font-medium">Duration</th> */}
+                    <th className="py-4 px-6 font-medium">Videos</th>
                     <th className="py-4 px-6 font-medium">Status</th>
                     <th className="py-4 px-6 font-medium">Updated</th>
                     <th className="py-4 px-6 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDemos.map((demo: Demo) => (
+                  {filteredVideos.map((video) => (
                     <tr
-                      key={demo.id}
+                      key={video.id}
                       className="border-t border-[#F3F0FC] hover:bg-[#F8F6FF] cursor-pointer"
-                      onClick={() => handleEditDemo(demo)}
+                      onClick={() => openVideo(video.exportedUrl)}
                     >
                       <td className="py-4 px-6 flex items-center gap-4">
                         <span className="inline-flex items-center justify-center w-14 h-14 bg-[#E5DEFF] rounded-xl">
                           <Image
                             src="/icons/play-demo.svg"
-                            alt="Notifications"
+                            alt="Preview"
                             width={24}
                             height={24}
                             className="w-6 h-6"
                           />
                         </span>
                         <div>
-                          <div className="font-semibold text-lg text-[#1A0033]">{demo.title}</div>
+                          <div className="font-semibold text-lg text-[#1A0033]">{video.title}</div>
                           <div className="text-[#8B8B8B] text-sm">
-                            {demo.description || "No description"}
+                            {video.description || "No description"}
                           </div>
                         </div>
                       </td>
-                      {/* <td className="py-4 px-6 text-[#8B8B8B] font-medium">
-                        {formatTime(demo.startTime)} -{" "}
-                        {formatTime(demo.endTime)}
-                      </td> */}
-                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">Draft</td>
+                      <td className="py-4 px-6 text-[#8B8B8B] font-medium">Published</td>
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
-                        {formatDate(demo.updatedAt)}
+                        {formatDate(video.updatedAt)}
                       </td>
                       <td className="py-4 px-6 flex gap-4 items-center">
+                        <button
+                          className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyShareLink(video.shareableUrl || video.exportedUrl);
+                          }}
+                        >
+                          <FaShareAlt />
+                        </button>
                         <button
                           className="text-red-400 hover:text-red-600 text-xl cursor-pointer"
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteDemo(demo.id);
+                            handleDeleteVideo(video.id);
                           }}
                         >
                           <Image
@@ -409,6 +393,7 @@ export default function DemosPage() {
           )}
         </div>
       </div>
+
       <ConfirmDeleteModal
         isOpen={isModalOpen}
         onConfirm={confirmDelete}
