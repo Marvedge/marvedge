@@ -107,3 +107,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id, exportedUrl } = await req.json();
+
+    if (!id || !exportedUrl) {
+      return NextResponse.json({ error: "id and exportedUrl are required" }, { status: 400 });
+    }
+
+    // Verify the demo belongs to the user
+    const demo = await prisma.demo.findUnique({ where: { id } });
+    if (!demo || demo.userId !== session.user.id) {
+      return NextResponse.json({ error: "Demo not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.demo.update({
+      where: { id },
+      data: { exportedUrl },
+    });
+
+    return NextResponse.json({ success: true, demo: updated });
+  } catch (error) {
+    console.error("Demo PATCH error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

@@ -46,3 +46,6 @@ next-env.d.ts
 task.md
 
 /// addding the fix shareable links in the schema 
+video-worker/node_modules
+video-worker/.env
+video-worker/dist

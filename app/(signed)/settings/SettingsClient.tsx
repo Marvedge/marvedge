@@ -134,7 +134,10 @@ const SettingsPage = () => {
       reader.onload = (event) => {
         if (event.target?.result) {
           setAvatar(event.target.result as string);
-          setForm((prev) => ({ ...prev, image: event.target?.result as string }));
+          setForm((prev) => ({
+            ...prev,
+            image: event.target?.result as string,
+          }));
         }
       };
       reader.readAsDataURL(file);
@@ -309,7 +312,10 @@ const SettingsPage = () => {
       reader.onload = (event) => {
         if (event.target?.result) {
           setAvatar(event.target.result as string);
-          setForm((prev) => ({ ...prev, image: event.target?.result as string }));
+          setForm((prev) => ({
+            ...prev,
+            image: event.target?.result as string,
+          }));
         }
       };
       reader.readAsDataURL(file);

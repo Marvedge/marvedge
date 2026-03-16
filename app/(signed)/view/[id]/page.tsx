@@ -20,7 +20,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <div>
       <h1>{video.title}</h1>
-      <video src={video.videoUrl} controls width="100%" />
+      <video src={video.exportedUrl || video.videoUrl} controls width="100%" />
     </div>
   );
 }

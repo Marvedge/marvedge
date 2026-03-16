@@ -8,7 +8,8 @@ import { Toaster, toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
-import { videoTrimmer } from "@/app/lib/ffmpeg";
+import axios from "axios";
+//import { videoTrimmer } from "@/app/lib/ffmpeg"; // Moved to export handler
 //import Image from "next/image";
 
 // Components
@@ -38,12 +39,16 @@ import { sanitizeFilename } from "@/app/lib/constants";
 import { handleSaveDemo, exportVideo } from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import ZoomModal from "@/app/components/ZoomModal";
+import ExportSettingsModal, { ExportSettings } from "@/app/components/ExportSettingsModal";
+import ExportResultModal from "@/app/components/ExportResultModal";
 
 export default function EditorPage() {
   const router = useRouter();
 
   // Track saved demos in this session to prevent duplicates
   const savedDemosRef = useRef<Set<string>>(new Set());
+  const defaultZoomSeededForVideoRef = useRef<string | null>(null);
+  const zoomFocusStageRef = useRef<HTMLDivElement | null>(null);
 
   // Custom hooks for state management
   const editorState = useEditorState();
@@ -143,8 +148,16 @@ export default function EditorPage() {
     setLoadedSegments,
     setCurrentSegments,
     setZoomEffects,
+    setSavedDemoId,
     formatTimeForInput,
   });
+
+  // Bridge recorder → editor: if no video URL from URL params, use blob from Zustand
+  useEffect(() => {
+    if (!videoUrl && blob) {
+      setVideoUrl(URL.createObjectURL(blob));
+    }
+  }, [videoUrl, blob, setVideoUrl]);
 
   // Video duration detection
   useVideoDuration({
@@ -212,6 +225,27 @@ export default function EditorPage() {
     }
   }, [videoUrl, setDemoSaved]);
 
+  // Restore editing state (trim/zoom blocks) from saved demo URL params
+  useEffect(() => {
+    // Restore trim segments from saved editing data
+    if (currentSegments.length > 0 && segments.length === 0) {
+      const numeric = currentSegments
+        .map((s) => ({
+          start: typeof s.start === "string" ? parseFloat(s.start) : Number(s.start),
+          end: typeof s.end === "string" ? parseFloat(s.end) : Number(s.end),
+        }))
+        .filter((s) => !isNaN(s.start) && !isNaN(s.end));
+      if (numeric.length > 0) {
+        setSegments(numeric);
+      }
+    }
+    // Restore zoom segments from saved editing data
+    if (zoomEffects.length > 0 && zoomSegments.length === 0) {
+      setZoomSegments(zoomEffects);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSegments, zoomEffects]);
+
   // User initials
   const initials = session?.user?.name
     ? session.user.name
@@ -247,42 +281,8 @@ export default function EditorPage() {
     setIsDashboardMenuOpen(!isDashboardMenuOpen);
   };
 
-  // Delete Trim handler
-  const onDeleteTrimmedDemo = async (segmentToDelete: { start: number; end: number }) => {
-    if (!videoUrl) {
-      return;
-    }
-
-    //convert seconds to hh:mm:ss
-    const secondsToTime = (sec: number): string => {
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = Math.floor(sec % 60);
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    };
-
-    const response = await fetch(videoUrl);
-    let currentBlob = await response.blob();
-
-    //getting all the segments
-    const sortedSegments = [...segments]
-      .filter((seg) =>
-        seg.start === segmentToDelete.start && seg.end === segmentToDelete.end ? true : true
-      )
-      .sort((a, b) => b.start - a.start);
-
-    for (const seg of sortedSegments) {
-      const start = secondsToTime(seg.start);
-      const end = secondsToTime(seg.end);
-      currentBlob = await videoTrimmer(currentBlob, start, end);
-    }
-
-    const newUrl = URL.createObjectURL(currentBlob);
-    setVideoUrl(newUrl);
-    setDuration(0);
-
-    setSegments([]);
-  };
+  // Delete handler is now UI-only — handled inside TimeLine.tsx
+  // Video trimming happens at export time in videoHandlers.ts
 
   // Save demo handler
   const onSaveDemo = async (data: { title: string; description: string }) => {
@@ -303,8 +303,12 @@ export default function EditorPage() {
       videoUrl: videoUrl!,
       inputStartTime,
       inputEndTime,
-      currentSegments,
-      zoomEffects,
+      currentSegments: segments.map((s) => ({
+        start: String(s.start),
+        end: String(s.end),
+      })),
+      zoomEffects: zoomSegments,
+      selectedBackground,
       setSavingDemo,
       setSidebarTitle,
       setSidebarDescription,
@@ -329,21 +333,117 @@ export default function EditorPage() {
   // };
 
   const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
+  const [showExportSettings, setShowExportSettings] = useState(false);
+  const [showExportResultModal, setShowExportResultModal] = useState(false);
+  const [savingShareLink, setSavingShareLink] = useState(false);
+  const [pendingExport, setPendingExport] = useState<{
+    exportedUrl: string;
+    sourceVideoUrl: string;
+    downloadAsMp4: (url: string) => Promise<void>;
+    settings: ExportSettings;
+  } | null>(null);
 
-  // Export video handler
-  const onExportVideo = async () => {
-    await exportVideo({
+  const saveExportedVideoRecord = async (
+    exportedUrl: string,
+    sourceVideoUrl: string,
+    settings: ExportSettings,
+    demoId?: string | null
+  ) => {
+    await axios.post("/api/exported-videos", {
+      title: sidebarTitle?.trim() || "Untitled Export",
+      description: sidebarDescription?.trim() || "",
+      exportedUrl,
+      sourceVideoUrl,
+      settings,
+      demoId: demoId || null,
+      upsertByDemo: Boolean(demoId),
+    });
+  };
+
+  // Called when the user confirms their settings in the new modal
+  const onExportVideo = async (settings: ExportSettings) => {
+    setShowExportSettings(false);
+
+    // If user uploaded a custom background image, create a temporary object URL for the compositor
+    const customBackgroundUrl = customBackground ? URL.createObjectURL(customBackground) : null;
+
+    const result = await exportVideo({
       videoUrl: videoUrl!,
-      selectedBackground,
+      selectedBackground: selectedBackground || "none",
+      customBackgroundUrl,
       imageMap,
       sidebarTitle,
       sidebarDescription,
-      router,
       segments,
-      setVideoUrl,
+      zoomSegments,
       setProgress,
       duration,
+      savedDemoId: editorState.savedDemoId,
+      settings,
     });
+
+    if (result) {
+      if (editorState.savedDemoId) {
+        try {
+          await saveExportedVideoRecord(
+            result.exportedUrl,
+            result.sourceVideoUrl,
+            settings,
+            editorState.savedDemoId
+          );
+          toast.success("Exported video updated in Exported Videos");
+        } catch (saveError) {
+          console.error("Failed saving exported video record:", saveError);
+          toast.error("Export completed, but saving exported entry failed");
+        }
+        await result.downloadAsMp4(result.exportedUrl);
+      } else {
+        setPendingExport({
+          ...result,
+          settings,
+        });
+        setShowExportResultModal(true);
+      }
+    }
+
+    // Clean up the object URL after export
+    if (customBackgroundUrl) {
+      URL.revokeObjectURL(customBackgroundUrl);
+    }
+  };
+
+  const handleDownloadMp4Only = async () => {
+    if (!pendingExport) {
+      return;
+    }
+    await pendingExport.downloadAsMp4(pendingExport.exportedUrl);
+    setShowExportResultModal(false);
+    setPendingExport(null);
+  };
+
+  const handleSaveShareLink = async () => {
+    if (!pendingExport) {
+      return;
+    }
+
+    try {
+      setSavingShareLink(true);
+      await saveExportedVideoRecord(
+        pendingExport.exportedUrl,
+        pendingExport.sourceVideoUrl,
+        pendingExport.settings,
+        null
+      );
+      await navigator.clipboard.writeText(pendingExport.exportedUrl);
+      toast.success("Share link saved in Exported Videos and copied");
+      setShowExportResultModal(false);
+      setPendingExport(null);
+    } catch (saveError) {
+      console.error("Failed to save share link:", saveError);
+      toast.error("Failed to save share link");
+    } finally {
+      setSavingShareLink(false);
+    }
   };
 
   // Zoom effects handlers
@@ -365,34 +465,170 @@ export default function EditorPage() {
     setZoomEffects(effects);
   };
 
+  // Zoom effects are now applied at export time, not immediately
+
   //useEffect(() => {}, [videoUrl]);
   const [mode, setMode] = useState<"main" | "trim" | "zoom">("main");
   const [childHandleProgress, setChildHandleProgress] = useState<
     null | ((data: { playedSeconds: number }) => void)
   >(null);
 
-  const [zoomActive, setZoomActive] = useState(false);
   const [activeZoomIdx, setActiveZoomIdx] = useState<number>(-1);
-  const [zoomSegments, setZoomSegments] = useState<ZoomEffect[]>([
-    {
-      id: "1",
-      startTime: 1,
-      endTime: 4,
-      zoomLevel: 2,
-      x: 0.5,
-      y: 0.5,
-    },
-  ]);
+  const [zoomSegments, setZoomSegments] = useState<ZoomEffect[]>([]);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isDraggingZoomTarget, setIsDraggingZoomTarget] = useState(false);
+  const [showZoomModal, setShowZoomModal] = useState(false);
+
+  // Restore a default 3-second zoom block for fresh recorder sessions.
+  useEffect(() => {
+    if (!params || !videoUrl || duration <= 0) {
+      return;
+    }
+
+    // Only seed for recorder-origin flow (no `video` query param).
+    const isRecorderFlow = !params.get("video");
+    if (!isRecorderFlow) {
+      return;
+    }
+
+    // Do not override loaded/saved zoom edits.
+    if (zoomEffects.length > 0 || zoomSegments.length > 0) {
+      return;
+    }
+
+    if (defaultZoomSeededForVideoRef.current === videoUrl) {
+      return;
+    }
+
+    const defaultStart = Math.min(2, Math.max(0, duration - 1));
+    const defaultEnd = Math.min(duration, defaultStart + 3);
+    if (defaultEnd - defaultStart <= 0.1) {
+      return;
+    }
+
+    setZoomSegments([
+      {
+        id: `seed-${Date.now()}`,
+        startTime: defaultStart,
+        endTime: defaultEnd,
+        zoomLevel: 2,
+        x: 0.5,
+        y: 0.5,
+      },
+    ]);
+    defaultZoomSeededForVideoRef.current = videoUrl;
+  }, [params, videoUrl, duration, zoomEffects.length, zoomSegments.length]);
+
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+  const resolvedZoomIdx =
+    activeZoomIdx >= 0 && activeZoomIdx < zoomSegments.length
+      ? activeZoomIdx
+      : zoomSegments.length > 0
+        ? 0
+        : -1;
+  const activeEditedZoomSegment = resolvedZoomIdx >= 0 ? zoomSegments[resolvedZoomIdx] : null;
+  const activePlaybackZoomSegment = zoomSegments.find(
+    (segment) => currentTime >= segment.startTime && currentTime <= segment.endTime
+  );
+  const activePreviewZoomSegment = activePlaybackZoomSegment ?? activeEditedZoomSegment;
+  const isWithinActiveEditedSegment =
+    !!activeEditedZoomSegment &&
+    currentTime >= activeEditedZoomSegment.startTime &&
+    currentTime <= activeEditedZoomSegment.endTime;
+  const shouldShowZoomFocusBox = !!activeEditedZoomSegment && isWithinActiveEditedSegment;
+  const shouldApplyZoomPreview = !!activePlaybackZoomSegment;
+
+  const previewZoomScale = activePreviewZoomSegment
+    ? 1 + (Math.max(1, activePreviewZoomSegment.zoomLevel) - 1) * 0.8
+    : 1;
+  const zoomFocusSizePct = 15;
+
+  // Correct zoom centering: translate so the selected point is at view center
+  const zoomCx = (activePreviewZoomSegment?.x ?? 0.5) * 100;
+  const zoomCy = (activePreviewZoomSegment?.y ?? 0.5) * 100;
+  const zoomTranslateX = shouldApplyZoomPreview
+    ? clamp(zoomCx - 50 / previewZoomScale, 0, 100 - 100 / previewZoomScale)
+    : 0;
+  const zoomTranslateY = shouldApplyZoomPreview
+    ? clamp(zoomCy - 50 / previewZoomScale, 0, 100 - 100 / previewZoomScale)
+    : 0;
+
+  const updateZoomTargetFromPointer = useCallback(
+    (clientX: number, clientY: number) => {
+      if (resolvedZoomIdx < 0) {
+        return;
+      }
+      if (!shouldShowZoomFocusBox) {
+        return;
+      }
+      const stage = zoomFocusStageRef.current;
+      if (!stage) {
+        return;
+      }
+
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+
+      const xRaw = (clientX - rect.left) / rect.width;
+      const yRaw = (clientY - rect.top) / rect.height;
+
+      const x = clamp(xRaw, 0, 1);
+      const y = clamp(yRaw, 0, 1);
+
+      setZoomSegments((prev) =>
+        prev.map((segment, index) => (index === resolvedZoomIdx ? { ...segment, x, y } : segment))
+      );
+    },
+    [resolvedZoomIdx, setZoomSegments, shouldShowZoomFocusBox]
+  );
+
+  const handleZoomTargetMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!activeEditedZoomSegment) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDraggingZoomTarget(true);
+      updateZoomTargetFromPointer(event.clientX, event.clientY);
+    },
+    [activeEditedZoomSegment, updateZoomTargetFromPointer]
+  );
+
+  useEffect(() => {
+    if (!isDraggingZoomTarget) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      updateZoomTargetFromPointer(event.clientX, event.clientY);
+    };
+    const onUp = () => {
+      setIsDraggingZoomTarget(false);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isDraggingZoomTarget, updateZoomTargetFromPointer]);
+
+  useEffect(() => {
+    if (activeZoomIdx === -1 && zoomSegments.length > 0) {
+      setActiveZoomIdx(0);
+    }
+  }, [activeZoomIdx, zoomSegments.length]);
 
   useEffect(() => {
     if (!currentTime) {
       return;
     }
-    const active = zoomSegments.some(
-      (segment) => currentTime >= segment.startTime && currentTime <= segment.endTime
-    );
-    setZoomActive(active);
+
     const segment = zoomSegments.find(
       (z) => currentTime >= z.startTime && currentTime <= z.endTime
     );
@@ -415,6 +651,26 @@ export default function EditorPage() {
 
   return (
     <main className="flex flex-col min-h-screen w-full bg-gray-50 overflow-hidden">
+      <ExportSettingsModal
+        isOpen={showExportSettings}
+        onClose={() => setShowExportSettings(false)}
+        onConfirm={onExportVideo}
+        durationInSeconds={duration || 0}
+      />
+      <ExportResultModal
+        isOpen={showExportResultModal}
+        exportedUrl={pendingExport?.exportedUrl || ""}
+        loading={savingShareLink}
+        onClose={() => {
+          if (savingShareLink) {
+            return;
+          }
+          setShowExportResultModal(false);
+          setPendingExport(null);
+        }}
+        onDownloadMp4={handleDownloadMp4Only}
+        onSaveShareLink={handleSaveShareLink}
+      />
       <Toaster
         position="top-center"
         toastOptions={{
@@ -462,7 +718,7 @@ export default function EditorPage() {
                   downloadBlob(mp4Url, `${filename}.mp4`);
                 }
               }}
-              onExportWebM={onExportVideo}
+              onExportWebM={() => setShowExportSettings(true)}
               tool={tool}
               setTool={(t: string) => {
                 if (t === "none" || t === "text" || t === "blur" || t === "rect" || t === "arrow") {
@@ -481,10 +737,10 @@ export default function EditorPage() {
               customBackground={customBackground}
               setCustomBackground={setCustomBackground}
             />
-            {activeZoomIdx != -1 ? (
+            {activeZoomIdx != -1 && showZoomModal ? (
               <ZoomModal
                 //isOpen={open}
-                onClose={() => setActiveZoomIdx(-1)}
+                onClose={() => setShowZoomModal(false)}
                 activeZoomIdx={activeZoomIdx}
                 setZoomSegments={setZoomSegments}
                 zoomSegments={zoomSegments}
@@ -532,7 +788,7 @@ export default function EditorPage() {
                     downloadBlob(mp4Url, `${filename}.mp4`);
                   }
                 }}
-                onExportWebM={onExportVideo}
+                onExportWebM={() => setShowExportSettings(true)}
                 tool={tool}
                 setTool={(t: string) => {
                   if (
@@ -639,7 +895,7 @@ export default function EditorPage() {
               </button>
             </div>
           )}
-          {/* {videoUrl && (
+          {videoUrl && !demoSaved && !sidebarTitle && (
             <div className="flex justify-center mt-6 mb-6 ml-">
               <button
                 onClick={() => setShowSaveDemoModal(true)}
@@ -649,7 +905,7 @@ export default function EditorPage() {
                 {savingDemo ? "Saving..." : demoSaved ? "Saved" : "Save Demo"}
               </button>
             </div>
-          )} */}
+          )}
           <div className="mt-5"></div>
           {/* Video Wrapper */}
           <div
@@ -672,6 +928,7 @@ export default function EditorPage() {
               }}
             >
               <div
+                ref={zoomFocusStageRef}
                 className=""
                 style={{
                   width: selectedBackground ? "90%" : "100%",
@@ -688,7 +945,7 @@ export default function EditorPage() {
                 }}
               >
                 <div
-                  className="absolute w-full h-fit z-100"
+                  className="absolute w-full h-fit z-10"
                   style={{
                     position: "absolute",
                     top: 0,
@@ -697,15 +954,18 @@ export default function EditorPage() {
                     height: "100%",
                     //border: "4px solid green",
                     borderRadius: "1.25rem",
-                    transform: zoomActive ? `scale(${zoomLevel})` : "scale(1)", // zoom only here
-                    transformOrigin: zoomActive ? "50% 50% -10px" : "center", // zoom from center
-                    transition: "transform 0.4s ease",
+                    transform: shouldApplyZoomPreview
+                      ? `scale(${previewZoomScale}) translate(-${zoomTranslateX}%, -${zoomTranslateY}%)`
+                      : "scale(1)",
+                    transformOrigin: "0% 0%",
+                    transition: isDraggingZoomTarget ? "none" : "transform 0.4s ease",
                   }}
                 >
                   <div className="">
                     {/*In FullScreen video require one div, so don't remove div */}
                     {videoUrl ? (
                       <ReactPlayer
+                        key={videoUrl}
                         ref={playerRef}
                         url={videoUrl}
                         playing={playing}
@@ -780,12 +1040,45 @@ export default function EditorPage() {
                     )}
                   </div>
                 </div>
+
+                {shouldShowZoomFocusBox && (
+                  <div
+                    className="absolute inset-0 z-50 rounded-2xl"
+                    onMouseDown={handleZoomTargetMouseDown}
+                    style={{
+                      cursor: isDraggingZoomTarget ? "grabbing" : "grab",
+                      userSelect: "none",
+                    }}
+                  >
+                    <div
+                      className="absolute rounded-lg pointer-events-none"
+                      style={{
+                        width: `${zoomFocusSizePct}%`,
+                        height: `${zoomFocusSizePct}%`,
+                        left: `${activeEditedZoomSegment.x * 100}%`,
+                        top: `${activeEditedZoomSegment.y * 100}%`,
+                        transform: "translate(-50%, -50%)",
+                        border: "2px solid #ef4444",
+                        boxShadow: "0 0 0 1px rgba(255,255,255,0.55) inset",
+                        background: "rgba(239,68,68,0.08)",
+                        transition: isDraggingZoomTarget
+                          ? "none"
+                          : "left 0.12s ease, top 0.12s ease",
+                      }}
+                    />
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-white text-xs font-medium pointer-events-none backdrop-blur-sm">
+                      Drag to adjust zoom
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Canvas stays on top of video */}
               <canvas
                 ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full z-10 cursor-crosshair rounded-2xl"
+                className={`absolute top-0 left-0 w-full h-full rounded-2xl ${
+                  tool !== "none" ? "z-40 cursor-crosshair" : "z-0 cursor-default"
+                }`}
                 onMouseDown={tool !== "none" ? handleMouseDown : undefined}
                 onMouseUp={tool !== "none" ? handleMouseUp : undefined}
                 style={{
@@ -845,7 +1138,6 @@ export default function EditorPage() {
             <div className="mr-2 mt-8 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
               {duration > 0 ? (
                 <TimelineRuler
-                  onDeleteSegment={onDeleteTrimmedDemo}
                   minValue={0}
                   maxValue={duration}
                   currentValue={Math.max(0, currentTime)}
@@ -872,13 +1164,8 @@ export default function EditorPage() {
                   }}
                   processing={processing}
                   onResetVideo={resetVideo}
-                  //onZoomEffectCreate={onZoomEffectCreate}
-                  //initialSegments={currentSegments}
-                  //onTrim={onVideoTrim}
                   playing={playing}
                   setPlaying={setPlaying}
-                  //videourl={videoUrl}
-                  //setVideoUrl={setVideoUrl}
                   mode={mode}
                   setMode={setMode}
                   playerRef={playerRef}
@@ -887,7 +1174,6 @@ export default function EditorPage() {
                   setZoomSegments={setZoomSegments}
                   activeZoomIdx={activeZoomIdx}
                   setActiveZoomIdx={setActiveZoomIdx}
-                  //setOpen={setOpen}
                   zoomLevelDepth={zoomLevel}
                   segments={segments}
                   setSegments={setSegments}
