@@ -141,11 +141,11 @@ const SidemenuDashboard = () => {
                   priority
                 />
               </span>
-              <span>Exported Videos</span>
+              <span>Shared Videos</span>
             </li>
           </Link>
           <Link href="/templates" onClick={closeMobileMenu}>
-            <li
+            {/* <li
               className={`flex items-center justify-start gap-1 sm:gap-3 h-8 sm:h-10 px-1 sm:px-2 transition-colors cursor-pointer text-xs sm:text-base ${
                 isActive("/templates") ? activeClass : inactiveClass
               }`}
@@ -161,7 +161,7 @@ const SidemenuDashboard = () => {
                 />
               </span>
               <span>Templates</span>
-            </li>
+            </li> */}
           </Link>
           <Link href="/analytics" onClick={closeMobileMenu}>
             <li
@@ -182,7 +182,7 @@ const SidemenuDashboard = () => {
             </li>
           </Link>
           <Link href="/team" onClick={closeMobileMenu}>
-            <li
+            {/* <li
               className={`flex items-center justify-start gap-1 sm:gap-3 h-8 sm:h-10 px-1 sm:px-2 transition-colors cursor-pointer text-xs sm:text-base ${
                 isActive("/team") ? activeClass : inactiveClass
               }`}
@@ -198,7 +198,7 @@ const SidemenuDashboard = () => {
                 />
               </span>
               <span>Team</span>
-            </li>
+            </li> */}
           </Link>
           <Link href="/settings" onClick={closeMobileMenu}>
             <li

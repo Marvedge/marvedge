@@ -3,18 +3,7 @@ import Image from "next/image";
 
 interface EditorSidebarProps {
   title: string;
-  setTitle: (v: string) => void;
-  description: string;
-  setDescription: (v: string) => void;
-  onDownloadWebM: () => void;
-  onDownloadMP4: () => void;
   onExportWebM: () => void;
-  tool: string;
-  setTool: (t: string) => void;
-  handleUndo: () => void;
-  handleClear: () => void;
-  handleSaveOverlays: () => void;
-  handleLoadOverlays: () => void;
   forceShowMobile?: boolean;
   thumbnailUrl?: string;
   selectedBackground?: string | null;
@@ -31,26 +20,30 @@ interface EditorSidebarProps {
   setBrowserFrameDrawShadow?: (enabled: boolean) => void;
   browserFrameDrawBorder?: boolean;
   setBrowserFrameDrawBorder?: (enabled: boolean) => void;
+  textOverlayInput?: string;
+  setTextOverlayInput?: (value: string) => void;
+  textOverlayFontFamily?: string;
+  setTextOverlayFontFamily?: (value: string) => void;
+  textOverlayFontSize?: number;
+  setTextOverlayFontSize?: (value: number) => void;
+  onAddTextOverlay?: () => void;
+  onDeleteSelectedTextOverlay?: () => void;
+  hasSelectedTextOverlay?: boolean;
+  textOverlayColor?: string;
+  setTextOverlayColor?: (value: string) => void;
   className?: string;
+  onOpenSaveDemo?: () => void;
+  savingDemo?: boolean;
+  demoSaved?: boolean;
+  onToggleDashboardMenu?: () => void;
 }
 
 type MainTab = "background" | "tools";
 type BgSubTab = "image" | "gradient" | "color" | "hidden";
 
 const EditorSidebar: React.FC<EditorSidebarProps> = ({
-  // title,
-  // setTitle,
-  // description,
-  // setDescription,
-  // onDownloadWebM,
+  title,
   onExportWebM,
-  //onDownloadMP4,
-  tool,
-  setTool,
-  handleUndo,
-  handleClear,
-  handleSaveOverlays,
-  handleLoadOverlays,
   forceShowMobile = false,
   // thumbnailUrl,
   selectedBackground,
@@ -67,6 +60,19 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   setBrowserFrameDrawShadow,
   browserFrameDrawBorder = false,
   setBrowserFrameDrawBorder,
+  textOverlayInput = "Add text",
+  setTextOverlayInput,
+  textOverlayFontFamily = "Arial",
+  setTextOverlayFontFamily,
+  textOverlayFontSize = 24,
+  setTextOverlayFontSize,
+  onAddTextOverlay,
+  textOverlayColor = "#ffffff",
+  setTextOverlayColor,
+  onOpenSaveDemo,
+  savingDemo = false,
+  demoSaved = false,
+  onToggleDashboardMenu,
 }) => {
   //const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<MainTab>("background");
@@ -229,6 +235,41 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
         forceShowMobile ? "flex" : "hidden md:flex"
       }`}
     >
+      {/* 3-bar menu + title */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onToggleDashboardMenu?.()}
+          className="h-[54px] w-[68px] rounded-xl bg-[#A594F9] hover:bg-[#7C5CFC] transition flex items-center justify-center shrink-0 shadow-sm"
+          aria-label="Open dashboard menu"
+        >
+          <div className="flex flex-col gap-1.5">
+            <span className="block w-6 h-0.5 bg-white rounded-full" />
+            <span className="block w-6 h-0.5 bg-white rounded-full opacity-90" />
+            <span className="block w-6 h-0.5 bg-white rounded-full opacity-80" />
+          </div>
+        </button>
+        <div className="min-w-0">
+          <div className="text-lg font-semibold text-[#261753] truncate">
+            {title?.trim() ? title.trim() : "Untitled demo"}
+          </div>
+        </div>
+      </div>
+
+      {/* Save Demo */}
+      <button
+        type="button"
+        onClick={() => onOpenSaveDemo?.()}
+        disabled={demoSaved || savingDemo}
+        className={`flex items-center justify-center gap-2 w-full h-[54px] font-semibold rounded-lg shadow transition text-sm ${
+          demoSaved || savingDemo
+            ? "bg-[#8A76FC] text-white opacity-70 cursor-not-allowed"
+            : "bg-[#8A76FC] hover:bg-[#7A66EC] text-white"
+        }`}
+      >
+        {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
+      </button>
+
       {/* Export Section */}
       <div className="relative">
         <button
@@ -505,8 +546,18 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
               </select>
               {/* Custom dropdown arrow */}
               <div className="absolute top-0 right-0 h-full w-10 flex items-center justify-center pointer-events-none">
-                <svg className="w-4 h-4 text-[#7C5CFC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg
+                  className="w-4 h-4 text-[#7C5CFC]"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </div>
             </div>
@@ -577,6 +628,129 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                   />
                 </span>
               </button>
+            </div>
+          </div>
+
+          {/* Add Text Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Add Text</h2>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={textOverlayInput}
+                onChange={(e) => setTextOverlayInput && setTextOverlayInput(e.target.value)}
+                className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#4A3C87] focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
+                placeholder="Write your text"
+              />
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="relative">
+                  <select
+                    value={textOverlayFontFamily}
+                    onChange={(e) =>
+                      setTextOverlayFontFamily && setTextOverlayFontFamily(e.target.value)
+                    }
+                    className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Inter">Inter</option>
+                    <option value="Roboto">Roboto</option>
+                    <option value="Poppins">Poppins</option>
+                    <option value="Georgia">Georgia</option>
+                  </select>
+                  <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="w-4 h-4 text-[#7C5CFC]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={String(textOverlayFontSize)}
+                    onChange={(e) =>
+                      setTextOverlayFontSize && setTextOverlayFontSize(Number(e.target.value))
+                    }
+                    className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
+                  >
+                    <option value="16">16</option>
+                    <option value="20">20</option>
+                    <option value="24">24</option>
+                    <option value="28">28</option>
+                    <option value="32">32</option>
+                    <option value="40">40</option>
+                  </select>
+                  <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="w-4 h-4 text-[#7C5CFC]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={textOverlayColor}
+                    onChange={(e) => setTextOverlayColor && setTextOverlayColor(e.target.value)}
+                    className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
+                  >
+                    <option value="#ffffff">White</option>
+                    <option value="#000000">Black</option>
+                    <option value="#ff0000">Red</option>
+                    <option value="#00ff00">Green</option>
+                    <option value="#0000ff">Blue</option>
+                    <option value="#ffff00">Yellow</option>
+                    <option value="#A594F9">Purple</option>
+                  </select>
+                  <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="w-4 h-4 text-[#7C5CFC]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onAddTextOverlay && onAddTextOverlay()}
+                  className="w-full rounded-lg bg-[#8A76FC] text-white py-2 text-sm font-semibold hover:bg-[#7C5CFC] transition"
+                >
+                  Add Text
+                </button>
+                <div className="w-full rounded-lg border border-transparent text-[#8A76FC] py-2 text-sm font-semibold opacity-60 select-none flex items-center justify-center">
+                  Delete via canvas
+                </div>
+              </div>
             </div>
           </div>
         </div>

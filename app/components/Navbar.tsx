@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Menu, X } from "lucide-react";
 // import Hero from "./Hero";
 
@@ -21,10 +22,19 @@ const NavButton: React.FC<{
 
 const Navbar: React.FC = () => {
   const router = useRouter();
+  const { status } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const toggleMenu = () => {
     setIsMenuOpen((prev) => !prev);
+  };
+
+  const handleLogoClick = () => {
+    if (status === "authenticated") {
+      router.push("/dashboard");
+      return;
+    }
+    router.push("/");
   };
 
   return (
@@ -33,7 +43,12 @@ const Navbar: React.FC = () => {
         <div className="px-4 sm:px-6 w-full">
           {/* Top Row: Logo, Marvedge text, Hamburger */}
           <div className="flex items-center justify-between w-full pt-2">
-            <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={handleLogoClick}
+              className="flex items-center space-x-3 cursor-pointer"
+              aria-label="Go to dashboard"
+            >
               <Image
                 src="/images/Transparent logo.png"
                 alt="Marvedge logo"
@@ -43,7 +58,7 @@ const Navbar: React.FC = () => {
                 priority
               />
               <span className="text-[#8C5BFF] text-xl md:text-2xl font-semibold">Marvedge</span>
-            </div>
+            </button>
             <button
               onClick={toggleMenu}
               className="md:hidden text-[#313053] focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] p-2"

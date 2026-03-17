@@ -73,6 +73,15 @@ function toSeconds(t: string | number): number {
 
 type TimeRange = { start: number; end: number };
 type ZoomRange = { startTime: number; endTime: number; zoomLevel: number; x: number; y: number };
+type TextRange = {
+  startTime: number;
+  endTime: number;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  color: string;
+};
 
 const EPS = 0.001;
 
@@ -202,6 +211,102 @@ function remapZoomEffectsToTrimmedTimeline(
     .sort((a: ZoomRange, b: ZoomRange) => a.startTime - b.startTime);
 }
 
+function remapTextOverlaysToTrimmedTimeline(
+  rawTextOverlays: any[],
+  keepSegments: TimeRange[],
+  removeSegments: TimeRange[]
+): TextRange[] {
+  if (!rawTextOverlays || rawTextOverlays.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
+
+  const removedBefore = buildRemovedBefore(removeSegments);
+  const out: TextRange[] = [];
+  const sorted = rawTextOverlays
+    .map((t: any) => ({
+      startTime: toSeconds(t.startTime),
+      endTime: toSeconds(t.endTime),
+      text: String(t.text ?? ""),
+      x: Number(t.x),
+      y: Number(t.y),
+      fontSize: Number(t.fontSize),
+      color: String(t.color ?? "#ffffff"),
+    }))
+    .filter(
+      (t: TextRange) =>
+        Number.isFinite(t.startTime) &&
+        Number.isFinite(t.endTime) &&
+        Number.isFinite(t.x) &&
+        Number.isFinite(t.y) &&
+        Number.isFinite(t.fontSize)
+    )
+    .map((t: TextRange) => ({
+      startTime: Math.min(t.startTime, t.endTime),
+      endTime: Math.max(t.startTime, t.endTime),
+      text: t.text,
+      x: Math.max(0, Math.min(1, t.x)),
+      y: Math.max(0, Math.min(1, t.y)),
+      fontSize: Math.max(10, Math.min(160, Math.round(t.fontSize))),
+      color: t.color,
+    }))
+    .filter((t: TextRange) => t.text.trim().length > 0 && t.endTime - t.startTime > EPS)
+    .sort((a: TextRange, b: TextRange) => a.startTime - b.startTime);
+
+  for (const t of sorted) {
+    for (const keep of keepSegments) {
+      const overlapStart = Math.max(t.startTime, keep.start);
+      const overlapEnd = Math.min(t.endTime, keep.end);
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
+      out.push({
+        startTime: overlapStart - removedBefore(overlapStart),
+        endTime: overlapEnd - removedBefore(overlapEnd),
+        text: t.text,
+        x: t.x,
+        y: t.y,
+        fontSize: t.fontSize,
+        color: t.color,
+      });
+    }
+  }
+
+  return out
+    .filter((t: TextRange) => t.endTime - t.startTime > EPS)
+    .sort((a: TextRange, b: TextRange) => a.startTime - b.startTime);
+}
+
+function ffmpegEscapeFilterValue(value: string): string {
+  // FFmpeg filter args are ':'-separated; escape colons and backslashes.
+  return value.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
+function normalizeHexColor(input: string, fallback = "white"): string {
+  const s = (input || "").trim();
+  if (/^#?[0-9a-fA-F]{6}$/.test(s)) {
+    const hex = s.startsWith("#") ? s.slice(1) : s;
+    return `#${hex.toLowerCase()}`;
+  }
+  if (/^#?[0-9a-fA-F]{3}$/.test(s)) {
+    const raw = s.startsWith("#") ? s.slice(1) : s;
+    const expanded = raw
+      .split("")
+      .map((c) => `${c}${c}`)
+      .join("");
+    return `#${expanded.toLowerCase()}`;
+  }
+  return fallback;
+}
+
+function writeTextOverlayFiles(tempDir: string, overlays: TextRange[]): { path: string; overlay: TextRange }[] {
+  return overlays.map((overlay, idx) => {
+    const p = path.join(tempDir, `text-${idx}.txt`);
+    // Keep it UTF-8; FFmpeg drawtext textfile supports it.
+    fs.writeFileSync(p, overlay.text, "utf8");
+    return { path: p, overlay };
+  });
+}
+
 async function downloadVideo(url: string, outputPath: string): Promise<void> {
   const writer = fs.createWriteStream(outputPath);
   const response = await axios({ url, method: "GET", responseType: "stream" });
@@ -323,6 +428,7 @@ const worker = new Worker(
       videoUrl,
       segments,
       zoomEffects,
+      textOverlays,
       selectedBackground,
       customBackgroundUrl,
       settings,
@@ -451,12 +557,17 @@ const worker = new Worker(
         keepSegments,
         removeSegments
       );
+      const remappedTextOverlays = remapTextOverlaysToTrimmedTimeline(
+        textOverlays || [],
+        keepSegments,
+        removeSegments
+      );
 
       await job.updateProgress(50);
       await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 50 } });
       console.log(
         `[${jobId}] Trim ranges remove=${removeSegments.length} keep=${keepSegments.length} ` +
-          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length}`
+          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length}`
       );
 
       // ── 4. Final encode pass: trim + zoom + background + speed ───────────────
@@ -662,6 +773,36 @@ const worker = new Worker(
           );
         }
         videoOut = "[bgout]";
+      }
+
+      // Text overlays (single-pass, only during enable windows).
+      if (remappedTextOverlays.length > 0) {
+        const textFiles = writeTextOverlayFiles(tempDir, remappedTextOverlays);
+        let prev = videoOut;
+        textFiles.forEach(({ path: filePath, overlay }, idx) => {
+          const next = `[txt${idx}]`;
+          const safeFile = ffmpegEscapeFilterValue(filePath);
+          const safeColor = normalizeHexColor(overlay.color, "white");
+          const start = Math.max(0, overlay.startTime);
+          const end = Math.max(start + EPS, overlay.endTime);
+          const size = Math.max(10, Math.min(160, Math.round(overlay.fontSize)));
+          const nx = Math.max(0, Math.min(1, overlay.x));
+          const ny = Math.max(0, Math.min(1, overlay.y));
+
+          // Position is normalized; keep it centered on the point like the editor.
+          const xExpr = `(w*${nx.toFixed(4)}-text_w/2)`;
+          const yExpr = `(h*${ny.toFixed(4)}-text_h/2)`;
+
+          filters.push(
+            `${prev}drawtext=textfile=${safeFile}:reload=0:` +
+              `fontsize=${size}:fontcolor=${safeColor}:` +
+              `x='${xExpr}':y='${yExpr}':` +
+              `shadowcolor=black@0.55:shadowx=1:shadowy=1:` +
+              `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`
+          );
+          prev = next;
+        });
+        videoOut = prev;
       }
 
       // Speed adjustment

@@ -2,6 +2,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRef, useState, useEffect } from "react";
 import Image from "next/image";
 import { FaBars, FaXmark } from "react-icons/fa6";
+import { useRouter } from "next/navigation";
 import SidemenuDashboard from "./SidemenuDashboard";
 
 type EditorTopbarProps = {
@@ -11,6 +12,7 @@ type EditorTopbarProps = {
 };
 
 const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps) => {
+  const router = useRouter();
   const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isDashboardMenuOpen, setIsDashboardMenuOpen] = useState(false);
@@ -121,7 +123,12 @@ const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps)
             </div>
           )}
         </div>
-        <span className="ml-2 sm:ml-0 text-lg sm:text-2xl font-extrabold text-[#7C5CFC] tracking-widest flex items-center gap-2 order-3">
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          className="ml-2 sm:ml-0 text-lg sm:text-2xl font-extrabold text-[#7C5CFC] tracking-widest flex items-center gap-2 order-3 cursor-pointer hover:opacity-90 transition-opacity"
+          aria-label="Go to dashboard"
+        >
           <Image
             src="/images/Transparent logo.png"
             alt="Marvedge logo"
@@ -131,7 +138,7 @@ const EditorTopbar = ({ onBack, userInitials, onToggleMenu }: EditorTopbarProps)
             priority
           />
           MARVEDGE
-        </span>
+        </button>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
         <span className="hidden sm:block text-[#7C5CFC] font-medium text-base mr-2 items-center gap-1">

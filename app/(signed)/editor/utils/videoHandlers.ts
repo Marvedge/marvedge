@@ -406,6 +406,17 @@ interface ExportVideoParams {
   sidebarDescription: string;
   segments: { start: number; end: number }[];
   zoomSegments: ZoomEffect[];
+  textOverlays: {
+    id: string;
+    text: string;
+    x: number;
+    y: number;
+    startTime: number;
+    endTime: number;
+    fontFamily: string;
+    fontSize: number;
+    color: string;
+  }[];
   setProgress: (p: number) => void;
   aspectRatio?: string;
   browserFrame?: {
@@ -487,6 +498,7 @@ export const exportVideo = async ({
   sidebarDescription,
   segments,
   zoomSegments,
+  textOverlays,
   setProgress,
   aspectRatio,
   browserFrame,
@@ -586,6 +598,7 @@ export const exportVideo = async ({
       demoId: savedDemoId || null,
       segments,
       zoomEffects: zoomSegments,
+      textOverlays,
       duration: duration || 0,
       selectedBackground: backgroundToUse,
       customBackgroundUrl: resolvedCustomBackgroundUrl,

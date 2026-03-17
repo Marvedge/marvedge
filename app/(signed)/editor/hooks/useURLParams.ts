@@ -21,14 +21,7 @@ interface UseURLParamsProps {
   formatTimeForInput: (seconds: number) => string;
 }
 
-const ALLOWED_ASPECT_RATIOS = new Set([
-  "native",
-  "16:9",
-  "1:1",
-  "4:5",
-  "2:3",
-  "9:16",
-]);
+const ALLOWED_ASPECT_RATIOS = new Set(["native", "16:9", "1:1", "4:5", "2:3", "9:16"]);
 
 function normalizeAspectRatio(value: string | null): string | null {
   if (!value) {

@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useCallback, useState, useRef } from "react";
-import { FaBars } from "react-icons/fa6";
+// import { FaBars } from "react-icons/fa6";
 //import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
-import { useSession } from "next-auth/react";
+// import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
 import axios from "axios";
@@ -15,7 +15,7 @@ import axios from "axios";
 // Components
 import SidemenuDashboard from "@/app/components/SidemenuDashboard";
 import EditorSidebar from "@/app/components/EditorSidebar";
-import EditorTopbar from "@/app/components/EditorTopbar";
+// EditorTopbar removed to keep editor viewport scroll-free
 import TimelineRuler from "@/app/components/TimeLine";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
@@ -35,12 +35,25 @@ import { useBackgroundStyle } from "./hooks/useBackgroundStyle";
 import { useTimelineInit } from "./hooks/useTimelineInit";
 
 // Utils
-import { sanitizeFilename } from "@/app/lib/constants";
 import { handleSaveDemo, exportVideo } from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import ZoomModal from "@/app/components/ZoomModal";
 import ExportSettingsModal, { ExportSettings } from "@/app/components/ExportSettingsModal";
 import ExportResultModal from "@/app/components/ExportResultModal";
+
+type TextOverlayItem = {
+  id: string;
+  text: string;
+  x: number; // normalized 0..1
+  y: number; // normalized 0..1
+  w: number; // px
+  h: number; // px
+  startTime: number;
+  endTime: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+};
 
 export default function EditorPage() {
   const router = useRouter();
@@ -123,18 +136,11 @@ export default function EditorPage() {
   } = editorState;
 
   // External hooks
-  const {
-    videoUrl: recordedVideoUrl,
-    mp4Url,
-    thumbnailUrl,
-    processing,
-    resetVideo,
-    downloadBlob,
-  } = useEditor();
+  const { videoUrl: recordedVideoUrl, thumbnailUrl, processing, resetVideo } = useEditor();
 
   const blob = useBlobStore((state) => state.blob);
   const { recordingDuration } = useScreenRecorder();
-  const { data: session } = useSession();
+  // const { data: session } = useSession();
 
   // Format time helper
   const { formatTimeForInput } = useFormatTime();
@@ -188,14 +194,7 @@ export default function EditorPage() {
   });
 
   // Overlays handling
-  const {
-    handleMouseDown,
-    handleMouseUp,
-    handleUndo,
-    handleClear,
-    handleSaveOverlays,
-    handleLoadOverlays,
-  } = useOverlays({
+  const { handleMouseDown, handleMouseUp } = useOverlays({
     canvasRef,
     playerRef,
     tool,
@@ -258,15 +257,7 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSegments, zoomEffects]);
 
-  // User initials
-  const initials = session?.user?.name
-    ? session.user.name
-        .split(" ")
-        .map((part: string) => part[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : session?.user?.email?.[0]?.toUpperCase() || "U";
+  // User initials were previously used in the topbar (now removed).
 
   // No-op setProgress to satisfy required callback
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -370,6 +361,26 @@ export default function EditorPage() {
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showExportResultModal, setShowExportResultModal] = useState(false);
   const [resultActionLoading, setResultActionLoading] = useState(false);
+  const [textOverlayInput, setTextOverlayInput] = useState("Add text");
+  const [textOverlayFontFamily, setTextOverlayFontFamily] = useState("Arial");
+  const [textOverlayFontSize, setTextOverlayFontSize] = useState(24);
+  const [textOverlayColor, setTextOverlayColor] = useState("#ffffff");
+  const [textOverlays, setTextOverlays] = useState<TextOverlayItem[]>([]);
+  const [selectedTextOverlayId, setSelectedTextOverlayId] = useState<string | null>(null);
+  const [draggingTextOverlayId, setDraggingTextOverlayId] = useState<string | null>(null);
+  const [resizingTextOverlayId, setResizingTextOverlayId] = useState<string | null>(null);
+  const textDragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const textResizeStartRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  }>({
+    startX: 0,
+    startY: 0,
+    startW: 240,
+    startH: 80,
+  });
   const [pendingExport, setPendingExport] = useState<{
     exportedUrl: string;
     sourceVideoUrl: string;
@@ -395,12 +406,12 @@ export default function EditorPage() {
       : 16 / 9;
   // Temporarily disabled in preview (UI controls remain visible in sidebar).
   const browserFrameEnabled = false;
-  const browserFrameTopBarHeight = browserFrameMode === "default" ? 34 : browserFrameMode === "minimal" ? 20 : 0;
+  const browserFrameTopBarHeight =
+    browserFrameMode === "default" ? 34 : browserFrameMode === "minimal" ? 20 : 0;
   const browserFrameBorder =
     browserFrameEnabled && browserFrameDrawBorder ? "1px solid rgba(124, 92, 252, 0.45)" : "none";
-  const browserFrameShadow = browserFrameEnabled && browserFrameDrawShadow
-    ? "0 10px 28px rgba(17, 24, 39, 0.28)"
-    : "none";
+  const browserFrameShadow =
+    browserFrameEnabled && browserFrameDrawShadow ? "0 10px 28px rgba(17, 24, 39, 0.28)" : "none";
   const isPortraitPreview = previewRatioValue < 1;
   const stageHeight = selectedBackground
     ? isPortraitPreview
@@ -411,11 +422,7 @@ export default function EditorPage() {
         ? "73%"
         : "84%"
     : "100%";
-  const stageMaxWidth = selectedBackground
-    ? isPortraitPreview
-      ? "95%"
-      : "92%"
-    : "100%";
+  const stageMaxWidth = selectedBackground ? (isPortraitPreview ? "95%" : "92%") : "100%";
 
   const saveExportedVideoRecord = async (
     exportedUrl: string,
@@ -450,6 +457,7 @@ export default function EditorPage() {
       sidebarDescription,
       segments,
       zoomSegments,
+      textOverlays,
       setProgress,
       aspectRatio,
       browserFrame: {
@@ -570,7 +578,7 @@ export default function EditorPage() {
   // Zoom effects are now applied at export time, not immediately
 
   //useEffect(() => {}, [videoUrl]);
-  const [mode, setMode] = useState<"main" | "trim" | "zoom">("main");
+  const [mode, setMode] = useState<"main" | "trim" | "zoom" | "text">("main");
   const [childHandleProgress, setChildHandleProgress] = useState<
     null | ((data: { playedSeconds: number }) => void)
   >(null);
@@ -749,6 +757,242 @@ export default function EditorPage() {
     }
   }, [activeZoomIdx, currentTime, mode, playerRef, zoomSegments]);
 
+  const handleAddTextOverlay = useCallback(() => {
+    const text = textOverlayInput.trim() || "Add text";
+    const start = Math.max(0, currentTime);
+    const defaultDuration = 3;
+    const end =
+      duration > 0 ? Math.min(duration, start + defaultDuration) : start + defaultDuration;
+    const newOverlay: TextOverlayItem = {
+      id: `text-${Date.now()}`,
+      text,
+      x: 0.5,
+      y: 0.5,
+      w: 240,
+      h: 80,
+      startTime: start,
+      endTime: Math.max(end, start + 0.1),
+      fontFamily: textOverlayFontFamily,
+      fontSize: textOverlayFontSize,
+      color: textOverlayColor,
+    };
+
+    setTextOverlays((prev) => [...prev, newOverlay]);
+    setSelectedTextOverlayId(newOverlay.id);
+    setTool("none");
+  }, [
+    currentTime,
+    duration,
+    setTool,
+    textOverlayColor,
+    textOverlayFontFamily,
+    textOverlayFontSize,
+    textOverlayInput,
+  ]);
+
+  const handleTextOverlayInputChange = useCallback(
+    (value: string) => {
+      setTextOverlayInput(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) => (item.id === selectedTextOverlayId ? { ...item, text: value } : item))
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayFontFamilyChange = useCallback(
+    (value: string) => {
+      setTextOverlayFontFamily(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === selectedTextOverlayId ? { ...item, fontFamily: value } : item
+        )
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayFontSizeChange = useCallback(
+    (value: number) => {
+      setTextOverlayFontSize(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === selectedTextOverlayId ? { ...item, fontSize: value } : item
+        )
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayColorChange = useCallback(
+    (value: string) => {
+      setTextOverlayColor(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) => (item.id === selectedTextOverlayId ? { ...item, color: value } : item))
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>, overlayId: string) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+        return;
+      }
+
+      const stage = zoomFocusStageRef.current;
+      if (!stage) {
+        return;
+      }
+
+      const currentOverlay = textOverlays.find((item) => item.id === overlayId);
+      if (!currentOverlay) {
+        return;
+      }
+
+      const rect = stage.getBoundingClientRect();
+      textDragOffsetRef.current = {
+        x: event.clientX - rect.left - currentOverlay.x * rect.width,
+        y: event.clientY - rect.top - currentOverlay.y * rect.height,
+      };
+
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedTextOverlayId(overlayId);
+      setTextOverlayInput(currentOverlay.text);
+      setTextOverlayFontFamily(currentOverlay.fontFamily);
+      setTextOverlayFontSize(currentOverlay.fontSize);
+      setTextOverlayColor(currentOverlay.color);
+      setDraggingTextOverlayId(overlayId);
+    },
+    [textOverlays]
+  );
+
+  const handleTextOverlayResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>, overlayId: string) => {
+      const currentOverlay = textOverlays.find((item) => item.id === overlayId);
+      if (!currentOverlay) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedTextOverlayId(overlayId);
+      setTextOverlayInput(currentOverlay.text);
+      setTextOverlayFontFamily(currentOverlay.fontFamily);
+      setTextOverlayFontSize(currentOverlay.fontSize);
+      setTextOverlayColor(currentOverlay.color);
+      textResizeStartRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startW: currentOverlay.w,
+        startH: currentOverlay.h,
+      };
+      setResizingTextOverlayId(overlayId);
+    },
+    [textOverlays]
+  );
+
+  useEffect(() => {
+    if (!draggingTextOverlayId) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      const stage = zoomFocusStageRef.current;
+      if (!stage) {
+        return;
+      }
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+
+      const x = clamp((event.clientX - rect.left - textDragOffsetRef.current.x) / rect.width, 0, 1);
+      const y = clamp((event.clientY - rect.top - textDragOffsetRef.current.y) / rect.height, 0, 1);
+
+      setTextOverlays((prev) =>
+        prev.map((item) => (item.id === draggingTextOverlayId ? { ...item, x, y } : item))
+      );
+    };
+
+    const onUp = () => {
+      setDraggingTextOverlayId(null);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingTextOverlayId]);
+
+  useEffect(() => {
+    if (!resizingTextOverlayId) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      const deltaX = event.clientX - textResizeStartRef.current.startX;
+      const deltaY = event.clientY - textResizeStartRef.current.startY;
+      const nextW = clamp(Math.round(textResizeStartRef.current.startW + deltaX), 120, 900);
+      const nextH = clamp(Math.round(textResizeStartRef.current.startH + deltaY), 40, 600);
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === resizingTextOverlayId ? { ...item, w: nextW, h: nextH } : item
+        )
+      );
+    };
+
+    const onUp = () => {
+      setResizingTextOverlayId(null);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [resizingTextOverlayId]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      const isTyping =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.isContentEditable;
+      if (isTyping) {
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectedTextOverlayId) {
+          setTextOverlays((prev) => prev.filter((item) => item.id !== selectedTextOverlayId));
+          setSelectedTextOverlayId(null);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedTextOverlayId]);
+
   //const [open, setOpen] = useState(true);
 
   return (
@@ -790,47 +1034,13 @@ export default function EditorPage() {
         }}
       />
 
-      <EditorTopbar
-        onBack={() => router.back()}
-        userInitials={initials}
-        onToggleMenu={toggleDashboardMenu}
-      />
-
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Sidebar for Desktop */}
         <div className="hidden md:block w-80 bg-white shadow-lg z-40">
           <div className="w-full h-full relative">
             <EditorSidebar
               title={sidebarTitle}
-              setTitle={setSidebarTitle}
-              description={sidebarDescription}
-              setDescription={setSidebarDescription}
-              onDownloadWebM={() => {
-                const filename = sanitizeFilename(sidebarTitle) || "clip";
-                if (videoUrl) {
-                  const a = document.createElement("a");
-                  a.href = videoUrl;
-                  a.download = `${filename}.webm`;
-                  a.click();
-                }
-              }}
-              onDownloadMP4={() => {
-                const filename = sanitizeFilename(sidebarTitle) || "clip";
-                if (mp4Url) {
-                  downloadBlob(mp4Url, `${filename}.mp4`);
-                }
-              }}
               onExportWebM={() => setShowExportSettings(true)}
-              tool={tool}
-              setTool={(t: string) => {
-                if (t === "none" || t === "text" || t === "blur" || t === "rect" || t === "arrow") {
-                  setTool(t);
-                }
-              }}
-              handleUndo={handleUndo}
-              handleClear={handleClear}
-              handleSaveOverlays={handleSaveOverlays}
-              handleLoadOverlays={handleLoadOverlays}
               thumbnailUrl={thumbnailUrl || undefined}
               selectedBackground={selectedBackground}
               setSelectedBackground={setSelectedBackground}
@@ -846,6 +1056,19 @@ export default function EditorPage() {
               setBrowserFrameDrawShadow={setBrowserFrameDrawShadow}
               browserFrameDrawBorder={browserFrameDrawBorder}
               setBrowserFrameDrawBorder={setBrowserFrameDrawBorder}
+              textOverlayInput={textOverlayInput}
+              setTextOverlayInput={handleTextOverlayInputChange}
+              textOverlayFontFamily={textOverlayFontFamily}
+              setTextOverlayFontFamily={handleTextOverlayFontFamilyChange}
+              textOverlayFontSize={textOverlayFontSize}
+              setTextOverlayFontSize={handleTextOverlayFontSizeChange}
+              textOverlayColor={textOverlayColor}
+              setTextOverlayColor={handleTextOverlayColorChange}
+              onAddTextOverlay={handleAddTextOverlay}
+              onOpenSaveDemo={() => setShowSaveDemoModal(true)}
+              savingDemo={savingDemo}
+              demoSaved={demoSaved}
+              onToggleDashboardMenu={toggleDashboardMenu}
             />
             {activeZoomIdx != -1 && showZoomModal ? (
               <ZoomModal
@@ -880,41 +1103,7 @@ export default function EditorPage() {
               </button>
               <EditorSidebar
                 title={sidebarTitle}
-                setTitle={setSidebarTitle}
-                description={sidebarDescription}
-                setDescription={setSidebarDescription}
-                onDownloadWebM={() => {
-                  const filename = sanitizeFilename(sidebarTitle) || "clip";
-                  if (videoUrl) {
-                    const a = document.createElement("a");
-                    a.href = videoUrl;
-                    a.download = `${filename}.webm`;
-                    a.click();
-                  }
-                }}
-                onDownloadMP4={() => {
-                  const filename = sanitizeFilename(sidebarTitle) || "clip";
-                  if (mp4Url) {
-                    downloadBlob(mp4Url, `${filename}.mp4`);
-                  }
-                }}
                 onExportWebM={() => setShowExportSettings(true)}
-                tool={tool}
-                setTool={(t: string) => {
-                  if (
-                    t === "none" ||
-                    t === "text" ||
-                    t === "blur" ||
-                    t === "rect" ||
-                    t === "arrow"
-                  ) {
-                    setTool(t);
-                  }
-                }}
-                handleUndo={handleUndo}
-                handleClear={handleClear}
-                handleSaveOverlays={handleSaveOverlays}
-                handleLoadOverlays={handleLoadOverlays}
                 forceShowMobile={true}
                 thumbnailUrl={thumbnailUrl || undefined}
                 selectedBackground={selectedBackground}
@@ -931,100 +1120,39 @@ export default function EditorPage() {
                 setBrowserFrameDrawShadow={setBrowserFrameDrawShadow}
                 browserFrameDrawBorder={browserFrameDrawBorder}
                 setBrowserFrameDrawBorder={setBrowserFrameDrawBorder}
+                textOverlayInput={textOverlayInput}
+                setTextOverlayInput={handleTextOverlayInputChange}
+                textOverlayFontFamily={textOverlayFontFamily}
+                setTextOverlayFontFamily={handleTextOverlayFontFamilyChange}
+                textOverlayFontSize={textOverlayFontSize}
+                setTextOverlayFontSize={handleTextOverlayFontSizeChange}
+                textOverlayColor={textOverlayColor}
+                setTextOverlayColor={handleTextOverlayColorChange}
+                onAddTextOverlay={handleAddTextOverlay}
+                onOpenSaveDemo={() => setShowSaveDemoModal(true)}
+                savingDemo={savingDemo}
+                demoSaved={demoSaved}
+                onToggleDashboardMenu={toggleDashboardMenu}
                 className="w-full h-full"
               />
             </div>
           </div>
         )}
 
-        {/* Mobile Drawer for SidemenuDashboard */}
+        {/* Dashboard menu drawer (all sizes) */}
         {isDashboardMenuOpen && (
-          <div className="fixed inset-0 z-50 flex md:hidden">
-            <div className="fixed inset-0 bg-black bg-opacity-40" onClick={closeDashboardMenu} />
+          <div className="fixed inset-0 z-50 flex">
+            <div
+              className="fixed inset-0 bg-black/10"
+              onClick={closeDashboardMenu}
+              aria-label="Close dashboard menu"
+            />
             <SidemenuDashboard />
           </div>
         )}
 
         <div className="flex-1 min-h-0 overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6 px-4 sm:px-8">
-            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0 ml-auto">
-              {/* Mobile Hamburger Button for SidemenuDashboard */}
-              <div className="relative md:hidden group">
-                <button
-                  className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                  onClick={toggleDashboardMenu}
-                  aria-label="Toggle dashboard menu"
-                >
-                  <FaBars className="text-xl" />
-                  Menu
-                </button>
-                {isDashboardMenuOpen && (
-                  <div className="fixed inset-0 z-50 flex md:hidden">
-                    <div
-                      className="fixed inset-0 bg-black bg-opacity-40"
-                      onClick={() => setIsDashboardMenuOpen(false)}
-                    />
-                    <SidemenuDashboard />
-                  </div>
-                )}
-              </div>
-
-              {/* <button
-                className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setShowSaveDemoModal(true)}
-              >
-                <span className="text-xl"></span> Save Demo
-              </button> */}
-
-              {/* Editor Sidebar Toggle for Mobile */}
-              <button
-                className="md:hidden cursor-pointer flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setIsSidebarOpen(true)}
-              >
-                <FaBars className="text-xl" />
-                Editor
-              </button>
-            </div>
-          </div>
-
-          {(sidebarTitle || sidebarDescription) && !demoSaved && (
-            <div className="bg-white p-4 mx-4 flex items-center justify-between">
-              <div className="flex flex-col">
-                {sidebarTitle && (
-                  <div>
-                    {/* <span className="text-sm font-medium text-gray-500">Title:</span> */}
-                    <span className="text-[32px] font-medium text-[#261753]">{sidebarTitle}</span>
-                  </div>
-                )}
-                {/* {sidebarDescription && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Description:</span>
-                    <span className="text-[rgba(0,0,0,0.43)] text-lg">{sidebarDescription}</span>
-                  </div>
-                )} */}
-              </div>
-              <button
-                className="flex cursor-pointer items-center justify-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setShowSaveDemoModal(true)}
-                disabled={demoSaved || savingDemo}
-              >
-                <span className="text-xl"></span>
-                {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
-              </button>
-            </div>
-          )}
-          {videoUrl && !demoSaved && !sidebarTitle && (
-            <div className="flex justify-center mt-6 mb-6 ml-">
-              <button
-                onClick={() => setShowSaveDemoModal(true)}
-                disabled={demoSaved || savingDemo}
-                className={`px-8 py-3 rounded-lg font-semibold shadow transition text-base whitespace-nowrap ${demoSaved || savingDemo ? "bg-[#8A76FC] text-white opacity-70 cursor-not-allowed" : "bg-[#8A76FC] text-white hover:bg-[#7A66EC]"}`}
-              >
-                {savingDemo ? "Saving..." : demoSaved ? "Saved" : "Save Demo"}
-              </button>
-            </div>
-          )}
-          <div className="mt-5"></div>
+          <div className="mt-3" />
           {/* Video Wrapper */}
           <div
             className={
@@ -1239,6 +1367,151 @@ export default function EditorPage() {
                       borderRadius: browserFrameEnabled ? "0 0 1.25rem 1.25rem" : "1.25rem",
                     }}
                   />
+
+                  <div
+                    className="absolute inset-0 z-50"
+                    style={{
+                      pointerEvents:
+                        (tool === "none" || tool === "text") && !shouldShowZoomFocusBox
+                          ? "auto"
+                          : "none",
+                    }}
+                  >
+                    {textOverlays
+                      .filter(
+                        (overlay) =>
+                          currentTime >= overlay.startTime && currentTime <= overlay.endTime
+                      )
+                      .map((overlay) => {
+                        const isSelected = selectedTextOverlayId === overlay.id;
+                        return (
+                          <div
+                            key={overlay.id}
+                            className={`absolute rounded-md ${
+                              isSelected
+                                ? "border border-[#7C5CFC]/80"
+                                : "border border-transparent"
+                            }`}
+                            style={{
+                              left: `${overlay.x * 100}%`,
+                              top: `${overlay.y * 100}%`,
+                              transform: "translate(-50%, -50%)",
+                              cursor:
+                                resizingTextOverlayId === overlay.id
+                                  ? "nwse-resize"
+                                  : draggingTextOverlayId === overlay.id
+                                    ? "grabbing"
+                                    : "grab",
+                              userSelect: "none",
+                              padding: "2px 4px",
+                              width: `${overlay.w}px`,
+                              height: `${overlay.h}px`,
+                            }}
+                            onMouseDown={(event) => handleTextOverlayMouseDown(event, overlay.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedTextOverlayId(overlay.id);
+                              setTextOverlayInput(overlay.text);
+                              setTextOverlayFontFamily(overlay.fontFamily);
+                              setTextOverlayFontSize(overlay.fontSize);
+                              setTextOverlayColor(overlay.color);
+                              setMode("text");
+                            }}
+                          >
+                            {isSelected && (
+                              <div
+                                className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#7C5CFC] text-white p-1 rounded cursor-grab shadow-md"
+                                onMouseDown={(e) => {
+                                  // Trigger standard drag logic, but prevent default so it doesn't blur textarea
+                                  handleTextOverlayMouseDown(e, overlay.id);
+                                }}
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 8h16M4 16h16"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            {isSelected ? (
+                              <textarea
+                                value={overlay.text}
+                                rows={Math.max(1, overlay.text.split("\n").length)}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setTextOverlays((prev) =>
+                                    prev.map((item) =>
+                                      item.id === overlay.id ? { ...item, text: value } : item
+                                    )
+                                  );
+                                  setTextOverlayInput(value);
+                                }}
+                                className="w-full h-full bg-transparent outline-none border border-dashed border-[#A594F9] text-white resize-none"
+                                style={{
+                                  fontFamily: overlay.fontFamily,
+                                  fontSize: `${overlay.fontSize}px`,
+                                  color: overlay.color,
+                                  lineHeight: 1.2,
+                                  textShadow: "0 1px 2px rgba(0,0,0,0.55)",
+                                  overflow: "auto",
+                                  padding: "2px 4px",
+                                }}
+                              />
+                            ) : (
+                              <div
+                                className="whitespace-pre-wrap break-words w-full h-full"
+                                style={{
+                                  fontFamily: overlay.fontFamily,
+                                  fontSize: `${overlay.fontSize}px`,
+                                  color: overlay.color,
+                                  lineHeight: 1.2,
+                                  textShadow: "0 1px 2px rgba(0,0,0,0.55)",
+                                  overflow: "hidden",
+                                  padding: "2px 4px",
+                                }}
+                              >
+                                {overlay.text}
+                              </div>
+                            )}
+                            {isSelected && (
+                              <button
+                                type="button"
+                                aria-label="Delete text"
+                                className="absolute -top-7 right-0 bg-red-500 text-white px-2 py-1 rounded shadow hover:bg-red-600"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setTextOverlays((prev) =>
+                                    prev.filter((item) => item.id !== overlay.id)
+                                  );
+                                  setSelectedTextOverlayId(null);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            )}
+                            {isSelected && (
+                              <button
+                                type="button"
+                                aria-label="Resize text"
+                                className="absolute -right-2 -bottom-2 h-4 w-4 rounded-full border border-white bg-[#7C5CFC] shadow"
+                                onMouseDown={(event) =>
+                                  handleTextOverlayResizeMouseDown(event, overlay.id)
+                                }
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               </div>
 
@@ -1332,6 +1605,16 @@ export default function EditorPage() {
                   zoomLevelDepth={zoomLevel}
                   segments={segments}
                   setSegments={setSegments}
+                  textOverlays={textOverlays}
+                  setTextOverlays={setTextOverlays}
+                  selectedTextOverlayId={selectedTextOverlayId}
+                  setSelectedTextOverlayId={setSelectedTextOverlayId}
+                  setTextOverlayInspectorValues={(overlay) => {
+                    setTextOverlayInput(overlay.text);
+                    setTextOverlayFontFamily(overlay.fontFamily);
+                    setTextOverlayFontSize(overlay.fontSize);
+                    setTextOverlayColor(overlay.color);
+                  }}
                 />
               ) : (
                 <div className="w-full max-w-6xl mx-auto">

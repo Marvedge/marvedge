@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
       videoUrl,
       segments,
       zoomEffects,
+      textOverlays,
       selectedBackground,
       customBackgroundUrl,
       imageMap,
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
         jobData: {
           segments: segments || [],
           zoomEffects: zoomEffects || [],
+          textOverlays: textOverlays || [],
           selectedBackground: selectedBackground || null,
           customBackgroundUrl: customBackgroundUrl || null,
           imageMap: imageMap || {},
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest) {
         videoUrl,
         segments: segments || [],
         zoomEffects: zoomEffects || [],
+        textOverlays: textOverlays || [],
         selectedBackground: selectedBackground || null,
         customBackgroundUrl: customBackgroundUrl || null,
         imageMap: imageMap || {},
