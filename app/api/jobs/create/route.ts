@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
       imageMap,
       demoId,
       settings,
+      aspectRatio,
+      browserFrame,
     } = data;
 
     if (!videoUrl) {
@@ -58,6 +60,12 @@ export async function POST(req: NextRequest) {
           customBackgroundUrl: customBackgroundUrl || null,
           imageMap: imageMap || {},
           settings: settings || null,
+          aspectRatio: aspectRatio || "native",
+          browserFrame: browserFrame || {
+            mode: "default",
+            drawShadow: true,
+            drawBorder: false,
+          },
         },
       },
     });
@@ -76,6 +84,12 @@ export async function POST(req: NextRequest) {
         customBackgroundUrl: customBackgroundUrl || null,
         imageMap: imageMap || {},
         settings: settings || null,
+        aspectRatio: aspectRatio || "native",
+        browserFrame: browserFrame || {
+          mode: "default",
+          drawShadow: true,
+          drawBorder: false,
+        },
       },
       {
         jobId: jobRecord.id, // BullMQ job ID matches DB Job ID

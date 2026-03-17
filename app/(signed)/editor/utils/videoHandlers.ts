@@ -37,6 +37,12 @@ interface SaveDemoParams {
   currentSegments: Segment[];
   zoomEffects: ZoomEffect[];
   selectedBackground?: string | null;
+  aspectRatio?: string;
+  browserFrame?: {
+    mode: "default" | "minimal" | "hidden";
+    drawShadow: boolean;
+    drawBorder: boolean;
+  };
   setSavingDemo: (saving: boolean) => void;
   setSidebarTitle: (title: string) => void;
   setSidebarDescription: (description: string) => void;
@@ -57,6 +63,8 @@ export async function handleSaveDemo(
     currentSegments,
     zoomEffects,
     selectedBackground,
+    aspectRatio,
+    browserFrame,
     setSavingDemo,
     setSidebarTitle,
     setSidebarDescription,
@@ -140,6 +148,12 @@ export async function handleSaveDemo(
       segments: segmentsToSave,
       zoom: zoomEffects,
       background: selectedBackground ?? null,
+      aspectRatio: aspectRatio || "native",
+      browserFrame: browserFrame || {
+        mode: "default",
+        drawShadow: true,
+        drawBorder: false,
+      },
     };
 
     try {
@@ -393,6 +407,12 @@ interface ExportVideoParams {
   segments: { start: number; end: number }[];
   zoomSegments: ZoomEffect[];
   setProgress: (p: number) => void;
+  aspectRatio?: string;
+  browserFrame?: {
+    mode: "default" | "minimal" | "hidden";
+    drawShadow: boolean;
+    drawBorder: boolean;
+  };
   duration?: number;
   savedDemoId?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -403,6 +423,7 @@ interface ExportVideoResult {
   exportedUrl: string;
   sourceVideoUrl: string;
   downloadAsMp4: (url: string) => Promise<void>;
+  uploadedSourceVideo: boolean;
 }
 
 async function uploadImageBlobToCloudinary(imageBlob: Blob): Promise<string> {
@@ -467,6 +488,8 @@ export const exportVideo = async ({
   segments,
   zoomSegments,
   setProgress,
+  aspectRatio,
+  browserFrame,
   duration,
   savedDemoId,
   settings,
@@ -480,6 +503,7 @@ export const exportVideo = async ({
   };
 
   try {
+    let uploadedSourceVideo = false;
     let backgroundToUse = "transparent";
     let resolvedCustomBackgroundUrl: string | null = null;
     if (selectedBackground === "custom" && customBackgroundUrl) {
@@ -544,6 +568,7 @@ export const exportVideo = async ({
         toast.loading("Uploading raw video to Cloudinary...", { id: toastId });
         const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
         cloudinaryVideoUrl = cloudRes.data.secure_url;
+        uploadedSourceVideo = true;
       } catch (cloudError) {
         console.error("Error uploading to Cloudinary:", cloudError);
         toast.error("Failed to upload video to Cloudinary", { id: toastId });
@@ -564,6 +589,12 @@ export const exportVideo = async ({
       duration: duration || 0,
       selectedBackground: backgroundToUse,
       customBackgroundUrl: resolvedCustomBackgroundUrl,
+      aspectRatio: aspectRatio || "native",
+      browserFrame: browserFrame || {
+        mode: "default",
+        drawShadow: true,
+        drawBorder: false,
+      },
       imageMap,
       settings: exportSettings,
     });
@@ -635,6 +666,7 @@ export const exportVideo = async ({
             exportedUrl,
             sourceVideoUrl: cloudinaryVideoUrl,
             downloadAsMp4,
+            uploadedSourceVideo,
           };
         }
 

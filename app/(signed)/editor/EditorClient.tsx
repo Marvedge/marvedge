@@ -112,6 +112,14 @@ export default function EditorPage() {
     canvasRef,
     videoContainerRef,
     setLoadedSegments,
+    aspectRatio,
+    setAspectRatio,
+    browserFrameMode,
+    setBrowserFrameMode,
+    browserFrameDrawShadow,
+    setBrowserFrameDrawShadow,
+    browserFrameDrawBorder,
+    setBrowserFrameDrawBorder,
   } = editorState;
 
   // External hooks
@@ -149,6 +157,10 @@ export default function EditorPage() {
     setCurrentSegments,
     setZoomEffects,
     setSavedDemoId,
+    setAspectRatio,
+    setBrowserFrameMode,
+    setBrowserFrameDrawShadow,
+    setBrowserFrameDrawBorder,
     formatTimeForInput,
   });
 
@@ -272,6 +284,21 @@ export default function EditorPage() {
     [formatTimeForInput, setInputStartTime, setInputEndTime]
   );
 
+  function handleResetTimeline() {
+    resetVideo();
+    setPlaying(false);
+    setMode("main");
+    setSegments([]);
+    setZoomSegments([]);
+    setActiveZoomIdx(-1);
+    setCurrentTime(0);
+    playerRef.current?.seekTo(0, "seconds");
+    setTimelineStartTime(0);
+    setTimelineEndTime(duration);
+    setInputStartTime(formatTimeForInput(0));
+    setInputEndTime(formatTimeForInput(duration));
+  }
+
   // Dashboard menu handlers
   const closeDashboardMenu = () => {
     setIsDashboardMenuOpen(false);
@@ -309,6 +336,12 @@ export default function EditorPage() {
       })),
       zoomEffects: zoomSegments,
       selectedBackground,
+      aspectRatio,
+      browserFrame: {
+        mode: browserFrameMode,
+        drawShadow: browserFrameDrawShadow,
+        drawBorder: browserFrameDrawBorder,
+      },
       setSavingDemo,
       setSidebarTitle,
       setSidebarDescription,
@@ -333,15 +366,56 @@ export default function EditorPage() {
   // };
 
   const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
+  const [nativeAspectRatio, setNativeAspectRatio] = useState("16/9");
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showExportResultModal, setShowExportResultModal] = useState(false);
-  const [savingShareLink, setSavingShareLink] = useState(false);
+  const [resultActionLoading, setResultActionLoading] = useState(false);
   const [pendingExport, setPendingExport] = useState<{
     exportedUrl: string;
     sourceVideoUrl: string;
     downloadAsMp4: (url: string) => Promise<void>;
+    uploadedSourceVideo: boolean;
     settings: ExportSettings;
+    demoId: string | null;
   } | null>(null);
+  const hasCanvasBackground =
+    !!selectedBackground &&
+    selectedBackground !== "none" &&
+    selectedBackground !== "hidden" &&
+    selectedBackground !== "transparent";
+  const previewObjectFit = "contain";
+  const previewFrameAspectRatio =
+    aspectRatio === "native" ? nativeAspectRatio : aspectRatio.replace(":", "/");
+  const ratioParts = previewFrameAspectRatio.split("/");
+  const ratioW = Number(ratioParts[0]);
+  const ratioH = Number(ratioParts[1]);
+  const previewRatioValue =
+    Number.isFinite(ratioW) && Number.isFinite(ratioH) && ratioW > 0 && ratioH > 0
+      ? ratioW / ratioH
+      : 16 / 9;
+  // Temporarily disabled in preview (UI controls remain visible in sidebar).
+  const browserFrameEnabled = false;
+  const browserFrameTopBarHeight = browserFrameMode === "default" ? 34 : browserFrameMode === "minimal" ? 20 : 0;
+  const browserFrameBorder =
+    browserFrameEnabled && browserFrameDrawBorder ? "1px solid rgba(124, 92, 252, 0.45)" : "none";
+  const browserFrameShadow = browserFrameEnabled && browserFrameDrawShadow
+    ? "0 10px 28px rgba(17, 24, 39, 0.28)"
+    : "none";
+  const isPortraitPreview = previewRatioValue < 1;
+  const stageHeight = selectedBackground
+    ? isPortraitPreview
+      ? isFullscreen
+        ? "82%"
+        : "92%"
+      : isFullscreen
+        ? "73%"
+        : "84%"
+    : "100%";
+  const stageMaxWidth = selectedBackground
+    ? isPortraitPreview
+      ? "95%"
+      : "92%"
+    : "100%";
 
   const saveExportedVideoRecord = async (
     exportedUrl: string,
@@ -377,33 +451,24 @@ export default function EditorPage() {
       segments,
       zoomSegments,
       setProgress,
+      aspectRatio,
+      browserFrame: {
+        mode: browserFrameMode,
+        drawShadow: browserFrameDrawShadow,
+        drawBorder: browserFrameDrawBorder,
+      },
       duration,
       savedDemoId: editorState.savedDemoId,
       settings,
     });
 
     if (result) {
-      if (editorState.savedDemoId) {
-        try {
-          await saveExportedVideoRecord(
-            result.exportedUrl,
-            result.sourceVideoUrl,
-            settings,
-            editorState.savedDemoId
-          );
-          toast.success("Exported video updated in Exported Videos");
-        } catch (saveError) {
-          console.error("Failed saving exported video record:", saveError);
-          toast.error("Export completed, but saving exported entry failed");
-        }
-        await result.downloadAsMp4(result.exportedUrl);
-      } else {
-        setPendingExport({
-          ...result,
-          settings,
-        });
-        setShowExportResultModal(true);
-      }
+      setPendingExport({
+        ...result,
+        settings,
+        demoId: editorState.savedDemoId ?? null,
+      });
+      setShowExportResultModal(true);
     }
 
     // Clean up the object URL after export
@@ -412,13 +477,50 @@ export default function EditorPage() {
     }
   };
 
+  useEffect(() => {
+    if (!videoUrl) {
+      setNativeAspectRatio("16/9");
+      return;
+    }
+
+    const probeVideo = document.createElement("video");
+    probeVideo.preload = "metadata";
+    probeVideo.src = videoUrl;
+
+    const handleLoaded = () => {
+      if (probeVideo.videoWidth > 0 && probeVideo.videoHeight > 0) {
+        setNativeAspectRatio(`${probeVideo.videoWidth}/${probeVideo.videoHeight}`);
+      }
+    };
+
+    probeVideo.addEventListener("loadedmetadata", handleLoaded);
+    return () => {
+      probeVideo.removeEventListener("loadedmetadata", handleLoaded);
+      probeVideo.src = "";
+    };
+  }, [videoUrl]);
+
   const handleDownloadMp4Only = async () => {
     if (!pendingExport) {
       return;
     }
-    await pendingExport.downloadAsMp4(pendingExport.exportedUrl);
-    setShowExportResultModal(false);
-    setPendingExport(null);
+    try {
+      setResultActionLoading(true);
+      await pendingExport.downloadAsMp4(pendingExport.exportedUrl);
+      await axios.post("/api/exported-videos/cleanup", {
+        exportedUrl: pendingExport.exportedUrl,
+        sourceVideoUrl: pendingExport.uploadedSourceVideo ? pendingExport.sourceVideoUrl : null,
+        demoId: pendingExport.demoId,
+      });
+      toast.success("Downloaded MP4 without saving share link");
+      setShowExportResultModal(false);
+      setPendingExport(null);
+    } catch (cleanupError) {
+      console.error("Failed during download-only cleanup:", cleanupError);
+      toast.error("MP4 downloaded, but cleanup failed");
+    } finally {
+      setResultActionLoading(false);
+    }
   };
 
   const handleSaveShareLink = async () => {
@@ -427,12 +529,12 @@ export default function EditorPage() {
     }
 
     try {
-      setSavingShareLink(true);
+      setResultActionLoading(true);
       await saveExportedVideoRecord(
         pendingExport.exportedUrl,
         pendingExport.sourceVideoUrl,
         pendingExport.settings,
-        null
+        pendingExport.demoId
       );
       await navigator.clipboard.writeText(pendingExport.exportedUrl);
       toast.success("Share link saved in Exported Videos and copied");
@@ -442,7 +544,7 @@ export default function EditorPage() {
       console.error("Failed to save share link:", saveError);
       toast.error("Failed to save share link");
     } finally {
-      setSavingShareLink(false);
+      setResultActionLoading(false);
     }
   };
 
@@ -660,9 +762,9 @@ export default function EditorPage() {
       <ExportResultModal
         isOpen={showExportResultModal}
         exportedUrl={pendingExport?.exportedUrl || ""}
-        loading={savingShareLink}
+        loading={resultActionLoading}
         onClose={() => {
-          if (savingShareLink) {
+          if (resultActionLoading) {
             return;
           }
           setShowExportResultModal(false);
@@ -736,6 +838,14 @@ export default function EditorPage() {
               setBackgroundType={setBackgroundType}
               customBackground={customBackground}
               setCustomBackground={setCustomBackground}
+              aspectRatio={aspectRatio}
+              setAspectRatio={setAspectRatio}
+              browserFrameMode={browserFrameMode}
+              setBrowserFrameMode={setBrowserFrameMode}
+              browserFrameDrawShadow={browserFrameDrawShadow}
+              setBrowserFrameDrawShadow={setBrowserFrameDrawShadow}
+              browserFrameDrawBorder={browserFrameDrawBorder}
+              setBrowserFrameDrawBorder={setBrowserFrameDrawBorder}
             />
             {activeZoomIdx != -1 && showZoomModal ? (
               <ZoomModal
@@ -813,6 +923,14 @@ export default function EditorPage() {
                 setBackgroundType={setBackgroundType}
                 customBackground={customBackground}
                 setCustomBackground={setCustomBackground}
+                aspectRatio={aspectRatio}
+                setAspectRatio={setAspectRatio}
+                browserFrameMode={browserFrameMode}
+                setBrowserFrameMode={setBrowserFrameMode}
+                browserFrameDrawShadow={browserFrameDrawShadow}
+                setBrowserFrameDrawShadow={setBrowserFrameDrawShadow}
+                browserFrameDrawBorder={browserFrameDrawBorder}
+                setBrowserFrameDrawBorder={setBrowserFrameDrawBorder}
                 className="w-full h-full"
               />
             </div>
@@ -910,17 +1028,18 @@ export default function EditorPage() {
           {/* Video Wrapper */}
           <div
             className={
-              "flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl bg-transparent"
+              "flex flex-col items-center w-full max-w-[1200px] mx-auto rounded-2xl bg-transparent"
             }
             //style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
           >
             {/* Video container */}
             <div
               ref={videoContainerRef}
-              className={`relative w-[1000px] sm:h-auto sm:aspect-video rounded-2xl border ${
+              className={`relative w-full max-w-[1120px] sm:h-auto rounded-2xl border ${
                 isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
               } flex flex-col items-center justify-center mb-1 transition-all duration-300`}
               style={{
+                aspectRatio: "16 / 9",
                 minHeight: "160px",
                 padding: selectedBackground ? "0px" : "5px",
                 boxShadow: "0 4px 24px 0 #E6E1FA",
@@ -928,164 +1047,200 @@ export default function EditorPage() {
               }}
             >
               <div
-                ref={zoomFocusStageRef}
                 className=""
                 style={{
-                  width: selectedBackground ? "90%" : "100%",
-                  height: selectedBackground
-                    ? `${isFullscreen ? "73%" : "81%"}`
-                    : `${isFullscreen ? "81%" : "100%"}`,
+                  width: "auto",
+                  aspectRatio: previewFrameAspectRatio,
+                  height: stageHeight,
+                  maxWidth: stageMaxWidth,
+                  margin: "0 auto",
                   position: "relative",
-                  //zIndex: 1,
+                  display: "flex",
+                  flexDirection: "column",
                   borderRadius: "1.25rem",
                   overflow: "hidden",
-                  background: "#F6F3FF",
+                  background: hasCanvasBackground ? "#F6F3FF" : "#000000",
+                  border: browserFrameBorder,
+                  boxShadow: browserFrameShadow,
                   transition: "width 0.3s ease, height 0.3s ease",
-                  //transform: "scale(1)",
                 }}
               >
-                <div
-                  className="absolute w-full h-fit z-10"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    // width: "100%",
-                    height: "100%",
-                    //border: "4px solid green",
-                    borderRadius: "1.25rem",
-                    transform: shouldApplyZoomPreview
-                      ? `scale(${previewZoomScale}) translate(-${zoomTranslateX}%, -${zoomTranslateY}%)`
-                      : "scale(1)",
-                    transformOrigin: "0% 0%",
-                    transition: isDraggingZoomTarget ? "none" : "transform 0.4s ease",
-                  }}
-                >
-                  <div className="">
-                    {/*In FullScreen video require one div, so don't remove div */}
-                    {videoUrl ? (
-                      <ReactPlayer
-                        key={videoUrl}
-                        ref={playerRef}
-                        url={videoUrl}
-                        playing={playing}
-                        controls={false}
-                        muted={false}
-                        volume={volume}
-                        width="100%"
-                        height="100%"
-                        // style={{
-                        // objectFit: "contain",
-                        // background: "#F6F3FF",
-                        // }}
-                        config={{
-                          file: {
-                            attributes: {
-                              crossOrigin: "anonymous",
-                            },
-                          },
-                        }}
-                        onError={(e) => console.error("Video failed to load", e)}
-                        onProgress={(data) => {
-                          setCurrentTime(data.playedSeconds);
-                          childHandleProgress?.(data);
-                        }}
-                        onEnded={() => setPlaying(false)}
-                        progressInterval={50}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                        <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
-                          <svg
-                            className="w-8 h-8 text-[#7C5CFC]"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                          </svg>
-                        </div>
-                        <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
-                          No Video Selected
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
-                        <div className="space-y-2 text-sm text-gray-500">
-                          <p>
-                            • Go to <strong>Dashboard</strong> and edit an existing demo
-                          </p>
-                          <p>
-                            • Or go to <strong>Recorder</strong> to record/upload a new video
-                          </p>
-                        </div>
-                        <div className="mt-6 flex gap-3">
-                          <button
-                            onClick={() => router.push("/dashboard")}
-                            className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
-                          >
-                            Go to Dashboard
-                          </button>
-                          <button
-                            onClick={() => router.push("/recorder")}
-                            className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
-                          >
-                            Go to Recorder
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {shouldShowZoomFocusBox && (
+                {browserFrameEnabled && (
                   <div
-                    className="absolute inset-0 z-50 rounded-2xl"
-                    onMouseDown={handleZoomTargetMouseDown}
+                    className="w-full shrink-0 px-3"
                     style={{
-                      cursor: isDraggingZoomTarget ? "grabbing" : "grab",
-                      userSelect: "none",
+                      height: `${browserFrameTopBarHeight}px`,
+                      background:
+                        browserFrameMode === "default"
+                          ? "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(17,24,39,0.98) 100%)"
+                          : "rgba(17, 24, 39, 0.96)",
+                      borderBottom: "1px solid rgba(148,163,184,0.24)",
+                      display: "flex",
+                      alignItems: "center",
                     }}
                   >
-                    <div
-                      className="absolute rounded-lg pointer-events-none"
-                      style={{
-                        width: `${zoomFocusSizePct}%`,
-                        height: `${zoomFocusSizePct}%`,
-                        left: `${activeEditedZoomSegment.x * 100}%`,
-                        top: `${activeEditedZoomSegment.y * 100}%`,
-                        transform: "translate(-50%, -50%)",
-                        border: "2px solid #ef4444",
-                        boxShadow: "0 0 0 1px rgba(255,255,255,0.55) inset",
-                        background: "rgba(239,68,68,0.08)",
-                        transition: isDraggingZoomTarget
-                          ? "none"
-                          : "left 0.12s ease, top 0.12s ease",
-                      }}
-                    />
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-white text-xs font-medium pointer-events-none backdrop-blur-sm">
-                      Drag to adjust zoom
-                    </div>
+                    {browserFrameMode === "default" ? (
+                      <div className="w-full flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
+                        </div>
+                        <div className="flex-1 h-6 rounded-md bg-white/10 border border-white/10" />
+                      </div>
+                    ) : (
+                      <div className="w-full h-1.5 rounded-full bg-white/15" />
+                    )}
                   </div>
                 )}
-              </div>
 
-              {/* Canvas stays on top of video */}
-              <canvas
-                ref={canvasRef}
-                className={`absolute top-0 left-0 w-full h-full rounded-2xl ${
-                  tool !== "none" ? "z-40 cursor-crosshair" : "z-0 cursor-default"
-                }`}
-                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
-                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
-                style={{
-                  pointerEvents: tool !== "none" ? "auto" : "none",
-                  borderRadius: "1.25rem",
-                }}
-              />
+                <div
+                  ref={zoomFocusStageRef}
+                  className="relative w-full flex-1 min-h-0"
+                  style={{
+                    borderRadius: browserFrameEnabled ? "0 0 1.25rem 1.25rem" : "1.25rem",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    className="absolute inset-0 z-10"
+                    style={{
+                      transform: shouldApplyZoomPreview
+                        ? `scale(${previewZoomScale}) translate(-${zoomTranslateX}%, -${zoomTranslateY}%)`
+                        : "scale(1)",
+                      transformOrigin: "0% 0%",
+                      transition: isDraggingZoomTarget ? "none" : "transform 0.4s ease",
+                      backgroundColor: hasCanvasBackground ? "#F1ECFF" : "#000000",
+                    }}
+                  >
+                    <div className="w-full h-full">
+                      {/*In FullScreen video require one div, so don't remove div */}
+                      {videoUrl ? (
+                        <ReactPlayer
+                          key={videoUrl}
+                          ref={playerRef}
+                          url={videoUrl}
+                          playing={playing}
+                          controls={false}
+                          muted={false}
+                          volume={volume}
+                          width="100%"
+                          height="100%"
+                          config={{
+                            file: {
+                              attributes: {
+                                crossOrigin: "anonymous",
+                                style: {
+                                  objectFit: previewObjectFit,
+                                  objectPosition: "center center",
+                                  width: "100%",
+                                  height: "100%",
+                                  backgroundColor: hasCanvasBackground ? "#F1ECFF" : "#000000",
+                                },
+                              },
+                            },
+                          }}
+                          onError={(e) => console.error("Video failed to load", e)}
+                          onProgress={(data) => {
+                            setCurrentTime(data.playedSeconds);
+                            childHandleProgress?.(data);
+                          }}
+                          onEnded={() => setPlaying(false)}
+                          progressInterval={50}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                          <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
+                            <svg
+                              className="w-8 h-8 text-[#7C5CFC]"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
+                            No Video Selected
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
+                          <div className="space-y-2 text-sm text-gray-500">
+                            <p>
+                              • Go to <strong>Dashboard</strong> and edit an existing demo
+                            </p>
+                            <p>
+                              • Or go to <strong>Recorder</strong> to record/upload a new video
+                            </p>
+                          </div>
+                          <div className="mt-6 flex gap-3">
+                            <button
+                              onClick={() => router.push("/dashboard")}
+                              className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
+                            >
+                              Go to Dashboard
+                            </button>
+                            <button
+                              onClick={() => router.push("/recorder")}
+                              className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
+                            >
+                              Go to Recorder
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {shouldShowZoomFocusBox && (
+                    <div
+                      className="absolute inset-0 z-50"
+                      onMouseDown={handleZoomTargetMouseDown}
+                      style={{
+                        cursor: isDraggingZoomTarget ? "grabbing" : "grab",
+                        userSelect: "none",
+                      }}
+                    >
+                      <div
+                        className="absolute rounded-lg pointer-events-none"
+                        style={{
+                          width: `${zoomFocusSizePct}%`,
+                          height: `${zoomFocusSizePct}%`,
+                          left: `${activeEditedZoomSegment.x * 100}%`,
+                          top: `${activeEditedZoomSegment.y * 100}%`,
+                          transform: "translate(-50%, -50%)",
+                          border: "2px solid #ef4444",
+                          boxShadow: "0 0 0 1px rgba(255,255,255,0.55) inset",
+                          background: "rgba(239,68,68,0.08)",
+                          transition: isDraggingZoomTarget
+                            ? "none"
+                            : "left 0.12s ease, top 0.12s ease",
+                        }}
+                      />
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-white text-xs font-medium pointer-events-none backdrop-blur-sm">
+                        Drag to adjust zoom
+                      </div>
+                    </div>
+                  )}
+
+                  <canvas
+                    ref={canvasRef}
+                    className={`absolute top-0 left-0 w-full h-full ${
+                      tool !== "none" ? "z-40 cursor-crosshair" : "z-0 cursor-default"
+                    }`}
+                    onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+                    onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+                    style={{
+                      pointerEvents: tool !== "none" ? "auto" : "none",
+                      borderRadius: browserFrameEnabled ? "0 0 1.25rem 1.25rem" : "1.25rem",
+                    }}
+                  />
+                </div>
+              </div>
 
               {/* Controls container - only show when video is available */}
               {videoUrl && (
@@ -1163,7 +1318,7 @@ export default function EditorPage() {
                     handleTimelineChange(timelineStartTime, value);
                   }}
                   processing={processing}
-                  onResetVideo={resetVideo}
+                  onResetVideo={handleResetTimeline}
                   playing={playing}
                   setPlaying={setPlaying}
                   mode={mode}

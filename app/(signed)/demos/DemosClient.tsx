@@ -37,6 +37,8 @@ interface Demo {
   editing?: {
     segments?: unknown;
     zoom?: unknown;
+    aspectRatio?: string;
+    browserFrame?: unknown;
   };
 }
 
@@ -114,6 +116,12 @@ export default function DemosPage() {
       }
       if (demo.editing.zoom) {
         params.append("zoom", JSON.stringify(demo.editing.zoom));
+      }
+      if (demo.editing.aspectRatio) {
+        params.append("aspectRatio", demo.editing.aspectRatio);
+      }
+      if (demo.editing.browserFrame) {
+        params.append("browserFrame", JSON.stringify(demo.editing.browserFrame));
       }
     } else if (demo.segments) {
       // fallback for old demos

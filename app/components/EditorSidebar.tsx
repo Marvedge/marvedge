@@ -23,6 +23,14 @@ interface EditorSidebarProps {
   setBackgroundType?: (type: string) => void;
   customBackground?: File | null;
   setCustomBackground?: (file: File | null) => void;
+  aspectRatio?: string;
+  setAspectRatio?: (ratio: string) => void;
+  browserFrameMode?: "default" | "minimal" | "hidden";
+  setBrowserFrameMode?: (mode: "default" | "minimal" | "hidden") => void;
+  browserFrameDrawShadow?: boolean;
+  setBrowserFrameDrawShadow?: (enabled: boolean) => void;
+  browserFrameDrawBorder?: boolean;
+  setBrowserFrameDrawBorder?: (enabled: boolean) => void;
   className?: string;
 }
 
@@ -51,6 +59,14 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   setBackgroundType,
   customBackground,
   setCustomBackground,
+  aspectRatio = "native",
+  setAspectRatio,
+  browserFrameMode = "default",
+  setBrowserFrameMode,
+  browserFrameDrawShadow = true,
+  setBrowserFrameDrawShadow,
+  browserFrameDrawBorder = false,
+  setBrowserFrameDrawBorder,
 }) => {
   //const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<MainTab>("background");
@@ -470,63 +486,98 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
 
       {/* TOOLS TAB */}
       {activeTab === "tools" && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-[#A594F9]">Tools</h2>
-
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              onClick={() => setTool("none")}
-              className={`w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide ${
-                tool === "none"
-                  ? "bg-[#7C5CFC] text-white"
-                  : "bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#d1c6fa]"
-              }`}
-            >
-              SELECT
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {["blur", "rect", "arrow", "text"].map((t) => (
-              <button
-                key={t}
-                onClick={() => setTool(t)}
-                className={`w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide ${
-                  tool === t
-                    ? "bg-[#7C5CFC] text-white"
-                    : "bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#d1c6fa]"
-                }`}
+        <div className="space-y-6">
+          {/* Aspect Ratio Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Aspect Ratio</h2>
+            <div className="relative w-[180px]">
+              <select
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio && setAspectRatio(e.target.value)}
+                className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-semibold appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
               >
-                {t.toUpperCase()}
-              </button>
-            ))}
+                <option value="native">Native</option>
+                <option value="16:9">16:9</option>
+                <option value="1:1">1:1</option>
+                <option value="4:5">4:5</option>
+                <option value="2:3">2:3</option>
+                <option value="9:16">9:16</option>
+              </select>
+              {/* Custom dropdown arrow */}
+              <div className="absolute top-0 right-0 h-full w-10 flex items-center justify-center pointer-events-none">
+                <svg className="w-4 h-4 text-[#7C5CFC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleUndo}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              UNDO
-            </button>
-            <button
-              onClick={handleClear}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              CLEAR
-            </button>
-            <button
-              onClick={handleSaveOverlays}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              SAVE
-            </button>
-            <button
-              onClick={handleLoadOverlays}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              LOAD
-            </button>
+          {/* Browser Frame Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Browser Frame</h2>
+            <div className="inline-flex items-center rounded-full bg-[#E6E1FA] p-1 gap-1 mb-4">
+              {(["default", "minimal", "hidden"] as const).map((mode) => {
+                const isActive = browserFrameMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setBrowserFrameMode && setBrowserFrameMode(mode)}
+                    className={`min-w-[92px] rounded-full px-3 py-1 text-sm transition ${
+                      isActive
+                        ? "bg-[#D7D0F5] text-[#7C5CFC]"
+                        : "bg-transparent text-[#7C5CFC] hover:bg-[#DDD6F8]"
+                    }`}
+                  >
+                    {mode === "default" ? "Default" : mode === "minimal" ? "Minimal" : "Hidden"}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setBrowserFrameDrawShadow && setBrowserFrameDrawShadow(!browserFrameDrawShadow)
+                }
+                className="w-full flex items-center justify-between py-1 text-sm"
+              >
+                <span className="text-[#6B6B6B]">Draw Shadow</span>
+                <span
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    browserFrameDrawShadow ? "bg-[#8A76FC]" : "bg-[#A3A3A3]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                      browserFrameDrawShadow ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setBrowserFrameDrawBorder && setBrowserFrameDrawBorder(!browserFrameDrawBorder)
+                }
+                className="w-full flex items-center justify-between py-1 text-sm"
+              >
+                <span className="text-[#6B6B6B]">Draw Border</span>
+                <span
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    browserFrameDrawBorder ? "bg-[#8A76FC]" : "bg-[#A3A3A3]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                      browserFrameDrawBorder ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

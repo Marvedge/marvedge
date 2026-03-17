@@ -19,6 +19,7 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+const workerConcurrency = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || "1", 10) || 1);
 const prisma = new PrismaClient({
   datasourceUrl: (process.env.DATABASE_URL || "").replace(
     "?sslmode=require",
@@ -270,10 +271,53 @@ function runFfmpeg(command: any): Promise<void> {
   });
 }
 
+function parseAspectRatioRatio(aspectRatio: string | null | undefined, fallback: number): number {
+  if (!aspectRatio || aspectRatio === "native") {
+    return fallback;
+  }
+
+  const [wStr, hStr] = aspectRatio.includes(":")
+    ? aspectRatio.split(":")
+    : aspectRatio.split("/");
+  const w = Number(wStr);
+  const h = Number(hStr);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    return fallback;
+  }
+
+  return w / h;
+}
+
+function ensureEvenDimension(value: number): number {
+  const v = Math.max(2, Math.round(value));
+  return v % 2 === 0 ? v : v + 1;
+}
+
+function computeTargetSizeForRatio(quality: string, ratio: number): { width: number; height: number } {
+  const longSide = quality === "720p" ? 1280 : 1920;
+  const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
+
+  let width: number;
+  let height: number;
+  if (safeRatio >= 1) {
+    width = longSide;
+    height = longSide / safeRatio;
+  } else {
+    width = longSide * safeRatio;
+    height = longSide;
+  }
+
+  return {
+    width: ensureEvenDimension(width),
+    height: ensureEvenDimension(height),
+  };
+}
+
 // ── Worker ─────────────────────────────────────────────────────────────────────
 const worker = new Worker(
   "video-processing",
   async (job: Job) => {
+    const jobStartTs = Date.now();
     const {
       jobId,
       videoUrl,
@@ -282,6 +326,7 @@ const worker = new Worker(
       selectedBackground,
       customBackgroundUrl,
       settings,
+      aspectRatio,
     } = job.data;
 
     const qSettings = settings || {
@@ -290,12 +335,12 @@ const worker = new Worker(
       compression: "Web",
       speed: "Default",
     };
-    const targetWidth = qSettings.quality === "720p" ? 1280 : 1920;
-    const targetHeight = qSettings.quality === "720p" ? 720 : 1080;
+    let targetWidth = qSettings.quality === "720p" ? 1280 : 1920;
+    let targetHeight = qSettings.quality === "720p" ? 720 : 1080;
     const targetFps = qSettings.fps === "60 FPS" ? 60 : 30;
 
     let overrideCrf = "18";
-    let overridePreset = "medium";
+    let overridePreset = "fast";
     if (qSettings.compression === "Ultra") {
       overrideCrf = "12";
       overridePreset = "slow";
@@ -323,8 +368,8 @@ const worker = new Worker(
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `vj-${jobId}-`));
     const inputPath = path.join(tempDir, "input.webm");
     const bgPath = path.join(tempDir, "background.png");
-    const maskPath = path.join(tempDir, "rounded-mask.pgm");
     const outputPath = path.join(tempDir, "output.mp4");
+    const roundedMaskPath = path.join(tempDir, "rounded-mask.pgm");
     const hasCustomBackground = selectedBackground === "custom" && !!customBackgroundUrl;
 
     try {
@@ -338,32 +383,51 @@ const worker = new Worker(
 
       // ── 1. Download ──────────────────────────────────────────────────────────
       console.log(`[${jobId}] Downloading...`);
+      const downloadStartTs = Date.now();
       await downloadVideo(videoUrl, inputPath);
       if (hasCustomBackground) {
         console.log(`[${jobId}] Downloading custom background...`);
         await downloadFile(customBackgroundUrl, bgPath);
       }
+      console.log(`[${jobId}] Download completed in ${Date.now() - downloadStartTs}ms`);
       await job.updateProgress(20);
       await withRetry(() =>
         prisma.videoJob.update({ where: { id: jobId }, data: { progress: 20 } })
       );
 
       // ── 2. Probe ─────────────────────────────────────────────────────────────
-      const { hasAudio, videoDuration } = await new Promise<{
+      const probeStartTs = Date.now();
+      const { hasAudio, videoDuration, sourceWidth, sourceHeight } = await new Promise<{
         hasAudio: boolean;
         videoDuration: number;
+        sourceWidth: number;
+        sourceHeight: number;
       }>((res, rej) => {
         ffmpeg.ffprobe(inputPath, (err, meta) => {
           if (err) {
             return rej(err);
           }
+          const videoStream = meta.streams.find((s) => s.codec_type === "video");
           res({
             hasAudio: meta.streams.some((s) => s.codec_type === "audio"),
             videoDuration: meta.format.duration || 0,
+            sourceWidth: Number(videoStream?.width || 0),
+            sourceHeight: Number(videoStream?.height || 0),
           });
         });
       });
-      console.log(`[${jobId}] Duration=${videoDuration}s hasAudio=${hasAudio}`);
+      const nativeRatio =
+        sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
+      const selectedRatio = parseAspectRatioRatio(aspectRatio, nativeRatio);
+      const computedTarget = computeTargetSizeForRatio(qSettings.quality, selectedRatio);
+      targetWidth = computedTarget.width;
+      targetHeight = computedTarget.height;
+
+      console.log(
+        `[${jobId}] Duration=${videoDuration}s hasAudio=${hasAudio} source=${sourceWidth}x${sourceHeight} ` +
+        `aspect=${aspectRatio || "native"} target=${targetWidth}x${targetHeight}`
+      );
+      console.log(`[${jobId}] Probe completed in ${Date.now() - probeStartTs}ms`);
 
       // ── 3. Build edit timeline (deterministic trim + remapped zoom) ──────────
       // segments = array of REMOVE regions from timeline
@@ -443,22 +507,14 @@ const worker = new Worker(
         selectedBackground !== "hidden" &&
         selectedBackground !== "none" &&
         selectedBackground !== "transparent";
-      const hasRoundedCorners = hasBackgroundCanvas;
+      const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 
-      // Base fit strategy:
-      // - with background canvas: fill frame (no black bars), crop overflow
-      // - without background canvas: preserve full content with letter/pillar-boxing
-      if (hasBackgroundCanvas) {
-        filters.push(
-          `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase:flags=lanczos,` +
-            `crop=${targetWidth}:${targetHeight},setsar=1[res]`
-        );
-      } else {
-        filters.push(
-          `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-            `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black,setsar=1[res]`
-        );
-      }
+      // Preserve full source frame for all aspect ratios.
+      // This avoids hidden crop when converting landscape recordings to portrait outputs.
+      filters.push(
+        `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+          `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+      );
       videoOut = "[res]";
 
       // Zoom: split → per-segment trim+crop → concat
@@ -493,10 +549,6 @@ const worker = new Worker(
         if (n > 0) {
           const vSplits = Array.from({ length: n }, (_, i) => `[vs${i}]`).join("");
           filters.push(`${videoOut}split=${n}${vSplits}`);
-          if (hasAudio && audioOut) {
-            const aSplits = Array.from({ length: n }, (_, i) => `[as${i}]`).join("");
-            filters.push(`${audioOut}asplit=${n}${aSplits}`);
-          }
 
           let concatIn = "";
           for (let i = 0; i < n; i++) {
@@ -540,28 +592,15 @@ const worker = new Worker(
                 `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[zseg${i}]`
               );
             }
-
-            if (hasAudio && audioOut) {
-              filters.push(
-                `[as${i}]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS[zaseg${i}]`
-              );
-              concatIn += `[zseg${i}][zaseg${i}]`;
-            } else {
-              concatIn += `[zseg${i}]`;
-            }
+            concatIn += `[zseg${i}]`;
           }
 
-          const aStr = hasAudio && audioOut ? ":a=1" : ":a=0";
-          const zOuts = hasAudio && audioOut ? "[zoomv][zooma]" : "[zoomv]";
-          filters.push(`${concatIn}concat=n=${n}:v=1${aStr}${zOuts}`);
+          filters.push(`${concatIn}concat=n=${n}:v=1:a=0[zoomv]`);
           videoOut = "[zoomv]";
-          if (hasAudio && audioOut) {
-            audioOut = "[zooma]";
-          }
         }
       }
 
-      // Background overlay (fast path: inset card on canvas).
+      // Background overlay with rounded video card (static mask; avoids costly per-frame geq ops).
       if (hasBackgroundCanvas) {
         let bgHex = "#f3f0fc";
         const palette: Record<string, string> = {
@@ -581,56 +620,45 @@ const worker = new Worker(
           bg7: "#fff1eb",
           bg8: "#f4effd",
         };
-        if (selectedBackground.startsWith("color:")) {
+        if (selectedBackground?.startsWith("color:")) {
           bgHex = selectedBackground.replace("color:", "");
         } else if (palette[selectedBackground]) {
           bgHex = palette[selectedBackground];
         }
 
-        // Match frontend framing: inset video card over styled canvas.
-        // Keep this path simple: one downscale + one overlay (no extra pad/mask),
-        // which avoids filter reinit errors and is much faster on longer renders.
+        // Match frontend framing with an inset card over canvas.
         const cardW = Math.max(2, Math.floor((targetWidth * 0.9) / 2) * 2);
-        const cardH = Math.max(2, Math.floor((targetHeight * 0.81) / 2) * 2);
-        // Frontend card uses ~20px radius at normal size; scale it mildly for 1080p.
-        const cornerRadius = Math.max(12, Math.round(targetWidth * 0.0156));
-
-        if (hasRoundedCorners) {
-          // Build a single-frame rounded alpha mask once per job, then loop it.
-          writeRoundedMaskPgm(maskPath, cardW, cardH, cornerRadius);
-        }
-
-        const maskInputIdx = hasCustomBackground ? 2 : 1;
+        const cardH = Math.max(2, Math.floor((targetHeight * 0.9) / 2) * 2);
+        const cornerRadius = Math.max(12, Math.round(Math.min(cardW, cardH) * 0.04));
+        writeRoundedMaskPgm(roundedMaskPath, cardW, cardH, cornerRadius);
+        const roundedMaskInputIdx = hasCustomBackground ? 2 : 1;
+        const roundedMaskFilter =
+          `[${roundedMaskInputIdx}:v]scale=${cardW}:${cardH}:flags=neighbor,format=gray,` +
+          `loop=loop=-1:size=1:start=0,fps=${targetFps}[roundmask]`;
 
         if (hasCustomBackground) {
           const customBgFilter =
             `[1:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase:flags=lanczos,` +
-            `crop=${targetWidth}:${targetHeight},fps=${targetFps},` +
-            "tpad=stop_mode=clone:stop_duration=86400," +
-            "setsar=1,format=yuv420p[bg];";
-          const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
-          const roundedFilter = hasRoundedCorners
-            ? `[${maskInputIdx}:v]scale=${cardW}:${cardH}:flags=neighbor,format=gray,` +
-              `fps=${targetFps},tpad=stop_mode=clone:stop_duration=86400[roundmask];` +
-              "[svidbase][roundmask]alphamerge[svid];"
-            : "[svidbase]format=yuva420p[svid];";
+            `crop=${targetWidth}:${targetHeight},loop=loop=-1:size=1:start=0,fps=${targetFps},` +
+            "setsar=1,format=yuv420p[bg]";
+          const cardFilter =
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
 
           filters.push(
-            `${customBgFilter}${cardFilter};${roundedFilter}` +
-              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1:repeatlast=0[bgout]"
+            `${customBgFilter};${cardFilter};${roundedMaskFilter};` +
+              "[svidbase][roundmask]alphamerge[svid];" +
+              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
           );
         } else {
-          const solidBgFilter = `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
-          const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
-          const roundedFilter = hasRoundedCorners
-            ? `[${maskInputIdx}:v]scale=${cardW}:${cardH}:flags=neighbor,format=gray,` +
-              `fps=${targetFps},tpad=stop_mode=clone:stop_duration=86400[roundmask];` +
-              "[svidbase][roundmask]alphamerge[svid];"
-            : "[svidbase]format=yuva420p[svid];";
+          const solidBgFilter =
+            `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
+          const cardFilter =
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
 
           filters.push(
-            `${solidBgFilter};${cardFilter};${roundedFilter}` +
-              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1:repeatlast=0[bgout]"
+            `${solidBgFilter};${cardFilter};${roundedMaskFilter};` +
+              "[svidbase][roundmask]alphamerge[svid];" +
+              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
           );
         }
         videoOut = "[bgout]";
@@ -663,7 +691,7 @@ const worker = new Worker(
         finalCmd.input(bgPath);
       }
       if (hasBackgroundCanvas) {
-        finalCmd.input(maskPath);
+        finalCmd.input(roundedMaskPath);
       }
       finalCmd
         .on("start", (cmdLine) => {
@@ -679,6 +707,7 @@ const worker = new Worker(
           "-vsync cfr",
           `-g ${targetFps * 2}`,
           "-threads 0",
+          `-t ${Math.max(0.1, trimmedDuration / speedFactor).toFixed(3)}`,
           `-preset ${overridePreset}`,
           `-crf ${overrideCrf}`,
           "-movflags +faststart",
@@ -690,17 +719,21 @@ const worker = new Worker(
           prisma.videoJob.update({ where: { id: jobId }, data: { progress: pct } }).catch(() => {});
         });
 
+      const encodeStartTs = Date.now();
       await runFfmpeg(finalCmd);
+      console.log(`[${jobId}] Encode completed in ${Date.now() - encodeStartTs}ms`);
       console.log(`[${jobId}] Encode done. Uploading to Cloudinary...`);
 
       await job.updateProgress(90);
       await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 90 } });
 
       // ── 5. Upload ─────────────────────────────────────────────────────────────
+      const uploadStartTs = Date.now();
       const uploadResult = await cloudinary.uploader.upload(outputPath, {
         resource_type: "video",
         folder: "processed_exports",
       });
+      console.log(`[${jobId}] Upload completed in ${Date.now() - uploadStartTs}ms`);
       const exportedUrl = uploadResult.secure_url;
 
       await job.updateProgress(100);
@@ -709,18 +742,8 @@ const worker = new Worker(
         data: { status: "COMPLETED", progress: 100, exportedUrl },
       });
 
-      if (job.data.demoId) {
-        await prisma.demo
-          .update({
-            where: { id: job.data.demoId },
-            data: {
-              exportedUrl,
-            },
-          })
-          .catch((e: any) => console.error(`[${jobId}] Demo update failed:`, e.message));
-      }
-
       console.log(`[${jobId}] ✅ Done: ${exportedUrl}`);
+      console.log(`[${jobId}] Total job time: ${Date.now() - jobStartTs}ms`);
     } catch (error: any) {
       console.error(`[${jobId}] ❌ Failed:`, error.message);
       await prisma.videoJob.update({
@@ -732,11 +755,14 @@ const worker = new Worker(
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   },
-  { connection: connection as any }
+  {
+    connection: connection as any,
+    concurrency: workerConcurrency,
+  }
 );
 
 worker.on("failed", (job, err) => {
   console.log(`Job ${job?.id} failed: ${err.message}`);
 });
 
-console.log("🎬 Video Worker running and waiting for jobs...");
+console.log(`🎬 Video Worker running and waiting for jobs (concurrency=${workerConcurrency})...`);

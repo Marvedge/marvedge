@@ -211,6 +211,7 @@ export default function TimelineRuler({
     (segments.length === 1 &&
       (Math.abs(segments[0].start - minValue) > 0.001 ||
         Math.abs(segments[0].end - maxValue) > 0.001));
+  const hasTimelineEdits = hasBeenTrimmed || zoomSegments.length > 0;
 
   const baseTimelineWidth = 956; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
@@ -1084,7 +1085,7 @@ export default function TimelineRuler({
             <span className="text-sm font-medium leading-none"> Trim </span>
           </button>
           {/* Reset Timeline  */}
-          {onResetVideo && hasBeenTrimmed && (
+          {onResetVideo && hasTimelineEdits && (
             <button
               onClick={onResetVideo}
               className="h-[50.85px] w-[163px] px-4 flex items-center justify-center gap-2 font-medium bg-white text-[#8A76FC] text-sm rounded-lg hover:shadow-md transition-all duration-200"

@@ -7,6 +7,8 @@ export interface Segment {
   end: string;
 }
 
+export type BrowserFrameMode = "default" | "minimal" | "hidden";
+
 export function useEditorState() {
   const [params, setParams] = useState<URLSearchParams | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -55,6 +57,12 @@ export function useEditorState() {
   const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [backgroundType, setBackgroundType] = useState<string>("");
   const [customBackground, setCustomBackground] = useState<File | null>(null);
+
+  // Aspect ratio state
+  const [aspectRatio, setAspectRatio] = useState<string>("native");
+  const [browserFrameMode, setBrowserFrameMode] = useState<BrowserFrameMode>("default");
+  const [browserFrameDrawShadow, setBrowserFrameDrawShadow] = useState<boolean>(true);
+  const [browserFrameDrawBorder, setBrowserFrameDrawBorder] = useState<boolean>(false);
 
   // Refs
   const playerRef = useRef<ReactPlayer>(null!);
@@ -121,6 +129,14 @@ export function useEditorState() {
     setBackgroundType,
     customBackground,
     setCustomBackground,
+    aspectRatio,
+    setAspectRatio,
+    browserFrameMode,
+    setBrowserFrameMode,
+    browserFrameDrawShadow,
+    setBrowserFrameDrawShadow,
+    browserFrameDrawBorder,
+    setBrowserFrameDrawBorder,
     // Refs
     playerRef,
     canvasRef,
