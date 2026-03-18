@@ -36,6 +36,7 @@ interface SaveDemoParams {
   inputEndTime: string;
   currentSegments: Segment[];
   zoomEffects: ZoomEffect[];
+  subtitles?: { start: number; end: number; text: string }[];
   selectedBackground?: string | null;
   aspectRatio?: string;
   browserFrame?: {
@@ -62,6 +63,7 @@ export async function handleSaveDemo(
     inputEndTime,
     currentSegments,
     zoomEffects,
+    subtitles,
     selectedBackground,
     aspectRatio,
     browserFrame,
@@ -148,6 +150,7 @@ export async function handleSaveDemo(
       segments: segmentsToSave,
       zoom: zoomEffects,
       background: selectedBackground ?? null,
+      subtitles: subtitles || null,
       aspectRatio: aspectRatio || "native",
       browserFrame: browserFrame || {
         mode: "default",
@@ -406,6 +409,7 @@ interface ExportVideoParams {
   sidebarDescription: string;
   segments: { start: number; end: number }[];
   zoomSegments: ZoomEffect[];
+  subtitles?: { start: number; end: number; text: string }[];
   textOverlays: {
     id: string;
     text: string;
@@ -489,6 +493,17 @@ async function rasterizeSvgToPngBlob(svgPath: string, width = 1920, height = 108
   return pngBlob;
 }
 
+async function fetchPublicAssetAsBlob(assetPathOrUrl: string): Promise<Blob> {
+  const absoluteUrl = assetPathOrUrl.startsWith("http")
+    ? assetPathOrUrl
+    : `${window.location.origin}${assetPathOrUrl}`;
+  const resp = await fetch(absoluteUrl, { mode: "cors" });
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch asset: ${absoluteUrl}`);
+  }
+  return await resp.blob();
+}
+
 export const exportVideo = async ({
   videoUrl,
   selectedBackground,
@@ -498,6 +513,7 @@ export const exportVideo = async ({
   sidebarDescription,
   segments,
   zoomSegments,
+  subtitles,
   textOverlays,
   setProgress,
   aspectRatio,
@@ -537,14 +553,19 @@ export const exportVideo = async ({
       selectedBackground !== "none" &&
       selectedBackground !== "transparent"
     ) {
-      // For built-in image backgrounds (bg1..bg8), convert exact selected SVG to PNG and upload.
-      // This gives backend FFmpeg a real image input matching frontend selection.
+      // For built-in backgrounds, ensure backend FFmpeg gets a real image input matching frontend selection.
       const mappedValue = imageMap[selectedBackground];
       if (mappedValue) {
         try {
           toast.loading("Preparing selected background...", { id: toastId });
-          const pngBlob = await rasterizeSvgToPngBlob(mappedValue, 1920, 1080);
-          resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(pngBlob);
+          if (mappedValue.toLowerCase().endsWith(".svg")) {
+            const pngBlob = await rasterizeSvgToPngBlob(mappedValue, 1920, 1080);
+            resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(pngBlob);
+          } else {
+            // Public-root images like /staticbackground.jpg etc.
+            const blob = await fetchPublicAssetAsBlob(mappedValue);
+            resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(blob);
+          }
           backgroundToUse = "custom";
         } catch (svgBgError) {
           console.error("Failed to rasterize/upload selected SVG background:", svgBgError);
@@ -610,6 +631,7 @@ export const exportVideo = async ({
       },
       imageMap,
       settings: exportSettings,
+      subtitles: subtitles || [],
     });
 
     const { jobId } = createRes.data;

@@ -5,13 +5,30 @@ import Redis from "ioredis";
 import { v2 as cloudinary } from "cloudinary";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { execFileSync } from "child_process";
 import axios from "axios";
-import "dotenv/config";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
+// Load env from common locations (video-worker/.env and parent app .env).
+// Note: environment variables are read once at process start; restart the worker after editing .env.
+(() => {
+  const candidates = [
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "../.env"),
+    path.resolve(__dirname, ".env"),
+    path.resolve(__dirname, "../.env"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      dotenv.config({ path: p, override: false });
+    }
+  }
+})();
+
 if (!ffmpegStatic) {
   throw new Error("ffmpeg-static not found");
 }
@@ -26,6 +43,10 @@ const prisma = new PrismaClient({
     "?sslmode=require&connect_timeout=30"
   ),
 });
+
+console.log(
+  `🧩 Env check: DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ? "set" : "missing"}`
+);
 
 // Retry wrapper for Neon cold-start (free tier suspends after 5 min inactivity)
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
@@ -53,6 +74,44 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+function listEncoders(): Set<string> {
+  try {
+    const out = execFileSync(ffmpegStatic as string, ["-hide_banner", "-encoders"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const enc = new Set<string>();
+    for (const line of out.split("\n")) {
+      // Typical format: " V....D h264_videotoolbox VideoToolbox H.264 Encoder"
+      const m = line.match(/^\s*[A-Z\.]{6}\s+([^\s]+)\s+/);
+      if (m?.[1]) {
+        enc.add(m[1]);
+      }
+    }
+    return enc;
+  } catch {
+    return new Set<string>();
+  }
+}
+
+const AVAILABLE_ENCODERS = listEncoders();
+
+function pickVideoEncoder(preferred: string | null | undefined) {
+  const forced = (preferred || "").trim();
+  if (forced) {
+    return { encoder: forced, available: AVAILABLE_ENCODERS.has(forced) };
+  }
+
+  // Auto-pick best available.
+  if (process.platform === "darwin" && AVAILABLE_ENCODERS.has("h264_videotoolbox")) {
+    return { encoder: "h264_videotoolbox", available: true };
+  }
+  if (AVAILABLE_ENCODERS.has("h264_nvenc")) {
+    return { encoder: "h264_nvenc", available: true };
+  }
+  return { encoder: "libx264", available: true };
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function toSeconds(t: string | number): number {
@@ -376,6 +435,235 @@ function runFfmpeg(command: any): Promise<void> {
   });
 }
 
+type SubtitleCue = { start: number; end: number; text: string };
+
+function remapSubtitleCuesToTrimmedTimeline(
+  rawCues: any[],
+  keepSegments: TimeRange[],
+  removeSegments: TimeRange[]
+): SubtitleCue[] {
+  if (!rawCues || rawCues.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
+  const removedBefore = buildRemovedBefore(removeSegments);
+  const sorted = rawCues
+    .map((c: any) => ({
+      start: Number(c.start),
+      end: Number(c.end),
+      text: String(c.text ?? "").trim(),
+    }))
+    .filter((c: SubtitleCue) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0)
+    .map((c: SubtitleCue) => ({
+      start: Math.min(c.start, c.end),
+      end: Math.max(c.start, c.end),
+      text: c.text,
+    }))
+    .filter((c: SubtitleCue) => c.end - c.start > EPS)
+    .sort((a: SubtitleCue, b: SubtitleCue) => a.start - b.start);
+
+  const out: SubtitleCue[] = [];
+  for (const cue of sorted) {
+    for (const keep of keepSegments) {
+      const overlapStart = Math.max(cue.start, keep.start);
+      const overlapEnd = Math.min(cue.end, keep.end);
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
+      out.push({
+        start: overlapStart - removedBefore(overlapStart),
+        end: overlapEnd - removedBefore(overlapEnd),
+        text: cue.text,
+      });
+    }
+  }
+
+  return out
+    .map((c) => ({
+      start: Math.max(0, c.start),
+      end: Math.max(c.start + 0.04, c.end),
+      text: c.text,
+    }))
+    .filter((c) => c.text.trim().length > 0 && c.end - c.start > 0.01)
+    .sort((a, b) => a.start - b.start);
+}
+
+function formatAssTime(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  const cs = Math.floor((s - Math.floor(s)) * 100); // centiseconds
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+}
+
+function escapeAssText(text: string): string {
+  // Basic ASS escaping. Keep it simple and deterministic.
+  return String(text || "")
+    .replace(/\r\n|\r|\n/g, "\\N")
+    .replace(/{/g, "(")
+    .replace(/}/g, ")");
+}
+
+function writeAssSubtitles(tempDir: string, cues: SubtitleCue[], w: number, h: number): string {
+  const fontSize = Math.max(20, Math.min(58, Math.round(h * 0.05)));
+  const marginV = Math.max(20, Math.min(96, Math.round(h * 0.06)));
+  const outline = Math.max(1, Math.min(4, Math.round(fontSize / 16)));
+
+  const header = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${w}`,
+    `PlayResY: ${h}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    // BackColour alpha included, but we keep BorderStyle=1 (outline) for speed; background box is optional.
+    `Style: Default,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,${outline},0,2,60,60,${marginV},1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+  ].join("\n");
+
+  const lines = cues.map((c) => {
+    const start = formatAssTime(c.start);
+    const end = formatAssTime(c.end);
+    const t = escapeAssText(c.text);
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${t}`;
+  });
+
+  const assPath = path.join(tempDir, "subtitles.ass");
+  fs.writeFileSync(assPath, `${header}\n${lines.join("\n")}\n`, "utf8");
+  return assPath;
+}
+
+function pickBestMicAudioStreamIndex(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta: any
+): number | null {
+  const audioStreams = (meta?.streams || []).filter((s: any) => s.codec_type === "audio");
+  if (audioStreams.length === 0) {
+    return null;
+  }
+  if (audioStreams.length === 1) {
+    return Number(audioStreams[0].index);
+  }
+
+  // Best-effort mic selection: prefer streams whose tags mention mic/microphone.
+  const micLike = audioStreams.find((s: any) => {
+    const tags = s?.tags || {};
+    const hay = `${tags.title || ""} ${tags.handler_name || ""} ${tags.language || ""}`.toLowerCase();
+    return hay.includes("mic") || hay.includes("microphone");
+  });
+  return Number((micLike || audioStreams[0]).index);
+}
+
+async function extractAudioWav16kMono(
+  inputPath: string,
+  outputPath: string,
+  audioStreamIndex: number | null
+): Promise<void> {
+  const cmd = ffmpeg(inputPath);
+  const map = audioStreamIndex != null ? [`-map 0:${audioStreamIndex}`] : ["-map 0:a:0"];
+  cmd
+    .noVideo()
+    .audioChannels(1)
+    .audioFrequency(16000)
+    .audioCodec("pcm_s16le")
+    .outputOptions([...map])
+    .output(outputPath);
+  await runFfmpeg(cmd);
+}
+
+function buildSubtitleCuesFromDeepgramWords(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  words: any[]
+): SubtitleCue[] {
+  if (!Array.isArray(words) || words.length === 0) {
+    return [];
+  }
+
+  const cues: SubtitleCue[] = [];
+  let buf: string[] = [];
+  let cueStart = Number(words[0]?.start ?? 0);
+  let cueEnd = Number(words[0]?.end ?? 0);
+
+  const flush = () => {
+    const text = buf.join(" ").trim();
+    if (text) {
+      cues.push({ start: cueStart, end: cueEnd, text });
+    }
+    buf = [];
+  };
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const wordText = String(w?.punctuated_word ?? w?.word ?? "").trim();
+    if (!wordText) {
+      continue;
+    }
+    const start = Number(w?.start ?? cueEnd);
+    const end = Number(w?.end ?? start);
+
+    if (buf.length === 0) {
+      cueStart = Number.isFinite(start) ? start : 0;
+    }
+    cueEnd = Number.isFinite(end) ? end : cueEnd;
+    buf.push(wordText);
+
+    const next = words[i + 1];
+    const gap = next ? Number(next.start ?? cueEnd) - cueEnd : 0;
+    const textLen = buf.join(" ").length;
+    const endsSentence = /[.!?]$/.test(wordText);
+
+    // Reasonable default grouping for "YouTube-like" captions.
+    if (endsSentence || gap > 0.85 || textLen >= 48) {
+      flush();
+    }
+  }
+  flush();
+
+  // Clamp super-short cues.
+  return cues
+    .map((c) => ({
+      ...c,
+      start: Math.max(0, c.start),
+      end: Math.max(c.start + 0.04, c.end),
+    }))
+    .filter((c) => c.text.trim().length > 0 && c.end - c.start > 0.01);
+}
+
+async function transcribeWithDeepgram(wavPath: string, language: string): Promise<SubtitleCue[]> {
+  const apiKey = (process.env.DEEPGRAM_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("Missing DEEPGRAM_API_KEY");
+  }
+
+  const audio = fs.readFileSync(wavPath);
+  const url =
+    "https://api.deepgram.com/v1/listen" +
+    `?model=nova-2&language=${encodeURIComponent(language || "multi")}` +
+    "&smart_format=true&punctuate=true";
+
+  const resp = await axios.post(url, audio, {
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "audio/wav",
+    },
+    timeout: 120000,
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = resp.data;
+  const words =
+    data?.results?.channels?.[0]?.alternatives?.[0]?.words ||
+    data?.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs?.flatMap((p: any) => p.words) ||
+    [];
+
+  return buildSubtitleCuesFromDeepgramWords(words);
+}
+
 function parseAspectRatioRatio(aspectRatio: string | null | undefined, fallback: number): number {
   if (!aspectRatio || aspectRatio === "native") {
     return fallback;
@@ -429,10 +717,12 @@ const worker = new Worker(
       segments,
       zoomEffects,
       textOverlays,
+      subtitles,
       selectedBackground,
       customBackgroundUrl,
       settings,
       aspectRatio,
+      demoId,
     } = job.data;
 
     const qSettings = settings || {
@@ -446,7 +736,9 @@ const worker = new Worker(
     const targetFps = qSettings.fps === "60 FPS" ? 60 : 30;
 
     let overrideCrf = "18";
-    let overridePreset = "fast";
+    // Keep CRF constant for quality parity, but use a faster default preset.
+    // Preset trades compression for speed (quality target stays CRF-based).
+    let overridePreset = "veryfast";
     if (qSettings.compression === "Ultra") {
       overrideCrf = "12";
       overridePreset = "slow";
@@ -459,6 +751,26 @@ const worker = new Worker(
       overrideCrf = "16";
       overridePreset = "medium";
     }
+
+    // Extra safety: allow forcing the preset via env for benchmarking.
+    const forcedPreset = process.env.FFMPEG_X264_PRESET?.trim();
+    if (forcedPreset) {
+      overridePreset = forcedPreset;
+    }
+
+    const picked = pickVideoEncoder(process.env.FFMPEG_VIDEO_CODEC);
+    const videoEncoder =
+      picked.available ? picked.encoder : process.platform === "darwin" ? "libx264" : "libx264";
+    console.log(
+      `[${jobId}] Encoder selection: requested=${process.env.FFMPEG_VIDEO_CODEC || "auto"} ` +
+        `picked=${picked.encoder} available=${picked.available} using=${videoEncoder}`
+    );
+
+    // Parallelize filter evaluation (especially helps with zoompan + overlays).
+    const filterThreadsEnv = parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
+    const filterThreads = Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
+      ? filterThreadsEnv
+      : Math.max(1, Math.min(8, os.cpus().length || 4));
 
     let speedFactor = 1.0;
     if (qSettings.speed === "1.25") {
@@ -562,12 +874,37 @@ const worker = new Worker(
         keepSegments,
         removeSegments
       );
+      let rawSubtitleCues: SubtitleCue[] = [];
+      if (Array.isArray(subtitles)) {
+        rawSubtitleCues = subtitles as SubtitleCue[];
+      } else if (subtitles && Array.isArray((subtitles as any).cues)) {
+        rawSubtitleCues = (subtitles as any).cues as SubtitleCue[];
+      } else if (demoId) {
+        try {
+          const demo = await prisma.demo.findUnique({
+            where: { id: String(demoId) },
+            select: { subtitles: true },
+          });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const s: any = demo?.subtitles;
+          if (s && Array.isArray(s.cues)) {
+            rawSubtitleCues = s.cues as SubtitleCue[];
+          }
+        } catch {
+          // Ignore subtitle lookup failures; export should still proceed.
+        }
+      }
+      const remappedSubtitleCues = remapSubtitleCuesToTrimmedTimeline(
+        rawSubtitleCues || [],
+        keepSegments,
+        removeSegments
+      );
 
       await job.updateProgress(50);
       await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 50 } });
       console.log(
         `[${jobId}] Trim ranges remove=${removeSegments.length} keep=${keepSegments.length} ` +
-          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length}`
+          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length} subtitles=${remappedSubtitleCues.length}`
       );
 
       // ── 4. Final encode pass: trim + zoom + background + speed ───────────────
@@ -711,7 +1048,8 @@ const worker = new Worker(
         }
       }
 
-      // Background overlay with rounded video card (static mask; avoids costly per-frame geq ops).
+      // Background overlay (square video card for speed).
+      // Rounded corners were intentionally disabled to reduce filter/alpha overhead.
       if (hasBackgroundCanvas) {
         let bgHex = "#f3f0fc";
         const palette: Record<string, string> = {
@@ -740,12 +1078,6 @@ const worker = new Worker(
         // Match frontend framing with an inset card over canvas.
         const cardW = Math.max(2, Math.floor((targetWidth * 0.9) / 2) * 2);
         const cardH = Math.max(2, Math.floor((targetHeight * 0.9) / 2) * 2);
-        const cornerRadius = Math.max(12, Math.round(Math.min(cardW, cardH) * 0.04));
-        writeRoundedMaskPgm(roundedMaskPath, cardW, cardH, cornerRadius);
-        const roundedMaskInputIdx = hasCustomBackground ? 2 : 1;
-        const roundedMaskFilter =
-          `[${roundedMaskInputIdx}:v]scale=${cardW}:${cardH}:flags=neighbor,format=gray,` +
-          `loop=loop=-1:size=1:start=0,fps=${targetFps}[roundmask]`;
 
         if (hasCustomBackground) {
           const customBgFilter =
@@ -753,22 +1085,20 @@ const worker = new Worker(
             `crop=${targetWidth}:${targetHeight},loop=loop=-1:size=1:start=0,fps=${targetFps},` +
             "setsar=1,format=yuv420p[bg]";
           const cardFilter =
-            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p[svid]`;
 
           filters.push(
-            `${customBgFilter};${cardFilter};${roundedMaskFilter};` +
-              "[svidbase][roundmask]alphamerge[svid];" +
+            `${customBgFilter};${cardFilter};` +
               "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
           );
         } else {
           const solidBgFilter =
             `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
           const cardFilter =
-            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p[svid]`;
 
           filters.push(
-            `${solidBgFilter};${cardFilter};${roundedMaskFilter};` +
-              "[svidbase][roundmask]alphamerge[svid];" +
+            `${solidBgFilter};${cardFilter};` +
               "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
           );
         }
@@ -805,6 +1135,14 @@ const worker = new Worker(
         videoOut = prev;
       }
 
+      // Subtitles (burn-in) using an ASS file for fast, high-quality rendering.
+      if (remappedSubtitleCues.length > 0) {
+        const assPath = writeAssSubtitles(tempDir, remappedSubtitleCues, targetWidth, targetHeight);
+        const safeAss = ffmpegEscapeFilterValue(assPath);
+        filters.push(`${videoOut}subtitles=${safeAss}[subv]`);
+        videoOut = "[subv]";
+      }
+
       // Speed adjustment
       if (speedFactor !== 1.0) {
         const pts = (1 / speedFactor).toFixed(4);
@@ -828,29 +1166,54 @@ const worker = new Worker(
       }
 
       const finalCmd = ffmpeg(inputPath);
+      // Hardware-accelerated decode can help on M1 for long clips.
+      // Safe: if unsupported, FFmpeg will fail; keep it opt-in via env.
+      const hwDecode = (process.env.FFMPEG_HW_DECODE || "").trim();
+      if (hwDecode) {
+        finalCmd.inputOptions([`-hwaccel ${hwDecode}`]);
+      }
       if (hasCustomBackground) {
         finalCmd.input(bgPath);
-      }
-      if (hasBackgroundCanvas) {
-        finalCmd.input(roundedMaskPath);
       }
       finalCmd
         .on("start", (cmdLine) => {
           console.log(`[${jobId}] FFmpeg command: ${cmdLine}`);
         })
         .complexFilter(filterStr)
-        .videoCodec("libx264")
+        .videoCodec(videoEncoder)
         .audioCodec("aac")
         .outputOptions([
           ...maps,
+          `-filter_complex_threads ${filterThreads}`,
           "-shortest",
           "-pix_fmt yuv420p",
           "-vsync cfr",
           `-g ${targetFps * 2}`,
           "-threads 0",
           `-t ${Math.max(0.1, trimmedDuration / speedFactor).toFixed(3)}`,
-          `-preset ${overridePreset}`,
-          `-crf ${overrideCrf}`,
+          // Encoder tuning:
+          // - For libx264: CRF-based quality (no behavioral change vs today).
+          // - For hardware encoders: use a high-quality constant-quality style where supported.
+          ...(videoEncoder === "libx264"
+            ? [`-preset ${overridePreset}`, `-crf ${overrideCrf}`]
+            : videoEncoder === "h264_videotoolbox"
+              ? [
+                  // VideoToolbox does not support CRF; use a conservative quality scale.
+                  // Lower is better; 50 is visually high quality for 720p.
+                  "-q:v 50",
+                  "-profile:v high",
+                ]
+              : videoEncoder === "h264_nvenc"
+                ? [
+                    // NVENC: prefer constant-quality (CQ) style.
+                    // CQ lower = higher quality. 19 approximates CRF~18 for many sources.
+                    "-rc vbr_hq",
+                    "-cq 19",
+                    "-b:v 0",
+                    "-profile:v high",
+                    "-preset p5",
+                  ]
+                : []),
           "-movflags +faststart",
         ])
         .output(outputPath)
@@ -907,3 +1270,92 @@ worker.on("failed", (job, err) => {
 });
 
 console.log(`🎬 Video Worker running and waiting for jobs (concurrency=${workerConcurrency})...`);
+
+// ── Subtitle Worker (Deepgram) ────────────────────────────────────────────────
+const subtitleConcurrency = Math.max(
+  1,
+  parseInt(process.env.SUBTITLE_WORKER_CONCURRENCY || "1", 10) || 1
+);
+
+const subtitleWorker = new Worker(
+  "subtitle-processing",
+  async (job: Job) => {
+    const { jobId, videoUrl, demoId, language } = job.data;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `stt-${jobId}-`));
+    const inputPath = path.join(tempDir, "input.webm");
+    const wavPath = path.join(tempDir, "audio.wav");
+
+    try {
+      await withRetry(() =>
+        prisma.videoJob.update({
+          where: { id: jobId },
+          data: { status: "PROCESSING", progress: 5 },
+        })
+      );
+      await job.updateProgress(5);
+
+      await downloadVideo(videoUrl, inputPath);
+      await job.updateProgress(25);
+      await withRetry(() => prisma.videoJob.update({ where: { id: jobId }, data: { progress: 25 } }));
+
+      // Probe for best-effort mic stream selection.
+      const meta = await new Promise<any>((res, rej) => {
+        ffmpeg.ffprobe(inputPath, (err, m) => (err ? rej(err) : res(m)));
+      });
+      const micIdx = pickBestMicAudioStreamIndex(meta);
+
+      await extractAudioWav16kMono(inputPath, wavPath, micIdx);
+      await job.updateProgress(55);
+      await withRetry(() => prisma.videoJob.update({ where: { id: jobId }, data: { progress: 55 } }));
+
+      const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+
+      if (demoId) {
+        await prisma.demo.update({
+          where: { id: demoId },
+          data: {
+            subtitles: {
+              provider: "deepgram",
+              language: String(language || "multi"),
+              cues,
+            },
+          },
+        });
+      }
+
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          jobData: {
+            kind: "SUBTITLES",
+            provider: "deepgram",
+            language: String(language || "multi"),
+            subtitles: cues,
+          },
+        },
+      });
+      await job.updateProgress(100);
+    } catch (error: any) {
+      console.error(`[${jobId}] ❌ Subtitle job failed:`, error?.message || error);
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: { status: "FAILED", error: error?.message || "Subtitle generation failed" },
+      });
+      throw error;
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+  {
+    connection: connection as any,
+    concurrency: subtitleConcurrency,
+  }
+);
+
+subtitleWorker.on("failed", (job, err) => {
+  console.log(`Subtitle job ${job?.id} failed: ${err.message}`);
+});
+
+console.log(`📝 Subtitle Worker ready (concurrency=${subtitleConcurrency})...`);

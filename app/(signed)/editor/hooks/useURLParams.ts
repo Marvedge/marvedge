@@ -13,6 +13,7 @@ interface UseURLParamsProps {
   setLoadedSegments: (segments: Segment[] | null) => void;
   setCurrentSegments: (segments: Segment[]) => void;
   setZoomEffects: (effects: ZoomEffect[]) => void;
+  setSubtitles?: (cues: unknown) => void;
   setSavedDemoId: (id: string | null) => void;
   setAspectRatio: (ratio: string) => void;
   setBrowserFrameMode: (mode: BrowserFrameMode) => void;
@@ -57,6 +58,7 @@ export function useURLParams({
   setLoadedSegments,
   setCurrentSegments,
   setZoomEffects,
+  setSubtitles,
   setSavedDemoId,
   setAspectRatio,
   setBrowserFrameMode,
@@ -74,6 +76,7 @@ export function useURLParams({
     const urlEndTime = params.get("endTime");
     const urlSegments = params.get("segments");
     const urlZoom = params.get("zoom");
+    const urlSubtitles = params.get("subtitles");
     const urlTitle = params.get("title");
     const urlDescription = params.get("description");
     const urlDemoId = params.get("demoId");
@@ -161,6 +164,16 @@ export function useURLParams({
           console.error("Error parsing zoom from URL:", error);
         }
       }
+
+      // Load subtitles if provided
+      if (urlSubtitles && setSubtitles) {
+        try {
+          const subs = JSON.parse(urlSubtitles);
+          setSubtitles(subs);
+        } catch (error) {
+          console.error("Error parsing subtitles from URL:", error);
+        }
+      }
     }
   }, [
     params,
@@ -173,6 +186,7 @@ export function useURLParams({
     setLoadedSegments,
     setCurrentSegments,
     setZoomEffects,
+    setSubtitles,
     setSavedDemoId,
     setAspectRatio,
     setBrowserFrameMode,

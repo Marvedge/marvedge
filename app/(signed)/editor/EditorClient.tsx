@@ -55,6 +55,8 @@ type TextOverlayItem = {
   color: string;
 };
 
+type SubtitleCue = { start: number; end: number; text: string };
+
 export default function EditorPage() {
   const router = useRouter();
 
@@ -326,6 +328,7 @@ export default function EditorPage() {
         end: String(s.end),
       })),
       zoomEffects: zoomSegments,
+      subtitles: subtitleCues,
       selectedBackground,
       aspectRatio,
       browserFrame: {
@@ -358,9 +361,146 @@ export default function EditorPage() {
 
   const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
   const [nativeAspectRatio, setNativeAspectRatio] = useState("16/9");
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [subtitlesLoading, setSubtitlesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!params) {
+      return;
+    }
+    const urlSubtitles = params.get("subtitles");
+    if (!urlSubtitles) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(urlSubtitles) as unknown;
+      // Accept either an array of cues or a { cues: [...] } payload.
+      let cues: unknown = null;
+      if (Array.isArray(parsed)) {
+        cues = parsed;
+      } else if (typeof parsed === "object" && parsed && "cues" in parsed) {
+        cues = (parsed as { cues?: unknown }).cues ?? null;
+      }
+      if (Array.isArray(cues)) {
+        setSubtitleCues(
+          cues
+            .map((c) => {
+              if (typeof c !== "object" || !c) {
+                return null;
+              }
+              const rec = c as Record<string, unknown>;
+              const start = Number(rec.start);
+              const end = Number(rec.end);
+              const text = String(rec.text ?? "").trim();
+              if (!Number.isFinite(start) || !Number.isFinite(end) || !text) {
+                return null;
+              }
+              return { start, end, text } satisfies SubtitleCue;
+            })
+            .filter(
+              (c): c is SubtitleCue =>
+                !!c && Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0
+            )
+        );
+      }
+    } catch (e) {
+      console.error("Failed to parse subtitles from URL:", e);
+    }
+  }, [params]);
+
+  const activeSubtitleText = React.useMemo(() => {
+    if (!subtitleCues.length) {
+      return "";
+    }
+    const t = currentTime;
+    // Binary search over sorted cues by start time.
+    let lo = 0;
+    let hi = subtitleCues.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const c = subtitleCues[mid];
+      if (t < c.start) {
+        hi = mid - 1;
+      } else if (t > c.end) {
+        lo = mid + 1;
+      } else {
+        return c.text;
+      }
+    }
+    // Might be between cues; no caption.
+    return "";
+  }, [subtitleCues, currentTime]);
+
+  const handleAddSubtitles = async () => {
+    if (!videoUrl) {
+      toast.error("No video available for subtitles");
+      return;
+    }
+    if (subtitlesLoading) {
+      return;
+    }
+
+    const toastId = toast.loading("Generating subtitles...");
+    setSubtitlesLoading(true);
+    try {
+      let subtitleSourceUrl = videoUrl;
+      if (videoUrl.startsWith("blob:")) {
+        toast.loading("Uploading audio source...", { id: toastId });
+        const resp = await fetch(videoUrl);
+        if (!resp.ok) {
+          throw new Error("Failed to read recorded video blob");
+        }
+        const blob = await resp.blob();
+
+        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+        const formData = new FormData();
+        formData.append("file", blob, "subtitle_source.webm");
+        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+        const uploadRes = await axios.post(CLOUDINARY_API_URL, formData);
+        subtitleSourceUrl = uploadRes.data.secure_url as string;
+      }
+
+      const createRes = await axios.post("/api/subtitles/create", {
+        videoUrl: subtitleSourceUrl,
+        demoId: editorState.savedDemoId || null,
+        language: "multi",
+      });
+      const jobId = createRes.data?.jobId as string | undefined;
+      if (!jobId) {
+        throw new Error("No subtitle job ID returned");
+      }
+
+      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      const MAX_POLLS = 180; // 6 minutes (180 × 2s)
+      for (let pollCount = 0; pollCount < MAX_POLLS; pollCount++) {
+        const statusRes = await axios.get(`/api/jobs/${jobId}`);
+        const state = statusRes.data?.state as string | undefined;
+        if (state === "completed") {
+          const cues = (statusRes.data?.subtitles || []) as SubtitleCue[];
+          setSubtitleCues(Array.isArray(cues) ? cues : []);
+          toast.success("Subtitles ready", { id: toastId });
+          return;
+        }
+        if (state === "failed") {
+          throw new Error(statusRes.data?.error || "Subtitle generation failed");
+        }
+        await sleep(2000);
+      }
+      throw new Error("Subtitle generation timed out");
+    } catch (e: unknown) {
+      console.error(e);
+      const message = e instanceof Error ? e.message : "Failed to generate subtitles";
+      toast.error(message, { id: toastId });
+    } finally {
+      setSubtitlesLoading(false);
+    }
+  };
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showExportResultModal, setShowExportResultModal] = useState(false);
   const [resultActionLoading, setResultActionLoading] = useState(false);
+  const [shareLinkSaved, setShareLinkSaved] = useState(false);
   const [textOverlayInput, setTextOverlayInput] = useState("Add text");
   const [textOverlayFontFamily, setTextOverlayFontFamily] = useState("Arial");
   const [textOverlayFontSize, setTextOverlayFontSize] = useState(24);
@@ -457,6 +597,7 @@ export default function EditorPage() {
       sidebarDescription,
       segments,
       zoomSegments,
+      subtitles: subtitleCues,
       textOverlays,
       setProgress,
       aspectRatio,
@@ -476,6 +617,7 @@ export default function EditorPage() {
         settings,
         demoId: editorState.savedDemoId ?? null,
       });
+      setShareLinkSaved(false);
       setShowExportResultModal(true);
     }
 
@@ -544,6 +686,7 @@ export default function EditorPage() {
         pendingExport.settings,
         pendingExport.demoId
       );
+      setShareLinkSaved(true);
       await navigator.clipboard.writeText(pendingExport.exportedUrl);
       toast.success("Share link saved in Exported Videos and copied");
       setShowExportResultModal(false);
@@ -1011,6 +1154,18 @@ export default function EditorPage() {
           if (resultActionLoading) {
             return;
           }
+          // If user closes without saving a share link, cleanup the temporary Cloudinary export.
+          if (pendingExport && !shareLinkSaved) {
+            axios
+              .post("/api/exported-videos/cleanup", {
+                exportedUrl: pendingExport.exportedUrl,
+                sourceVideoUrl: pendingExport.uploadedSourceVideo
+                  ? pendingExport.sourceVideoUrl
+                  : null,
+                demoId: pendingExport.demoId,
+              })
+              .catch((e) => console.error("Cleanup on close failed:", e));
+          }
           setShowExportResultModal(false);
           setPendingExport(null);
         }}
@@ -1065,6 +1220,9 @@ export default function EditorPage() {
               textOverlayColor={textOverlayColor}
               setTextOverlayColor={handleTextOverlayColorChange}
               onAddTextOverlay={handleAddTextOverlay}
+              onAddSubtitles={handleAddSubtitles}
+              subtitlesLoading={subtitlesLoading}
+              hasSubtitles={subtitleCues.length > 0}
               onOpenSaveDemo={() => setShowSaveDemoModal(true)}
               savingDemo={savingDemo}
               demoSaved={demoSaved}
@@ -1129,6 +1287,9 @@ export default function EditorPage() {
                 textOverlayColor={textOverlayColor}
                 setTextOverlayColor={handleTextOverlayColorChange}
                 onAddTextOverlay={handleAddTextOverlay}
+                onAddSubtitles={handleAddSubtitles}
+                subtitlesLoading={subtitlesLoading}
+                hasSubtitles={subtitleCues.length > 0}
                 onOpenSaveDemo={() => setShowSaveDemoModal(true)}
                 savingDemo={savingDemo}
                 demoSaved={demoSaved}
@@ -1323,6 +1484,21 @@ export default function EditorPage() {
                       )}
                     </div>
                   </div>
+
+                  {activeSubtitleText && (
+                    <div className="absolute inset-x-0 bottom-6 z-40 flex justify-center px-6 pointer-events-none">
+                      <div
+                        className="max-w-[92%] rounded-md bg-black/70 px-3 py-2 text-center text-white"
+                        style={{
+                          fontSize: "16px",
+                          lineHeight: "1.25",
+                          textShadow: "0 1px 2px rgba(0,0,0,0.65)",
+                        }}
+                      >
+                        {activeSubtitleText}
+                      </div>
+                    </div>
+                  )}
 
                   {shouldShowZoomFocusBox && (
                     <div

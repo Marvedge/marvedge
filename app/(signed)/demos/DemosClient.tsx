@@ -37,6 +37,7 @@ interface Demo {
   editing?: {
     segments?: unknown;
     zoom?: unknown;
+    subtitles?: unknown;
     aspectRatio?: string;
     browserFrame?: unknown;
   };
@@ -116,6 +117,9 @@ export default function DemosPage() {
       }
       if (demo.editing.zoom) {
         params.append("zoom", JSON.stringify(demo.editing.zoom));
+      }
+      if (demo.editing.subtitles) {
+        params.append("subtitles", JSON.stringify(demo.editing.subtitles));
       }
       if (demo.editing.aspectRatio) {
         params.append("aspectRatio", demo.editing.aspectRatio);

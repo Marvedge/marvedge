@@ -31,6 +31,9 @@ interface EditorSidebarProps {
   hasSelectedTextOverlay?: boolean;
   textOverlayColor?: string;
   setTextOverlayColor?: (value: string) => void;
+  onAddSubtitles?: () => void;
+  subtitlesLoading?: boolean;
+  hasSubtitles?: boolean;
   className?: string;
   onOpenSaveDemo?: () => void;
   savingDemo?: boolean;
@@ -69,6 +72,9 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   onAddTextOverlay,
   textOverlayColor = "#ffffff",
   setTextOverlayColor,
+  onAddSubtitles,
+  subtitlesLoading = false,
+  hasSubtitles = false,
   onOpenSaveDemo,
   savingDemo = false,
   demoSaved = false,
@@ -125,36 +131,77 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   };
 
   // Background options (Image)
-  const imageBackgroundOptions = [
+  const imageBackgroundOptions: {
+    id: string;
+    name: string;
+    thumbnail: string;
+    type: "" | "static" | "animated" | "gradient" | "pattern";
+  }[] = [
+    {
+      id: "staticBackground",
+      name: "Static Background",
+      thumbnail: "/staticbackground.jpg",
+      type: "static",
+    },
+    {
+      id: "animatedBackground",
+      name: "Animated Background",
+      thumbnail: "/animatedbackground.jpg",
+      type: "animated",
+    },
+    {
+      id: "gradientBackground",
+      name: "Gradient Background",
+      thumbnail: "/gradientbackground.png",
+      type: "gradient",
+    },
+    {
+      id: "patternBackground",
+      name: "Pattern Background",
+      thumbnail: "/patternbackground.jpg",
+      type: "pattern",
+    },
     {
       id: "bg1",
       name: "Mountain Sunset",
       thumbnail: "/icons/bg-mountain-sunset.svg",
+      type: "pattern",
     },
     {
       id: "bg2",
       name: "Abstract Circles",
       thumbnail: "/icons/bg-abstract-circles.svg",
+      type: "pattern",
     },
     {
       id: "bg3",
       name: "Crystalline Shapes",
       thumbnail: "/icons/bg-crystalline.svg",
+      type: "pattern",
     },
     {
       id: "bg4",
       name: "Dynamic Brushstrokes",
       thumbnail: "/icons/bg-brushstrokes.svg",
+      type: "pattern",
     },
     {
       id: "bg5",
       name: "Warm Gradients",
       thumbnail: "/icons/bg-warm-gradients.svg",
+      type: "gradient",
     },
-    { id: "bg6", name: "Ethereal Light", thumbnail: "/icons/bg-ethereal.svg" },
-    { id: "bg7", name: "Fiery Swirls", thumbnail: "/icons/bg-fiery.svg" },
-    { id: "bg8", name: "Elegant Ribbons", thumbnail: "/icons/bg-ribbons.svg" },
+    { id: "bg6", name: "Ethereal Light", thumbnail: "/icons/bg-ethereal.svg", type: "pattern" },
+    { id: "bg7", name: "Fiery Swirls", thumbnail: "/icons/bg-fiery.svg", type: "pattern" },
+    { id: "bg8", name: "Elegant Ribbons", thumbnail: "/icons/bg-ribbons.svg", type: "pattern" },
   ];
+
+  const filteredImageBackgroundOptions = imageBackgroundOptions.filter((bg) => {
+    if (!localBackgroundType) {
+      return true;
+    }
+    return bg.type === localBackgroundType;
+  });
 
   // Background options (Gradient)
   const gradientOptions: { id: string; name: string; css: string }[] = [
@@ -344,7 +391,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
           {bgSubTab === "image" && (
             <>
               <div className="grid grid-cols-4 gap-2">
-                {imageBackgroundOptions.map((bg) => {
+                {filteredImageBackgroundOptions.map((bg) => {
                   const isActive = localSelectedBackground === bg.id;
                   return (
                     <button
@@ -752,6 +799,23 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Subtitles Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Subtitles</h2>
+            <button
+              type="button"
+              disabled={subtitlesLoading}
+              onClick={() => onAddSubtitles && onAddSubtitles()}
+              className="w-full rounded-lg bg-[#8A76FC] text-white py-2 text-sm font-semibold hover:bg-[#7C5CFC] transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {subtitlesLoading
+                ? "Generating..."
+                : hasSubtitles
+                  ? "Regenerate Subtitles"
+                  : "Add Subtitles"}
+            </button>
           </div>
         </div>
       )}

@@ -22,6 +22,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         exportedUrl: true,
         error: true,
         userId: true,
+        jobData: true,
       },
     });
 
@@ -42,12 +43,22 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     };
     const state = stateMap[job.status] ?? job.status.toLowerCase();
 
+    const jobData = job.jobData as unknown;
+    let subtitles: unknown = null;
+    if (jobData && typeof jobData === "object") {
+      const rec = jobData as Record<string, unknown>;
+      if (rec.kind === "SUBTITLES") {
+        subtitles = rec.subtitles ?? null;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       state,
       progress: job.progress,
       exportedUrl: job.exportedUrl,
       error: job.error,
+      subtitles,
     });
   } catch (err) {
     console.error("Fetch Job Error:", err);
