@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Play, Settings, Clock } from "lucide-react";
+import { Menu, X, Play, Settings, Clock, Share2} from "lucide-react";
 import Image from "next/image";
 
 const SidemenuDashboard = () => {
@@ -132,14 +132,15 @@ const SidemenuDashboard = () => {
               }`}
             >
               <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
-                <Image
+                {/* <Image
                   src="/icons/dash-play.svg"
                   alt="Exported Videos"
                   width={22}
                   height={22}
                   className="object-contain sm:w-[30px] sm:h-[30px]"
                   priority
-                />
+                /> */}
+                <Share2 />
               </span>
               <span>Shared Videos</span>
             </li>

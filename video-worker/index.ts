@@ -641,10 +641,19 @@ async function transcribeWithDeepgram(wavPath: string, language: string): Promis
   }
 
   const audio = fs.readFileSync(wavPath);
-  const url =
-    "https://api.deepgram.com/v1/listen" +
-    `?model=nova-2&language=${encodeURIComponent(language || "multi")}` +
-    "&smart_format=true&punctuate=true";
+  // NOTE: Deepgram "language=multi" is primarily documented for streaming/websocket.
+  // For prerecorded REST transcription, use detect_language=true as the closest equivalent.
+  const params = new URLSearchParams();
+  params.set("model", "nova-2");
+  params.set("smart_format", "true");
+  params.set("punctuate", "true");
+  const lang = String(language || "").trim().toLowerCase();
+  if (lang && lang !== "multi") {
+    params.set("language", lang);
+  } else {
+    params.set("detect_language", "true");
+  }
+  const url = `https://api.deepgram.com/v1/listen?${params.toString()}`;
 
   const resp = await axios.post(url, audio, {
     headers: {
