@@ -1,6 +1,12 @@
 import { useCallback } from "react";
 
 const imageMap: Record<string, string> = {
+  // New dropdown category images (public root)
+  staticBackground: "/staticbackground.jpg",
+  animatedBackground: "/animatedbackground.jpg",
+  gradientBackground: "/gradientbackground.png",
+  patternBackground: "/patternbackground.jpg",
+
   bg1: "/icons/bg-mountain-sunset.svg",
   bg2: "/icons/bg-abstract-circles.svg",
   bg3: "/icons/bg-crystalline.svg",

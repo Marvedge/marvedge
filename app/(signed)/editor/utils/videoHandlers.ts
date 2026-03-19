@@ -36,7 +36,14 @@ interface SaveDemoParams {
   inputEndTime: string;
   currentSegments: Segment[];
   zoomEffects: ZoomEffect[];
+  subtitles?: { start: number; end: number; text: string }[];
   selectedBackground?: string | null;
+  aspectRatio?: string;
+  browserFrame?: {
+    mode: "default" | "minimal" | "hidden";
+    drawShadow: boolean;
+    drawBorder: boolean;
+  };
   setSavingDemo: (saving: boolean) => void;
   setSidebarTitle: (title: string) => void;
   setSidebarDescription: (description: string) => void;
@@ -56,7 +63,10 @@ export async function handleSaveDemo(
     inputEndTime,
     currentSegments,
     zoomEffects,
+    subtitles,
     selectedBackground,
+    aspectRatio,
+    browserFrame,
     setSavingDemo,
     setSidebarTitle,
     setSidebarDescription,
@@ -140,6 +150,13 @@ export async function handleSaveDemo(
       segments: segmentsToSave,
       zoom: zoomEffects,
       background: selectedBackground ?? null,
+      subtitles: subtitles || null,
+      aspectRatio: aspectRatio || "native",
+      browserFrame: browserFrame || {
+        mode: "default",
+        drawShadow: true,
+        drawBorder: false,
+      },
     };
 
     try {
@@ -392,7 +409,25 @@ interface ExportVideoParams {
   sidebarDescription: string;
   segments: { start: number; end: number }[];
   zoomSegments: ZoomEffect[];
+  subtitles?: { start: number; end: number; text: string }[];
+  textOverlays: {
+    id: string;
+    text: string;
+    x: number;
+    y: number;
+    startTime: number;
+    endTime: number;
+    fontFamily: string;
+    fontSize: number;
+    color: string;
+  }[];
   setProgress: (p: number) => void;
+  aspectRatio?: string;
+  browserFrame?: {
+    mode: "default" | "minimal" | "hidden";
+    drawShadow: boolean;
+    drawBorder: boolean;
+  };
   duration?: number;
   savedDemoId?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -403,6 +438,7 @@ interface ExportVideoResult {
   exportedUrl: string;
   sourceVideoUrl: string;
   downloadAsMp4: (url: string) => Promise<void>;
+  uploadedSourceVideo: boolean;
 }
 
 async function uploadImageBlobToCloudinary(imageBlob: Blob): Promise<string> {
@@ -457,6 +493,17 @@ async function rasterizeSvgToPngBlob(svgPath: string, width = 1920, height = 108
   return pngBlob;
 }
 
+async function fetchPublicAssetAsBlob(assetPathOrUrl: string): Promise<Blob> {
+  const absoluteUrl = assetPathOrUrl.startsWith("http")
+    ? assetPathOrUrl
+    : `${window.location.origin}${assetPathOrUrl}`;
+  const resp = await fetch(absoluteUrl, { mode: "cors" });
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch asset: ${absoluteUrl}`);
+  }
+  return await resp.blob();
+}
+
 export const exportVideo = async ({
   videoUrl,
   selectedBackground,
@@ -466,7 +513,11 @@ export const exportVideo = async ({
   sidebarDescription,
   segments,
   zoomSegments,
+  subtitles,
+  textOverlays,
   setProgress,
+  aspectRatio,
+  browserFrame,
   duration,
   savedDemoId,
   settings,
@@ -480,6 +531,7 @@ export const exportVideo = async ({
   };
 
   try {
+    let uploadedSourceVideo = false;
     let backgroundToUse = "transparent";
     let resolvedCustomBackgroundUrl: string | null = null;
     if (selectedBackground === "custom" && customBackgroundUrl) {
@@ -501,14 +553,19 @@ export const exportVideo = async ({
       selectedBackground !== "none" &&
       selectedBackground !== "transparent"
     ) {
-      // For built-in image backgrounds (bg1..bg8), convert exact selected SVG to PNG and upload.
-      // This gives backend FFmpeg a real image input matching frontend selection.
+      // For built-in backgrounds, ensure backend FFmpeg gets a real image input matching frontend selection.
       const mappedValue = imageMap[selectedBackground];
       if (mappedValue) {
         try {
           toast.loading("Preparing selected background...", { id: toastId });
-          const pngBlob = await rasterizeSvgToPngBlob(mappedValue, 1920, 1080);
-          resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(pngBlob);
+          if (mappedValue.toLowerCase().endsWith(".svg")) {
+            const pngBlob = await rasterizeSvgToPngBlob(mappedValue, 1920, 1080);
+            resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(pngBlob);
+          } else {
+            // Public-root images like /staticbackground.jpg etc.
+            const blob = await fetchPublicAssetAsBlob(mappedValue);
+            resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(blob);
+          }
           backgroundToUse = "custom";
         } catch (svgBgError) {
           console.error("Failed to rasterize/upload selected SVG background:", svgBgError);
@@ -544,6 +601,7 @@ export const exportVideo = async ({
         toast.loading("Uploading raw video to Cloudinary...", { id: toastId });
         const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
         cloudinaryVideoUrl = cloudRes.data.secure_url;
+        uploadedSourceVideo = true;
       } catch (cloudError) {
         console.error("Error uploading to Cloudinary:", cloudError);
         toast.error("Failed to upload video to Cloudinary", { id: toastId });
@@ -561,11 +619,19 @@ export const exportVideo = async ({
       demoId: savedDemoId || null,
       segments,
       zoomEffects: zoomSegments,
+      textOverlays,
       duration: duration || 0,
       selectedBackground: backgroundToUse,
       customBackgroundUrl: resolvedCustomBackgroundUrl,
+      aspectRatio: aspectRatio || "native",
+      browserFrame: browserFrame || {
+        mode: "default",
+        drawShadow: true,
+        drawBorder: false,
+      },
       imageMap,
       settings: exportSettings,
+      subtitles: subtitles || [],
     });
 
     const { jobId } = createRes.data;
@@ -635,6 +701,7 @@ export const exportVideo = async ({
             exportedUrl,
             sourceVideoUrl: cloudinaryVideoUrl,
             downloadAsMp4,
+            uploadedSourceVideo,
           };
         }
 

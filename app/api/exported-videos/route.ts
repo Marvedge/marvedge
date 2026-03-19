@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import { deleteCloudinaryVideoByUrl } from "@/app/lib/cloudinary-utils";
 
 type SessionUser = {
   id?: string;
@@ -96,6 +97,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (demoId && upsertByDemo) {
+      const previous = await prisma.exportedVideo.findUnique({
+        where: { demoId },
+        select: { id: true, userId: true, exportedUrl: true },
+      });
+
+      if (previous && previous.userId !== userId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
       const exportedVideo = await prisma.exportedVideo.upsert({
         where: { demoId },
         update: {
@@ -117,6 +127,15 @@ export async function POST(req: NextRequest) {
           settings: settings ?? null,
         },
       });
+
+      await prisma.demo.update({
+        where: { id: demoId },
+        data: { exportedUrl },
+      });
+
+      if (previous?.exportedUrl && previous.exportedUrl !== exportedUrl) {
+        await deleteCloudinaryVideoByUrl(previous.exportedUrl);
+      }
 
       return NextResponse.json({ success: true, exportedVideo });
     }
@@ -160,7 +179,7 @@ export async function DELETE(req: NextRequest) {
 
     const record = await prisma.exportedVideo.findUnique({
       where: { id },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, exportedUrl: true, demoId: true },
     });
 
     if (!record || record.userId !== userId) {
@@ -168,6 +187,16 @@ export async function DELETE(req: NextRequest) {
     }
 
     await prisma.exportedVideo.delete({ where: { id } });
+    await deleteCloudinaryVideoByUrl(record.exportedUrl);
+
+    if (record.demoId) {
+      await prisma.demo
+        .update({
+          where: { id: record.demoId },
+          data: { exportedUrl: null },
+        })
+        .catch(() => null);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

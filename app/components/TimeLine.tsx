@@ -6,6 +6,20 @@ import Linepage from "./Linepage";
 //import { start } from "nprogress";
 import ReactPlayer from "react-player";
 
+type TextOverlayItem = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  startTime: number;
+  endTime: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+};
+
 interface TimelineRulerProps {
   minValue?: number;
   maxValue?: number;
@@ -30,8 +44,8 @@ interface TimelineRulerProps {
   handleFullscreen: () => void;
   //to handle the trimmed video part
   //onDeleteSegment removed — delete is now UI-only, handled internally
-  mode: "main" | "trim" | "zoom";
-  setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom">>;
+  mode: "main" | "trim" | "zoom" | "text";
+  setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom" | "text">>;
   playerRef: React.RefObject<ReactPlayer>;
   setChildHandleProgress: (fn: (data: { playedSeconds: number }) => void) => void;
   zoomSegments: ZoomEffect[];
@@ -41,6 +55,11 @@ interface TimelineRulerProps {
   zoomLevelDepth: number;
   segments: { start: number; end: number }[];
   setSegments: React.Dispatch<React.SetStateAction<{ start: number; end: number }[]>>;
+  textOverlays: TextOverlayItem[];
+  setTextOverlays: React.Dispatch<React.SetStateAction<TextOverlayItem[]>>;
+  selectedTextOverlayId: string | null;
+  setSelectedTextOverlayId: React.Dispatch<React.SetStateAction<string | null>>;
+  setTextOverlayInspectorValues: (overlay: TextOverlayItem) => void;
 }
 
 export default function TimelineRuler({
@@ -75,6 +94,11 @@ export default function TimelineRuler({
   zoomLevelDepth,
   segments,
   setSegments,
+  textOverlays,
+  setTextOverlays,
+  selectedTextOverlayId,
+  setSelectedTextOverlayId,
+  setTextOverlayInspectorValues,
 }: TimelineRulerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [draggingHandle] = useState<"current" | "start" | "end" | null>(null);
@@ -211,6 +235,7 @@ export default function TimelineRuler({
     (segments.length === 1 &&
       (Math.abs(segments[0].start - minValue) > 0.001 ||
         Math.abs(segments[0].end - maxValue) > 0.001));
+  const hasTimelineEdits = hasBeenTrimmed || zoomSegments.length > 0;
 
   const baseTimelineWidth = 956; // Fixed base width for the timeline
   const zoomedTimelineWidth = baseTimelineWidth * zoomLevel;
@@ -489,6 +514,12 @@ export default function TimelineRuler({
     if (zoomSegments.length <= 1) {
       setMode("main");
     }
+  };
+
+  const removeTextOverlay = (id: string) => {
+    setTextOverlays((prev) => prev.filter((t) => t.id !== id));
+    setSelectedTextOverlayId(null);
+    setMode("main");
   };
 
   const handleUndo = () => {
@@ -1007,6 +1038,85 @@ export default function TimelineRuler({
     };
   }, [dragZoomState, maxValue, minValue, setZoomSegments, zoomedTimelineWidth]);
 
+  type DragTextState =
+    | {
+        mode: "edge";
+        id: string;
+        side: "left" | "right";
+        startX: number;
+        startValue: number;
+      }
+    | {
+        mode: "segment";
+        id: string;
+        startX: number;
+        startValue: number;
+        endValue: number;
+      };
+
+  const [dragTextState, setDragTextState] = useState<DragTextState | null>(null);
+
+  useEffect(() => {
+    if (!dragTextState) {
+      return;
+    }
+
+    const onMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - dragTextState.startX;
+      const pixelsPerUnit = zoomedTimelineWidth / (maxValue - minValue);
+      const deltaValue = deltaX / pixelsPerUnit;
+
+      setTextOverlays((prev) =>
+        prev.map((t) => {
+          if (t.id !== dragTextState.id) {
+            return t;
+          }
+
+          if (dragTextState.mode === "edge") {
+            let newStart = t.startTime;
+            let newEnd = t.endTime;
+
+            if (dragTextState.side === "left") {
+              newStart = dragTextState.startValue + deltaValue;
+              newStart = Math.max(minValue, Math.min(newStart, newEnd - 0.05));
+            } else {
+              newEnd = dragTextState.startValue + deltaValue;
+              newEnd = Math.min(maxValue, Math.max(newEnd, newStart + 0.05));
+            }
+
+            return { ...t, startTime: newStart, endTime: newEnd };
+          }
+
+          if (dragTextState.mode === "segment") {
+            const width = dragTextState.endValue - dragTextState.startValue;
+            let newStart = dragTextState.startValue + deltaValue;
+            let newEnd = dragTextState.endValue + deltaValue;
+
+            if (newStart < minValue) {
+              newStart = minValue;
+              newEnd = minValue + width;
+            } else if (newEnd > maxValue) {
+              newEnd = maxValue;
+              newStart = maxValue - width;
+            }
+
+            return { ...t, startTime: newStart, endTime: newEnd };
+          }
+
+          return t;
+        })
+      );
+    };
+
+    const onUp = () => setDragTextState(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragTextState, maxValue, minValue, setTextOverlays, zoomedTimelineWidth]);
+
   const currentPosition = ((localValue - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
   const handleZoomClick = () => {
     const startTime = Math.max(0, localValue - 1);
@@ -1084,7 +1194,7 @@ export default function TimelineRuler({
             <span className="text-sm font-medium leading-none"> Trim </span>
           </button>
           {/* Reset Timeline  */}
-          {onResetVideo && hasBeenTrimmed && (
+          {onResetVideo && hasTimelineEdits && (
             <button
               onClick={onResetVideo}
               className="h-[50.85px] w-[163px] px-4 flex items-center justify-center gap-2 font-medium bg-white text-[#8A76FC] text-sm rounded-lg hover:shadow-md transition-all duration-200"
@@ -1206,12 +1316,15 @@ export default function TimelineRuler({
                 activeZoomIdx < zoomSegments.length
               ) {
                 removeZoomSegment(activeZoomIdx);
+              } else if (mode === "text" && selectedTextOverlayId) {
+                removeTextOverlay(selectedTextOverlayId);
               }
             }}
             disabled={
               mode === "main" ||
               (mode === "trim" && (segments.length === 0 || activeSegment === -1)) ||
-              (mode === "zoom" && (zoomSegments.length === 0 || activeZoomIdx === -1))
+              (mode === "zoom" && (zoomSegments.length === 0 || activeZoomIdx === -1)) ||
+              (mode === "text" && !selectedTextOverlayId)
             }
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Delete"
@@ -1593,6 +1706,100 @@ export default function TimelineRuler({
                         }}
                         title="Drag to resize end"
                         aria-label="Resize end"
+                      >
+                        <div className="w-px h-[60px] bg-white/80" />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {textOverlays.map((overlay, idx) => {
+                  const startPosition =
+                    ((overlay.startTime - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  const endPosition =
+                    ((overlay.endTime - minValue) / (maxValue - minValue)) * zoomedTimelineWidth;
+                  const width = Math.max(6, endPosition - startPosition);
+                  const isSelected = overlay.id === selectedTextOverlayId;
+                  const label = overlay.text?.trim() ? overlay.text.trim() : `Text ${idx + 1}`;
+
+                  return (
+                    <div
+                      key={`text-${overlay.id}`}
+                      className={`absolute top-0 h-[84px] mt-[50px] group cursor-grab transition-opacity ${
+                        isSelected
+                          ? "bg-[#FF3939]/60 opacity-80 z-10 hover:border-2 border-[#7C5CFC] rounded-md"
+                          : "bg-[#FF3939]/35 opacity-55 hover:opacity-70 z-8"
+                      }`}
+                      style={{
+                        left: `${startPosition}px`,
+                        width: `${width}px`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMode("text");
+                        setSelectedTextOverlayId(overlay.id);
+                        setTextOverlayInspectorValues(overlay);
+                        playerRef.current?.seekTo(overlay.startTime, "seconds");
+                        setPlaying(true);
+                      }}
+                      onMouseDown={(e) => {
+                        setDragTextState({
+                          mode: "segment",
+                          id: overlay.id,
+                          startX: e.clientX,
+                          startValue: overlay.startTime,
+                          endValue: overlay.endTime,
+                        });
+                      }}
+                    >
+                      <div className="w-full h-full flex justify-center items-center">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-transparent pointer-events-none overflow-hidden max-w-full">
+                          <Image
+                            src="/icons/Violet_scissor.svg"
+                            alt="Text"
+                            width={14.89}
+                            height={14.89}
+                            className="select-none"
+                          />
+                          <div className="text-base font-bold text-[#8A76FC] select-none">Text</div>
+                          <div className="text-xs text-[#6B5BB5] select-none truncate max-w-[180px]">
+                            {label}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#FF3939]/60 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setDragTextState({
+                            mode: "edge",
+                            id: overlay.id,
+                            side: "left",
+                            startX: e.clientX,
+                            startValue: overlay.startTime,
+                          });
+                        }}
+                        aria-label="Resize text start"
+                        title="Drag to resize start"
+                      >
+                        <div className="w-px h-[60px] bg-white/80" />
+                      </div>
+
+                      <div
+                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#FF3939]/60 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setDragTextState({
+                            mode: "edge",
+                            id: overlay.id,
+                            side: "right",
+                            startX: e.clientX,
+                            startValue: overlay.endTime,
+                          });
+                        }}
+                        aria-label="Resize text end"
+                        title="Drag to resize end"
                       >
                         <div className="w-px h-[60px] bg-white/80" />
                       </div>

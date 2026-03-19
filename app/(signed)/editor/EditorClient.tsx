@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useCallback, useState, useRef } from "react";
-import { FaBars } from "react-icons/fa6";
+// import { FaBars } from "react-icons/fa6";
 //import { FaExpand, FaVolumeUp, FaVolumeMute } from "react-icons/fa";
 import { X } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
-import { useSession } from "next-auth/react";
+// import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactPlayer from "react-player";
 import axios from "axios";
@@ -15,7 +15,7 @@ import axios from "axios";
 // Components
 import SidemenuDashboard from "@/app/components/SidemenuDashboard";
 import EditorSidebar from "@/app/components/EditorSidebar";
-import EditorTopbar from "@/app/components/EditorTopbar";
+// EditorTopbar removed to keep editor viewport scroll-free
 import TimelineRuler from "@/app/components/TimeLine";
 import ZoomEffectsPopup from "@/app/components/ZoomEffectsPopup";
 import SaveDemoModal from "@/app/components/SaveDemoModal";
@@ -35,12 +35,46 @@ import { useBackgroundStyle } from "./hooks/useBackgroundStyle";
 import { useTimelineInit } from "./hooks/useTimelineInit";
 
 // Utils
-import { sanitizeFilename } from "@/app/lib/constants";
 import { handleSaveDemo, exportVideo } from "./utils/videoHandlers";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import ZoomModal from "@/app/components/ZoomModal";
 import ExportSettingsModal, { ExportSettings } from "@/app/components/ExportSettingsModal";
 import ExportResultModal from "@/app/components/ExportResultModal";
+
+type TextOverlayItem = {
+  id: string;
+  text: string;
+  x: number; // normalized 0..1
+  y: number; // normalized 0..1
+  w: number; // px
+  h: number; // px
+  startTime: number;
+  endTime: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+};
+
+type SubtitleCue = { start: number; end: number; text: string };
+
+function resolveOverlayFontFamily(value: string): string {
+  const v = (value || "").trim();
+  switch (v) {
+    case "Inter":
+      return "var(--font-inter), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    case "Roboto":
+      return "var(--font-roboto), ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial";
+    case "Poppins":
+      return "var(--font-poppins), ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial";
+    case "Caveat":
+      return "var(--font-caveat), ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial";
+    case "Georgia":
+      return "Georgia, ui-serif, serif";
+    case "Arial":
+    default:
+      return "Arial, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
+  }
+}
 
 export default function EditorPage() {
   const router = useRouter();
@@ -112,21 +146,22 @@ export default function EditorPage() {
     canvasRef,
     videoContainerRef,
     setLoadedSegments,
+    aspectRatio,
+    setAspectRatio,
+    browserFrameMode,
+    setBrowserFrameMode,
+    browserFrameDrawShadow,
+    setBrowserFrameDrawShadow,
+    browserFrameDrawBorder,
+    setBrowserFrameDrawBorder,
   } = editorState;
 
   // External hooks
-  const {
-    videoUrl: recordedVideoUrl,
-    mp4Url,
-    thumbnailUrl,
-    processing,
-    resetVideo,
-    downloadBlob,
-  } = useEditor();
+  const { videoUrl: recordedVideoUrl, thumbnailUrl, processing, resetVideo } = useEditor();
 
   const blob = useBlobStore((state) => state.blob);
   const { recordingDuration } = useScreenRecorder();
-  const { data: session } = useSession();
+  // const { data: session } = useSession();
 
   // Format time helper
   const { formatTimeForInput } = useFormatTime();
@@ -149,6 +184,10 @@ export default function EditorPage() {
     setCurrentSegments,
     setZoomEffects,
     setSavedDemoId,
+    setAspectRatio,
+    setBrowserFrameMode,
+    setBrowserFrameDrawShadow,
+    setBrowserFrameDrawBorder,
     formatTimeForInput,
   });
 
@@ -176,14 +215,7 @@ export default function EditorPage() {
   });
 
   // Overlays handling
-  const {
-    handleMouseDown,
-    handleMouseUp,
-    handleUndo,
-    handleClear,
-    handleSaveOverlays,
-    handleLoadOverlays,
-  } = useOverlays({
+  const { handleMouseDown, handleMouseUp } = useOverlays({
     canvasRef,
     playerRef,
     tool,
@@ -246,15 +278,7 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSegments, zoomEffects]);
 
-  // User initials
-  const initials = session?.user?.name
-    ? session.user.name
-        .split(" ")
-        .map((part: string) => part[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : session?.user?.email?.[0]?.toUpperCase() || "U";
+  // User initials were previously used in the topbar (now removed).
 
   // No-op setProgress to satisfy required callback
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -271,6 +295,21 @@ export default function EditorPage() {
     },
     [formatTimeForInput, setInputStartTime, setInputEndTime]
   );
+
+  function handleResetTimeline() {
+    resetVideo();
+    setPlaying(false);
+    setMode("main");
+    setSegments([]);
+    setZoomSegments([]);
+    setActiveZoomIdx(-1);
+    setCurrentTime(0);
+    playerRef.current?.seekTo(0, "seconds");
+    setTimelineStartTime(0);
+    setTimelineEndTime(duration);
+    setInputStartTime(formatTimeForInput(0));
+    setInputEndTime(formatTimeForInput(duration));
+  }
 
   // Dashboard menu handlers
   const closeDashboardMenu = () => {
@@ -308,7 +347,14 @@ export default function EditorPage() {
         end: String(s.end),
       })),
       zoomEffects: zoomSegments,
+      subtitles: subtitleCues,
       selectedBackground,
+      aspectRatio,
+      browserFrame: {
+        mode: browserFrameMode,
+        drawShadow: browserFrameDrawShadow,
+        drawBorder: browserFrameDrawBorder,
+      },
       setSavingDemo,
       setSidebarTitle,
       setSidebarDescription,
@@ -333,15 +379,205 @@ export default function EditorPage() {
   // };
 
   const [segments, setSegments] = useState<{ start: number; end: number }[]>([]);
+  const [nativeAspectRatio, setNativeAspectRatio] = useState("16/9");
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [subtitlesLoading, setSubtitlesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!params) {
+      return;
+    }
+    const urlSubtitles = params.get("subtitles");
+    if (!urlSubtitles) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(urlSubtitles) as unknown;
+      // Accept either an array of cues or a { cues: [...] } payload.
+      let cues: unknown = null;
+      if (Array.isArray(parsed)) {
+        cues = parsed;
+      } else if (typeof parsed === "object" && parsed && "cues" in parsed) {
+        cues = (parsed as { cues?: unknown }).cues ?? null;
+      }
+      if (Array.isArray(cues)) {
+        setSubtitleCues(
+          cues
+            .map((c) => {
+              if (typeof c !== "object" || !c) {
+                return null;
+              }
+              const rec = c as Record<string, unknown>;
+              const start = Number(rec.start);
+              const end = Number(rec.end);
+              const text = String(rec.text ?? "").trim();
+              if (!Number.isFinite(start) || !Number.isFinite(end) || !text) {
+                return null;
+              }
+              return { start, end, text } satisfies SubtitleCue;
+            })
+            .filter(
+              (c): c is SubtitleCue =>
+                !!c && Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0
+            )
+        );
+      }
+    } catch (e) {
+      console.error("Failed to parse subtitles from URL:", e);
+    }
+  }, [params]);
+
+  const activeSubtitleText = React.useMemo(() => {
+    if (!subtitleCues.length) {
+      return "";
+    }
+    const t = currentTime;
+    // Binary search over sorted cues by start time.
+    let lo = 0;
+    let hi = subtitleCues.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const c = subtitleCues[mid];
+      if (t < c.start) {
+        hi = mid - 1;
+      } else if (t > c.end) {
+        lo = mid + 1;
+      } else {
+        return c.text;
+      }
+    }
+    // Might be between cues; no caption.
+    return "";
+  }, [subtitleCues, currentTime]);
+
+  const handleAddSubtitles = async () => {
+    if (!videoUrl) {
+      toast.error("No video available for subtitles");
+      return;
+    }
+    if (subtitlesLoading) {
+      return;
+    }
+
+    const toastId = toast.loading("Generating subtitles...");
+    setSubtitlesLoading(true);
+    try {
+      let subtitleSourceUrl = videoUrl;
+      if (videoUrl.startsWith("blob:")) {
+        toast.loading("Uploading audio source...", { id: toastId });
+        const resp = await fetch(videoUrl);
+        if (!resp.ok) {
+          throw new Error("Failed to read recorded video blob");
+        }
+        const blob = await resp.blob();
+
+        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+        const formData = new FormData();
+        formData.append("file", blob, "subtitle_source.webm");
+        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+        const uploadRes = await axios.post(CLOUDINARY_API_URL, formData);
+        subtitleSourceUrl = uploadRes.data.secure_url as string;
+      }
+
+      const createRes = await axios.post("/api/subtitles/create", {
+        videoUrl: subtitleSourceUrl,
+        demoId: editorState.savedDemoId || null,
+        language: "multi",
+      });
+      const jobId = createRes.data?.jobId as string | undefined;
+      if (!jobId) {
+        throw new Error("No subtitle job ID returned");
+      }
+
+      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      const MAX_POLLS = 180; // 6 minutes (180 × 2s)
+      for (let pollCount = 0; pollCount < MAX_POLLS; pollCount++) {
+        const statusRes = await axios.get(`/api/jobs/${jobId}`);
+        const state = statusRes.data?.state as string | undefined;
+        if (state === "completed") {
+          const cues = (statusRes.data?.subtitles || []) as SubtitleCue[];
+          setSubtitleCues(Array.isArray(cues) ? cues : []);
+          toast.success("Subtitles ready", { id: toastId });
+          return;
+        }
+        if (state === "failed") {
+          throw new Error(statusRes.data?.error || "Subtitle generation failed");
+        }
+        await sleep(2000);
+      }
+      throw new Error("Subtitle generation timed out");
+    } catch (e: unknown) {
+      console.error(e);
+      const message = e instanceof Error ? e.message : "Failed to generate subtitles";
+      toast.error(message, { id: toastId });
+    } finally {
+      setSubtitlesLoading(false);
+    }
+  };
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showExportResultModal, setShowExportResultModal] = useState(false);
-  const [savingShareLink, setSavingShareLink] = useState(false);
+  const [resultActionLoading, setResultActionLoading] = useState(false);
+  const [shareLinkSaved, setShareLinkSaved] = useState(false);
+  const [textOverlayInput, setTextOverlayInput] = useState("Add text");
+  const [textOverlayFontFamily, setTextOverlayFontFamily] = useState("Arial");
+  const [textOverlayFontSize, setTextOverlayFontSize] = useState(24);
+  const [textOverlayColor, setTextOverlayColor] = useState("#ffffff");
+  const [textOverlays, setTextOverlays] = useState<TextOverlayItem[]>([]);
+  const [selectedTextOverlayId, setSelectedTextOverlayId] = useState<string | null>(null);
+  const [draggingTextOverlayId, setDraggingTextOverlayId] = useState<string | null>(null);
+  const [resizingTextOverlayId, setResizingTextOverlayId] = useState<string | null>(null);
+  const textDragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const textResizeStartRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  }>({
+    startX: 0,
+    startY: 0,
+    startW: 240,
+    startH: 80,
+  });
   const [pendingExport, setPendingExport] = useState<{
     exportedUrl: string;
     sourceVideoUrl: string;
     downloadAsMp4: (url: string) => Promise<void>;
+    uploadedSourceVideo: boolean;
     settings: ExportSettings;
+    demoId: string | null;
   } | null>(null);
+  const hasCanvasBackground =
+    !!selectedBackground &&
+    selectedBackground !== "none" &&
+    selectedBackground !== "hidden" &&
+    selectedBackground !== "transparent";
+  const previewObjectFit = "contain";
+  const previewFrameAspectRatio =
+    aspectRatio === "native" ? nativeAspectRatio : aspectRatio.replace(":", "/");
+  const ratioParts = previewFrameAspectRatio.split("/");
+  const ratioW = Number(ratioParts[0]);
+  const ratioH = Number(ratioParts[1]);
+  const previewRatioValue =
+    Number.isFinite(ratioW) && Number.isFinite(ratioH) && ratioW > 0 && ratioH > 0
+      ? ratioW / ratioH
+      : 16 / 9;
+  // Browser frame UI modes are removed; keep only cheap border/shadow styling.
+  const browserFrameBorder = browserFrameDrawBorder ? "6px solid rgba(255,255,255,0.95)" : "none";
+  const browserFrameShadow = browserFrameDrawShadow ? "0 14px 34px rgba(0,0,0,0.32)" : "none";
+  const isPortraitPreview = previewRatioValue < 1;
+  const stageHeight = selectedBackground
+    ? isPortraitPreview
+      ? isFullscreen
+        ? "82%"
+        : "92%"
+      : isFullscreen
+        ? "73%"
+        : "84%"
+    : "100%";
+  const stageMaxWidth = selectedBackground ? (isPortraitPreview ? "95%" : "92%") : "100%";
+  const stageContainerPadY = isPortraitPreview ? (isFullscreen ? 14 : 18) : isFullscreen ? 18 : 24;
 
   const saveExportedVideoRecord = async (
     exportedUrl: string,
@@ -376,34 +612,28 @@ export default function EditorPage() {
       sidebarDescription,
       segments,
       zoomSegments,
+      subtitles: subtitleCues,
+      textOverlays,
       setProgress,
+      aspectRatio,
+      browserFrame: {
+        mode: browserFrameMode,
+        drawShadow: browserFrameDrawShadow,
+        drawBorder: browserFrameDrawBorder,
+      },
       duration,
       savedDemoId: editorState.savedDemoId,
       settings,
     });
 
     if (result) {
-      if (editorState.savedDemoId) {
-        try {
-          await saveExportedVideoRecord(
-            result.exportedUrl,
-            result.sourceVideoUrl,
-            settings,
-            editorState.savedDemoId
-          );
-          toast.success("Exported video updated in Exported Videos");
-        } catch (saveError) {
-          console.error("Failed saving exported video record:", saveError);
-          toast.error("Export completed, but saving exported entry failed");
-        }
-        await result.downloadAsMp4(result.exportedUrl);
-      } else {
-        setPendingExport({
-          ...result,
-          settings,
-        });
-        setShowExportResultModal(true);
-      }
+      setPendingExport({
+        ...result,
+        settings,
+        demoId: editorState.savedDemoId ?? null,
+      });
+      setShareLinkSaved(false);
+      setShowExportResultModal(true);
     }
 
     // Clean up the object URL after export
@@ -412,13 +642,50 @@ export default function EditorPage() {
     }
   };
 
+  useEffect(() => {
+    if (!videoUrl) {
+      setNativeAspectRatio("16/9");
+      return;
+    }
+
+    const probeVideo = document.createElement("video");
+    probeVideo.preload = "metadata";
+    probeVideo.src = videoUrl;
+
+    const handleLoaded = () => {
+      if (probeVideo.videoWidth > 0 && probeVideo.videoHeight > 0) {
+        setNativeAspectRatio(`${probeVideo.videoWidth}/${probeVideo.videoHeight}`);
+      }
+    };
+
+    probeVideo.addEventListener("loadedmetadata", handleLoaded);
+    return () => {
+      probeVideo.removeEventListener("loadedmetadata", handleLoaded);
+      probeVideo.src = "";
+    };
+  }, [videoUrl]);
+
   const handleDownloadMp4Only = async () => {
     if (!pendingExport) {
       return;
     }
-    await pendingExport.downloadAsMp4(pendingExport.exportedUrl);
-    setShowExportResultModal(false);
-    setPendingExport(null);
+    try {
+      setResultActionLoading(true);
+      await pendingExport.downloadAsMp4(pendingExport.exportedUrl);
+      await axios.post("/api/exported-videos/cleanup", {
+        exportedUrl: pendingExport.exportedUrl,
+        sourceVideoUrl: pendingExport.uploadedSourceVideo ? pendingExport.sourceVideoUrl : null,
+        demoId: pendingExport.demoId,
+      });
+      toast.success("Downloaded MP4 without saving share link");
+      setShowExportResultModal(false);
+      setPendingExport(null);
+    } catch (cleanupError) {
+      console.error("Failed during download-only cleanup:", cleanupError);
+      toast.error("MP4 downloaded, but cleanup failed");
+    } finally {
+      setResultActionLoading(false);
+    }
   };
 
   const handleSaveShareLink = async () => {
@@ -427,13 +694,14 @@ export default function EditorPage() {
     }
 
     try {
-      setSavingShareLink(true);
+      setResultActionLoading(true);
       await saveExportedVideoRecord(
         pendingExport.exportedUrl,
         pendingExport.sourceVideoUrl,
         pendingExport.settings,
-        null
+        pendingExport.demoId
       );
+      setShareLinkSaved(true);
       await navigator.clipboard.writeText(pendingExport.exportedUrl);
       toast.success("Share link saved in Exported Videos and copied");
       setShowExportResultModal(false);
@@ -442,7 +710,7 @@ export default function EditorPage() {
       console.error("Failed to save share link:", saveError);
       toast.error("Failed to save share link");
     } finally {
-      setSavingShareLink(false);
+      setResultActionLoading(false);
     }
   };
 
@@ -468,7 +736,7 @@ export default function EditorPage() {
   // Zoom effects are now applied at export time, not immediately
 
   //useEffect(() => {}, [videoUrl]);
-  const [mode, setMode] = useState<"main" | "trim" | "zoom">("main");
+  const [mode, setMode] = useState<"main" | "trim" | "zoom" | "text">("main");
   const [childHandleProgress, setChildHandleProgress] = useState<
     null | ((data: { playedSeconds: number }) => void)
   >(null);
@@ -647,6 +915,242 @@ export default function EditorPage() {
     }
   }, [activeZoomIdx, currentTime, mode, playerRef, zoomSegments]);
 
+  const handleAddTextOverlay = useCallback(() => {
+    const text = textOverlayInput.trim() || "Add text";
+    const start = Math.max(0, currentTime);
+    const defaultDuration = 3;
+    const end =
+      duration > 0 ? Math.min(duration, start + defaultDuration) : start + defaultDuration;
+    const newOverlay: TextOverlayItem = {
+      id: `text-${Date.now()}`,
+      text,
+      x: 0.5,
+      y: 0.5,
+      w: 240,
+      h: 80,
+      startTime: start,
+      endTime: Math.max(end, start + 0.1),
+      fontFamily: textOverlayFontFamily,
+      fontSize: textOverlayFontSize,
+      color: textOverlayColor,
+    };
+
+    setTextOverlays((prev) => [...prev, newOverlay]);
+    setSelectedTextOverlayId(newOverlay.id);
+    setTool("none");
+  }, [
+    currentTime,
+    duration,
+    setTool,
+    textOverlayColor,
+    textOverlayFontFamily,
+    textOverlayFontSize,
+    textOverlayInput,
+  ]);
+
+  const handleTextOverlayInputChange = useCallback(
+    (value: string) => {
+      setTextOverlayInput(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) => (item.id === selectedTextOverlayId ? { ...item, text: value } : item))
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayFontFamilyChange = useCallback(
+    (value: string) => {
+      setTextOverlayFontFamily(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === selectedTextOverlayId ? { ...item, fontFamily: value } : item
+        )
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayFontSizeChange = useCallback(
+    (value: number) => {
+      setTextOverlayFontSize(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === selectedTextOverlayId ? { ...item, fontSize: value } : item
+        )
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayColorChange = useCallback(
+    (value: string) => {
+      setTextOverlayColor(value);
+      if (!selectedTextOverlayId) {
+        return;
+      }
+      setTextOverlays((prev) =>
+        prev.map((item) => (item.id === selectedTextOverlayId ? { ...item, color: value } : item))
+      );
+    },
+    [selectedTextOverlayId]
+  );
+
+  const handleTextOverlayMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>, overlayId: string) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+        return;
+      }
+
+      const stage = zoomFocusStageRef.current;
+      if (!stage) {
+        return;
+      }
+
+      const currentOverlay = textOverlays.find((item) => item.id === overlayId);
+      if (!currentOverlay) {
+        return;
+      }
+
+      const rect = stage.getBoundingClientRect();
+      textDragOffsetRef.current = {
+        x: event.clientX - rect.left - currentOverlay.x * rect.width,
+        y: event.clientY - rect.top - currentOverlay.y * rect.height,
+      };
+
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedTextOverlayId(overlayId);
+      setTextOverlayInput(currentOverlay.text);
+      setTextOverlayFontFamily(currentOverlay.fontFamily);
+      setTextOverlayFontSize(currentOverlay.fontSize);
+      setTextOverlayColor(currentOverlay.color);
+      setDraggingTextOverlayId(overlayId);
+    },
+    [textOverlays]
+  );
+
+  const handleTextOverlayResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>, overlayId: string) => {
+      const currentOverlay = textOverlays.find((item) => item.id === overlayId);
+      if (!currentOverlay) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedTextOverlayId(overlayId);
+      setTextOverlayInput(currentOverlay.text);
+      setTextOverlayFontFamily(currentOverlay.fontFamily);
+      setTextOverlayFontSize(currentOverlay.fontSize);
+      setTextOverlayColor(currentOverlay.color);
+      textResizeStartRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startW: currentOverlay.w,
+        startH: currentOverlay.h,
+      };
+      setResizingTextOverlayId(overlayId);
+    },
+    [textOverlays]
+  );
+
+  useEffect(() => {
+    if (!draggingTextOverlayId) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      const stage = zoomFocusStageRef.current;
+      if (!stage) {
+        return;
+      }
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+
+      const x = clamp((event.clientX - rect.left - textDragOffsetRef.current.x) / rect.width, 0, 1);
+      const y = clamp((event.clientY - rect.top - textDragOffsetRef.current.y) / rect.height, 0, 1);
+
+      setTextOverlays((prev) =>
+        prev.map((item) => (item.id === draggingTextOverlayId ? { ...item, x, y } : item))
+      );
+    };
+
+    const onUp = () => {
+      setDraggingTextOverlayId(null);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingTextOverlayId]);
+
+  useEffect(() => {
+    if (!resizingTextOverlayId) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      const deltaX = event.clientX - textResizeStartRef.current.startX;
+      const deltaY = event.clientY - textResizeStartRef.current.startY;
+      const nextW = clamp(Math.round(textResizeStartRef.current.startW + deltaX), 120, 900);
+      const nextH = clamp(Math.round(textResizeStartRef.current.startH + deltaY), 40, 600);
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === resizingTextOverlayId ? { ...item, w: nextW, h: nextH } : item
+        )
+      );
+    };
+
+    const onUp = () => {
+      setResizingTextOverlayId(null);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [resizingTextOverlayId]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      const isTyping =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.isContentEditable;
+      if (isTyping) {
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectedTextOverlayId) {
+          setTextOverlays((prev) => prev.filter((item) => item.id !== selectedTextOverlayId));
+          setSelectedTextOverlayId(null);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedTextOverlayId]);
+
   //const [open, setOpen] = useState(true);
 
   return (
@@ -660,10 +1164,22 @@ export default function EditorPage() {
       <ExportResultModal
         isOpen={showExportResultModal}
         exportedUrl={pendingExport?.exportedUrl || ""}
-        loading={savingShareLink}
+        loading={resultActionLoading}
         onClose={() => {
-          if (savingShareLink) {
+          if (resultActionLoading) {
             return;
+          }
+          // If user closes without saving a share link, cleanup the temporary Cloudinary export.
+          if (pendingExport && !shareLinkSaved) {
+            axios
+              .post("/api/exported-videos/cleanup", {
+                exportedUrl: pendingExport.exportedUrl,
+                sourceVideoUrl: pendingExport.uploadedSourceVideo
+                  ? pendingExport.sourceVideoUrl
+                  : null,
+                demoId: pendingExport.demoId,
+              })
+              .catch((e) => console.error("Cleanup on close failed:", e));
           }
           setShowExportResultModal(false);
           setPendingExport(null);
@@ -688,47 +1204,13 @@ export default function EditorPage() {
         }}
       />
 
-      <EditorTopbar
-        onBack={() => router.back()}
-        userInitials={initials}
-        onToggleMenu={toggleDashboardMenu}
-      />
-
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Sidebar for Desktop */}
         <div className="hidden md:block w-80 bg-white shadow-lg z-40">
           <div className="w-full h-full relative">
             <EditorSidebar
               title={sidebarTitle}
-              setTitle={setSidebarTitle}
-              description={sidebarDescription}
-              setDescription={setSidebarDescription}
-              onDownloadWebM={() => {
-                const filename = sanitizeFilename(sidebarTitle) || "clip";
-                if (videoUrl) {
-                  const a = document.createElement("a");
-                  a.href = videoUrl;
-                  a.download = `${filename}.webm`;
-                  a.click();
-                }
-              }}
-              onDownloadMP4={() => {
-                const filename = sanitizeFilename(sidebarTitle) || "clip";
-                if (mp4Url) {
-                  downloadBlob(mp4Url, `${filename}.mp4`);
-                }
-              }}
               onExportWebM={() => setShowExportSettings(true)}
-              tool={tool}
-              setTool={(t: string) => {
-                if (t === "none" || t === "text" || t === "blur" || t === "rect" || t === "arrow") {
-                  setTool(t);
-                }
-              }}
-              handleUndo={handleUndo}
-              handleClear={handleClear}
-              handleSaveOverlays={handleSaveOverlays}
-              handleLoadOverlays={handleLoadOverlays}
               thumbnailUrl={thumbnailUrl || undefined}
               selectedBackground={selectedBackground}
               setSelectedBackground={setSelectedBackground}
@@ -736,6 +1218,30 @@ export default function EditorPage() {
               setBackgroundType={setBackgroundType}
               customBackground={customBackground}
               setCustomBackground={setCustomBackground}
+              aspectRatio={aspectRatio}
+              setAspectRatio={setAspectRatio}
+              browserFrameMode={browserFrameMode}
+              setBrowserFrameMode={setBrowserFrameMode}
+              browserFrameDrawShadow={browserFrameDrawShadow}
+              setBrowserFrameDrawShadow={setBrowserFrameDrawShadow}
+              browserFrameDrawBorder={browserFrameDrawBorder}
+              setBrowserFrameDrawBorder={setBrowserFrameDrawBorder}
+              textOverlayInput={textOverlayInput}
+              setTextOverlayInput={handleTextOverlayInputChange}
+              textOverlayFontFamily={textOverlayFontFamily}
+              setTextOverlayFontFamily={handleTextOverlayFontFamilyChange}
+              textOverlayFontSize={textOverlayFontSize}
+              setTextOverlayFontSize={handleTextOverlayFontSizeChange}
+              textOverlayColor={textOverlayColor}
+              setTextOverlayColor={handleTextOverlayColorChange}
+              onAddTextOverlay={handleAddTextOverlay}
+              onAddSubtitles={handleAddSubtitles}
+              subtitlesLoading={subtitlesLoading}
+              hasSubtitles={subtitleCues.length > 0}
+              onOpenSaveDemo={() => setShowSaveDemoModal(true)}
+              savingDemo={savingDemo}
+              demoSaved={demoSaved}
+              onToggleDashboardMenu={toggleDashboardMenu}
             />
             {activeZoomIdx != -1 && showZoomModal ? (
               <ZoomModal
@@ -770,41 +1276,7 @@ export default function EditorPage() {
               </button>
               <EditorSidebar
                 title={sidebarTitle}
-                setTitle={setSidebarTitle}
-                description={sidebarDescription}
-                setDescription={setSidebarDescription}
-                onDownloadWebM={() => {
-                  const filename = sanitizeFilename(sidebarTitle) || "clip";
-                  if (videoUrl) {
-                    const a = document.createElement("a");
-                    a.href = videoUrl;
-                    a.download = `${filename}.webm`;
-                    a.click();
-                  }
-                }}
-                onDownloadMP4={() => {
-                  const filename = sanitizeFilename(sidebarTitle) || "clip";
-                  if (mp4Url) {
-                    downloadBlob(mp4Url, `${filename}.mp4`);
-                  }
-                }}
                 onExportWebM={() => setShowExportSettings(true)}
-                tool={tool}
-                setTool={(t: string) => {
-                  if (
-                    t === "none" ||
-                    t === "text" ||
-                    t === "blur" ||
-                    t === "rect" ||
-                    t === "arrow"
-                  ) {
-                    setTool(t);
-                  }
-                }}
-                handleUndo={handleUndo}
-                handleClear={handleClear}
-                handleSaveOverlays={handleSaveOverlays}
-                handleLoadOverlays={handleLoadOverlays}
                 forceShowMobile={true}
                 thumbnailUrl={thumbnailUrl || undefined}
                 selectedBackground={selectedBackground}
@@ -813,279 +1285,398 @@ export default function EditorPage() {
                 setBackgroundType={setBackgroundType}
                 customBackground={customBackground}
                 setCustomBackground={setCustomBackground}
+                aspectRatio={aspectRatio}
+                setAspectRatio={setAspectRatio}
+                browserFrameMode={browserFrameMode}
+                setBrowserFrameMode={setBrowserFrameMode}
+                browserFrameDrawShadow={browserFrameDrawShadow}
+                setBrowserFrameDrawShadow={setBrowserFrameDrawShadow}
+                browserFrameDrawBorder={browserFrameDrawBorder}
+                setBrowserFrameDrawBorder={setBrowserFrameDrawBorder}
+                textOverlayInput={textOverlayInput}
+                setTextOverlayInput={handleTextOverlayInputChange}
+                textOverlayFontFamily={textOverlayFontFamily}
+                setTextOverlayFontFamily={handleTextOverlayFontFamilyChange}
+                textOverlayFontSize={textOverlayFontSize}
+                setTextOverlayFontSize={handleTextOverlayFontSizeChange}
+                textOverlayColor={textOverlayColor}
+                setTextOverlayColor={handleTextOverlayColorChange}
+                onAddTextOverlay={handleAddTextOverlay}
+                onAddSubtitles={handleAddSubtitles}
+                subtitlesLoading={subtitlesLoading}
+                hasSubtitles={subtitleCues.length > 0}
+                onOpenSaveDemo={() => setShowSaveDemoModal(true)}
+                savingDemo={savingDemo}
+                demoSaved={demoSaved}
+                onToggleDashboardMenu={toggleDashboardMenu}
                 className="w-full h-full"
               />
             </div>
           </div>
         )}
 
-        {/* Mobile Drawer for SidemenuDashboard */}
+        {/* Dashboard menu drawer (all sizes) */}
         {isDashboardMenuOpen && (
-          <div className="fixed inset-0 z-50 flex md:hidden">
-            <div className="fixed inset-0 bg-black bg-opacity-40" onClick={closeDashboardMenu} />
+          <div className="fixed inset-0 z-50 flex">
+            <div
+              className="fixed inset-0 bg-black/10"
+              onClick={closeDashboardMenu}
+              aria-label="Close dashboard menu"
+            />
             <SidemenuDashboard />
           </div>
         )}
 
         <div className="flex-1 min-h-0 overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-4 mb-6 sm:mb-6 px-4 sm:px-8">
-            <div className="flex gap-2 sm:gap-4 mt-2 sm:mt-0 ml-auto">
-              {/* Mobile Hamburger Button for SidemenuDashboard */}
-              <div className="relative md:hidden group">
-                <button
-                  className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                  onClick={toggleDashboardMenu}
-                  aria-label="Toggle dashboard menu"
-                >
-                  <FaBars className="text-xl" />
-                  Menu
-                </button>
-                {isDashboardMenuOpen && (
-                  <div className="fixed inset-0 z-50 flex md:hidden">
-                    <div
-                      className="fixed inset-0 bg-black bg-opacity-40"
-                      onClick={() => setIsDashboardMenuOpen(false)}
-                    />
-                    <SidemenuDashboard />
-                  </div>
-                )}
-              </div>
-
-              {/* <button
-                className="flex cursor-pointer items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setShowSaveDemoModal(true)}
-              >
-                <span className="text-xl"></span> Save Demo
-              </button> */}
-
-              {/* Editor Sidebar Toggle for Mobile */}
-              <button
-                className="md:hidden cursor-pointer flex items-center gap-2 mt-5 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setIsSidebarOpen(true)}
-              >
-                <FaBars className="text-xl" />
-                Editor
-              </button>
-            </div>
-          </div>
-
-          {(sidebarTitle || sidebarDescription) && !demoSaved && (
-            <div className="bg-white p-4 mx-4 flex items-center justify-between">
-              <div className="flex flex-col">
-                {sidebarTitle && (
-                  <div>
-                    {/* <span className="text-sm font-medium text-gray-500">Title:</span> */}
-                    <span className="text-[32px] font-medium text-[#261753]">{sidebarTitle}</span>
-                  </div>
-                )}
-                {/* {sidebarDescription && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Description:</span>
-                    <span className="text-[rgba(0,0,0,0.43)] text-lg">{sidebarDescription}</span>
-                  </div>
-                )} */}
-              </div>
-              <button
-                className="flex cursor-pointer items-center justify-center gap-2 px-4 sm:px-6 h-10 sm:h-12 rounded-lg bg-[#A594F9] text-white font-semibold shadow-sm hover:bg-[#7C5CFC] focus:ring-2 focus:ring-[#A594F9] transition-all text-base w-32 max-w-xs min-w-fit whitespace-nowrap"
-                onClick={() => setShowSaveDemoModal(true)}
-                disabled={demoSaved || savingDemo}
-              >
-                <span className="text-xl"></span>
-                {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
-              </button>
-            </div>
-          )}
-          {videoUrl && !demoSaved && !sidebarTitle && (
-            <div className="flex justify-center mt-6 mb-6 ml-">
-              <button
-                onClick={() => setShowSaveDemoModal(true)}
-                disabled={demoSaved || savingDemo}
-                className={`px-8 py-3 rounded-lg font-semibold shadow transition text-base whitespace-nowrap ${demoSaved || savingDemo ? "bg-[#8A76FC] text-white opacity-70 cursor-not-allowed" : "bg-[#8A76FC] text-white hover:bg-[#7A66EC]"}`}
-              >
-                {savingDemo ? "Saving..." : demoSaved ? "Saved" : "Save Demo"}
-              </button>
-            </div>
-          )}
-          <div className="mt-5"></div>
+          <div className="mt-3" />
           {/* Video Wrapper */}
           <div
             className={
-              "flex flex-col items-center w-full max-w-[1100px] mx-auto rounded-2xl bg-transparent"
+              "flex flex-col items-center w-full max-w-[1200px] mx-auto rounded-2xl bg-transparent"
             }
             //style={{ boxShadow: "0 8px 24px rgba(124, 92, 252, 0.3)" }}
           >
             {/* Video container */}
             <div
               ref={videoContainerRef}
-              className={`relative w-[1000px] sm:h-auto sm:aspect-video rounded-2xl border ${
+              className={`relative w-full max-w-[1120px] sm:h-auto rounded-2xl border ${
                 isFullscreen ? "border-[#7C5CFC] shadow-lg" : "border-[#E6E1FA]"
               } flex flex-col items-center justify-center mb-1 transition-all duration-300`}
               style={{
+                aspectRatio: "16 / 9",
                 minHeight: "160px",
-                padding: selectedBackground ? "0px" : "5px",
+                // Add symmetric vertical inset so the stage isn't stuck to the top when backgrounds are enabled.
+                padding: `${stageContainerPadY}px ${selectedBackground ? "0px" : "5px"}`,
                 boxShadow: "0 4px 24px 0 #E6E1FA",
                 ...getBackgroundStyle(),
               }}
             >
               <div
-                ref={zoomFocusStageRef}
                 className=""
                 style={{
-                  width: selectedBackground ? "90%" : "100%",
-                  height: selectedBackground
-                    ? `${isFullscreen ? "73%" : "81%"}`
-                    : `${isFullscreen ? "81%" : "100%"}`,
+                  width: "auto",
+                  aspectRatio: previewFrameAspectRatio,
+                  height: stageHeight,
+                  maxWidth: stageMaxWidth,
+                  margin: "0 auto",
                   position: "relative",
-                  //zIndex: 1,
+                  display: "flex",
+                  flexDirection: "column",
                   borderRadius: "1.25rem",
                   overflow: "hidden",
-                  background: "#F6F3FF",
+                  background: hasCanvasBackground ? "#F6F3FF" : "#000000",
+                  border: browserFrameBorder,
+                  boxShadow: browserFrameShadow,
                   transition: "width 0.3s ease, height 0.3s ease",
-                  //transform: "scale(1)",
                 }}
               >
                 <div
-                  className="absolute w-full h-fit z-10"
+                  ref={zoomFocusStageRef}
+                  className="relative w-full flex-1 min-h-0"
                   style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    // width: "100%",
-                    height: "100%",
-                    //border: "4px solid green",
                     borderRadius: "1.25rem",
-                    transform: shouldApplyZoomPreview
-                      ? `scale(${previewZoomScale}) translate(-${zoomTranslateX}%, -${zoomTranslateY}%)`
-                      : "scale(1)",
-                    transformOrigin: "0% 0%",
-                    transition: isDraggingZoomTarget ? "none" : "transform 0.4s ease",
+                    overflow: "hidden",
                   }}
                 >
-                  <div className="">
-                    {/*In FullScreen video require one div, so don't remove div */}
-                    {videoUrl ? (
-                      <ReactPlayer
-                        key={videoUrl}
-                        ref={playerRef}
-                        url={videoUrl}
-                        playing={playing}
-                        controls={false}
-                        muted={false}
-                        volume={volume}
-                        width="100%"
-                        height="100%"
-                        // style={{
-                        // objectFit: "contain",
-                        // background: "#F6F3FF",
-                        // }}
-                        config={{
-                          file: {
-                            attributes: {
-                              crossOrigin: "anonymous",
-                            },
-                          },
-                        }}
-                        onError={(e) => console.error("Video failed to load", e)}
-                        onProgress={(data) => {
-                          setCurrentTime(data.playedSeconds);
-                          childHandleProgress?.(data);
-                        }}
-                        onEnded={() => setPlaying(false)}
-                        progressInterval={50}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                        <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
-                          <svg
-                            className="w-8 h-8 text-[#7C5CFC]"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                          </svg>
-                        </div>
-                        <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
-                          No Video Selected
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
-                        <div className="space-y-2 text-sm text-gray-500">
-                          <p>
-                            • Go to <strong>Dashboard</strong> and edit an existing demo
-                          </p>
-                          <p>
-                            • Or go to <strong>Recorder</strong> to record/upload a new video
-                          </p>
-                        </div>
-                        <div className="mt-6 flex gap-3">
-                          <button
-                            onClick={() => router.push("/dashboard")}
-                            className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
-                          >
-                            Go to Dashboard
-                          </button>
-                          <button
-                            onClick={() => router.push("/recorder")}
-                            className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
-                          >
-                            Go to Recorder
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {shouldShowZoomFocusBox && (
                   <div
-                    className="absolute inset-0 z-50 rounded-2xl"
-                    onMouseDown={handleZoomTargetMouseDown}
+                    className="absolute inset-0 z-10"
                     style={{
-                      cursor: isDraggingZoomTarget ? "grabbing" : "grab",
-                      userSelect: "none",
+                      transform: shouldApplyZoomPreview
+                        ? `scale(${previewZoomScale}) translate(-${zoomTranslateX}%, -${zoomTranslateY}%)`
+                        : "scale(1)",
+                      transformOrigin: "0% 0%",
+                      transition: isDraggingZoomTarget ? "none" : "transform 0.4s ease",
+                      backgroundColor: hasCanvasBackground ? "#F1ECFF" : "#000000",
                     }}
                   >
-                    <div
-                      className="absolute rounded-lg pointer-events-none"
-                      style={{
-                        width: `${zoomFocusSizePct}%`,
-                        height: `${zoomFocusSizePct}%`,
-                        left: `${activeEditedZoomSegment.x * 100}%`,
-                        top: `${activeEditedZoomSegment.y * 100}%`,
-                        transform: "translate(-50%, -50%)",
-                        border: "2px solid #ef4444",
-                        boxShadow: "0 0 0 1px rgba(255,255,255,0.55) inset",
-                        background: "rgba(239,68,68,0.08)",
-                        transition: isDraggingZoomTarget
-                          ? "none"
-                          : "left 0.12s ease, top 0.12s ease",
-                      }}
-                    />
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-white text-xs font-medium pointer-events-none backdrop-blur-sm">
-                      Drag to adjust zoom
+                    <div className="w-full h-full">
+                      {/*In FullScreen video require one div, so don't remove div */}
+                      {videoUrl ? (
+                        <ReactPlayer
+                          key={videoUrl}
+                          ref={playerRef}
+                          url={videoUrl}
+                          playing={playing}
+                          controls={false}
+                          muted={false}
+                          volume={volume}
+                          width="100%"
+                          height="100%"
+                          config={{
+                            file: {
+                              attributes: {
+                                crossOrigin: "anonymous",
+                                style: {
+                                  objectFit: previewObjectFit,
+                                  objectPosition: "center center",
+                                  width: "100%",
+                                  height: "100%",
+                                  backgroundColor: hasCanvasBackground ? "#F1ECFF" : "#000000",
+                                },
+                              },
+                            },
+                          }}
+                          onError={(e) => console.error("Video failed to load", e)}
+                          onProgress={(data) => {
+                            setCurrentTime(data.playedSeconds);
+                            childHandleProgress?.(data);
+                          }}
+                          onEnded={() => setPlaying(false)}
+                          progressInterval={50}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                          <div className="w-16 h-16 bg-[#E6E1FA] rounded-full flex items-center justify-center mb-4">
+                            <svg
+                              className="w-8 h-8 text-[#7C5CFC]"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-semibold text-[#7C5CFC] mb-2">
+                            No Video Selected
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-4">To start editing, please:</p>
+                          <div className="space-y-2 text-sm text-gray-500">
+                            <p>
+                              • Go to <strong>Dashboard</strong> and edit an existing demo
+                            </p>
+                            <p>
+                              • Or go to <strong>Recorder</strong> to record/upload a new video
+                            </p>
+                          </div>
+                          <div className="mt-6 flex gap-3">
+                            <button
+                              onClick={() => router.push("/dashboard")}
+                              className="px-4 py-2 bg-[#7C5CFC] text-white rounded-lg hover:bg-[#6356D7] transition"
+                            >
+                              Go to Dashboard
+                            </button>
+                            <button
+                              onClick={() => router.push("/recorder")}
+                              className="px-4 py-2 bg-[#E6E1FA] text-[#7C5CFC] rounded-lg hover:bg-[#7C5CFC] hover:text-white transition"
+                            >
+                              Go to Recorder
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Canvas stays on top of video */}
-              <canvas
-                ref={canvasRef}
-                className={`absolute top-0 left-0 w-full h-full rounded-2xl ${
-                  tool !== "none" ? "z-40 cursor-crosshair" : "z-0 cursor-default"
-                }`}
-                onMouseDown={tool !== "none" ? handleMouseDown : undefined}
-                onMouseUp={tool !== "none" ? handleMouseUp : undefined}
-                style={{
-                  pointerEvents: tool !== "none" ? "auto" : "none",
-                  borderRadius: "1.25rem",
-                }}
-              />
+                  {activeSubtitleText && (
+                    <div className="absolute inset-x-0 bottom-6 z-40 flex justify-center px-6 pointer-events-none">
+                      <div
+                        className="max-w-[92%] rounded-md bg-black/70 px-3 py-2 text-center text-white"
+                        style={{
+                          fontSize: "16px",
+                          lineHeight: "1.25",
+                          textShadow: "0 1px 2px rgba(0,0,0,0.65)",
+                        }}
+                      >
+                        {activeSubtitleText}
+                      </div>
+                    </div>
+                  )}
+
+                  {shouldShowZoomFocusBox && (
+                    <div
+                      className="absolute inset-0 z-50"
+                      onMouseDown={handleZoomTargetMouseDown}
+                      style={{
+                        cursor: isDraggingZoomTarget ? "grabbing" : "grab",
+                        userSelect: "none",
+                      }}
+                    >
+                      <div
+                        className="absolute rounded-lg pointer-events-none"
+                        style={{
+                          width: `${zoomFocusSizePct}%`,
+                          height: `${zoomFocusSizePct}%`,
+                          left: `${activeEditedZoomSegment.x * 100}%`,
+                          top: `${activeEditedZoomSegment.y * 100}%`,
+                          transform: "translate(-50%, -50%)",
+                          border: "2px solid #ef4444",
+                          boxShadow: "0 0 0 1px rgba(255,255,255,0.55) inset",
+                          background: "rgba(239,68,68,0.08)",
+                          transition: isDraggingZoomTarget
+                            ? "none"
+                            : "left 0.12s ease, top 0.12s ease",
+                        }}
+                      />
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-white text-xs font-medium pointer-events-none backdrop-blur-sm">
+                        Drag to adjust zoom
+                      </div>
+                    </div>
+                  )}
+
+                  <canvas
+                    ref={canvasRef}
+                    className={`absolute top-0 left-0 w-full h-full ${
+                      tool !== "none" ? "z-40 cursor-crosshair" : "z-0 cursor-default"
+                    }`}
+                    onMouseDown={tool !== "none" ? handleMouseDown : undefined}
+                    onMouseUp={tool !== "none" ? handleMouseUp : undefined}
+                    style={{
+                      pointerEvents: tool !== "none" ? "auto" : "none",
+                      borderRadius: "1.25rem",
+                    }}
+                  />
+
+                  <div
+                    className="absolute inset-0 z-50"
+                    style={{
+                      pointerEvents:
+                        (tool === "none" || tool === "text") && !shouldShowZoomFocusBox
+                          ? "auto"
+                          : "none",
+                    }}
+                  >
+                    {textOverlays
+                      .filter(
+                        (overlay) =>
+                          currentTime >= overlay.startTime && currentTime <= overlay.endTime
+                      )
+                      .map((overlay) => {
+                        const isSelected = selectedTextOverlayId === overlay.id;
+                        return (
+                          <div
+                            key={overlay.id}
+                            className={`absolute rounded-md ${
+                              isSelected
+                                ? "border border-[#7C5CFC]/80"
+                                : "border border-transparent"
+                            }`}
+                            style={{
+                              left: `${overlay.x * 100}%`,
+                              top: `${overlay.y * 100}%`,
+                              transform: "translate(-50%, -50%)",
+                              cursor:
+                                resizingTextOverlayId === overlay.id
+                                  ? "nwse-resize"
+                                  : draggingTextOverlayId === overlay.id
+                                    ? "grabbing"
+                                    : "grab",
+                              userSelect: "none",
+                              padding: "2px 4px",
+                              width: `${overlay.w}px`,
+                              height: `${overlay.h}px`,
+                            }}
+                            onMouseDown={(event) => handleTextOverlayMouseDown(event, overlay.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedTextOverlayId(overlay.id);
+                              setTextOverlayInput(overlay.text);
+                              setTextOverlayFontFamily(overlay.fontFamily);
+                              setTextOverlayFontSize(overlay.fontSize);
+                              setTextOverlayColor(overlay.color);
+                              setMode("text");
+                            }}
+                          >
+                            {isSelected && (
+                              <div
+                                className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#7C5CFC] text-white p-1 rounded cursor-grab shadow-md"
+                                onMouseDown={(e) => {
+                                  // Trigger standard drag logic, but prevent default so it doesn't blur textarea
+                                  handleTextOverlayMouseDown(e, overlay.id);
+                                }}
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 8h16M4 16h16"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            {isSelected ? (
+                              <textarea
+                                value={overlay.text}
+                                rows={Math.max(1, overlay.text.split("\n").length)}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setTextOverlays((prev) =>
+                                    prev.map((item) =>
+                                      item.id === overlay.id ? { ...item, text: value } : item
+                                    )
+                                  );
+                                  setTextOverlayInput(value);
+                                }}
+                                className="w-full h-full bg-transparent outline-none border border-dashed border-[#A594F9] text-white resize-none"
+                                style={{
+                                  fontFamily: resolveOverlayFontFamily(overlay.fontFamily),
+                                  fontSize: `${overlay.fontSize}px`,
+                                  color: overlay.color,
+                                  lineHeight: 1.2,
+                                  textShadow: "0 1px 2px rgba(0,0,0,0.55)",
+                                  overflow: "auto",
+                                  padding: "2px 4px",
+                                }}
+                              />
+                            ) : (
+                              <div
+                                className="whitespace-pre-wrap break-words w-full h-full"
+                                style={{
+                                  fontFamily: resolveOverlayFontFamily(overlay.fontFamily),
+                                  fontSize: `${overlay.fontSize}px`,
+                                  color: overlay.color,
+                                  lineHeight: 1.2,
+                                  textShadow: "0 1px 2px rgba(0,0,0,0.55)",
+                                  overflow: "hidden",
+                                  padding: "2px 4px",
+                                }}
+                              >
+                                {overlay.text}
+                              </div>
+                            )}
+                            {isSelected && (
+                              <button
+                                type="button"
+                                aria-label="Delete text"
+                                className="absolute -top-7 right-0 bg-red-500 text-white px-2 py-1 rounded shadow hover:bg-red-600"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setTextOverlays((prev) =>
+                                    prev.filter((item) => item.id !== overlay.id)
+                                  );
+                                  setSelectedTextOverlayId(null);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            )}
+                            {isSelected && (
+                              <button
+                                type="button"
+                                aria-label="Resize text"
+                                className="absolute -right-2 -bottom-2 h-4 w-4 rounded-full border border-white bg-[#7C5CFC] shadow"
+                                onMouseDown={(event) =>
+                                  handleTextOverlayResizeMouseDown(event, overlay.id)
+                                }
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
 
               {/* Controls container - only show when video is available */}
               {videoUrl && (
@@ -1163,7 +1754,7 @@ export default function EditorPage() {
                     handleTimelineChange(timelineStartTime, value);
                   }}
                   processing={processing}
-                  onResetVideo={resetVideo}
+                  onResetVideo={handleResetTimeline}
                   playing={playing}
                   setPlaying={setPlaying}
                   mode={mode}
@@ -1177,6 +1768,16 @@ export default function EditorPage() {
                   zoomLevelDepth={zoomLevel}
                   segments={segments}
                   setSegments={setSegments}
+                  textOverlays={textOverlays}
+                  setTextOverlays={setTextOverlays}
+                  selectedTextOverlayId={selectedTextOverlayId}
+                  setSelectedTextOverlayId={setSelectedTextOverlayId}
+                  setTextOverlayInspectorValues={(overlay) => {
+                    setTextOverlayInput(overlay.text);
+                    setTextOverlayFontFamily(overlay.fontFamily);
+                    setTextOverlayFontSize(overlay.fontSize);
+                    setTextOverlayColor(overlay.color);
+                  }}
                 />
               ) : (
                 <div className="w-full max-w-6xl mx-auto">

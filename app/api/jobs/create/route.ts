@@ -17,11 +17,15 @@ export async function POST(req: NextRequest) {
       videoUrl,
       segments,
       zoomEffects,
+      textOverlays,
+      subtitles,
       selectedBackground,
       customBackgroundUrl,
       imageMap,
       demoId,
       settings,
+      aspectRatio,
+      browserFrame,
     } = data;
 
     if (!videoUrl) {
@@ -54,10 +58,18 @@ export async function POST(req: NextRequest) {
         jobData: {
           segments: segments || [],
           zoomEffects: zoomEffects || [],
+          textOverlays: textOverlays || [],
+          subtitles: Array.isArray(subtitles) ? subtitles : [],
           selectedBackground: selectedBackground || null,
           customBackgroundUrl: customBackgroundUrl || null,
           imageMap: imageMap || {},
           settings: settings || null,
+          aspectRatio: aspectRatio || "native",
+          browserFrame: browserFrame || {
+            mode: "default",
+            drawShadow: true,
+            drawBorder: false,
+          },
         },
       },
     });
@@ -72,10 +84,18 @@ export async function POST(req: NextRequest) {
         videoUrl,
         segments: segments || [],
         zoomEffects: zoomEffects || [],
+        textOverlays: textOverlays || [],
+        subtitles: Array.isArray(subtitles) ? subtitles : [],
         selectedBackground: selectedBackground || null,
         customBackgroundUrl: customBackgroundUrl || null,
         imageMap: imageMap || {},
         settings: settings || null,
+        aspectRatio: aspectRatio || "native",
+        browserFrame: browserFrame || {
+          mode: "default",
+          drawShadow: true,
+          drawBorder: false,
+        },
       },
       {
         jobId: jobRecord.id, // BullMQ job ID matches DB Job ID

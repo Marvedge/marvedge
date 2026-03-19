@@ -5,7 +5,7 @@ interface TimelineProps {
   maxValue?: number;
   zoomLevel?: number;
   width?: number;
-  setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom">>;
+  setMode: React.Dispatch<React.SetStateAction<"main" | "trim" | "zoom" | "text">>;
   setActiveZoomIdx: React.Dispatch<React.SetStateAction<number>>;
   setActiveSegment: React.Dispatch<React.SetStateAction<number>>;
 }

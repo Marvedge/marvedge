@@ -5,13 +5,30 @@ import Redis from "ioredis";
 import { v2 as cloudinary } from "cloudinary";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { execFileSync } from "child_process";
 import axios from "axios";
-import "dotenv/config";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
+// Load env from common locations (video-worker/.env and parent app .env).
+// Note: environment variables are read once at process start; restart the worker after editing .env.
+(() => {
+  const candidates = [
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "../.env"),
+    path.resolve(__dirname, ".env"),
+    path.resolve(__dirname, "../.env"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      dotenv.config({ path: p, override: false });
+    }
+  }
+})();
+
 if (!ffmpegStatic) {
   throw new Error("ffmpeg-static not found");
 }
@@ -19,12 +36,17 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+const workerConcurrency = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || "1", 10) || 1);
 const prisma = new PrismaClient({
   datasourceUrl: (process.env.DATABASE_URL || "").replace(
     "?sslmode=require",
     "?sslmode=require&connect_timeout=30"
   ),
 });
+
+console.log(
+  `🧩 Env check: DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ? "set" : "missing"}`
+);
 
 // Retry wrapper for Neon cold-start (free tier suspends after 5 min inactivity)
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
@@ -53,6 +75,44 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+function listEncoders(): Set<string> {
+  try {
+    const out = execFileSync(ffmpegStatic as string, ["-hide_banner", "-encoders"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const enc = new Set<string>();
+    for (const line of out.split("\n")) {
+      // Typical format: " V....D h264_videotoolbox VideoToolbox H.264 Encoder"
+      const m = line.match(/^\s*[A-Z\.]{6}\s+([^\s]+)\s+/);
+      if (m?.[1]) {
+        enc.add(m[1]);
+      }
+    }
+    return enc;
+  } catch {
+    return new Set<string>();
+  }
+}
+
+const AVAILABLE_ENCODERS = listEncoders();
+
+function pickVideoEncoder(preferred: string | null | undefined) {
+  const forced = (preferred || "").trim();
+  if (forced) {
+    return { encoder: forced, available: AVAILABLE_ENCODERS.has(forced) };
+  }
+
+  // Auto-pick best available.
+  if (process.platform === "darwin" && AVAILABLE_ENCODERS.has("h264_videotoolbox")) {
+    return { encoder: "h264_videotoolbox", available: true };
+  }
+  if (AVAILABLE_ENCODERS.has("h264_nvenc")) {
+    return { encoder: "h264_nvenc", available: true };
+  }
+  return { encoder: "libx264", available: true };
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function toSeconds(t: string | number): number {
   if (typeof t === "number") {
@@ -72,6 +132,15 @@ function toSeconds(t: string | number): number {
 
 type TimeRange = { start: number; end: number };
 type ZoomRange = { startTime: number; endTime: number; zoomLevel: number; x: number; y: number };
+type TextRange = {
+  startTime: number;
+  endTime: number;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  color: string;
+};
 
 const EPS = 0.001;
 
@@ -201,6 +270,102 @@ function remapZoomEffectsToTrimmedTimeline(
     .sort((a: ZoomRange, b: ZoomRange) => a.startTime - b.startTime);
 }
 
+function remapTextOverlaysToTrimmedTimeline(
+  rawTextOverlays: any[],
+  keepSegments: TimeRange[],
+  removeSegments: TimeRange[]
+): TextRange[] {
+  if (!rawTextOverlays || rawTextOverlays.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
+
+  const removedBefore = buildRemovedBefore(removeSegments);
+  const out: TextRange[] = [];
+  const sorted = rawTextOverlays
+    .map((t: any) => ({
+      startTime: toSeconds(t.startTime),
+      endTime: toSeconds(t.endTime),
+      text: String(t.text ?? ""),
+      x: Number(t.x),
+      y: Number(t.y),
+      fontSize: Number(t.fontSize),
+      color: String(t.color ?? "#ffffff"),
+    }))
+    .filter(
+      (t: TextRange) =>
+        Number.isFinite(t.startTime) &&
+        Number.isFinite(t.endTime) &&
+        Number.isFinite(t.x) &&
+        Number.isFinite(t.y) &&
+        Number.isFinite(t.fontSize)
+    )
+    .map((t: TextRange) => ({
+      startTime: Math.min(t.startTime, t.endTime),
+      endTime: Math.max(t.startTime, t.endTime),
+      text: t.text,
+      x: Math.max(0, Math.min(1, t.x)),
+      y: Math.max(0, Math.min(1, t.y)),
+      fontSize: Math.max(10, Math.min(160, Math.round(t.fontSize))),
+      color: t.color,
+    }))
+    .filter((t: TextRange) => t.text.trim().length > 0 && t.endTime - t.startTime > EPS)
+    .sort((a: TextRange, b: TextRange) => a.startTime - b.startTime);
+
+  for (const t of sorted) {
+    for (const keep of keepSegments) {
+      const overlapStart = Math.max(t.startTime, keep.start);
+      const overlapEnd = Math.min(t.endTime, keep.end);
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
+      out.push({
+        startTime: overlapStart - removedBefore(overlapStart),
+        endTime: overlapEnd - removedBefore(overlapEnd),
+        text: t.text,
+        x: t.x,
+        y: t.y,
+        fontSize: t.fontSize,
+        color: t.color,
+      });
+    }
+  }
+
+  return out
+    .filter((t: TextRange) => t.endTime - t.startTime > EPS)
+    .sort((a: TextRange, b: TextRange) => a.startTime - b.startTime);
+}
+
+function ffmpegEscapeFilterValue(value: string): string {
+  // FFmpeg filter args are ':'-separated; escape colons and backslashes.
+  return value.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
+function normalizeHexColor(input: string, fallback = "white"): string {
+  const s = (input || "").trim();
+  if (/^#?[0-9a-fA-F]{6}$/.test(s)) {
+    const hex = s.startsWith("#") ? s.slice(1) : s;
+    return `#${hex.toLowerCase()}`;
+  }
+  if (/^#?[0-9a-fA-F]{3}$/.test(s)) {
+    const raw = s.startsWith("#") ? s.slice(1) : s;
+    const expanded = raw
+      .split("")
+      .map((c) => `${c}${c}`)
+      .join("");
+    return `#${expanded.toLowerCase()}`;
+  }
+  return fallback;
+}
+
+function writeTextOverlayFiles(tempDir: string, overlays: TextRange[]): { path: string; overlay: TextRange }[] {
+  return overlays.map((overlay, idx) => {
+    const p = path.join(tempDir, `text-${idx}.txt`);
+    // Keep it UTF-8; FFmpeg drawtext textfile supports it.
+    fs.writeFileSync(p, overlay.text, "utf8");
+    return { path: p, overlay };
+  });
+}
+
 async function downloadVideo(url: string, outputPath: string): Promise<void> {
   const writer = fs.createWriteStream(outputPath);
   const response = await axios({ url, method: "GET", responseType: "stream" });
@@ -270,18 +435,304 @@ function runFfmpeg(command: any): Promise<void> {
   });
 }
 
+type SubtitleCue = { start: number; end: number; text: string };
+
+function remapSubtitleCuesToTrimmedTimeline(
+  rawCues: any[],
+  keepSegments: TimeRange[],
+  removeSegments: TimeRange[]
+): SubtitleCue[] {
+  if (!rawCues || rawCues.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
+  const removedBefore = buildRemovedBefore(removeSegments);
+  const sorted = rawCues
+    .map((c: any) => ({
+      start: Number(c.start),
+      end: Number(c.end),
+      text: String(c.text ?? "").trim(),
+    }))
+    .filter((c: SubtitleCue) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0)
+    .map((c: SubtitleCue) => ({
+      start: Math.min(c.start, c.end),
+      end: Math.max(c.start, c.end),
+      text: c.text,
+    }))
+    .filter((c: SubtitleCue) => c.end - c.start > EPS)
+    .sort((a: SubtitleCue, b: SubtitleCue) => a.start - b.start);
+
+  const out: SubtitleCue[] = [];
+  for (const cue of sorted) {
+    for (const keep of keepSegments) {
+      const overlapStart = Math.max(cue.start, keep.start);
+      const overlapEnd = Math.min(cue.end, keep.end);
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
+      out.push({
+        start: overlapStart - removedBefore(overlapStart),
+        end: overlapEnd - removedBefore(overlapEnd),
+        text: cue.text,
+      });
+    }
+  }
+
+  return out
+    .map((c) => ({
+      start: Math.max(0, c.start),
+      end: Math.max(c.start + 0.04, c.end),
+      text: c.text,
+    }))
+    .filter((c) => c.text.trim().length > 0 && c.end - c.start > 0.01)
+    .sort((a, b) => a.start - b.start);
+}
+
+function formatAssTime(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  const cs = Math.floor((s - Math.floor(s)) * 100); // centiseconds
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+}
+
+function escapeAssText(text: string): string {
+  // Basic ASS escaping. Keep it simple and deterministic.
+  return String(text || "")
+    .replace(/\r\n|\r|\n/g, "\\N")
+    .replace(/{/g, "(")
+    .replace(/}/g, ")");
+}
+
+function writeAssSubtitles(tempDir: string, cues: SubtitleCue[], w: number, h: number): string {
+  const fontSize = Math.max(20, Math.min(58, Math.round(h * 0.05)));
+  const marginV = Math.max(20, Math.min(96, Math.round(h * 0.06)));
+  const outline = Math.max(1, Math.min(4, Math.round(fontSize / 16)));
+
+  const header = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${w}`,
+    `PlayResY: ${h}`,
+    "WrapStyle: 2",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    // BackColour alpha included, but we keep BorderStyle=1 (outline) for speed; background box is optional.
+    `Style: Default,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,${outline},0,2,60,60,${marginV},1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+  ].join("\n");
+
+  const lines = cues.map((c) => {
+    const start = formatAssTime(c.start);
+    const end = formatAssTime(c.end);
+    const t = escapeAssText(c.text);
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${t}`;
+  });
+
+  const assPath = path.join(tempDir, "subtitles.ass");
+  fs.writeFileSync(assPath, `${header}\n${lines.join("\n")}\n`, "utf8");
+  return assPath;
+}
+
+function pickBestMicAudioStreamIndex(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta: any
+): number | null {
+  const audioStreams = (meta?.streams || []).filter((s: any) => s.codec_type === "audio");
+  if (audioStreams.length === 0) {
+    return null;
+  }
+  if (audioStreams.length === 1) {
+    return Number(audioStreams[0].index);
+  }
+
+  // Best-effort mic selection: prefer streams whose tags mention mic/microphone.
+  const micLike = audioStreams.find((s: any) => {
+    const tags = s?.tags || {};
+    const hay = `${tags.title || ""} ${tags.handler_name || ""} ${tags.language || ""}`.toLowerCase();
+    return hay.includes("mic") || hay.includes("microphone");
+  });
+  return Number((micLike || audioStreams[0]).index);
+}
+
+async function extractAudioWav16kMono(
+  inputPath: string,
+  outputPath: string,
+  audioStreamIndex: number | null
+): Promise<void> {
+  const cmd = ffmpeg(inputPath);
+  const map = audioStreamIndex != null ? [`-map 0:${audioStreamIndex}`] : ["-map 0:a:0"];
+  cmd
+    .noVideo()
+    .audioChannels(1)
+    .audioFrequency(16000)
+    .audioCodec("pcm_s16le")
+    .outputOptions([...map])
+    .output(outputPath);
+  await runFfmpeg(cmd);
+}
+
+function buildSubtitleCuesFromDeepgramWords(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  words: any[]
+): SubtitleCue[] {
+  if (!Array.isArray(words) || words.length === 0) {
+    return [];
+  }
+
+  const cues: SubtitleCue[] = [];
+  let buf: string[] = [];
+  let cueStart = Number(words[0]?.start ?? 0);
+  let cueEnd = Number(words[0]?.end ?? 0);
+
+  const flush = () => {
+    const text = buf.join(" ").trim();
+    if (text) {
+      cues.push({ start: cueStart, end: cueEnd, text });
+    }
+    buf = [];
+  };
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const wordText = String(w?.punctuated_word ?? w?.word ?? "").trim();
+    if (!wordText) {
+      continue;
+    }
+    const start = Number(w?.start ?? cueEnd);
+    const end = Number(w?.end ?? start);
+
+    if (buf.length === 0) {
+      cueStart = Number.isFinite(start) ? start : 0;
+    }
+    cueEnd = Number.isFinite(end) ? end : cueEnd;
+    buf.push(wordText);
+
+    const next = words[i + 1];
+    const gap = next ? Number(next.start ?? cueEnd) - cueEnd : 0;
+    const textLen = buf.join(" ").length;
+    const endsSentence = /[.!?]$/.test(wordText);
+
+    // Reasonable default grouping for "YouTube-like" captions.
+    if (endsSentence || gap > 0.85 || textLen >= 48) {
+      flush();
+    }
+  }
+  flush();
+
+  // Clamp super-short cues.
+  return cues
+    .map((c) => ({
+      ...c,
+      start: Math.max(0, c.start),
+      end: Math.max(c.start + 0.04, c.end),
+    }))
+    .filter((c) => c.text.trim().length > 0 && c.end - c.start > 0.01);
+}
+
+async function transcribeWithDeepgram(wavPath: string, language: string): Promise<SubtitleCue[]> {
+  const apiKey = (process.env.DEEPGRAM_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("Missing DEEPGRAM_API_KEY");
+  }
+
+  const audio = fs.readFileSync(wavPath);
+  // NOTE: Deepgram "language=multi" is primarily documented for streaming/websocket.
+  // For prerecorded REST transcription, use detect_language=true as the closest equivalent.
+  const params = new URLSearchParams();
+  params.set("model", "nova-2");
+  params.set("smart_format", "true");
+  params.set("punctuate", "true");
+  const lang = String(language || "").trim().toLowerCase();
+  if (lang && lang !== "multi") {
+    params.set("language", lang);
+  } else {
+    params.set("detect_language", "true");
+  }
+  const url = `https://api.deepgram.com/v1/listen?${params.toString()}`;
+
+  const resp = await axios.post(url, audio, {
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "audio/wav",
+    },
+    timeout: 120000,
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = resp.data;
+  const words =
+    data?.results?.channels?.[0]?.alternatives?.[0]?.words ||
+    data?.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs?.flatMap((p: any) => p.words) ||
+    [];
+
+  return buildSubtitleCuesFromDeepgramWords(words);
+}
+
+function parseAspectRatioRatio(aspectRatio: string | null | undefined, fallback: number): number {
+  if (!aspectRatio || aspectRatio === "native") {
+    return fallback;
+  }
+
+  const [wStr, hStr] = aspectRatio.includes(":")
+    ? aspectRatio.split(":")
+    : aspectRatio.split("/");
+  const w = Number(wStr);
+  const h = Number(hStr);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    return fallback;
+  }
+
+  return w / h;
+}
+
+function ensureEvenDimension(value: number): number {
+  const v = Math.max(2, Math.round(value));
+  return v % 2 === 0 ? v : v + 1;
+}
+
+function computeTargetSizeForRatio(quality: string, ratio: number): { width: number; height: number } {
+  const longSide = quality === "720p" ? 1280 : 1920;
+  const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
+
+  let width: number;
+  let height: number;
+  if (safeRatio >= 1) {
+    width = longSide;
+    height = longSide / safeRatio;
+  } else {
+    width = longSide * safeRatio;
+    height = longSide;
+  }
+
+  return {
+    width: ensureEvenDimension(width),
+    height: ensureEvenDimension(height),
+  };
+}
+
 // ── Worker ─────────────────────────────────────────────────────────────────────
 const worker = new Worker(
   "video-processing",
   async (job: Job) => {
+    const jobStartTs = Date.now();
     const {
       jobId,
       videoUrl,
       segments,
       zoomEffects,
+      textOverlays,
+      subtitles,
       selectedBackground,
       customBackgroundUrl,
       settings,
+      aspectRatio,
+      demoId,
+      browserFrame,
     } = job.data;
 
     const qSettings = settings || {
@@ -290,12 +741,14 @@ const worker = new Worker(
       compression: "Web",
       speed: "Default",
     };
-    const targetWidth = qSettings.quality === "720p" ? 1280 : 1920;
-    const targetHeight = qSettings.quality === "720p" ? 720 : 1080;
+    let targetWidth = qSettings.quality === "720p" ? 1280 : 1920;
+    let targetHeight = qSettings.quality === "720p" ? 720 : 1080;
     const targetFps = qSettings.fps === "60 FPS" ? 60 : 30;
 
     let overrideCrf = "18";
-    let overridePreset = "medium";
+    // Keep CRF constant for quality parity, but use a faster default preset.
+    // Preset trades compression for speed (quality target stays CRF-based).
+    let overridePreset = "veryfast";
     if (qSettings.compression === "Ultra") {
       overrideCrf = "12";
       overridePreset = "slow";
@@ -308,6 +761,26 @@ const worker = new Worker(
       overrideCrf = "16";
       overridePreset = "medium";
     }
+
+    // Extra safety: allow forcing the preset via env for benchmarking.
+    const forcedPreset = process.env.FFMPEG_X264_PRESET?.trim();
+    if (forcedPreset) {
+      overridePreset = forcedPreset;
+    }
+
+    const picked = pickVideoEncoder(process.env.FFMPEG_VIDEO_CODEC);
+    const videoEncoder =
+      picked.available ? picked.encoder : process.platform === "darwin" ? "libx264" : "libx264";
+    console.log(
+      `[${jobId}] Encoder selection: requested=${process.env.FFMPEG_VIDEO_CODEC || "auto"} ` +
+        `picked=${picked.encoder} available=${picked.available} using=${videoEncoder}`
+    );
+
+    // Parallelize filter evaluation (especially helps with zoompan + overlays).
+    const filterThreadsEnv = parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
+    const filterThreads = Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
+      ? filterThreadsEnv
+      : Math.max(1, Math.min(8, os.cpus().length || 4));
 
     let speedFactor = 1.0;
     if (qSettings.speed === "1.25") {
@@ -323,8 +796,8 @@ const worker = new Worker(
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `vj-${jobId}-`));
     const inputPath = path.join(tempDir, "input.webm");
     const bgPath = path.join(tempDir, "background.png");
-    const maskPath = path.join(tempDir, "rounded-mask.pgm");
     const outputPath = path.join(tempDir, "output.mp4");
+    const roundedMaskPath = path.join(tempDir, "rounded-mask.pgm");
     const hasCustomBackground = selectedBackground === "custom" && !!customBackgroundUrl;
 
     try {
@@ -338,32 +811,51 @@ const worker = new Worker(
 
       // ── 1. Download ──────────────────────────────────────────────────────────
       console.log(`[${jobId}] Downloading...`);
+      const downloadStartTs = Date.now();
       await downloadVideo(videoUrl, inputPath);
       if (hasCustomBackground) {
         console.log(`[${jobId}] Downloading custom background...`);
         await downloadFile(customBackgroundUrl, bgPath);
       }
+      console.log(`[${jobId}] Download completed in ${Date.now() - downloadStartTs}ms`);
       await job.updateProgress(20);
       await withRetry(() =>
         prisma.videoJob.update({ where: { id: jobId }, data: { progress: 20 } })
       );
 
       // ── 2. Probe ─────────────────────────────────────────────────────────────
-      const { hasAudio, videoDuration } = await new Promise<{
+      const probeStartTs = Date.now();
+      const { hasAudio, videoDuration, sourceWidth, sourceHeight } = await new Promise<{
         hasAudio: boolean;
         videoDuration: number;
+        sourceWidth: number;
+        sourceHeight: number;
       }>((res, rej) => {
         ffmpeg.ffprobe(inputPath, (err, meta) => {
           if (err) {
             return rej(err);
           }
+          const videoStream = meta.streams.find((s) => s.codec_type === "video");
           res({
             hasAudio: meta.streams.some((s) => s.codec_type === "audio"),
             videoDuration: meta.format.duration || 0,
+            sourceWidth: Number(videoStream?.width || 0),
+            sourceHeight: Number(videoStream?.height || 0),
           });
         });
       });
-      console.log(`[${jobId}] Duration=${videoDuration}s hasAudio=${hasAudio}`);
+      const nativeRatio =
+        sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
+      const selectedRatio = parseAspectRatioRatio(aspectRatio, nativeRatio);
+      const computedTarget = computeTargetSizeForRatio(qSettings.quality, selectedRatio);
+      targetWidth = computedTarget.width;
+      targetHeight = computedTarget.height;
+
+      console.log(
+        `[${jobId}] Duration=${videoDuration}s hasAudio=${hasAudio} source=${sourceWidth}x${sourceHeight} ` +
+        `aspect=${aspectRatio || "native"} target=${targetWidth}x${targetHeight}`
+      );
+      console.log(`[${jobId}] Probe completed in ${Date.now() - probeStartTs}ms`);
 
       // ── 3. Build edit timeline (deterministic trim + remapped zoom) ──────────
       // segments = array of REMOVE regions from timeline
@@ -387,12 +879,42 @@ const worker = new Worker(
         keepSegments,
         removeSegments
       );
+      const remappedTextOverlays = remapTextOverlaysToTrimmedTimeline(
+        textOverlays || [],
+        keepSegments,
+        removeSegments
+      );
+      let rawSubtitleCues: SubtitleCue[] = [];
+      if (Array.isArray(subtitles)) {
+        rawSubtitleCues = subtitles as SubtitleCue[];
+      } else if (subtitles && Array.isArray((subtitles as any).cues)) {
+        rawSubtitleCues = (subtitles as any).cues as SubtitleCue[];
+      } else if (demoId) {
+        try {
+          const demo = await prisma.demo.findUnique({
+            where: { id: String(demoId) },
+            select: { subtitles: true },
+          });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const s: any = demo?.subtitles;
+          if (s && Array.isArray(s.cues)) {
+            rawSubtitleCues = s.cues as SubtitleCue[];
+          }
+        } catch {
+          // Ignore subtitle lookup failures; export should still proceed.
+        }
+      }
+      const remappedSubtitleCues = remapSubtitleCuesToTrimmedTimeline(
+        rawSubtitleCues || [],
+        keepSegments,
+        removeSegments
+      );
 
       await job.updateProgress(50);
       await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 50 } });
       console.log(
         `[${jobId}] Trim ranges remove=${removeSegments.length} keep=${keepSegments.length} ` +
-          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length}`
+          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length} subtitles=${remappedSubtitleCues.length}`
       );
 
       // ── 4. Final encode pass: trim + zoom + background + speed ───────────────
@@ -443,22 +965,16 @@ const worker = new Worker(
         selectedBackground !== "hidden" &&
         selectedBackground !== "none" &&
         selectedBackground !== "transparent";
-      const hasRoundedCorners = hasBackgroundCanvas;
+      const drawCardShadow = Boolean(browserFrame?.drawShadow);
+      const drawCardBorder = Boolean(browserFrame?.drawBorder);
+      const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 
-      // Base fit strategy:
-      // - with background canvas: fill frame (no black bars), crop overflow
-      // - without background canvas: preserve full content with letter/pillar-boxing
-      if (hasBackgroundCanvas) {
-        filters.push(
-          `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase:flags=lanczos,` +
-            `crop=${targetWidth}:${targetHeight},setsar=1[res]`
-        );
-      } else {
-        filters.push(
-          `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-            `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black,setsar=1[res]`
-        );
-      }
+      // Preserve full source frame for all aspect ratios.
+      // This avoids hidden crop when converting landscape recordings to portrait outputs.
+      filters.push(
+        `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+          `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+      );
       videoOut = "[res]";
 
       // Zoom: split → per-segment trim+crop → concat
@@ -493,10 +1009,6 @@ const worker = new Worker(
         if (n > 0) {
           const vSplits = Array.from({ length: n }, (_, i) => `[vs${i}]`).join("");
           filters.push(`${videoOut}split=${n}${vSplits}`);
-          if (hasAudio && audioOut) {
-            const aSplits = Array.from({ length: n }, (_, i) => `[as${i}]`).join("");
-            filters.push(`${audioOut}asplit=${n}${aSplits}`);
-          }
 
           let concatIn = "";
           for (let i = 0; i < n; i++) {
@@ -540,28 +1052,16 @@ const worker = new Worker(
                 `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[zseg${i}]`
               );
             }
-
-            if (hasAudio && audioOut) {
-              filters.push(
-                `[as${i}]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS[zaseg${i}]`
-              );
-              concatIn += `[zseg${i}][zaseg${i}]`;
-            } else {
-              concatIn += `[zseg${i}]`;
-            }
+            concatIn += `[zseg${i}]`;
           }
 
-          const aStr = hasAudio && audioOut ? ":a=1" : ":a=0";
-          const zOuts = hasAudio && audioOut ? "[zoomv][zooma]" : "[zoomv]";
-          filters.push(`${concatIn}concat=n=${n}:v=1${aStr}${zOuts}`);
+          filters.push(`${concatIn}concat=n=${n}:v=1:a=0[zoomv]`);
           videoOut = "[zoomv]";
-          if (hasAudio && audioOut) {
-            audioOut = "[zooma]";
-          }
         }
       }
 
-      // Background overlay (fast path: inset card on canvas).
+      // Background overlay (square video card for speed).
+      // Rounded corners were intentionally disabled to reduce filter/alpha overhead.
       if (hasBackgroundCanvas) {
         let bgHex = "#f3f0fc";
         const palette: Record<string, string> = {
@@ -581,59 +1081,101 @@ const worker = new Worker(
           bg7: "#fff1eb",
           bg8: "#f4effd",
         };
-        if (selectedBackground.startsWith("color:")) {
+        if (selectedBackground?.startsWith("color:")) {
           bgHex = selectedBackground.replace("color:", "");
         } else if (palette[selectedBackground]) {
           bgHex = palette[selectedBackground];
         }
 
-        // Match frontend framing: inset video card over styled canvas.
-        // Keep this path simple: one downscale + one overlay (no extra pad/mask),
-        // which avoids filter reinit errors and is much faster on longer renders.
+        // Match frontend framing with an inset card over canvas.
         const cardW = Math.max(2, Math.floor((targetWidth * 0.9) / 2) * 2);
-        const cardH = Math.max(2, Math.floor((targetHeight * 0.81) / 2) * 2);
-        // Frontend card uses ~20px radius at normal size; scale it mildly for 1080p.
-        const cornerRadius = Math.max(12, Math.round(targetWidth * 0.0156));
-
-        if (hasRoundedCorners) {
-          // Build a single-frame rounded alpha mask once per job, then loop it.
-          writeRoundedMaskPgm(maskPath, cardW, cardH, cornerRadius);
-        }
-
-        const maskInputIdx = hasCustomBackground ? 2 : 1;
+        const cardH = Math.max(2, Math.floor((targetHeight * 0.9) / 2) * 2);
+        const borderFilter = drawCardBorder
+          ? ",drawbox=x=0:y=0:w=iw:h=ih:color=white@0.95:t=9"
+          : "";
 
         if (hasCustomBackground) {
           const customBgFilter =
             `[1:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase:flags=lanczos,` +
-            `crop=${targetWidth}:${targetHeight},fps=${targetFps},` +
-            "tpad=stop_mode=clone:stop_duration=86400," +
-            "setsar=1,format=yuv420p[bg];";
-          const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
-          const roundedFilter = hasRoundedCorners
-            ? `[${maskInputIdx}:v]scale=${cardW}:${cardH}:flags=neighbor,format=gray,` +
-              `fps=${targetFps},tpad=stop_mode=clone:stop_duration=86400[roundmask];` +
-              "[svidbase][roundmask]alphamerge[svid];"
-            : "[svidbase]format=yuva420p[svid];";
+            `crop=${targetWidth}:${targetHeight},loop=loop=-1:size=1:start=0,fps=${targetFps},` +
+            "setsar=1,format=yuv420p[bg]";
+          const cardFilter =
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
-          filters.push(
-            `${customBgFilter}${cardFilter};${roundedFilter}` +
-              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1:repeatlast=0[bgout]"
-          );
+          if (drawCardShadow) {
+            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
+            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            filters.push(
+              `${customBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
+                "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
+                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          } else {
+            filters.push(
+              `${customBgFilter};${cardFilter};` +
+                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          }
         } else {
-          const solidBgFilter = `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
-          const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=rgba[svidbase]`;
-          const roundedFilter = hasRoundedCorners
-            ? `[${maskInputIdx}:v]scale=${cardW}:${cardH}:flags=neighbor,format=gray,` +
-              `fps=${targetFps},tpad=stop_mode=clone:stop_duration=86400[roundmask];` +
-              "[svidbase][roundmask]alphamerge[svid];"
-            : "[svidbase]format=yuva420p[svid];";
+          const solidBgFilter =
+            `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
+          const cardFilter =
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
-          filters.push(
-            `${solidBgFilter};${cardFilter};${roundedFilter}` +
-              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1:repeatlast=0[bgout]"
-          );
+          if (drawCardShadow) {
+            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
+            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            filters.push(
+              `${solidBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
+                "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
+                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          } else {
+            filters.push(
+              `${solidBgFilter};${cardFilter};` +
+                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          }
         }
         videoOut = "[bgout]";
+      }
+
+      // Text overlays (single-pass, only during enable windows).
+      if (remappedTextOverlays.length > 0) {
+        const textFiles = writeTextOverlayFiles(tempDir, remappedTextOverlays);
+        let prev = videoOut;
+        textFiles.forEach(({ path: filePath, overlay }, idx) => {
+          const next = `[txt${idx}]`;
+          const safeFile = ffmpegEscapeFilterValue(filePath);
+          const safeColor = normalizeHexColor(overlay.color, "white");
+          const start = Math.max(0, overlay.startTime);
+          const end = Math.max(start + EPS, overlay.endTime);
+          const size = Math.max(10, Math.min(160, Math.round(overlay.fontSize)));
+          const nx = Math.max(0, Math.min(1, overlay.x));
+          const ny = Math.max(0, Math.min(1, overlay.y));
+
+          // Position is normalized; keep it centered on the point like the editor.
+          const xExpr = `(w*${nx.toFixed(4)}-text_w/2)`;
+          const yExpr = `(h*${ny.toFixed(4)}-text_h/2)`;
+
+          filters.push(
+            `${prev}drawtext=textfile=${safeFile}:reload=0:` +
+              `fontsize=${size}:fontcolor=${safeColor}:` +
+              `x='${xExpr}':y='${yExpr}':` +
+              `shadowcolor=black@0.55:shadowx=1:shadowy=1:` +
+              `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`
+          );
+          prev = next;
+        });
+        videoOut = prev;
+      }
+
+      // Subtitles (burn-in) using an ASS file for fast, high-quality rendering.
+      if (remappedSubtitleCues.length > 0) {
+        const assPath = writeAssSubtitles(tempDir, remappedSubtitleCues, targetWidth, targetHeight);
+        const safeAss = ffmpegEscapeFilterValue(assPath);
+        filters.push(`${videoOut}subtitles=${safeAss}[subv]`);
+        videoOut = "[subv]";
       }
 
       // Speed adjustment
@@ -659,28 +1201,54 @@ const worker = new Worker(
       }
 
       const finalCmd = ffmpeg(inputPath);
+      // Hardware-accelerated decode can help on M1 for long clips.
+      // Safe: if unsupported, FFmpeg will fail; keep it opt-in via env.
+      const hwDecode = (process.env.FFMPEG_HW_DECODE || "").trim();
+      if (hwDecode) {
+        finalCmd.inputOptions([`-hwaccel ${hwDecode}`]);
+      }
       if (hasCustomBackground) {
         finalCmd.input(bgPath);
-      }
-      if (hasBackgroundCanvas) {
-        finalCmd.input(maskPath);
       }
       finalCmd
         .on("start", (cmdLine) => {
           console.log(`[${jobId}] FFmpeg command: ${cmdLine}`);
         })
         .complexFilter(filterStr)
-        .videoCodec("libx264")
+        .videoCodec(videoEncoder)
         .audioCodec("aac")
         .outputOptions([
           ...maps,
+          `-filter_complex_threads ${filterThreads}`,
           "-shortest",
           "-pix_fmt yuv420p",
           "-vsync cfr",
           `-g ${targetFps * 2}`,
           "-threads 0",
-          `-preset ${overridePreset}`,
-          `-crf ${overrideCrf}`,
+          `-t ${Math.max(0.1, trimmedDuration / speedFactor).toFixed(3)}`,
+          // Encoder tuning:
+          // - For libx264: CRF-based quality (no behavioral change vs today).
+          // - For hardware encoders: use a high-quality constant-quality style where supported.
+          ...(videoEncoder === "libx264"
+            ? [`-preset ${overridePreset}`, `-crf ${overrideCrf}`]
+            : videoEncoder === "h264_videotoolbox"
+              ? [
+                  // VideoToolbox does not support CRF; use a conservative quality scale.
+                  // Lower is better; 50 is visually high quality for 720p.
+                  "-q:v 50",
+                  "-profile:v high",
+                ]
+              : videoEncoder === "h264_nvenc"
+                ? [
+                    // NVENC: prefer constant-quality (CQ) style.
+                    // CQ lower = higher quality. 19 approximates CRF~18 for many sources.
+                    "-rc vbr_hq",
+                    "-cq 19",
+                    "-b:v 0",
+                    "-profile:v high",
+                    "-preset p5",
+                  ]
+                : []),
           "-movflags +faststart",
         ])
         .output(outputPath)
@@ -690,17 +1258,21 @@ const worker = new Worker(
           prisma.videoJob.update({ where: { id: jobId }, data: { progress: pct } }).catch(() => {});
         });
 
+      const encodeStartTs = Date.now();
       await runFfmpeg(finalCmd);
+      console.log(`[${jobId}] Encode completed in ${Date.now() - encodeStartTs}ms`);
       console.log(`[${jobId}] Encode done. Uploading to Cloudinary...`);
 
       await job.updateProgress(90);
       await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 90 } });
 
       // ── 5. Upload ─────────────────────────────────────────────────────────────
+      const uploadStartTs = Date.now();
       const uploadResult = await cloudinary.uploader.upload(outputPath, {
         resource_type: "video",
         folder: "processed_exports",
       });
+      console.log(`[${jobId}] Upload completed in ${Date.now() - uploadStartTs}ms`);
       const exportedUrl = uploadResult.secure_url;
 
       await job.updateProgress(100);
@@ -709,18 +1281,8 @@ const worker = new Worker(
         data: { status: "COMPLETED", progress: 100, exportedUrl },
       });
 
-      if (job.data.demoId) {
-        await prisma.demo
-          .update({
-            where: { id: job.data.demoId },
-            data: {
-              exportedUrl,
-            },
-          })
-          .catch((e: any) => console.error(`[${jobId}] Demo update failed:`, e.message));
-      }
-
       console.log(`[${jobId}] ✅ Done: ${exportedUrl}`);
+      console.log(`[${jobId}] Total job time: ${Date.now() - jobStartTs}ms`);
     } catch (error: any) {
       console.error(`[${jobId}] ❌ Failed:`, error.message);
       await prisma.videoJob.update({
@@ -732,11 +1294,103 @@ const worker = new Worker(
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   },
-  { connection: connection as any }
+  {
+    connection: connection as any,
+    concurrency: workerConcurrency,
+  }
 );
 
 worker.on("failed", (job, err) => {
   console.log(`Job ${job?.id} failed: ${err.message}`);
 });
 
-console.log("🎬 Video Worker running and waiting for jobs...");
+console.log(`🎬 Video Worker running and waiting for jobs (concurrency=${workerConcurrency})...`);
+
+// ── Subtitle Worker (Deepgram) ────────────────────────────────────────────────
+const subtitleConcurrency = Math.max(
+  1,
+  parseInt(process.env.SUBTITLE_WORKER_CONCURRENCY || "1", 10) || 1
+);
+
+const subtitleWorker = new Worker(
+  "subtitle-processing",
+  async (job: Job) => {
+    const { jobId, videoUrl, demoId, language } = job.data;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `stt-${jobId}-`));
+    const inputPath = path.join(tempDir, "input.webm");
+    const wavPath = path.join(tempDir, "audio.wav");
+
+    try {
+      await withRetry(() =>
+        prisma.videoJob.update({
+          where: { id: jobId },
+          data: { status: "PROCESSING", progress: 5 },
+        })
+      );
+      await job.updateProgress(5);
+
+      await downloadVideo(videoUrl, inputPath);
+      await job.updateProgress(25);
+      await withRetry(() => prisma.videoJob.update({ where: { id: jobId }, data: { progress: 25 } }));
+
+      // Probe for best-effort mic stream selection.
+      const meta = await new Promise<any>((res, rej) => {
+        ffmpeg.ffprobe(inputPath, (err, m) => (err ? rej(err) : res(m)));
+      });
+      const micIdx = pickBestMicAudioStreamIndex(meta);
+
+      await extractAudioWav16kMono(inputPath, wavPath, micIdx);
+      await job.updateProgress(55);
+      await withRetry(() => prisma.videoJob.update({ where: { id: jobId }, data: { progress: 55 } }));
+
+      const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+
+      if (demoId) {
+        await prisma.demo.update({
+          where: { id: demoId },
+          data: {
+            subtitles: {
+              provider: "deepgram",
+              language: String(language || "multi"),
+              cues,
+            },
+          },
+        });
+      }
+
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          jobData: {
+            kind: "SUBTITLES",
+            provider: "deepgram",
+            language: String(language || "multi"),
+            subtitles: cues,
+          },
+        },
+      });
+      await job.updateProgress(100);
+    } catch (error: any) {
+      console.error(`[${jobId}] ❌ Subtitle job failed:`, error?.message || error);
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: { status: "FAILED", error: error?.message || "Subtitle generation failed" },
+      });
+      throw error;
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+  {
+    connection: connection as any,
+    concurrency: subtitleConcurrency,
+  }
+);
+
+subtitleWorker.on("failed", (job, err) => {
+  console.log(`Subtitle job ${job?.id} failed: ${err.message}`);
+});
+
+console.log(`📝 Subtitle Worker ready (concurrency=${subtitleConcurrency})...`);

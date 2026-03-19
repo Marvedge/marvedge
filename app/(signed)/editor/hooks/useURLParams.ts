@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from "react";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
-import { Segment } from "./useEditorState";
+import { Segment, BrowserFrameMode } from "./useEditorState";
 
 interface UseURLParamsProps {
   params: URLSearchParams | null;
@@ -13,8 +13,38 @@ interface UseURLParamsProps {
   setLoadedSegments: (segments: Segment[] | null) => void;
   setCurrentSegments: (segments: Segment[]) => void;
   setZoomEffects: (effects: ZoomEffect[]) => void;
+  setSubtitles?: (cues: unknown) => void;
   setSavedDemoId: (id: string | null) => void;
+  setAspectRatio: (ratio: string) => void;
+  setBrowserFrameMode: (mode: BrowserFrameMode) => void;
+  setBrowserFrameDrawShadow: (enabled: boolean) => void;
+  setBrowserFrameDrawBorder: (enabled: boolean) => void;
   formatTimeForInput: (seconds: number) => string;
+}
+
+const ALLOWED_ASPECT_RATIOS = new Set(["native", "16:9", "1:1", "4:5", "2:3", "9:16"]);
+
+function normalizeAspectRatio(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (ALLOWED_ASPECT_RATIOS.has(trimmed)) {
+    return trimmed;
+  }
+  const converted = trimmed.replace("/", ":");
+  return ALLOWED_ASPECT_RATIOS.has(converted) ? converted : null;
+}
+
+function normalizeBrowserFrameMode(value: string | null): BrowserFrameMode | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "default" || normalized === "minimal" || normalized === "hidden") {
+    return normalized;
+  }
+  return null;
 }
 
 export function useURLParams({
@@ -28,7 +58,12 @@ export function useURLParams({
   setLoadedSegments,
   setCurrentSegments,
   setZoomEffects,
+  setSubtitles,
   setSavedDemoId,
+  setAspectRatio,
+  setBrowserFrameMode,
+  setBrowserFrameDrawShadow,
+  setBrowserFrameDrawBorder,
   formatTimeForInput,
 }: UseURLParamsProps) {
   useEffect(() => {
@@ -41,9 +76,12 @@ export function useURLParams({
     const urlEndTime = params.get("endTime");
     const urlSegments = params.get("segments");
     const urlZoom = params.get("zoom");
+    const urlSubtitles = params.get("subtitles");
     const urlTitle = params.get("title");
     const urlDescription = params.get("description");
     const urlDemoId = params.get("demoId");
+    const urlAspectRatio = params.get("aspectRatio");
+    const urlBrowserFrame = params.get("browserFrame");
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
@@ -70,6 +108,34 @@ export function useURLParams({
 
       if (urlDemoId) {
         setSavedDemoId(urlDemoId);
+      }
+      const normalizedAspectRatio = normalizeAspectRatio(urlAspectRatio);
+      if (normalizedAspectRatio) {
+        setAspectRatio(normalizedAspectRatio);
+      }
+      if (urlBrowserFrame) {
+        try {
+          const parsed = JSON.parse(urlBrowserFrame) as {
+            mode?: string;
+            drawShadow?: boolean;
+            drawBorder?: boolean;
+          };
+          const mode = normalizeBrowserFrameMode(parsed.mode ?? null);
+          if (mode) {
+            setBrowserFrameMode(mode);
+          }
+          if (typeof parsed.drawShadow === "boolean") {
+            setBrowserFrameDrawShadow(parsed.drawShadow);
+          }
+          if (typeof parsed.drawBorder === "boolean") {
+            setBrowserFrameDrawBorder(parsed.drawBorder);
+          }
+        } catch {
+          const mode = normalizeBrowserFrameMode(urlBrowserFrame);
+          if (mode) {
+            setBrowserFrameMode(mode);
+          }
+        }
       }
 
       // Load segments if provided
@@ -98,6 +164,16 @@ export function useURLParams({
           console.error("Error parsing zoom from URL:", error);
         }
       }
+
+      // Load subtitles if provided
+      if (urlSubtitles && setSubtitles) {
+        try {
+          const subs = JSON.parse(urlSubtitles);
+          setSubtitles(subs);
+        } catch (error) {
+          console.error("Error parsing subtitles from URL:", error);
+        }
+      }
     }
   }, [
     params,
@@ -110,7 +186,12 @@ export function useURLParams({
     setLoadedSegments,
     setCurrentSegments,
     setZoomEffects,
+    setSubtitles,
     setSavedDemoId,
+    setAspectRatio,
+    setBrowserFrameMode,
+    setBrowserFrameDrawShadow,
+    setBrowserFrameDrawBorder,
     formatTimeForInput,
   ]);
 }

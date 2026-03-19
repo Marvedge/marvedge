@@ -3,18 +3,7 @@ import Image from "next/image";
 
 interface EditorSidebarProps {
   title: string;
-  setTitle: (v: string) => void;
-  description: string;
-  setDescription: (v: string) => void;
-  onDownloadWebM: () => void;
-  onDownloadMP4: () => void;
   onExportWebM: () => void;
-  tool: string;
-  setTool: (t: string) => void;
-  handleUndo: () => void;
-  handleClear: () => void;
-  handleSaveOverlays: () => void;
-  handleLoadOverlays: () => void;
   forceShowMobile?: boolean;
   thumbnailUrl?: string;
   selectedBackground?: string | null;
@@ -23,26 +12,41 @@ interface EditorSidebarProps {
   setBackgroundType?: (type: string) => void;
   customBackground?: File | null;
   setCustomBackground?: (file: File | null) => void;
+  aspectRatio?: string;
+  setAspectRatio?: (ratio: string) => void;
+  browserFrameMode?: "default" | "minimal" | "hidden";
+  setBrowserFrameMode?: (mode: "default" | "minimal" | "hidden") => void;
+  browserFrameDrawShadow?: boolean;
+  setBrowserFrameDrawShadow?: (enabled: boolean) => void;
+  browserFrameDrawBorder?: boolean;
+  setBrowserFrameDrawBorder?: (enabled: boolean) => void;
+  textOverlayInput?: string;
+  setTextOverlayInput?: (value: string) => void;
+  textOverlayFontFamily?: string;
+  setTextOverlayFontFamily?: (value: string) => void;
+  textOverlayFontSize?: number;
+  setTextOverlayFontSize?: (value: number) => void;
+  onAddTextOverlay?: () => void;
+  onDeleteSelectedTextOverlay?: () => void;
+  hasSelectedTextOverlay?: boolean;
+  textOverlayColor?: string;
+  setTextOverlayColor?: (value: string) => void;
+  onAddSubtitles?: () => void;
+  subtitlesLoading?: boolean;
+  hasSubtitles?: boolean;
   className?: string;
+  onOpenSaveDemo?: () => void;
+  savingDemo?: boolean;
+  demoSaved?: boolean;
+  onToggleDashboardMenu?: () => void;
 }
 
 type MainTab = "background" | "tools";
 type BgSubTab = "image" | "gradient" | "color" | "hidden";
 
 const EditorSidebar: React.FC<EditorSidebarProps> = ({
-  // title,
-  // setTitle,
-  // description,
-  // setDescription,
-  // onDownloadWebM,
+  title,
   onExportWebM,
-  //onDownloadMP4,
-  tool,
-  setTool,
-  handleUndo,
-  handleClear,
-  handleSaveOverlays,
-  handleLoadOverlays,
   forceShowMobile = false,
   // thumbnailUrl,
   selectedBackground,
@@ -51,6 +55,28 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   setBackgroundType,
   customBackground,
   setCustomBackground,
+  aspectRatio = "native",
+  setAspectRatio,
+  browserFrameDrawShadow = true,
+  setBrowserFrameDrawShadow,
+  browserFrameDrawBorder = false,
+  setBrowserFrameDrawBorder,
+  textOverlayInput = "Add text",
+  setTextOverlayInput,
+  textOverlayFontFamily = "Arial",
+  setTextOverlayFontFamily,
+  textOverlayFontSize = 24,
+  setTextOverlayFontSize,
+  onAddTextOverlay,
+  textOverlayColor = "#ffffff",
+  setTextOverlayColor,
+  onAddSubtitles,
+  subtitlesLoading = false,
+  hasSubtitles = false,
+  onOpenSaveDemo,
+  savingDemo = false,
+  demoSaved = false,
+  onToggleDashboardMenu,
 }) => {
   //const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<MainTab>("background");
@@ -103,36 +129,77 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   };
 
   // Background options (Image)
-  const imageBackgroundOptions = [
+  const imageBackgroundOptions: {
+    id: string;
+    name: string;
+    thumbnail: string;
+    type: "" | "static" | "animated" | "gradient" | "pattern";
+  }[] = [
+    {
+      id: "staticBackground",
+      name: "Static Background",
+      thumbnail: "/staticbackground.jpg",
+      type: "static",
+    },
+    {
+      id: "animatedBackground",
+      name: "Animated Background",
+      thumbnail: "/animatedbackground.jpg",
+      type: "animated",
+    },
+    {
+      id: "gradientBackground",
+      name: "Gradient Background",
+      thumbnail: "/gradientbackground.png",
+      type: "gradient",
+    },
+    {
+      id: "patternBackground",
+      name: "Pattern Background",
+      thumbnail: "/patternbackground.jpg",
+      type: "pattern",
+    },
     {
       id: "bg1",
       name: "Mountain Sunset",
       thumbnail: "/icons/bg-mountain-sunset.svg",
+      type: "pattern",
     },
     {
       id: "bg2",
       name: "Abstract Circles",
       thumbnail: "/icons/bg-abstract-circles.svg",
+      type: "pattern",
     },
     {
       id: "bg3",
       name: "Crystalline Shapes",
       thumbnail: "/icons/bg-crystalline.svg",
+      type: "pattern",
     },
     {
       id: "bg4",
       name: "Dynamic Brushstrokes",
       thumbnail: "/icons/bg-brushstrokes.svg",
+      type: "pattern",
     },
     {
       id: "bg5",
       name: "Warm Gradients",
       thumbnail: "/icons/bg-warm-gradients.svg",
+      type: "gradient",
     },
-    { id: "bg6", name: "Ethereal Light", thumbnail: "/icons/bg-ethereal.svg" },
-    { id: "bg7", name: "Fiery Swirls", thumbnail: "/icons/bg-fiery.svg" },
-    { id: "bg8", name: "Elegant Ribbons", thumbnail: "/icons/bg-ribbons.svg" },
+    { id: "bg6", name: "Ethereal Light", thumbnail: "/icons/bg-ethereal.svg", type: "pattern" },
+    { id: "bg7", name: "Fiery Swirls", thumbnail: "/icons/bg-fiery.svg", type: "pattern" },
+    { id: "bg8", name: "Elegant Ribbons", thumbnail: "/icons/bg-ribbons.svg", type: "pattern" },
   ];
+
+  const filteredImageBackgroundOptions = imageBackgroundOptions.filter((bg) => {
+    if (!localBackgroundType) {
+      return true;
+    }
+    return bg.type === localBackgroundType;
+  });
 
   // Background options (Gradient)
   const gradientOptions: { id: string; name: string; css: string }[] = [
@@ -213,6 +280,41 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
         forceShowMobile ? "flex" : "hidden md:flex"
       }`}
     >
+      {/* 3-bar menu + title */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onToggleDashboardMenu?.()}
+          className="h-[54px] w-[68px] rounded-xl bg-[#A594F9] hover:bg-[#7C5CFC] transition flex items-center justify-center shrink-0 shadow-sm"
+          aria-label="Open dashboard menu"
+        >
+          <div className="flex flex-col gap-1.5">
+            <span className="block w-6 h-0.5 bg-white rounded-full" />
+            <span className="block w-6 h-0.5 bg-white rounded-full opacity-90" />
+            <span className="block w-6 h-0.5 bg-white rounded-full opacity-80" />
+          </div>
+        </button>
+        <div className="min-w-0">
+          <div className="text-lg font-semibold text-[#261753] truncate">
+            {title?.trim() ? title.trim() : "Untitled demo"}
+          </div>
+        </div>
+      </div>
+
+      {/* Save Demo */}
+      <button
+        type="button"
+        onClick={() => onOpenSaveDemo?.()}
+        disabled={demoSaved || savingDemo}
+        className={`flex items-center justify-center gap-2 w-full h-[54px] font-semibold rounded-lg shadow transition text-sm ${
+          demoSaved || savingDemo
+            ? "bg-[#8A76FC] text-white opacity-70 cursor-not-allowed"
+            : "bg-[#8A76FC] hover:bg-[#7A66EC] text-white"
+        }`}
+      >
+        {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
+      </button>
+
       {/* Export Section */}
       <div className="relative">
         <button
@@ -287,7 +389,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
           {bgSubTab === "image" && (
             <>
               <div className="grid grid-cols-4 gap-2">
-                {imageBackgroundOptions.map((bg) => {
+                {filteredImageBackgroundOptions.map((bg) => {
                   const isActive = localSelectedBackground === bg.id;
                   return (
                     <button
@@ -470,62 +572,228 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
 
       {/* TOOLS TAB */}
       {activeTab === "tools" && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-[#A594F9]">Tools</h2>
-
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              onClick={() => setTool("none")}
-              className={`w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide ${
-                tool === "none"
-                  ? "bg-[#7C5CFC] text-white"
-                  : "bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#d1c6fa]"
-              }`}
-            >
-              SELECT
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {["blur", "rect", "arrow", "text"].map((t) => (
-              <button
-                key={t}
-                onClick={() => setTool(t)}
-                className={`w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide ${
-                  tool === t
-                    ? "bg-[#7C5CFC] text-white"
-                    : "bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#d1c6fa]"
-                }`}
+        <div className="space-y-6">
+          {/* Aspect Ratio Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Aspect Ratio</h2>
+            <div className="relative w-[180px]">
+              <select
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio && setAspectRatio(e.target.value)}
+                className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-semibold appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
               >
-                {t.toUpperCase()}
-              </button>
-            ))}
+                <option value="native">Native</option>
+                <option value="16:9">16:9</option>
+                <option value="1:1">1:1</option>
+                <option value="4:5">4:5</option>
+                <option value="2:3">2:3</option>
+                <option value="9:16">9:16</option>
+              </select>
+              {/* Custom dropdown arrow */}
+              <div className="absolute top-0 right-0 h-full w-10 flex items-center justify-center pointer-events-none">
+                <svg
+                  className="w-4 h-4 text-[#7C5CFC]"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          {/* Browser Frame Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Browser Frame</h2>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setBrowserFrameDrawShadow && setBrowserFrameDrawShadow(!browserFrameDrawShadow)
+                }
+                className="w-full flex items-center justify-between py-1 text-sm"
+              >
+                <span className="text-[#6B6B6B]">Draw Shadow</span>
+                <span
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    browserFrameDrawShadow ? "bg-[#8A76FC]" : "bg-[#A3A3A3]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                      browserFrameDrawShadow ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setBrowserFrameDrawBorder && setBrowserFrameDrawBorder(!browserFrameDrawBorder)
+                }
+                className="w-full flex items-center justify-between py-1 text-sm"
+              >
+                <span className="text-[#6B6B6B]">Draw Border</span>
+                <span
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    browserFrameDrawBorder ? "bg-[#8A76FC]" : "bg-[#A3A3A3]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                      browserFrameDrawBorder ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Add Text Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Add Text</h2>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={textOverlayInput}
+                onChange={(e) => setTextOverlayInput && setTextOverlayInput(e.target.value)}
+                className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#4A3C87] focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
+                placeholder="Write your text"
+              />
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="relative">
+                  <select
+                    value={textOverlayFontFamily}
+                    onChange={(e) =>
+                      setTextOverlayFontFamily && setTextOverlayFontFamily(e.target.value)
+                    }
+                    className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Inter">Inter</option>
+                    <option value="Roboto">Roboto</option>
+                    <option value="Poppins">Poppins</option>
+                    <option value="Caveat">Caveat</option>
+                    <option value="Georgia">Georgia</option>
+                  </select>
+                  <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="w-4 h-4 text-[#7C5CFC]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={String(textOverlayFontSize)}
+                    onChange={(e) =>
+                      setTextOverlayFontSize && setTextOverlayFontSize(Number(e.target.value))
+                    }
+                    className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
+                  >
+                    <option value="16">16</option>
+                    <option value="20">20</option>
+                    <option value="24">24</option>
+                    <option value="28">28</option>
+                    <option value="32">32</option>
+                    <option value="40">40</option>
+                  </select>
+                  <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="w-4 h-4 text-[#7C5CFC]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={textOverlayColor}
+                    onChange={(e) => setTextOverlayColor && setTextOverlayColor(e.target.value)}
+                    className="w-full border border-[#ede7fa] bg-[#F6F3FF] rounded-lg px-3 py-2 text-sm text-[#7C5CFC] font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-[#A594F9] cursor-pointer"
+                  >
+                    <option value="#ffffff">White</option>
+                    <option value="#000000">Black</option>
+                    <option value="#ff0000">Red</option>
+                    <option value="#00ff00">Green</option>
+                    <option value="#0000ff">Blue</option>
+                    <option value="#ffff00">Yellow</option>
+                    <option value="#A594F9">Purple</option>
+                  </select>
+                  <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="w-4 h-4 text-[#7C5CFC]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onAddTextOverlay && onAddTextOverlay()}
+                  className="w-full rounded-lg bg-[#8A76FC] text-white py-2 text-sm font-semibold hover:bg-[#7C5CFC] transition"
+                >
+                  Add Text
+                </button>
+                <div className="w-full rounded-lg border border-transparent text-[#8A76FC] py-2 text-sm font-semibold opacity-60 select-none flex items-center justify-center">
+                  Delete via canvas
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Subtitles Section */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A594F9] mb-4">Subtitles</h2>
             <button
-              onClick={handleUndo}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
+              type="button"
+              disabled={subtitlesLoading}
+              onClick={() => onAddSubtitles && onAddSubtitles()}
+              className="w-full rounded-lg bg-[#8A76FC] text-white py-2 text-sm font-semibold hover:bg-[#7C5CFC] transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              UNDO
-            </button>
-            <button
-              onClick={handleClear}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              CLEAR
-            </button>
-            <button
-              onClick={handleSaveOverlays}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              SAVE
-            </button>
-            <button
-              onClick={handleLoadOverlays}
-              className="w-full py-2 rounded-lg font-semibold shadow-sm transition-all text-sm tracking-wide border bg-[#E6E1FA] text-[#7C5CFC] hover:bg-[#F6F3FF]"
-            >
-              LOAD
+              {subtitlesLoading
+                ? "Generating..."
+                : hasSubtitles
+                  ? "Regenerate Subtitles"
+                  : "Add Subtitles"}
             </button>
           </div>
         </div>
