@@ -57,8 +57,6 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   setCustomBackground,
   aspectRatio = "native",
   setAspectRatio,
-  browserFrameMode = "default",
-  setBrowserFrameMode,
   browserFrameDrawShadow = true,
   setBrowserFrameDrawShadow,
   browserFrameDrawBorder = false,
@@ -613,26 +611,6 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
           {/* Browser Frame Section */}
           <div>
             <h2 className="text-lg font-bold text-[#A594F9] mb-4">Browser Frame</h2>
-            <div className="inline-flex items-center rounded-full bg-[#E6E1FA] p-1 gap-1 mb-4">
-              {(["default", "minimal", "hidden"] as const).map((mode) => {
-                const isActive = browserFrameMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setBrowserFrameMode && setBrowserFrameMode(mode)}
-                    className={`min-w-[92px] rounded-full px-3 py-1 text-sm transition ${
-                      isActive
-                        ? "bg-[#D7D0F5] text-[#7C5CFC]"
-                        : "bg-transparent text-[#7C5CFC] hover:bg-[#DDD6F8]"
-                    }`}
-                  >
-                    {mode === "default" ? "Default" : mode === "minimal" ? "Minimal" : "Hidden"}
-                  </button>
-                );
-              })}
-            </div>
-
             <div className="space-y-2">
               <button
                 type="button"
@@ -703,6 +681,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                     <option value="Inter">Inter</option>
                     <option value="Roboto">Roboto</option>
                     <option value="Poppins">Poppins</option>
+                    <option value="Caveat">Caveat</option>
                     <option value="Georgia">Georgia</option>
                   </select>
                   <div className="absolute top-0 right-0 h-full w-8 flex items-center justify-center pointer-events-none">

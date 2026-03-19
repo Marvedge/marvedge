@@ -732,6 +732,7 @@ const worker = new Worker(
       settings,
       aspectRatio,
       demoId,
+      browserFrame,
     } = job.data;
 
     const qSettings = settings || {
@@ -964,6 +965,8 @@ const worker = new Worker(
         selectedBackground !== "hidden" &&
         selectedBackground !== "none" &&
         selectedBackground !== "transparent";
+      const drawCardShadow = Boolean(browserFrame?.drawShadow);
+      const drawCardBorder = Boolean(browserFrame?.drawBorder);
       const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 
       // Preserve full source frame for all aspect ratios.
@@ -1087,6 +1090,9 @@ const worker = new Worker(
         // Match frontend framing with an inset card over canvas.
         const cardW = Math.max(2, Math.floor((targetWidth * 0.9) / 2) * 2);
         const cardH = Math.max(2, Math.floor((targetHeight * 0.9) / 2) * 2);
+        const borderFilter = drawCardBorder
+          ? ",drawbox=x=0:y=0:w=iw:h=ih:color=white@0.95:t=9"
+          : "";
 
         if (hasCustomBackground) {
           const customBgFilter =
@@ -1094,22 +1100,42 @@ const worker = new Worker(
             `crop=${targetWidth}:${targetHeight},loop=loop=-1:size=1:start=0,fps=${targetFps},` +
             "setsar=1,format=yuv420p[bg]";
           const cardFilter =
-            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p[svid]`;
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
-          filters.push(
-            `${customBgFilter};${cardFilter};` +
-              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
-          );
+          if (drawCardShadow) {
+            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
+            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            filters.push(
+              `${customBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
+                "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
+                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          } else {
+            filters.push(
+              `${customBgFilter};${cardFilter};` +
+                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          }
         } else {
           const solidBgFilter =
             `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
           const cardFilter =
-            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p[svid]`;
+            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
-          filters.push(
-            `${solidBgFilter};${cardFilter};` +
-              "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
-          );
+          if (drawCardShadow) {
+            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
+            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            filters.push(
+              `${solidBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
+                "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
+                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          } else {
+            filters.push(
+              `${solidBgFilter};${cardFilter};` +
+                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+            );
+          }
         }
         videoOut = "[bgout]";
       }

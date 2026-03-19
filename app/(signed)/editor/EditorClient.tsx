@@ -57,6 +57,25 @@ type TextOverlayItem = {
 
 type SubtitleCue = { start: number; end: number; text: string };
 
+function resolveOverlayFontFamily(value: string): string {
+  const v = (value || "").trim();
+  switch (v) {
+    case "Inter":
+      return "var(--font-inter), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    case "Roboto":
+      return "var(--font-roboto), ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial";
+    case "Poppins":
+      return "var(--font-poppins), ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial";
+    case "Caveat":
+      return "var(--font-caveat), ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial";
+    case "Georgia":
+      return "Georgia, ui-serif, serif";
+    case "Arial":
+    default:
+      return "Arial, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
+  }
+}
+
 export default function EditorPage() {
   const router = useRouter();
 
@@ -544,14 +563,9 @@ export default function EditorPage() {
     Number.isFinite(ratioW) && Number.isFinite(ratioH) && ratioW > 0 && ratioH > 0
       ? ratioW / ratioH
       : 16 / 9;
-  // Temporarily disabled in preview (UI controls remain visible in sidebar).
-  const browserFrameEnabled = false;
-  const browserFrameTopBarHeight =
-    browserFrameMode === "default" ? 34 : browserFrameMode === "minimal" ? 20 : 0;
-  const browserFrameBorder =
-    browserFrameEnabled && browserFrameDrawBorder ? "1px solid rgba(124, 92, 252, 0.45)" : "none";
-  const browserFrameShadow =
-    browserFrameEnabled && browserFrameDrawShadow ? "0 10px 28px rgba(17, 24, 39, 0.28)" : "none";
+  // Browser frame UI modes are removed; keep only cheap border/shadow styling.
+  const browserFrameBorder = browserFrameDrawBorder ? "6px solid rgba(255,255,255,0.95)" : "none";
+  const browserFrameShadow = browserFrameDrawShadow ? "0 14px 34px rgba(0,0,0,0.32)" : "none";
   const isPortraitPreview = previewRatioValue < 1;
   const stageHeight = selectedBackground
     ? isPortraitPreview
@@ -563,6 +577,15 @@ export default function EditorPage() {
         : "84%"
     : "100%";
   const stageMaxWidth = selectedBackground ? (isPortraitPreview ? "95%" : "92%") : "100%";
+  const stageContainerPadY = selectedBackground
+    ? isPortraitPreview
+      ? isFullscreen
+        ? 10
+        : 14
+      : isFullscreen
+        ? 14
+        : 18
+    : 0;
 
   const saveExportedVideoRecord = async (
     exportedUrl: string,
@@ -1330,7 +1353,8 @@ export default function EditorPage() {
               style={{
                 aspectRatio: "16 / 9",
                 minHeight: "160px",
-                padding: selectedBackground ? "0px" : "5px",
+                // Add symmetric vertical inset so the stage isn't stuck to the top when backgrounds are enabled.
+                padding: selectedBackground ? `${stageContainerPadY}px 0px` : "5px",
                 boxShadow: "0 4px 24px 0 #E6E1FA",
                 ...getBackgroundStyle(),
               }}
@@ -1354,40 +1378,11 @@ export default function EditorPage() {
                   transition: "width 0.3s ease, height 0.3s ease",
                 }}
               >
-                {browserFrameEnabled && (
-                  <div
-                    className="w-full shrink-0 px-3"
-                    style={{
-                      height: `${browserFrameTopBarHeight}px`,
-                      background:
-                        browserFrameMode === "default"
-                          ? "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(17,24,39,0.98) 100%)"
-                          : "rgba(17, 24, 39, 0.96)",
-                      borderBottom: "1px solid rgba(148,163,184,0.24)",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    {browserFrameMode === "default" ? (
-                      <div className="w-full flex items-center gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
-                        </div>
-                        <div className="flex-1 h-6 rounded-md bg-white/10 border border-white/10" />
-                      </div>
-                    ) : (
-                      <div className="w-full h-1.5 rounded-full bg-white/15" />
-                    )}
-                  </div>
-                )}
-
                 <div
                   ref={zoomFocusStageRef}
                   className="relative w-full flex-1 min-h-0"
                   style={{
-                    borderRadius: browserFrameEnabled ? "0 0 1.25rem 1.25rem" : "1.25rem",
+                    borderRadius: "1.25rem",
                     overflow: "hidden",
                   }}
                 >
@@ -1540,7 +1535,7 @@ export default function EditorPage() {
                     onMouseUp={tool !== "none" ? handleMouseUp : undefined}
                     style={{
                       pointerEvents: tool !== "none" ? "auto" : "none",
-                      borderRadius: browserFrameEnabled ? "0 0 1.25rem 1.25rem" : "1.25rem",
+                      borderRadius: "1.25rem",
                     }}
                   />
 
@@ -1632,7 +1627,7 @@ export default function EditorPage() {
                                 }}
                                 className="w-full h-full bg-transparent outline-none border border-dashed border-[#A594F9] text-white resize-none"
                                 style={{
-                                  fontFamily: overlay.fontFamily,
+                                  fontFamily: resolveOverlayFontFamily(overlay.fontFamily),
                                   fontSize: `${overlay.fontSize}px`,
                                   color: overlay.color,
                                   lineHeight: 1.2,
@@ -1645,7 +1640,7 @@ export default function EditorPage() {
                               <div
                                 className="whitespace-pre-wrap break-words w-full h-full"
                                 style={{
-                                  fontFamily: overlay.fontFamily,
+                                  fontFamily: resolveOverlayFontFamily(overlay.fontFamily),
                                   fontSize: `${overlay.fontSize}px`,
                                   color: overlay.color,
                                   lineHeight: 1.2,

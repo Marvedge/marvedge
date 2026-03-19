@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Play, Settings, Clock, Share2} from "lucide-react";
+import { Menu, X, Play, Settings, Clock, Share2 } from "lucide-react";
 import Image from "next/image";
 
 const SidemenuDashboard = () => {
