@@ -577,15 +577,7 @@ export default function EditorPage() {
         : "84%"
     : "100%";
   const stageMaxWidth = selectedBackground ? (isPortraitPreview ? "95%" : "92%") : "100%";
-  const stageContainerPadY = selectedBackground
-    ? isPortraitPreview
-      ? isFullscreen
-        ? 10
-        : 14
-      : isFullscreen
-        ? 14
-        : 18
-    : 0;
+  const stageContainerPadY = isPortraitPreview ? (isFullscreen ? 14 : 18) : isFullscreen ? 18 : 24;
 
   const saveExportedVideoRecord = async (
     exportedUrl: string,
@@ -1354,7 +1346,7 @@ export default function EditorPage() {
                 aspectRatio: "16 / 9",
                 minHeight: "160px",
                 // Add symmetric vertical inset so the stage isn't stuck to the top when backgrounds are enabled.
-                padding: selectedBackground ? `${stageContainerPadY}px 0px` : "5px",
+                padding: `${stageContainerPadY}px ${selectedBackground ? "0px" : "5px"}`,
                 boxShadow: "0 4px 24px 0 #E6E1FA",
                 ...getBackgroundStyle(),
               }}
