@@ -3,6 +3,18 @@ import axios from "axios";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "../hooks/useEditorState";
 
+function getDemoIdFromApiResponse(data: unknown): string | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const maybeDemo = (data as { demo?: unknown }).demo;
+  if (!maybeDemo || typeof maybeDemo !== "object") {
+    return null;
+  }
+  const id = (maybeDemo as { id?: unknown }).id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
 // Utility: Convert seconds or "mm:ss" etc. to "HH:MM:SS"
 export function normalizeTimeFormat(time: string | number): string {
   let totalSeconds: number;
@@ -38,12 +50,15 @@ interface SaveDemoParams {
   zoomEffects: ZoomEffect[];
   subtitles?: { start: number; end: number; text: string }[];
   selectedBackground?: string | null;
+  backgroundType?: string;
   aspectRatio?: string;
   browserFrame?: {
     mode: "default" | "minimal" | "hidden";
     drawShadow: boolean;
     drawBorder: boolean;
   };
+  textOverlays?: unknown;
+  savedDemoId?: string | null;
   setSavingDemo: (saving: boolean) => void;
   setSidebarTitle: (title: string) => void;
   setSidebarDescription: (description: string) => void;
@@ -65,8 +80,11 @@ export async function handleSaveDemo(
     zoomEffects,
     subtitles,
     selectedBackground,
+    backgroundType,
     aspectRatio,
     browserFrame,
+    textOverlays,
+    savedDemoId,
     setSavingDemo,
     setSidebarTitle,
     setSidebarDescription,
@@ -88,9 +106,17 @@ export async function handleSaveDemo(
     const startTime = inputStartTime;
     const endTime = inputEndTime;
 
+    // If this is an existing demo, we should only update the existing row's state.
+    // Never POST (which can 409) and never re-upload the raw video.
+    const urlDemoId =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("demoId")
+        : null;
+    const existingDemoId = savedDemoId ?? urlDemoId ?? null;
+
     // First, upload video to Cloudinary if it's a blob URL
     let cloudinaryVideoUrl = videoUrl;
-    if (videoUrl.startsWith("blob:")) {
+    if (!existingDemoId && videoUrl.startsWith("blob:")) {
       try {
         // Get the video blob
         const response = await fetch(videoUrl);
@@ -151,6 +177,8 @@ export async function handleSaveDemo(
       zoom: zoomEffects,
       background: selectedBackground ?? null,
       subtitles: subtitles || null,
+      textOverlays: textOverlays || [],
+      backgroundType: backgroundType || "",
       aspectRatio: aspectRatio || "native",
       browserFrame: browserFrame || {
         mode: "default",
@@ -160,20 +188,27 @@ export async function handleSaveDemo(
     };
 
     try {
-      const response = await axios.post("/api/demo", {
-        title: data.title,
-        description: data.description,
-        videoUrl: cloudinaryVideoUrl,
-        editing: editingToSave,
-      });
-      console.log("Demo saved:", response.data);
+      const response = existingDemoId
+        ? await axios.patch("/api/demo", {
+            id: existingDemoId,
+            title: data.title,
+            description: data.description,
+            editing: editingToSave,
+          })
+        : await axios.post("/api/demo", {
+            title: data.title,
+            description: data.description,
+            videoUrl: cloudinaryVideoUrl,
+            editing: editingToSave,
+          });
+      console.log("Demo saved/updated:", response.data);
 
       // Set the saved state
       if (setDemoSaved) {
         setDemoSaved(true);
       }
-      if (setSavedDemoId && response.data.demo?.id) {
-        setSavedDemoId(response.data.demo.id);
+      if (setSavedDemoId) {
+        setSavedDemoId(getDemoIdFromApiResponse(response.data) || existingDemoId);
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -181,6 +216,39 @@ export async function handleSaveDemo(
           if (error.response.status === 409) {
             // Demo already exists
             console.log("Demo already saved:", error.response.data);
+            const existingId = getDemoIdFromApiResponse(error.response.data) || undefined;
+            if (existingId) {
+              try {
+                const patchRes = await axios.patch("/api/demo", {
+                  id: existingId,
+                  title: data.title,
+                  description: data.description,
+                  editing: editingToSave,
+                });
+                if (setDemoSaved) {
+                  setDemoSaved(true);
+                }
+                if (setSavedDemoId) {
+                  setSavedDemoId(existingId);
+                }
+                if (onSaveSuccess) {
+                  onSaveSuccess();
+                }
+                toast.dismiss();
+                toast.success("Demo updated successfully!");
+                // Ensure sidebar reflects the saved text immediately.
+                setSidebarTitle(data.title);
+                setSidebarDescription(data.description);
+                setShowSaveDemoModal(false);
+                console.log("Demo updated after 409:", patchRes.data);
+                return;
+              } catch (patchErr) {
+                console.error("Failed to update existing demo after 409:", patchErr);
+                toast.dismiss();
+                toast.error("Failed to update demo");
+                throw patchErr;
+              }
+            }
             if (setDemoSaved) {
               setDemoSaved(true);
             }
@@ -213,7 +281,7 @@ export async function handleSaveDemo(
     setSidebarTitle(data.title);
     setSidebarDescription(data.description);
     toast.dismiss();
-    toast.success("Demo saved successfully!");
+    toast.success(savedDemoId ? "Demo updated successfully!" : "Demo saved successfully!");
     // Call success callback to update parent component tracking
     if (onSaveSuccess) {
       onSaveSuccess();

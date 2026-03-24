@@ -15,6 +15,9 @@ interface UseURLParamsProps {
   setZoomEffects: (effects: ZoomEffect[]) => void;
   setSubtitles?: (cues: unknown) => void;
   setSavedDemoId: (id: string | null) => void;
+  setSelectedBackground?: (bg: string | null) => void;
+  setBackgroundType?: (t: string) => void;
+  setTextOverlays?: (overlays: unknown) => void;
   setAspectRatio: (ratio: string) => void;
   setBrowserFrameMode: (mode: BrowserFrameMode) => void;
   setBrowserFrameDrawShadow: (enabled: boolean) => void;
@@ -60,6 +63,9 @@ export function useURLParams({
   setZoomEffects,
   setSubtitles,
   setSavedDemoId,
+  setSelectedBackground,
+  setBackgroundType,
+  setTextOverlays,
   setAspectRatio,
   setBrowserFrameMode,
   setBrowserFrameDrawShadow,
@@ -82,6 +88,33 @@ export function useURLParams({
     const urlDemoId = params.get("demoId");
     const urlAspectRatio = params.get("aspectRatio");
     const urlBrowserFrame = params.get("browserFrame");
+    const urlBackground = params.get("background");
+    const urlBackgroundType = params.get("backgroundType");
+    const urlTextOverlays = params.get("textOverlays");
+
+    // These should restore even if the video URL isn't set yet (prevents TDZ/ordering issues).
+    if (urlDemoId) {
+      setSavedDemoId(urlDemoId);
+    }
+    if (urlTitle) {
+      setSidebarTitle(urlTitle);
+    }
+    if (urlDescription) {
+      setSidebarDescription(urlDescription);
+    }
+    if (urlBackground && setSelectedBackground) {
+      setSelectedBackground(urlBackground);
+    }
+    if (urlBackgroundType && setBackgroundType) {
+      setBackgroundType(urlBackgroundType);
+    }
+    if (urlTextOverlays && setTextOverlays) {
+      try {
+        setTextOverlays(JSON.parse(urlTextOverlays));
+      } catch {
+        // ignore
+      }
+    }
 
     if (urlVideo) {
       setVideoUrl(urlVideo);
@@ -98,17 +131,6 @@ export function useURLParams({
         }
       }
 
-      if (urlTitle) {
-        setSidebarTitle(urlTitle);
-      }
-
-      if (urlDescription) {
-        setSidebarDescription(urlDescription);
-      }
-
-      if (urlDemoId) {
-        setSavedDemoId(urlDemoId);
-      }
       const normalizedAspectRatio = normalizeAspectRatio(urlAspectRatio);
       if (normalizedAspectRatio) {
         setAspectRatio(normalizedAspectRatio);
@@ -188,6 +210,9 @@ export function useURLParams({
     setZoomEffects,
     setSubtitles,
     setSavedDemoId,
+    setSelectedBackground,
+    setBackgroundType,
+    setTextOverlays,
     setAspectRatio,
     setBrowserFrameMode,
     setBrowserFrameDrawShadow,

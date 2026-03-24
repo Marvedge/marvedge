@@ -783,11 +783,17 @@ const worker = new Worker(
       : Math.max(1, Math.min(8, os.cpus().length || 4));
 
     let speedFactor = 1.0;
+    if (qSettings.speed === "0.75") {
+      speedFactor = 0.75;
+    }
     if (qSettings.speed === "1.25") {
       speedFactor = 1.25;
     }
     if (qSettings.speed === "1.5") {
       speedFactor = 1.5;
+    }
+    if (qSettings.speed === "1.75") {
+      speedFactor = 1.75;
     }
     if (qSettings.speed === "2") {
       speedFactor = 2.0;

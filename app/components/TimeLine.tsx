@@ -40,8 +40,8 @@ interface TimelineRulerProps {
   onTrim?: (segments: { start: string; end: string }[]) => Promise<void>;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
-  isFullscreen: boolean;
-  handleFullscreen: () => void;
+  playbackSpeed: number;
+  setPlaybackSpeed: (v: number) => void;
   //to handle the trimmed video part
   //onDeleteSegment removed — delete is now UI-only, handled internally
   mode: "main" | "trim" | "zoom" | "text";
@@ -77,7 +77,8 @@ export default function TimelineRuler({
   //onZoomEffectCreate,
   // initialSegments,
   setPlaying,
-  handleFullscreen,
+  playbackSpeed,
+  setPlaybackSpeed,
   // videourl,
   // setVideoUrl,
   // onTrim,
@@ -365,7 +366,7 @@ export default function TimelineRuler({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [draggingScissor, scissorPreview, minValue, maxValue, segments.length]);
+  }, [draggingScissor, scissorPreview, minValue, maxValue, segments.length, setSegments]);
 
   const updateCurrentTimeFromMouse = useCallback(
     (e: MouseEvent | React.MouseEvent) => {
@@ -456,6 +457,7 @@ export default function TimelineRuler({
       draggingHandle,
       segments,
       activeSegment,
+      setSegments,
     ]
   );
 
@@ -830,7 +832,7 @@ export default function TimelineRuler({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [dragState, maxValue, minValue, zoomedTimelineWidth]);
+  }, [dragState, maxValue, minValue, zoomedTimelineWidth, setSegments]);
 
   useEffect(() => {
     if (isUpdatingFromPropRef.current) {
@@ -1297,14 +1299,22 @@ export default function TimelineRuler({
           </div>
         </div>
         <div className="flex gap-2 sm:gap-3 items-center">
-          <button
-            onClick={handleFullscreen}
-            disabled={segments.length === 0}
-            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="FullScreen"
-          >
-            <Image src="/icons/Group 316.svg" alt="fullscreen" width={18.67} height={21} />
-          </button>
+          {/* Speed control (replaces the top fullscreen button) */}
+          <div className="h-[51px] px-3 flex items-center justify-center bg-white rounded-lg border border-[#E6E1FA]">
+            <select
+              value={String(playbackSpeed)}
+              onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+              className="h-[36px] bg-transparent text-sm text-[#7C5CFC] font-medium focus:outline-none cursor-pointer"
+              title="Playback speed"
+            >
+              <option value="0.75">0.75x</option>
+              <option value="1">1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2x</option>
+            </select>
+          </div>
           {/* Delete button — works for both trim and zoom segments */}
           <button
             onClick={() => {

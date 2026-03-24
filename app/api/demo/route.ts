@@ -116,24 +116,37 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id, exportedUrl } = await req.json();
+    const { id, exportedUrl, editing, title, description } = await req.json();
 
-    if (!id || !exportedUrl) {
-      return NextResponse.json({ error: "id and exportedUrl are required" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    // Verify the demo belongs to the user
-    const demo = await prisma.demo.findUnique({ where: { id } });
-    if (!demo || demo.userId !== session.user.id) {
+    if (typeof exportedUrl !== "string" && typeof editing === "undefined") {
+      return NextResponse.json(
+        { error: "Nothing to update: provide exportedUrl or editing" },
+        { status: 400 }
+      );
+    }
+
+    // Use a single write to both enforce ownership and avoid extra round trips.
+    const updateData = {
+      ...(typeof exportedUrl === "string" ? { exportedUrl } : {}),
+      ...(typeof editing !== "undefined" ? { editing } : {}),
+      ...(typeof title === "string" ? { title } : {}),
+      ...(typeof description === "string" ? { description } : {}),
+    };
+
+    const result = await prisma.demo.updateMany({
+      where: { id, userId: session.user.id },
+      data: updateData,
+    });
+
+    if (result.count === 0) {
       return NextResponse.json({ error: "Demo not found" }, { status: 404 });
     }
 
-    const updated = await prisma.demo.update({
-      where: { id },
-      data: { exportedUrl },
-    });
-
-    return NextResponse.json({ success: true, demo: updated });
+    return NextResponse.json({ success: true, demo: { id } });
   } catch (error) {
     console.error("Demo PATCH error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -48,6 +48,8 @@ const nextConfig: NextConfig = {
       // For server, mark these as external to avoid module resolution issues
       config.externals = config.externals || [];
       config.externals.push("ffmpeg-static");
+      // bullmq uses dynamic requires internally; externalize to avoid webpack "Critical dependency" warning.
+      config.externals.push("bullmq");
     }
     return config;
   },
