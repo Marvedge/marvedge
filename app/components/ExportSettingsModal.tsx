@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 export interface ExportSettings {
   quality: "720p" | "1080p";
   fps: "30 FPS" | "60 FPS";
   compression: "Web" | "Medium" | "High" | "Ultra";
-  speed: "Default" | "1.25" | "1.5" | "2";
+  // Speed is controlled from the main editor (not this modal).
+  speed: "Default" | "0.75" | "1.25" | "1.5" | "1.75" | "2";
 }
 
 interface ExportSettingsModalProps {
@@ -23,12 +24,15 @@ export default function ExportSettingsModal({
   onConfirm,
   durationInSeconds,
 }: ExportSettingsModalProps) {
-  const defaultSettings: ExportSettings = {
-    quality: "720p",
-    fps: "30 FPS",
-    compression: "Web",
-    speed: "Default",
-  };
+  const defaultSettings: ExportSettings = useMemo(
+    () => ({
+      quality: "720p",
+      fps: "30 FPS",
+      compression: "Web",
+      speed: "Default",
+    }),
+    []
+  );
 
   const [settings, setSettings] = useState<ExportSettings>({
     ...defaultSettings,
@@ -40,7 +44,7 @@ export default function ExportSettingsModal({
     if (isOpen) {
       setSettings(defaultSettings);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultSettings]);
 
   // Basic heuristic for file size estimation based on duration and settings
   useEffect(() => {
@@ -62,15 +66,6 @@ export default function ExportSettingsModal({
 
     // Roughly 0.5MB per second at 720p 30fps Web compression as a total guess baseline
     let sizeInMb = durationInSeconds * 0.25 * baseMultiplier;
-
-    // Adjust size if speed is applied (shorter duration = smaller size)
-    if (settings.speed === "1.25") {
-      sizeInMb /= 1.25;
-    } else if (settings.speed === "1.5") {
-      sizeInMb /= 1.5;
-    } else if (settings.speed === "2") {
-      sizeInMb /= 2;
-    }
 
     if (sizeInMb < 1) {
       sizeInMb = 1;
@@ -182,42 +177,6 @@ export default function ExportSettingsModal({
                 }
               >
                 {comp}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Speed */}
-        <div className="mb-6">
-          <label className="block text-[#8A76FC] text-[15px] mb-2">Speed</label>
-          <div className="flex bg-[#EAE5FB] rounded-xl p-1 relative h-[42px]">
-            <div
-              className="absolute top-1 bottom-1 w-[calc(25%-6px)] bg-[#8A76FC] rounded-lg transition-transform duration-300 ease-in-out"
-              style={{
-                transform:
-                  settings.speed === "Default"
-                    ? "translateX(0)"
-                    : settings.speed === "1.25"
-                      ? "translateX(105%)"
-                      : settings.speed === "1.5"
-                        ? "translateX(210%)"
-                        : "translateX(315%)",
-              }}
-            />
-            {["Default", "1.25", "1.5", "2"].map((spd) => (
-              <button
-                key={spd}
-                className={`flex-1 relative z-10 text-sm font-medium transition-colors ${
-                  settings.speed === spd ? "text-white" : "text-[#8A76FC]"
-                }`}
-                onClick={() =>
-                  setSettings({
-                    ...settings,
-                    speed: spd as ExportSettings["speed"],
-                  })
-                }
-              >
-                {spd}
               </button>
             ))}
           </div>

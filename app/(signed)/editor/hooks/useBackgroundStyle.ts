@@ -1,20 +1,47 @@
 import { useCallback } from "react";
 
 const imageMap: Record<string, string> = {
-  // New dropdown category images (public root)
-  staticBackground: "/staticbackground.jpg",
-  animatedBackground: "/animatedbackground.jpg",
-  gradientBackground: "/gradientbackground.png",
-  patternBackground: "/patternbackground.jpg",
+  // Default thumbnails shown when no type is selected
+  def_mac_1: "/background-default-images/mac-1.jpg",
+  def_mac_2: "/background-default-images/mac-2.jpg",
+  def_mac_3: "/background-default-images/mac-3.jpg",
+  def_mac_4: "/background-default-images/mac-4.jpg",
+  def_windows_1: "/background-default-images/windows-1.jpg",
+  def_windows_2: "/background-default-images/windows-2.jpg",
+  def_windows_3: "/background-default-images/windows-3.png",
+  def_windows_4: "/background-default-images/windows-4.jpg",
 
-  bg1: "/icons/bg-mountain-sunset.svg",
-  bg2: "/icons/bg-abstract-circles.svg",
-  bg3: "/icons/bg-crystalline.svg",
-  bg4: "/icons/bg-brushstrokes.svg",
-  bg5: "/icons/bg-warm-gradients.svg",
-  bg6: "/icons/bg-ethereal.svg",
-  bg7: "/icons/bg-fiery.svg",
-  bg8: "/icons/bg-ribbons.svg",
+  // Solid backgrounds
+  solid_blue_1: "/solid/blue-1.png",
+  solid_blue_2: "/solid/blue-2.png",
+  solid_blue_3: "/solid/blue-3.png",
+  solid_blue_4: "/solid/blue-4.png",
+  solid_green_1: "/solid/green-1.png",
+  solid_green_2: "/solid/green-2.png",
+  solid_green_3: "/solid/green-3.png",
+  solid_green_4: "/solid/green-4.png",
+  solid_orange_1: "/solid/orange-1.png",
+  solid_orange_2: "/solid/orange-2.png",
+  solid_orange_3: "/solid/orange-3.png",
+  solid_orange_4: "/solid/orange-4.png",
+  solid_red_1: "/solid/red-1.jpg",
+  solid_red_2: "/solid/red-2.jpg",
+  solid_red_3: "/solid/red-3.jpg",
+  solid_red_4: "/solid/red-4.jpg",
+  solid_yellow_1: "/solid/yellow-1.png",
+  solid_yellow_2: "/solid/yellow-2.png",
+  solid_yellow_3: "/solid/yellow-3.png",
+  solid_yellow_4: "/solid/yellow-4.png",
+
+  // Gradient backgrounds (images)
+  grad_dark_1: "/gradient/gradient_dark-1.jpg",
+  grad_dark_2: "/gradient/gradient_dark-2.jpg",
+  grad_dark_3: "/gradient/gradient_dark-3.jpg",
+  grad_dark_4: "/gradient/gradient_dark-4.jpg",
+  grad_light_1: "/gradient/gradient_light-1.png",
+  grad_light_2: "/gradient/gradient_light-2.jpg",
+  grad_light_3: "/gradient/gradient_light-3.png",
+  grad_light_4: "/gradient/gradient_light-4.jpg",
 };
 
 interface UseBackgroundStyleProps {

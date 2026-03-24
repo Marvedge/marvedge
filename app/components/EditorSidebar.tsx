@@ -133,72 +133,136 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
     id: string;
     name: string;
     thumbnail: string;
-    type: "" | "static" | "animated" | "gradient" | "pattern";
+    type: "default" | "solid" | "gradient";
   }[] = [
+    // Default set (shown when no type is selected)
     {
-      id: "staticBackground",
-      name: "Static Background",
-      thumbnail: "/staticbackground.jpg",
-      type: "static",
+      id: "def_mac_1",
+      name: "mac-1",
+      thumbnail: "/background-default-images/mac-1.jpg",
+      type: "default",
     },
     {
-      id: "animatedBackground",
-      name: "Animated Background",
-      thumbnail: "/animatedbackground.jpg",
-      type: "animated",
+      id: "def_mac_2",
+      name: "mac-2",
+      thumbnail: "/background-default-images/mac-2.jpg",
+      type: "default",
     },
     {
-      id: "gradientBackground",
-      name: "Gradient Background",
-      thumbnail: "/gradientbackground.png",
+      id: "def_mac_3",
+      name: "mac-3",
+      thumbnail: "/background-default-images/mac-3.jpg",
+      type: "default",
+    },
+    {
+      id: "def_mac_4",
+      name: "mac-4",
+      thumbnail: "/background-default-images/mac-4.jpg",
+      type: "default",
+    },
+    {
+      id: "def_windows_1",
+      name: "windows-1",
+      thumbnail: "/background-default-images/windows-1.jpg",
+      type: "default",
+    },
+    {
+      id: "def_windows_2",
+      name: "windows-2",
+      thumbnail: "/background-default-images/windows-2.jpg",
+      type: "default",
+    },
+    {
+      id: "def_windows_3",
+      name: "windows-3",
+      thumbnail: "/background-default-images/windows-3.png",
+      type: "default",
+    },
+    {
+      id: "def_windows_4",
+      name: "windows-4",
+      thumbnail: "/background-default-images/windows-4.jpg",
+      type: "default",
+    },
+
+    // Solid
+    { id: "solid_blue_1", name: "blue-1", thumbnail: "/solid/blue-1.png", type: "solid" },
+    { id: "solid_blue_2", name: "blue-2", thumbnail: "/solid/blue-2.png", type: "solid" },
+    { id: "solid_blue_3", name: "blue-3", thumbnail: "/solid/blue-3.png", type: "solid" },
+    { id: "solid_blue_4", name: "blue-4", thumbnail: "/solid/blue-4.png", type: "solid" },
+    { id: "solid_green_1", name: "green-1", thumbnail: "/solid/green-1.png", type: "solid" },
+    { id: "solid_green_2", name: "green-2", thumbnail: "/solid/green-2.png", type: "solid" },
+    { id: "solid_green_3", name: "green-3", thumbnail: "/solid/green-3.png", type: "solid" },
+    { id: "solid_green_4", name: "green-4", thumbnail: "/solid/green-4.png", type: "solid" },
+    { id: "solid_orange_1", name: "orange-1", thumbnail: "/solid/orange-1.png", type: "solid" },
+    { id: "solid_orange_2", name: "orange-2", thumbnail: "/solid/orange-2.png", type: "solid" },
+    { id: "solid_orange_3", name: "orange-3", thumbnail: "/solid/orange-3.png", type: "solid" },
+    { id: "solid_orange_4", name: "orange-4", thumbnail: "/solid/orange-4.png", type: "solid" },
+    { id: "solid_red_1", name: "red-1", thumbnail: "/solid/red-1.jpg", type: "solid" },
+    { id: "solid_red_2", name: "red-2", thumbnail: "/solid/red-2.jpg", type: "solid" },
+    { id: "solid_red_3", name: "red-3", thumbnail: "/solid/red-3.jpg", type: "solid" },
+    { id: "solid_red_4", name: "red-4", thumbnail: "/solid/red-4.jpg", type: "solid" },
+    { id: "solid_yellow_1", name: "yellow-1", thumbnail: "/solid/yellow-1.png", type: "solid" },
+    { id: "solid_yellow_2", name: "yellow-2", thumbnail: "/solid/yellow-2.png", type: "solid" },
+    { id: "solid_yellow_3", name: "yellow-3", thumbnail: "/solid/yellow-3.png", type: "solid" },
+    { id: "solid_yellow_4", name: "yellow-4", thumbnail: "/solid/yellow-4.png", type: "solid" },
+
+    // Gradient (images)
+    {
+      id: "grad_dark_1",
+      name: "gradient-dark-1",
+      thumbnail: "/gradient/gradient_dark-1.jpg",
       type: "gradient",
     },
     {
-      id: "patternBackground",
-      name: "Pattern Background",
-      thumbnail: "/patternbackground.jpg",
-      type: "pattern",
-    },
-    {
-      id: "bg1",
-      name: "Mountain Sunset",
-      thumbnail: "/icons/bg-mountain-sunset.svg",
-      type: "pattern",
-    },
-    {
-      id: "bg2",
-      name: "Abstract Circles",
-      thumbnail: "/icons/bg-abstract-circles.svg",
-      type: "pattern",
-    },
-    {
-      id: "bg3",
-      name: "Crystalline Shapes",
-      thumbnail: "/icons/bg-crystalline.svg",
-      type: "pattern",
-    },
-    {
-      id: "bg4",
-      name: "Dynamic Brushstrokes",
-      thumbnail: "/icons/bg-brushstrokes.svg",
-      type: "pattern",
-    },
-    {
-      id: "bg5",
-      name: "Warm Gradients",
-      thumbnail: "/icons/bg-warm-gradients.svg",
+      id: "grad_dark_2",
+      name: "gradient-dark-2",
+      thumbnail: "/gradient/gradient_dark-2.jpg",
       type: "gradient",
     },
-    { id: "bg6", name: "Ethereal Light", thumbnail: "/icons/bg-ethereal.svg", type: "pattern" },
-    { id: "bg7", name: "Fiery Swirls", thumbnail: "/icons/bg-fiery.svg", type: "pattern" },
-    { id: "bg8", name: "Elegant Ribbons", thumbnail: "/icons/bg-ribbons.svg", type: "pattern" },
+    {
+      id: "grad_dark_3",
+      name: "gradient-dark-3",
+      thumbnail: "/gradient/gradient_dark-3.jpg",
+      type: "gradient",
+    },
+    {
+      id: "grad_dark_4",
+      name: "gradient-dark-4",
+      thumbnail: "/gradient/gradient_dark-4.jpg",
+      type: "gradient",
+    },
+    {
+      id: "grad_light_1",
+      name: "gradient-light-1",
+      thumbnail: "/gradient/gradient_light-1.png",
+      type: "gradient",
+    },
+    {
+      id: "grad_light_2",
+      name: "gradient-light-2",
+      thumbnail: "/gradient/gradient_light-2.jpg",
+      type: "gradient",
+    },
+    {
+      id: "grad_light_3",
+      name: "gradient-light-3",
+      thumbnail: "/gradient/gradient_light-3.png",
+      type: "gradient",
+    },
+    {
+      id: "grad_light_4",
+      name: "gradient-light-4",
+      thumbnail: "/gradient/gradient_light-4.jpg",
+      type: "gradient",
+    },
   ];
 
   const filteredImageBackgroundOptions = imageBackgroundOptions.filter((bg) => {
     if (!localBackgroundType) {
-      return true;
+      return bg.type === "default";
     }
-    return bg.type === localBackgroundType;
+    return bg.type === (localBackgroundType as "solid" | "gradient");
   });
 
   // Background options (Gradient)
@@ -295,7 +359,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
           </div>
         </button>
         <div className="min-w-0">
-          <div className="text-lg font-semibold text-[#261753] truncate">
+          <div className="text-xl font-bold text-[#A594F9] tracking-tight truncate">
             {title?.trim() ? title.trim() : "Untitled demo"}
           </div>
         </div>
@@ -305,14 +369,14 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
       <button
         type="button"
         onClick={() => onOpenSaveDemo?.()}
-        disabled={demoSaved || savingDemo}
+        disabled={savingDemo}
         className={`flex items-center justify-center gap-2 w-full h-[54px] font-semibold rounded-lg shadow transition text-sm ${
-          demoSaved || savingDemo
+          savingDemo
             ? "bg-[#8A76FC] text-white opacity-70 cursor-not-allowed"
             : "bg-[#8A76FC] hover:bg-[#7A66EC] text-white"
         }`}
       >
-        {savingDemo ? "Saving..." : demoSaved ? "✓ Saved" : "Save Demo"}
+        {savingDemo ? "Saving..." : demoSaved ? "Save Changes" : "Save Demo"}
       </button>
 
       {/* Export Section */}
@@ -458,10 +522,8 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                   className="w-full border cursor-pointer border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] text-[#7C5CFC]"
                 >
                   <option value="">Select Type</option>
-                  <option value="static">Static Background</option>
-                  <option value="animated">Animated Background</option>
-                  <option value="gradient">Gradient Background</option>
-                  <option value="pattern">Pattern Background</option>
+                  <option value="solid">solid</option>
+                  <option value="gradient">gradient</option>
                 </select>
               </div>
 

@@ -166,10 +166,29 @@ export default function EditorPage() {
   // Format time helper
   const { formatTimeForInput } = useFormatTime();
 
+  // Text overlays need to be initialized before useURLParams() so URL restores don't hit TDZ.
+  const [textOverlays, setTextOverlays] = useState<TextOverlayItem[]>([]);
+  const setTextOverlaysFromUrl = React.useCallback((overlays: unknown) => {
+    if (!overlays) {
+      setTextOverlays([]);
+      return;
+    }
+    if (Array.isArray(overlays)) {
+      setTextOverlays(overlays as TextOverlayItem[]);
+    }
+  }, []);
+
   // Initialize params
   useEffect(() => {
-    setParams(new URLSearchParams(window.location.search));
-  }, [setParams]);
+    const nextParams = new URLSearchParams(window.location.search);
+    setParams(nextParams);
+    // Ensure existing demos opened from `/demos` immediately have an id for Save/Autosave,
+    // even before other URL restoration effects run.
+    const urlDemoId = nextParams.get("demoId");
+    if (urlDemoId) {
+      setSavedDemoId(urlDemoId);
+    }
+  }, [setParams, setSavedDemoId]);
 
   // URL params handling
   useURLParams({
@@ -183,6 +202,9 @@ export default function EditorPage() {
     setLoadedSegments,
     setCurrentSegments,
     setZoomEffects,
+    setSelectedBackground,
+    setBackgroundType,
+    setTextOverlays: setTextOverlaysFromUrl,
     setSavedDemoId,
     setAspectRatio,
     setBrowserFrameMode,
@@ -252,10 +274,18 @@ export default function EditorPage() {
 
   // Reset demoSaved state when video changes (allows saving again with different video)
   useEffect(() => {
-    if (videoUrl) {
+    // For existing demos (opened from /demos), keep "saved" state.
+    // For fresh recorder sessions, allow saving.
+    if (videoUrl && !editorState.savedDemoId) {
       setDemoSaved(false);
     }
-  }, [videoUrl, setDemoSaved]);
+  }, [videoUrl, editorState.savedDemoId, setDemoSaved]);
+
+  useEffect(() => {
+    if (editorState.savedDemoId) {
+      setDemoSaved(true);
+    }
+  }, [editorState.savedDemoId, setDemoSaved]);
 
   // Restore editing state (trim/zoom blocks) from saved demo URL params
   useEffect(() => {
@@ -325,7 +355,9 @@ export default function EditorPage() {
 
   // Save demo handler
   const onSaveDemo = async (data: { title: string; description: string }) => {
-    if (demoSaved) {
+    const effectiveDemoId = editorState.savedDemoId || params?.get("demoId") || null;
+    const isExistingDemo = !!effectiveDemoId;
+    if (demoSaved && !isExistingDemo) {
       return;
     }
 
@@ -333,7 +365,7 @@ export default function EditorPage() {
     const demoKey = `${data.title}|${videoUrl}|${data.description}`;
 
     // Check if this exact demo was already saved in this session
-    if (savedDemosRef.current.has(demoKey)) {
+    if (!isExistingDemo && savedDemosRef.current.has(demoKey)) {
       toast.error("This demo has already been saved in this session!");
       return;
     }
@@ -349,12 +381,15 @@ export default function EditorPage() {
       zoomEffects: zoomSegments,
       subtitles: subtitleCues,
       selectedBackground,
+      backgroundType,
       aspectRatio,
       browserFrame: {
         mode: browserFrameMode,
         drawShadow: browserFrameDrawShadow,
         drawBorder: browserFrameDrawBorder,
       },
+      textOverlays,
+      savedDemoId: effectiveDemoId,
       setSavingDemo,
       setSidebarTitle,
       setSidebarDescription,
@@ -363,7 +398,9 @@ export default function EditorPage() {
       setSavedDemoId,
       onSaveSuccess: () => {
         // Track this demo as saved
-        savedDemosRef.current.add(demoKey);
+        if (!isExistingDemo) {
+          savedDemosRef.current.add(demoKey);
+        }
       },
     });
   };
@@ -382,6 +419,7 @@ export default function EditorPage() {
   const [nativeAspectRatio, setNativeAspectRatio] = useState("16/9");
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [subtitlesLoading, setSubtitlesLoading] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
 
   useEffect(() => {
     if (!params) {
@@ -524,7 +562,6 @@ export default function EditorPage() {
   const [textOverlayFontFamily, setTextOverlayFontFamily] = useState("Arial");
   const [textOverlayFontSize, setTextOverlayFontSize] = useState(24);
   const [textOverlayColor, setTextOverlayColor] = useState("#ffffff");
-  const [textOverlays, setTextOverlays] = useState<TextOverlayItem[]>([]);
   const [selectedTextOverlayId, setSelectedTextOverlayId] = useState<string | null>(null);
   const [draggingTextOverlayId, setDraggingTextOverlayId] = useState<string | null>(null);
   const [resizingTextOverlayId, setResizingTextOverlayId] = useState<string | null>(null);
@@ -540,6 +577,7 @@ export default function EditorPage() {
     startW: 240,
     startH: 80,
   });
+
   const [pendingExport, setPendingExport] = useState<{
     exportedUrl: string;
     sourceVideoUrl: string;
@@ -564,7 +602,8 @@ export default function EditorPage() {
       ? ratioW / ratioH
       : 16 / 9;
   // Browser frame UI modes are removed; keep only cheap border/shadow styling.
-  const browserFrameBorder = browserFrameDrawBorder ? "6px solid rgba(255,255,255,0.95)" : "none";
+  // Slightly thinner + less visible than before (requested).
+  const browserFrameBorder = browserFrameDrawBorder ? "4px solid rgba(255,255,255,0.55)" : "none";
   const browserFrameShadow = browserFrameDrawShadow ? "0 14px 34px rgba(0,0,0,0.32)" : "none";
   const isPortraitPreview = previewRatioValue < 1;
   const stageHeight = selectedBackground
@@ -600,13 +639,34 @@ export default function EditorPage() {
   const onExportVideo = async (settings: ExportSettings) => {
     setShowExportSettings(false);
 
-    // If user uploaded a custom background image, create a temporary object URL for the compositor
-    const customBackgroundUrl = customBackground ? URL.createObjectURL(customBackground) : null;
+    // If user uploaded a custom background image, create a temporary object URL for the compositor.
+    // For preset image backgrounds (solid/gradient/default), we convert them to a worker-downloadable URL.
+    const localObjectUrl = customBackground ? URL.createObjectURL(customBackground) : null;
+    let resolvedSelectedBackground = selectedBackground || "none";
+    let resolvedCustomBackgroundUrl: string | null = localObjectUrl;
+
+    if (
+      !resolvedCustomBackgroundUrl &&
+      resolvedSelectedBackground &&
+      resolvedSelectedBackground !== "none" &&
+      resolvedSelectedBackground !== "hidden" &&
+      resolvedSelectedBackground !== "custom" &&
+      !resolvedSelectedBackground.startsWith("color:") &&
+      !resolvedSelectedBackground.startsWith("gradient:") &&
+      imageMap[resolvedSelectedBackground]
+    ) {
+      // Worker can only download an actual image URL. Public assets are served from the app origin.
+      const src = imageMap[resolvedSelectedBackground];
+      resolvedSelectedBackground = "custom";
+      resolvedCustomBackgroundUrl = src.startsWith("http")
+        ? src
+        : `${window.location.origin}${src.startsWith("/") ? src : `/${src}`}`;
+    }
 
     const result = await exportVideo({
       videoUrl: videoUrl!,
-      selectedBackground: selectedBackground || "none",
-      customBackgroundUrl,
+      selectedBackground: resolvedSelectedBackground,
+      customBackgroundUrl: resolvedCustomBackgroundUrl,
       imageMap,
       sidebarTitle,
       sidebarDescription,
@@ -623,7 +683,24 @@ export default function EditorPage() {
       },
       duration,
       savedDemoId: editorState.savedDemoId,
-      settings,
+      settings: {
+        ...settings,
+        // We intentionally keep exports at 30fps even if UI shows 60fps.
+        fps: "30 FPS",
+        // Speed is controlled from the main editor controls (not export modal).
+        speed:
+          playbackSpeed === 1
+            ? "Default"
+            : String(playbackSpeed) === "0.75"
+              ? "0.75"
+              : String(playbackSpeed) === "1.25"
+                ? "1.25"
+                : String(playbackSpeed) === "1.5"
+                  ? "1.5"
+                  : String(playbackSpeed) === "1.75"
+                    ? "1.75"
+                    : "2",
+      },
     });
 
     if (result) {
@@ -637,8 +714,8 @@ export default function EditorPage() {
     }
 
     // Clean up the object URL after export
-    if (customBackgroundUrl) {
-      URL.revokeObjectURL(customBackgroundUrl);
+    if (localObjectUrl) {
+      URL.revokeObjectURL(localObjectUrl);
     }
   };
 
@@ -746,6 +823,133 @@ export default function EditorPage() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDraggingZoomTarget, setIsDraggingZoomTarget] = useState(false);
   const [showZoomModal, setShowZoomModal] = useState(false);
+
+  // Autosave editing state for already-saved demos.
+  // This keeps edits persisted when the user navigates away without clicking "Save Demo".
+  const autosaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutosavePayloadRef = React.useRef<string>("");
+  const autosaveInFlightRef = React.useRef(false);
+
+  const buildEditingPayload = React.useCallback(() => {
+    return {
+      segments: segments.map((s) => ({ start: String(s.start), end: String(s.end) })),
+      zoom: zoomSegments,
+      background: selectedBackground ?? null,
+      backgroundType: backgroundType || "",
+      subtitles: subtitleCues || [],
+      textOverlays: textOverlays || [],
+      aspectRatio: aspectRatio || "native",
+      browserFrame: {
+        mode: browserFrameMode,
+        drawShadow: browserFrameDrawShadow,
+        drawBorder: browserFrameDrawBorder,
+      },
+    };
+  }, [
+    segments,
+    zoomSegments,
+    selectedBackground,
+    backgroundType,
+    subtitleCues,
+    textOverlays,
+    aspectRatio,
+    browserFrameMode,
+    browserFrameDrawShadow,
+    browserFrameDrawBorder,
+  ]);
+
+  const flushAutosave = React.useCallback(async () => {
+    const demoId = editorState.savedDemoId;
+    if (!demoId) {
+      return;
+    }
+    if (autosaveInFlightRef.current) {
+      return;
+    }
+
+    const payload = {
+      id: demoId,
+      title: sidebarTitle || "",
+      description: sidebarDescription || "",
+      editing: buildEditingPayload(),
+    };
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastAutosavePayloadRef.current) {
+      return;
+    }
+    lastAutosavePayloadRef.current = serialized;
+
+    autosaveInFlightRef.current = true;
+    try {
+      await axios.patch("/api/demo", payload);
+    } catch (e) {
+      // Don't toast here; autosave should be silent.
+      console.warn("Autosave failed:", e);
+    } finally {
+      autosaveInFlightRef.current = false;
+    }
+  }, [buildEditingPayload, editorState.savedDemoId, sidebarTitle, sidebarDescription]);
+
+  React.useEffect(() => {
+    if (!editorState.savedDemoId) {
+      return;
+    }
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    autosaveTimerRef.current = setTimeout(() => {
+      void flushAutosave();
+    }, 1200);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [
+    editorState.savedDemoId,
+    segments,
+    zoomSegments,
+    selectedBackground,
+    backgroundType,
+    subtitleCues,
+    textOverlays,
+    aspectRatio,
+    browserFrameMode,
+    browserFrameDrawShadow,
+    browserFrameDrawBorder,
+    sidebarTitle,
+    sidebarDescription,
+    flushAutosave,
+  ]);
+
+  React.useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        void flushAutosave();
+      }
+    };
+    const handleBeforeUnload = () => {
+      void flushAutosave();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [flushAutosave]);
+
+  // Ensure internal Next.js navigations (dashboard button, sidebar links, etc.) still persist edits.
+  React.useEffect(() => {
+    return () => {
+      void flushAutosave();
+    };
+  }, [flushAutosave]);
 
   // Restore a default 3-second zoom block for fresh recorder sessions.
   useEffect(() => {
@@ -1402,6 +1606,7 @@ export default function EditorPage() {
                           volume={volume}
                           width="100%"
                           height="100%"
+                          playbackRate={playbackSpeed}
                           config={{
                             file: {
                               attributes: {
@@ -1694,6 +1899,7 @@ export default function EditorPage() {
                     playing={playing}
                     volume={volume}
                     setVolume={setVolume}
+                    playbackSpeed={playbackSpeed}
                     handleFullscreen={handleFullscreen}
                   />
                 </div>
@@ -1732,8 +1938,8 @@ export default function EditorPage() {
                   minValue={0}
                   maxValue={duration}
                   currentValue={Math.max(0, currentTime)}
-                  handleFullscreen={handleFullscreen}
-                  isFullscreen={isFullscreen}
+                  playbackSpeed={playbackSpeed}
+                  setPlaybackSpeed={setPlaybackSpeed}
                   onValueChange={(value) => {
                     const clampedValue = Math.max(0, Math.min(duration, value));
                     setCurrentTime(clampedValue);

@@ -2,7 +2,7 @@ import { useState } from "react";
 import ReactPlayer from "react-player";
 import Image from "next/image";
 import { formatTime } from "@/app/lib/dateTimeUtils";
-import { FaExpand, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
+import { FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 
 interface CustomVideoControlsProps {
   playerRef: React.RefObject<ReactPlayer>;
@@ -14,6 +14,7 @@ interface CustomVideoControlsProps {
   playing: boolean;
   volume: number;
   setVolume: (t: number) => void;
+  playbackSpeed: number;
   handleFullscreen: () => void;
 }
 
@@ -27,6 +28,7 @@ export default function CustomVideoControls({
   playing,
   volume,
   setVolume,
+  playbackSpeed,
   handleFullscreen,
 }: CustomVideoControlsProps) {
   const [dragging, setDragging] = useState(false);
@@ -45,33 +47,37 @@ export default function CustomVideoControls({
 
   const handleSeekStart = () => {
     setDragging(true);
-    setDragValue(currentTime);
+    setDragValue(currentTime / Math.max(0.0001, playbackSpeed));
     setPlaying(false);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = Number(e.target.value);
-    setDragValue(value);
+    const effectiveValue = Number(e.target.value); // UI seconds (speed-adjusted)
+    const speed = Math.max(0.0001, playbackSpeed);
+    const sourceValue = effectiveValue * speed; // underlying media seconds
+    setDragValue(effectiveValue);
     setPlaying(false);
     if (playerRef.current) {
       const player = playerRef.current.getInternalPlayer();
       if (player) {
-        player.currentTime = value;
+        player.currentTime = sourceValue;
         player.dispatchEvent(new Event("seeking"));
       }
     }
   };
 
   const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
-    const value = Number((e.target as HTMLInputElement).value);
-    setCurrentTime(value);
+    const effectiveValue = Number((e.target as HTMLInputElement).value);
+    const speed = Math.max(0.0001, playbackSpeed);
+    const sourceValue = effectiveValue * speed;
+    setCurrentTime(sourceValue);
 
     if (playerRef.current) {
       const player = playerRef.current.getInternalPlayer();
       if (player) {
-        player.currentTime = value;
+        player.currentTime = sourceValue;
         player.dispatchEvent(new Event("seeking"));
-        playerRef.current.seekTo(value, "seconds");
+        playerRef.current.seekTo(sourceValue, "seconds");
       }
     }
     // setPlaying(false);
@@ -79,6 +85,9 @@ export default function CustomVideoControls({
   };
 
   const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+  const speed = Math.max(0.0001, playbackSpeed);
+  const effectiveDuration = displayDuration / speed;
+  const effectiveCurrentTime = currentTime / speed;
 
   return (
     <div className="w-full px-6 pb-2 pt-0 flex flex-col gap-2">
@@ -100,19 +109,19 @@ export default function CustomVideoControls({
           <input
             type="range"
             min={0}
-            max={displayDuration}
+            max={effectiveDuration}
             step={0.01}
-            value={dragging ? dragValue : currentTime}
+            value={dragging ? dragValue : effectiveCurrentTime}
             onPointerDown={handleSeekStart}
             onChange={handleSeek}
             onPointerUp={handleSeekEnd}
             className="flex-1 h-2 rounded-lg appearance-none cursor-pointerflex-1 accent-[#A594F9] cursor-pointer bg-linear-to-r from-[#A594F9] to-[#7C5CFC]"
             style={{
-              background: `linear-gradient(90deg, #7C5CFC ${(currentTime / displayDuration) * 100}%, #E6E1FA ${(currentTime / displayDuration) * 100}%)`,
+              background: `linear-gradient(90deg, #7C5CFC ${(effectiveCurrentTime / Math.max(0.0001, effectiveDuration)) * 100}%, #E6E1FA ${(effectiveCurrentTime / Math.max(0.0001, effectiveDuration)) * 100}%)`,
             }}
           />
           <span className="text-xs text-[#7C5CFC] font-mono min-w-[60px] text-right">
-            {formatTime(currentTime)} / {formatTime(displayDuration || 0)}
+            {formatTime(effectiveCurrentTime)} / {formatTime(effectiveDuration || 0)}
           </span>
         </div>
 
@@ -121,9 +130,10 @@ export default function CustomVideoControls({
           {/* Skip -5 */}
           <button
             onClick={() => {
-              const newTime = Math.max(0, currentTime - 5);
-              setCurrentTime(newTime);
-              playerRef.current?.seekTo(newTime, "seconds");
+              const newEffective = Math.max(0, effectiveCurrentTime - 5);
+              const newSource = newEffective * speed;
+              setCurrentTime(newSource);
+              playerRef.current?.seekTo(newSource, "seconds");
             }}
             className="p-2 rounded-full cursor-pointer bg-[#7C5CFC] hover:bg-[#6A4DE8] text-white transition"
             title="Back 5 seconds"
@@ -134,9 +144,10 @@ export default function CustomVideoControls({
           {/* Skip +5 */}
           <button
             onClick={() => {
-              const newTime = Math.min(displayDuration, currentTime + 5);
-              setCurrentTime(newTime);
-              playerRef.current?.seekTo(newTime, "seconds");
+              const newEffective = Math.min(effectiveDuration, effectiveCurrentTime + 5);
+              const newSource = newEffective * speed;
+              setCurrentTime(newSource);
+              playerRef.current?.seekTo(newSource, "seconds");
             }}
             className="p-2 rounded-full cursor-pointer bg-[#7C5CFC] hover:bg-[#6A4DE8] text-white transition"
             title="Forward 5 seconds"
@@ -167,11 +178,12 @@ export default function CustomVideoControls({
 
           {/* Fullscreen */}
           <button
-            className="text-[#7C5CFC] hover:text-[#5A48D2] p-2"
-            title="Fullscreen"
             onClick={handleFullscreen}
+            className="p-2 rounded-full cursor-pointer bg-[#7C5CFC] hover:bg-[#6A4DE8] text-white transition"
+            title="Fullscreen"
+            type="button"
           >
-            <FaExpand size={20} />
+            <Image src="/icons/Group 316.svg" alt="Fullscreen" width={16} height={16} />
           </button>
         </div>
       </div>
