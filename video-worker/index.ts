@@ -1109,8 +1109,21 @@ const worker = new Worker(
             `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
           if (drawCardShadow) {
-            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
-            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            // Build a proper soft drop shadow (no hard black bars):
+            // draw a smaller filled rect on a transparent canvas, blur it at low-res, then scale up.
+            const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
+            const baseW = 320;
+            const baseH = Math.max(180, Math.round((baseW * cardH) / Math.max(1, cardW)));
+            const baseSpread = 20;
+            // Important: keep an alpha channel through the shadow pipeline.
+            // If we stay in yuv420p, the "@0.0" alpha is lost and the shadow becomes a solid dark plate.
+            const shadowSrc =
+              `color=c=black@0.0:s=${baseW + baseSpread * 2}x${baseH + baseSpread * 2}:r=${targetFps},` +
+              "format=rgba[sh0]";
+            const shadowFx =
+              `[sh0]drawbox=x=${baseSpread}:y=${baseSpread}:w=${baseW}:h=${baseH}:` +
+              `color=black@0.30:t=fill,boxblur=14:1,` +
+              `scale=${cardW + spread * 2}:${cardH + spread * 2}:flags=bicubic,format=rgba[sh]`;
             filters.push(
               `${customBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
                 "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
@@ -1129,8 +1142,17 @@ const worker = new Worker(
             `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
           if (drawCardShadow) {
-            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
-            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
+            const baseW = 320;
+            const baseH = Math.max(180, Math.round((baseW * cardH) / Math.max(1, cardW)));
+            const baseSpread = 20;
+            const shadowSrc =
+              `color=c=black@0.0:s=${baseW + baseSpread * 2}x${baseH + baseSpread * 2}:r=${targetFps},` +
+              "format=rgba[sh0]";
+            const shadowFx =
+              `[sh0]drawbox=x=${baseSpread}:y=${baseSpread}:w=${baseW}:h=${baseH}:` +
+              `color=black@0.30:t=fill,boxblur=14:1,` +
+              `scale=${cardW + spread * 2}:${cardH + spread * 2}:flags=bicubic,format=rgba[sh]`;
             filters.push(
               `${solidBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
                 "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +

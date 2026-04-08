@@ -716,7 +716,7 @@ export const exportVideo = async ({
       const filename = `${safeName || "Exported_Demo"}.mp4`;
 
       try {
-        const response = await fetch(url, { mode: "cors" });
+        const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`Download failed: ${response.status}`);
         }
@@ -734,6 +734,7 @@ export const exportVideo = async ({
         const link = document.createElement("a");
         link.href = url;
         link.download = filename;
+        link.target = "_blank";
         link.rel = "noopener noreferrer";
         document.body.appendChild(link);
         link.click();

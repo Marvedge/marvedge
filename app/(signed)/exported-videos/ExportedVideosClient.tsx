@@ -18,6 +18,7 @@ import Image from "next/image";
 import axios from "axios";
 import { formatDate } from "@/app/lib/dateTimeUtils";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
+import ShareModal from "../../components/ShareModal";
 
 interface ExportedVideo {
   id: string;
@@ -41,6 +42,7 @@ export default function ExportedVideosClient() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [shareVideo, setShareVideo] = useState<Pick<ExportedVideo, "id" | "title"> | null>(null);
 
   const fetchExportedVideos = async () => {
     try {
@@ -88,14 +90,6 @@ export default function ExportedVideosClient() {
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const copyShareLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch (copyError) {
-      console.error("Failed to copy share link:", copyError);
-    }
   };
 
   const handleDeleteVideo = (id: string) => {
@@ -310,7 +304,7 @@ export default function ExportedVideosClient() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      copyShareLink(video.shareableUrl || video.exportedUrl);
+                      setShareVideo({ id: video.id, title: video.title });
                     }}
                     className="bg-[#A594F9] text-white rounded-lg px-6 py-3 w-full text-lg font-medium flex items-center justify-center gap-2 mt-auto cursor-pointer"
                   >
@@ -363,7 +357,7 @@ export default function ExportedVideosClient() {
                           className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
-                            copyShareLink(video.shareableUrl || video.exportedUrl);
+                            setShareVideo({ id: video.id, title: video.title });
                           }}
                         >
                           <FaShareAlt />
@@ -399,6 +393,13 @@ export default function ExportedVideosClient() {
         onConfirm={confirmDelete}
         onCancel={() => setIsModalOpen(false)}
       />
+      {shareVideo && (
+        <ShareModal
+          apiPath={`/api/exported-videos/${shareVideo.id}/share`}
+          title={shareVideo.title}
+          onClose={() => setShareVideo(null)}
+        />
+      )}
     </div>
   );
 }

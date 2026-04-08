@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { videoQueue } from "@/app/lib/queue";
+import { invokeGcpWorker } from "@/app/lib/gcpWorker";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 
@@ -74,35 +74,77 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 2. Add job to the Redis queue
-    await videoQueue.add(
-      "process-video",
-      {
-        jobId: jobRecord.id, // the database ID
-        userId,
-        demoId,
-        videoUrl,
-        segments: segments || [],
-        zoomEffects: zoomEffects || [],
-        textOverlays: textOverlays || [],
-        subtitles: Array.isArray(subtitles) ? subtitles : [],
-        selectedBackground: selectedBackground || null,
-        customBackgroundUrl: customBackgroundUrl || null,
-        imageMap: imageMap || {},
-        settings: settings || null,
-        aspectRatio: aspectRatio || "native",
-        browserFrame: browserFrame || {
-          mode: "default",
-          drawShadow: true,
-          drawBorder: false,
-        },
+    const normalizedPayload = {
+      jobId: jobRecord.id,
+      userId,
+      demoId: demoId || null,
+      videoUrl,
+      segments: segments || [],
+      zoomEffects: zoomEffects || [],
+      textOverlays: textOverlays || [],
+      subtitles: Array.isArray(subtitles) ? subtitles : [],
+      selectedBackground: selectedBackground || null,
+      customBackgroundUrl: customBackgroundUrl || null,
+      imageMap: imageMap || {},
+      settings: settings || null,
+      aspectRatio: aspectRatio || "native",
+      browserFrame: browserFrame || {
+        mode: "default",
+        drawShadow: true,
+        drawBorder: false,
       },
-      {
-        jobId: jobRecord.id, // BullMQ job ID matches DB Job ID
-        removeOnComplete: true,
-        removeOnFail: false,
-      }
-    );
+    };
+
+    // 2. Dispatch to GCP Cloud Run worker using live payload
+    try {
+      const chunkId = `${jobRecord.id}_chunk_000`;
+      const recipeId = jobRecord.id;
+      const outputObject = `${jobRecord.id}.mp4`;
+
+      await prisma.videoJob.update({
+        where: { id: jobRecord.id },
+        data: {
+          status: "PROCESSING",
+          progress: 25,
+        },
+      });
+
+      const workerResp = await invokeGcpWorker({
+        chunkId,
+        recipeId,
+        outputObject,
+        videoUrl,
+        recipe: normalizedPayload as unknown as Record<string, unknown>,
+      });
+
+      const processedBucket =
+        workerResp.result?.processedBucket || process.env.GCP_PROCESSED_BUCKET || "";
+      const processedObject = workerResp.result?.processedObject || "";
+      const baseUrl =
+        process.env.GCP_PROCESSED_BASE_URL ||
+        (processedBucket ? `https://storage.googleapis.com/${processedBucket}` : "");
+      const exportedUrl =
+        baseUrl && processedObject ? `${baseUrl}/${processedObject}` : null;
+
+      await prisma.videoJob.update({
+        where: { id: jobRecord.id },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          exportedUrl,
+        },
+      });
+    } catch (dispatchError) {
+      console.error("Job dispatch failed:", dispatchError);
+      await prisma.videoJob.update({
+        where: { id: jobRecord.id },
+        data: {
+          status: "FAILED",
+          error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
+        },
+      });
+      return NextResponse.json({ error: "Failed to dispatch job" }, { status: 500 });
+    }
 
     // 3. Return the job ID to the client instantly
     return NextResponse.json({
