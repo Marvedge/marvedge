@@ -708,6 +708,7 @@ export const exportVideo = async ({
     }
 
     toast.loading("Processing video...", { id: toastId });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const downloadAsMp4 = async (_url: string) => {
       const safeName = (sidebarTitle || "Exported_Demo")
         .replace(/[^\w\s-]/g, "")

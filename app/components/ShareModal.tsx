@@ -50,7 +50,9 @@ export default function ShareModal({ apiPath, title, onClose }: Props) {
 
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+      }
     };
     document.addEventListener("keydown", onEsc);
     return () => document.removeEventListener("keydown", onEsc);
@@ -98,15 +100,13 @@ export default function ShareModal({ apiPath, title, onClose }: Props) {
         </div>
 
         <div className="mx-auto mt-8 max-w-[460px]">
-          <label className="mb-2 block text-[26px] font-semibold text-[#2D1F61]">Share your link</label>
+          <label className="mb-2 block text-[26px] font-semibold text-[#2D1F61]">
+            Share your link
+          </label>
           <div className="flex items-center rounded-[10px] border border-[#D8CFFF] bg-white px-3 py-2 shadow-[0_3px_9px_rgba(88,62,182,0.1)]">
             <input
               value={
-                loading
-                  ? "Generating secure link..."
-                  : error
-                    ? "Unable to generate link"
-                    : link
+                loading ? "Generating secure link..." : error ? "Unable to generate link" : link
               }
               readOnly
               className="w-full border-0 bg-transparent text-[14px] text-[#6D6591] placeholder:text-[#B0A5D3] focus:outline-none"

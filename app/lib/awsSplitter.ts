@@ -51,5 +51,3 @@ export async function invokeAwsSplitter(payload: SplitterPayload) {
     requestId: response.$metadata?.requestId ?? "",
   };
 }
-
-

@@ -13,7 +13,9 @@ function buildPublicUrl(request: NextRequest, id: string) {
 async function getOwnedExportedVideo(id: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    return {
+      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
   }
 
   const record = await prisma.exportedVideo.findFirst({
@@ -27,7 +29,9 @@ async function getOwnedExportedVideo(id: string) {
   });
 
   if (!record) {
-    return { error: NextResponse.json({ error: "Exported video not found" }, { status: 404 }) };
+    return {
+      error: NextResponse.json({ error: "Exported video not found" }, { status: 404 }),
+    };
   }
 
   return { record };
@@ -58,4 +62,3 @@ export async function POST(request: NextRequest, { params }: Params) {
     shareUrl: buildPublicUrl(request, owned.record.id),
   });
 }
-

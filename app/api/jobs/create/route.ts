@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
 
       const chunkDuration = 10;
       const chunksCount = Math.ceil(duration / chunkDuration);
-      
+
       const fetchPromises = [];
       const chunkFilenames = [];
 
@@ -121,18 +121,21 @@ export async function POST(req: NextRequest) {
         const currentChunkDuration = Math.min(chunkDuration, duration - startTime);
         const chunkId = `${jobRecord.id}_chunk_${String(i).padStart(3, "0")}`;
         const outputObject = `${chunkId}.mp4`;
-        
+
         chunkFilenames.push(outputObject);
 
-        const chunkPromise = invokeGcpWorker({
-          chunkId,
-          recipeId: jobRecord.id,
-          outputObject,
-          videoUrl,
-          recipe: normalizedPayload as unknown as Record<string, unknown>,
-          startTime,
-          duration: currentChunkDuration,
-        }, "/process");
+        const chunkPromise = invokeGcpWorker(
+          {
+            chunkId,
+            recipeId: jobRecord.id,
+            outputObject,
+            videoUrl,
+            recipe: normalizedPayload as unknown as Record<string, unknown>,
+            startTime,
+            duration: currentChunkDuration,
+          },
+          "/process"
+        );
 
         fetchPromises.push(chunkPromise);
       }
@@ -144,10 +147,13 @@ export async function POST(req: NextRequest) {
         data: { progress: 80 },
       });
 
-      const mergeResp = await invokeGcpWorker({
-        recipeId: jobRecord.id,
-        chunkFilenames,
-      }, "/merge");
+      const mergeResp = await invokeGcpWorker(
+        {
+          recipeId: jobRecord.id,
+          chunkFilenames,
+        },
+        "/merge"
+      );
 
       const exportedUrl = mergeResp.result?.exportedUrl || null;
 

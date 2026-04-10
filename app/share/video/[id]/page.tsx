@@ -25,8 +25,9 @@ export default async function SharedExportedVideoPage({ params }: PageProps) {
     <ShareVideoPageClient
       title={video.title}
       description={video.description}
-      videoUrl={video.exportedUrl}
+      videoUrl={video.exportedUrl || ""}
+      backgroundStyle={{}}
+      aspectRatio="native"
     />
   );
 }
-

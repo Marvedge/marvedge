@@ -4,7 +4,10 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 
 function sanitizeFilename(input: string) {
-  const cleaned = input.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+  const cleaned = input
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "_");
   return cleaned || "Exported_Demo";
 }
 
@@ -60,4 +63,3 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
-

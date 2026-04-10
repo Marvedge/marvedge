@@ -16,13 +16,17 @@ type AwsJobStatus = {
 };
 
 function parseNum(value: { N?: string } | undefined): number | null {
-  if (!value?.N) return null;
+  if (!value?.N) {
+    return null;
+  }
   const parsed = Number(value.N);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function getAwsJobProgress(jobId: string): Promise<AwsJobStatus | null> {
-  if (!jobId) return null;
+  if (!jobId) {
+    return null;
+  }
 
   const resp = await ddb.send(
     new GetItemCommand({
@@ -35,7 +39,9 @@ export async function getAwsJobProgress(jobId: string): Promise<AwsJobStatus | n
   );
 
   const item = resp.Item;
-  if (!item) return null;
+  if (!item) {
+    return null;
+  }
 
   const status = item.status?.S || "PENDING";
   const totalChunks = parseNum(item.totalChunks);
@@ -46,11 +52,7 @@ export async function getAwsJobProgress(jobId: string): Promise<AwsJobStatus | n
   let progress = 0;
   if (status === "MERGED" || status === "COMPLETED") {
     progress = 100;
-  } else if (
-    totalChunks &&
-    chunksFinished !== null &&
-    totalChunks > 0
-  ) {
+  } else if (totalChunks && chunksFinished !== null && totalChunks > 0) {
     const ratio = Math.max(0, Math.min(1, chunksFinished / totalChunks));
     progress = Math.min(95, 5 + Math.floor(ratio * 90));
   } else if (status === "MERGING") {
@@ -81,4 +83,3 @@ export async function getAwsJobProgress(jobId: string): Promise<AwsJobStatus | n
     chunksFinished,
   };
 }
-

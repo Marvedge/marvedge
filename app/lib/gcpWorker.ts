@@ -42,7 +42,10 @@ export async function invokeGcpWorker(payload: GcpWorkerPayload, endpoint = "/pr
 
   const controller = new AbortController();
   const timeoutMs = Number.parseInt(process.env.GCP_VIDEO_WORKER_TIMEOUT_MS || "180000", 10);
-  const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 180000);
+  const timer = setTimeout(
+    () => controller.abort(),
+    Number.isFinite(timeoutMs) ? timeoutMs : 180000
+  );
 
   try {
     const response = await fetch(url, {

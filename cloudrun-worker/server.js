@@ -51,21 +51,35 @@ async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath })
 
 async function getRecipeById(recipeId) {
   const snap = await firestore.collection(RECIPES_COLLECTION).doc(recipeId).get();
-  if (!snap.exists) throw new Error(`Recipe not found: ${recipeId}`);
+  if (!snap.exists) {
+    throw new Error(`Recipe not found: ${recipeId}`);
+  }
   return snap.data() || {};
 }
 
 async function updateChunkStatus(chunkId, patch) {
-  await firestore.collection(CHUNKS_COLLECTION).doc(chunkId).set(
-    {
-      ...patch,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await firestore
+    .collection(CHUNKS_COLLECTION)
+    .doc(chunkId)
+    .set(
+      {
+        ...patch,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
 }
 
-async function processChunkJob({ chunkId, recipeId, rawObject, outputObject, recipe: inlineRecipe, videoUrl, startTime, duration }) {
+async function processChunkJob({
+  chunkId,
+  recipeId,
+  rawObject,
+  outputObject,
+  recipe: inlineRecipe,
+  videoUrl,
+  startTime,
+  duration,
+}) {
   const totalStartMs = Date.now();
   const rawBucket = must("RAW_BUCKET", RAW_BUCKET);
   const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
@@ -184,7 +198,8 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.post("/process", async (req, res) => {
-  const { chunkId, recipeId, rawObject, outputObject, recipe, videoUrl, startTime, duration } = req.body || {};
+  const { chunkId, recipeId, rawObject, outputObject, recipe, videoUrl, startTime, duration } =
+    req.body || {};
   if (!chunkId || !recipeId) {
     return res.status(400).json({
       ok: false,
@@ -216,7 +231,10 @@ app.post("/process", async (req, res) => {
 app.post("/merge", async (req, res) => {
   const { recipeId, chunkFilenames } = req.body || {};
   if (!recipeId || !Array.isArray(chunkFilenames) || chunkFilenames.length === 0) {
-    return res.status(400).json({ ok: false, error: "recipeId and chunkFilenames array are required" });
+    return res.status(400).json({
+      ok: false,
+      error: "recipeId and chunkFilenames array are required",
+    });
   }
 
   const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
@@ -230,7 +248,11 @@ app.post("/merge", async (req, res) => {
     for (let i = 0; i < chunkFilenames.length; i++) {
       const chunkName = chunkFilenames[i];
       const localChunkPath = path.join(workDir, chunkName);
-      await downloadRawChunkFromGcs({ bucketName: processedBucket, objectName: chunkName, destinationPath: localChunkPath });
+      await downloadRawChunkFromGcs({
+        bucketName: processedBucket,
+        objectName: chunkName,
+        destinationPath: localChunkPath,
+      });
       concatLines += `file '${chunkName}'\n`;
     }
 
@@ -254,15 +276,30 @@ app.post("/merge", async (req, res) => {
     });
 
     const fileRef = storage.bucket(processedBucket).file(finalFilename);
-    try { await fileRef.makePublic(); } catch (e) { /* Ignore if UBLA is enforced */ }
-    
+    try {
+      await fileRef.makePublic();
+    } catch (e) {
+      /* Ignore if UBLA is enforced */
+    }
+
     const publicUrl = `https://storage.googleapis.com/${processedBucket}/${finalFilename}`;
 
     for (let i = 0; i < chunkFilenames.length; i++) {
-      storage.bucket(processedBucket).file(chunkFilenames[i]).delete().catch(() => {});
+      storage
+        .bucket(processedBucket)
+        .file(chunkFilenames[i])
+        .delete()
+        .catch(() => {});
     }
 
-    return res.status(200).json({ ok: true, result: { recipeId, mergedObject: finalFilename, exportedUrl: publicUrl } });
+    return res.status(200).json({
+      ok: true,
+      result: {
+        recipeId,
+        mergedObject: finalFilename,
+        exportedUrl: publicUrl,
+      },
+    });
   } catch (err) {
     console.error("[worker] merge failed:", err);
     return res.status(500).json({ ok: false, error: err?.message || "unknown_error" });

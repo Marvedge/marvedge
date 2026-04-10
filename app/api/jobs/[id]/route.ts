@@ -39,12 +39,15 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const useAwsProgress = !useGcpWorker && process.env.USE_AWS_SPLITTER === "true";
     const awsProgress = useAwsProgress ? await getAwsJobProgress(id) : null;
 
-    const state = awsProgress?.state ?? {
-      PENDING: "waiting",
-      PROCESSING: "active",
-      COMPLETED: "completed",
-      FAILED: "failed",
-    }[job.status] ?? job.status.toLowerCase();
+    const state =
+      awsProgress?.state ??
+      {
+        PENDING: "waiting",
+        PROCESSING: "active",
+        COMPLETED: "completed",
+        FAILED: "failed",
+      }[job.status] ??
+      job.status.toLowerCase();
 
     const progress = awsProgress?.progress ?? job.progress;
     const exportedUrl = awsProgress?.exportedUrl ?? job.exportedUrl;

@@ -28,12 +28,18 @@ function runFfmpeg(command) {
 }
 
 function toSeconds(t) {
-  if (typeof t === "number") return t;
+  if (typeof t === "number") {
+    return t;
+  }
   const s = String(t || "");
   if (s.includes(":")) {
     const parts = s.split(":").map(Number);
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
   }
   return Number.parseFloat(s);
 }
@@ -44,7 +50,9 @@ function ensureEvenDimension(value) {
 }
 
 function parseAspectRatioRatio(aspectRatio, nativeRatio) {
-  if (!aspectRatio || aspectRatio === "native") return nativeRatio;
+  if (!aspectRatio || aspectRatio === "native") {
+    return nativeRatio;
+  }
   const map = {
     "16:9": 16 / 9,
     "1:1": 1,
@@ -93,7 +101,9 @@ function fitInside(maxW, maxH, ratio) {
 }
 
 function normalizeRemoveSegments(rawSegments, duration) {
-  if (!rawSegments || rawSegments.length === 0) return [];
+  if (!rawSegments || rawSegments.length === 0) {
+    return [];
+  }
 
   const cleaned = rawSegments
     .map((s) => ({ start: toSeconds(s.start), end: toSeconds(s.end) }))
@@ -105,29 +115,42 @@ function normalizeRemoveSegments(rawSegments, duration) {
     .filter((s) => s.end - s.start > EPS)
     .sort((a, b) => a.start - b.start);
 
-  if (cleaned.length === 0) return [];
+  if (cleaned.length === 0) {
+    return [];
+  }
 
   const merged = [cleaned[0]];
   for (let i = 1; i < cleaned.length; i++) {
     const curr = cleaned[i];
     const last = merged[merged.length - 1];
-    if (curr.start <= last.end + EPS) last.end = Math.max(last.end, curr.end);
-    else merged.push(curr);
+    if (curr.start <= last.end + EPS) {
+      last.end = Math.max(last.end, curr.end);
+    } else {
+      merged.push(curr);
+    }
   }
   return merged;
 }
 
 function invertToKeepSegments(removeSegments, duration) {
-  if (duration <= EPS) return [];
-  if (removeSegments.length === 0) return [{ start: 0, end: duration }];
+  if (duration <= EPS) {
+    return [];
+  }
+  if (removeSegments.length === 0) {
+    return [{ start: 0, end: duration }];
+  }
 
   const keep = [];
   let cursor = 0;
   for (const s of removeSegments) {
-    if (cursor < s.start - EPS) keep.push({ start: cursor, end: s.start });
+    if (cursor < s.start - EPS) {
+      keep.push({ start: cursor, end: s.start });
+    }
     cursor = Math.max(cursor, s.end);
   }
-  if (cursor < duration - EPS) keep.push({ start: cursor, end: duration });
+  if (cursor < duration - EPS) {
+    keep.push({ start: cursor, end: duration });
+  }
   return keep.filter((s) => s.end - s.start > EPS);
 }
 
@@ -135,7 +158,9 @@ function buildRemovedBefore(removeSegments) {
   return (time) => {
     let removed = 0;
     for (const seg of removeSegments) {
-      if (seg.start >= time) break;
+      if (seg.start >= time) {
+        break;
+      }
       removed += Math.max(0, Math.min(time, seg.end) - seg.start);
     }
     return removed;
@@ -143,7 +168,9 @@ function buildRemovedBefore(removeSegments) {
 }
 
 function remapZoomEffectsToTrimmedTimeline(rawZoomEffects, keepSegments, removeSegments) {
-  if (!rawZoomEffects || rawZoomEffects.length === 0 || keepSegments.length === 0) return [];
+  if (!rawZoomEffects || rawZoomEffects.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
 
   const removedBefore = buildRemovedBefore(removeSegments);
   const out = [];
@@ -177,7 +204,9 @@ function remapZoomEffectsToTrimmedTimeline(rawZoomEffects, keepSegments, removeS
     for (const keep of keepSegments) {
       const overlapStart = Math.max(z.startTime, keep.start);
       const overlapEnd = Math.min(z.endTime, keep.end);
-      if (overlapEnd - overlapStart <= EPS) continue;
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
       out.push({
         startTime: overlapStart - removedBefore(overlapStart),
         endTime: overlapEnd - removedBefore(overlapEnd),
@@ -188,13 +217,13 @@ function remapZoomEffectsToTrimmedTimeline(rawZoomEffects, keepSegments, removeS
     }
   }
 
-  return out
-    .filter((z) => z.endTime - z.startTime > EPS)
-    .sort((a, b) => a.startTime - b.startTime);
+  return out.filter((z) => z.endTime - z.startTime > EPS).sort((a, b) => a.startTime - b.startTime);
 }
 
 function remapTextOverlaysToTrimmedTimeline(rawTextOverlays, keepSegments, removeSegments) {
-  if (!rawTextOverlays || rawTextOverlays.length === 0 || keepSegments.length === 0) return [];
+  if (!rawTextOverlays || rawTextOverlays.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
 
   const removedBefore = buildRemovedBefore(removeSegments);
   const out = [];
@@ -232,7 +261,9 @@ function remapTextOverlaysToTrimmedTimeline(rawTextOverlays, keepSegments, remov
     for (const keep of keepSegments) {
       const overlapStart = Math.max(t.startTime, keep.start);
       const overlapEnd = Math.min(t.endTime, keep.end);
-      if (overlapEnd - overlapStart <= EPS) continue;
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
       out.push({
         startTime: overlapStart - removedBefore(overlapStart),
         endTime: overlapEnd - removedBefore(overlapEnd),
@@ -245,13 +276,13 @@ function remapTextOverlaysToTrimmedTimeline(rawTextOverlays, keepSegments, remov
     }
   }
 
-  return out
-    .filter((t) => t.endTime - t.startTime > EPS)
-    .sort((a, b) => a.startTime - b.startTime);
+  return out.filter((t) => t.endTime - t.startTime > EPS).sort((a, b) => a.startTime - b.startTime);
 }
 
 function remapSubtitleCuesToTrimmedTimeline(rawCues, keepSegments, removeSegments) {
-  if (!rawCues || rawCues.length === 0 || keepSegments.length === 0) return [];
+  if (!rawCues || rawCues.length === 0 || keepSegments.length === 0) {
+    return [];
+  }
 
   const removedBefore = buildRemovedBefore(removeSegments);
   const sorted = rawCues
@@ -274,7 +305,9 @@ function remapSubtitleCuesToTrimmedTimeline(rawCues, keepSegments, removeSegment
     for (const keep of keepSegments) {
       const overlapStart = Math.max(cue.start, keep.start);
       const overlapEnd = Math.min(cue.end, keep.end);
-      if (overlapEnd - overlapStart <= EPS) continue;
+      if (overlapEnd - overlapStart <= EPS) {
+        continue;
+      }
       out.push({
         start: overlapStart - removedBefore(overlapStart),
         end: overlapEnd - removedBefore(overlapEnd),
@@ -382,10 +415,14 @@ function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
     const normalized = mapItem(item);
     const start = Number(normalized.start);
     const end = Number(normalized.end);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      continue;
+    }
     const os = Math.max(start, chunkStart);
     const oe = Math.min(end, chunkEnd);
-    if (oe - os <= EPS) continue;
+    if (oe - os <= EPS) {
+      continue;
+    }
     out.push({ ...normalized, start: os - chunkStart, end: oe - chunkStart });
   }
   return out;
@@ -423,20 +460,38 @@ function pickCompression(recipe) {
   // - Medium:      CRF 22
   // - High:        CRF 20
   // - Ultra:       CRF 18
-  if (qSettings.compression === "Medium") overrideCrf = "22";
-  if (qSettings.compression === "High") overrideCrf = "20";
-  if (qSettings.compression === "Ultra") overrideCrf = "18";
+  if (qSettings.compression === "Medium") {
+    overrideCrf = "22";
+  }
+  if (qSettings.compression === "High") {
+    overrideCrf = "20";
+  }
+  if (qSettings.compression === "Ultra") {
+    overrideCrf = "18";
+  }
 
   const forcedCrf = (process.env.FFMPEG_X264_CRF || "").trim();
-  if (forcedCrf) overrideCrf = forcedCrf;
+  if (forcedCrf) {
+    overrideCrf = forcedCrf;
+  }
 
   const forcedPreset = (process.env.FFMPEG_X264_PRESET || "").trim();
-  if (forcedPreset) overridePreset = forcedPreset;
+  if (forcedPreset) {
+    overridePreset = forcedPreset;
+  }
 
   return { overrideCrf, overridePreset };
 }
 
-async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, chunkDurationSecs, startTime, duration }) {
+async function renderChunkFromRecipe({
+  inputPath,
+  outputPath,
+  chunkId,
+  recipe,
+  chunkDurationSecs,
+  startTime,
+  duration,
+}) {
   const renderStartMs = Date.now();
   const tempDir = path.dirname(outputPath);
   const bgPath = path.join(tempDir, "background.png");
@@ -457,20 +512,30 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
   const { overrideCrf, overridePreset } = pickCompression(recipe);
   const filterThreadsEnv = Number.parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
   const filterThreads =
-    Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
-      ? filterThreadsEnv
-      : 2;
+    Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0 ? filterThreadsEnv : 2;
 
   let speedFactor = 1.0;
-  if (qSettings.speed === "0.75") speedFactor = 0.75;
-  if (qSettings.speed === "1.25") speedFactor = 1.25;
-  if (qSettings.speed === "1.5") speedFactor = 1.5;
-  if (qSettings.speed === "1.75") speedFactor = 1.75;
-  if (qSettings.speed === "2") speedFactor = 2.0;
+  if (qSettings.speed === "0.75") {
+    speedFactor = 0.75;
+  }
+  if (qSettings.speed === "1.25") {
+    speedFactor = 1.25;
+  }
+  if (qSettings.speed === "1.5") {
+    speedFactor = 1.5;
+  }
+  if (qSettings.speed === "1.75") {
+    speedFactor = 1.75;
+  }
+  if (qSettings.speed === "2") {
+    speedFactor = 2.0;
+  }
 
   const probe = await new Promise((resolve, reject) => {
     ffmpeg.ffprobe(inputPath, (err, meta) => {
-      if (err) return reject(err);
+      if (err) {
+        return reject(err);
+      }
       const videoStream = meta.streams.find((s) => s.codec_type === "video");
       resolve({
         hasAudio: meta.streams.some((s) => s.codec_type === "audio"),
@@ -553,9 +618,10 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     text: String(s.text || ""),
   }));
 
-  const nativeRatio = probe.sourceWidth > 0 && probe.sourceHeight > 0
-    ? probe.sourceWidth / probe.sourceHeight
-    : 16 / 9;
+  const nativeRatio =
+    probe.sourceWidth > 0 && probe.sourceHeight > 0
+      ? probe.sourceWidth / probe.sourceHeight
+      : 16 / 9;
   const selectedRatio = parseAspectRatioRatio(recipe.aspectRatio, nativeRatio);
   const computedTarget = computeTargetSizeForRatio(qSettings.quality, selectedRatio);
   let targetWidth = computedTarget.width;
@@ -575,9 +641,21 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     throw new Error("All video content was trimmed out.");
   }
 
-  const remappedZoomEffects = remapZoomEffectsToTrimmedTimeline(slicedZoom, keepSegments, removeSegments);
-  const remappedTextOverlays = remapTextOverlaysToTrimmedTimeline(slicedText, keepSegments, removeSegments);
-  const remappedSubtitleCues = remapSubtitleCuesToTrimmedTimeline(slicedSubs, keepSegments, removeSegments);
+  const remappedZoomEffects = remapZoomEffectsToTrimmedTimeline(
+    slicedZoom,
+    keepSegments,
+    removeSegments
+  );
+  const remappedTextOverlays = remapTextOverlaysToTrimmedTimeline(
+    slicedText,
+    keepSegments,
+    removeSegments
+  );
+  const remappedSubtitleCues = remapSubtitleCuesToTrimmedTimeline(
+    slicedSubs,
+    keepSegments,
+    removeSegments
+  );
 
   const filters = [];
   let videoOut = "[0:v]";
@@ -595,7 +673,9 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     let trimConcatIn = "";
     for (let i = 0; i < n; i++) {
       const seg = keepSegments[i];
-      filters.push(`[tvs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[tvseg${i}]`);
+      filters.push(
+        `[tvs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[tvseg${i}]`
+      );
       if (probe.hasAudio && audioOut) {
         filters.push(
           `[tas${i}]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS[taseg${i}]`
@@ -610,7 +690,9 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     const trimAStr = probe.hasAudio && audioOut ? ":a=1" : ":a=0";
     filters.push(`${trimConcatIn}concat=n=${n}:v=1${trimAStr}${trimOut}`);
     videoOut = "[trimv]";
-    if (probe.hasAudio && audioOut) audioOut = "[trima]";
+    if (probe.hasAudio && audioOut) {
+      audioOut = "[trima]";
+    }
   }
 
   filters.push(`${videoOut}fps=${targetFps}:round=near[fpsnorm]`);
@@ -652,15 +734,25 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     for (const z of sortedZooms) {
       const start = Math.max(0, Math.min(trimmedDuration, z.startTime));
       const end = Math.max(0, Math.min(trimmedDuration, z.endTime));
-      if (end - start <= EPS) continue;
-      if (zCur < start - EPS) zSegs.push({ start: zCur, end: start });
+      if (end - start <= EPS) {
+        continue;
+      }
+      if (zCur < start - EPS) {
+        zSegs.push({ start: zCur, end: start });
+      }
       const segStart = Math.max(zCur, start);
       if (end - segStart > EPS) {
-        zSegs.push({ start: segStart, end, zoom: { level: z.zoomLevel, x: z.x, y: z.y } });
+        zSegs.push({
+          start: segStart,
+          end,
+          zoom: { level: z.zoomLevel, x: z.x, y: z.y },
+        });
         zCur = end;
       }
     }
-    if (zCur < trimmedDuration - EPS) zSegs.push({ start: zCur, end: trimmedDuration });
+    if (zCur < trimmedDuration - EPS) {
+      zSegs.push({ start: zCur, end: trimmedDuration });
+    }
 
     const n = zSegs.length;
     if (n > 0) {
@@ -702,7 +794,9 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
               `s=${contentBox.width}x${contentBox.height}:fps=${targetFps}[zseg${i}]`
           );
         } else {
-          filters.push(`[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[zseg${i}]`);
+          filters.push(
+            `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[zseg${i}]`
+          );
         }
         concatIn += `[zseg${i}]`;
       }
@@ -751,8 +845,7 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
         `[1:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase:flags=lanczos,` +
         `crop=${targetWidth}:${targetHeight},loop=loop=-1:size=1:start=0,fps=${targetFps},` +
         "setsar=1,format=yuv420p[bg]";
-      const cardFilter =
-        `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
+      const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
       if (drawCardShadow) {
         const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
@@ -764,7 +857,7 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
           "format=rgba[sh0]";
         const shadowFx =
           `[sh0]drawbox=x=${baseSpread}:y=${baseSpread}:w=${baseW}:h=${baseH}:` +
-          `color=black@0.30:t=fill,boxblur=14:1,` +
+          "color=black@0.30:t=fill,boxblur=14:1," +
           `scale=${cardW + spread * 2}:${cardH + spread * 2}:flags=bicubic,format=rgba[sh]`;
         filters.push(
           `${customBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
@@ -779,8 +872,7 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
       }
     } else {
       const solidBgFilter = `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
-      const cardFilter =
-        `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
+      const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
       if (drawCardShadow) {
         const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
@@ -792,7 +884,7 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
           "format=rgba[sh0]";
         const shadowFx =
           `[sh0]drawbox=x=${baseSpread}:y=${baseSpread}:w=${baseW}:h=${baseH}:` +
-          `color=black@0.30:t=fill,boxblur=14:1,` +
+          "color=black@0.30:t=fill,boxblur=14:1," +
           `scale=${cardW + spread * 2}:${cardH + spread * 2}:flags=bicubic,format=rgba[sh]`;
         filters.push(
           `${solidBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
@@ -828,7 +920,7 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
         `${prev}drawtext=textfile=${safeFile}:reload=0:` +
           `fontsize=${size}:fontcolor=${safeColor}:` +
           `x='${xExpr}':y='${yExpr}':` +
-          `shadowcolor=black@0.55:shadowx=1:shadowy=1:` +
+          "shadowcolor=black@0.55:shadowx=1:shadowy=1:" +
           `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`
       );
       prev = next;
@@ -857,12 +949,16 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
   console.log(`[${chunkId}] Final filter:\n${filterStr}\n`);
   const toMapArg = (pad) => pad.replace(/^\[(\d+:[av])\]$/, "$1");
   const maps = [`-map ${toMapArg(videoOut)}`];
-  if (probe.hasAudio && audioOut) maps.push(`-map ${toMapArg(audioOut)}`);
+  if (probe.hasAudio && audioOut) {
+    maps.push(`-map ${toMapArg(audioOut)}`);
+  }
 
   const finalCmd = ffmpeg(inputPath);
   const hwDecode = (process.env.FFMPEG_HW_DECODE || "").trim();
   const inputOpts = [];
-  if (hwDecode) inputOpts.push(`-hwaccel ${hwDecode}`);
+  if (hwDecode) {
+    inputOpts.push(`-hwaccel ${hwDecode}`);
+  }
   if (typeof startTime === "number" && typeof duration === "number") {
     inputOpts.push(`-ss ${startTime.toFixed(3)}`);
     inputOpts.push(`-t ${duration.toFixed(3)}`);
@@ -870,7 +966,9 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
   if (inputOpts.length > 0) {
     finalCmd.inputOptions(inputOpts);
   }
-  if (hasCustomBackground) finalCmd.input(bgPath);
+  if (hasCustomBackground) {
+    finalCmd.input(bgPath);
+  }
 
   finalCmd
     .on("start", (cmdLine) => console.log(`[${chunkId}] FFmpeg command: ${cmdLine}`))
@@ -879,15 +977,15 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     .audioCodec("aac")
     .outputOptions([
       ...maps,
-      `-filter_complex_threads 2`,
+      "-filter_complex_threads 2",
       "-shortest",
       "-pix_fmt yuv420p",
       "-vsync cfr",
       `-g ${targetFps * 2}`,
       "-threads 0",
       `-t ${Math.max(0.1, trimmedDuration / speedFactor).toFixed(3)}`,
-      `-preset ultrafast`,
-      `-crf 24`,
+      "-preset ultrafast",
+      "-crf 24",
       "-movflags +faststart",
     ])
     .output(outputPath);
