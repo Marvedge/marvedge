@@ -415,12 +415,20 @@ function downloadFile(url, outputPath) {
 
 function pickCompression(recipe) {
   const qSettings = recipe.settings || {};
-  let overrideCrf = "18";
+  let overrideCrf = "24";
   let overridePreset = "ultrafast";
 
-  if (qSettings.compression === "Ultra") overrideCrf = "12";
-  if (qSettings.compression === "High") overrideCrf = "14";
-  if (qSettings.compression === "Medium") overrideCrf = "16";
+  // Speed-first defaults:
+  // - Web/default: CRF 24
+  // - Medium:      CRF 22
+  // - High:        CRF 20
+  // - Ultra:       CRF 18
+  if (qSettings.compression === "Medium") overrideCrf = "22";
+  if (qSettings.compression === "High") overrideCrf = "20";
+  if (qSettings.compression === "Ultra") overrideCrf = "18";
+
+  const forcedCrf = (process.env.FFMPEG_X264_CRF || "").trim();
+  if (forcedCrf) overrideCrf = forcedCrf;
 
   const forcedPreset = (process.env.FFMPEG_X264_PRESET || "").trim();
   if (forcedPreset) overridePreset = forcedPreset;
@@ -428,7 +436,8 @@ function pickCompression(recipe) {
   return { overrideCrf, overridePreset };
 }
 
-async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, chunkDurationSecs }) {
+async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, chunkDurationSecs, startTime, duration }) {
+  const renderStartMs = Date.now();
   const tempDir = path.dirname(outputPath);
   const bgPath = path.join(tempDir, "background.png");
   const hasCustomBackground =
@@ -450,7 +459,7 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
   const filterThreads =
     Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
       ? filterThreadsEnv
-      : Math.max(1, Math.min(8, os.cpus().length || 4));
+      : 2;
 
   let speedFactor = 1.0;
   if (qSettings.speed === "0.75") speedFactor = 0.75;
@@ -472,9 +481,17 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     });
   });
 
-  const chunkIndex = parseChunkIndex(chunkId);
-  const chunkAbsStart = chunkIndex * chunkDurationSecs;
-  const chunkAbsEnd = chunkAbsStart + probe.videoDuration;
+  let chunkAbsStart = 0;
+  let chunkAbsEnd = probe.videoDuration;
+
+  if (typeof startTime === "number" && typeof duration === "number") {
+    chunkAbsStart = startTime;
+    chunkAbsEnd = startTime + duration;
+  } else {
+    const chunkIndex = parseChunkIndex(chunkId);
+    chunkAbsStart = chunkIndex * chunkDurationSecs;
+    chunkAbsEnd = chunkAbsStart + (probe.videoDuration || chunkDurationSecs);
+  }
 
   const slicedSegments = overlapSliceAbsolute(
     recipe.segments || [],
@@ -844,7 +861,15 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
 
   const finalCmd = ffmpeg(inputPath);
   const hwDecode = (process.env.FFMPEG_HW_DECODE || "").trim();
-  if (hwDecode) finalCmd.inputOptions([`-hwaccel ${hwDecode}`]);
+  const inputOpts = [];
+  if (hwDecode) inputOpts.push(`-hwaccel ${hwDecode}`);
+  if (typeof startTime === "number" && typeof duration === "number") {
+    inputOpts.push(`-ss ${startTime.toFixed(3)}`);
+    inputOpts.push(`-t ${duration.toFixed(3)}`);
+  }
+  if (inputOpts.length > 0) {
+    finalCmd.inputOptions(inputOpts);
+  }
   if (hasCustomBackground) finalCmd.input(bgPath);
 
   finalCmd
@@ -854,20 +879,27 @@ async function renderChunkFromRecipe({ inputPath, outputPath, chunkId, recipe, c
     .audioCodec("aac")
     .outputOptions([
       ...maps,
-      `-filter_complex_threads ${filterThreads}`,
+      `-filter_complex_threads 2`,
       "-shortest",
       "-pix_fmt yuv420p",
       "-vsync cfr",
       `-g ${targetFps * 2}`,
       "-threads 0",
       `-t ${Math.max(0.1, trimmedDuration / speedFactor).toFixed(3)}`,
-      `-preset ${overridePreset}`,
-      `-crf ${overrideCrf}`,
+      `-preset ultrafast`,
+      `-crf 24`,
       "-movflags +faststart",
     ])
     .output(outputPath);
 
+  const ffmpegStartMs = Date.now();
   await runFfmpeg(finalCmd);
+  const ffmpegMs = Date.now() - ffmpegStartMs;
+  const totalRenderMs = Date.now() - renderStartMs;
+  console.log(
+    `[${chunkId}] Timing render_ms=${totalRenderMs} ffmpeg_ms=${ffmpegMs} ` +
+      `trimmed_duration_s=${Math.max(0, trimmedDuration / speedFactor).toFixed(3)}`
+  );
 }
 
 module.exports = {

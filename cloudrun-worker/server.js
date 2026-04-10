@@ -65,7 +65,8 @@ async function updateChunkStatus(chunkId, patch) {
   );
 }
 
-async function processChunkJob({ chunkId, recipeId, rawObject, outputObject, recipe: inlineRecipe, videoUrl }) {
+async function processChunkJob({ chunkId, recipeId, rawObject, outputObject, recipe: inlineRecipe, videoUrl, startTime, duration }) {
+  const totalStartMs = Date.now();
   const rawBucket = must("RAW_BUCKET", RAW_BUCKET);
   const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
   const recipe = inlineRecipe || (await getRecipeById(recipeId));
@@ -83,36 +84,70 @@ async function processChunkJob({ chunkId, recipeId, rawObject, outputObject, rec
   });
 
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "marvedge-gcp-"));
-  const inputPath = path.join(workDir, "input.webm");
+  let inputPath = path.join(workDir, "input.webm");
   const outputPath = path.join(workDir, "output.mp4");
 
   try {
-    if (videoUrl) {
+    const dlStartMs = Date.now();
+    let dlMs = 0;
+
+    if (typeof startTime === "number" && typeof duration === "number" && videoUrl) {
+      // Logical splitting: Skip physical download, use URL directly as inputPath
+      inputPath = String(videoUrl);
+    } else if (videoUrl) {
       await downloadFromUrl({
         url: String(videoUrl),
         destinationPath: inputPath,
       });
+      dlMs = Date.now() - dlStartMs;
     } else {
       await downloadRawChunkFromGcs({
         bucketName: rawBucket,
         objectName: sourceObject,
         destinationPath: inputPath,
       });
+      dlMs = Date.now() - dlStartMs;
     }
 
+    let inputBytes = 0;
+    try {
+      inputBytes = (await fs.stat(inputPath)).size;
+    } catch {
+      // Ignore stats failures.
+    }
+
+    const renderStartMs = Date.now();
     await renderChunkFromRecipe({
       inputPath,
       outputPath,
       chunkId,
       recipe,
       chunkDurationSecs: CHUNK_DURATION_SECS,
+      startTime,
+      duration,
     });
+    const renderMs = Date.now() - renderStartMs;
 
+    let outputBytes = 0;
+    try {
+      outputBytes = (await fs.stat(outputPath)).size;
+    } catch {
+      // Ignore stats failures.
+    }
+
+    const uploadStartMs = Date.now();
     await uploadProcessedChunkToGcs({
       bucketName: processedBucket,
       objectName: destObject,
       sourcePath: outputPath,
     });
+    const uploadMs = Date.now() - uploadStartMs;
+    const totalMs = Date.now() - totalStartMs;
+
+    console.log(
+      `[${chunkId}] Timing download_ms=${dlMs} render_ms=${renderMs} upload_ms=${uploadMs} total_ms=${totalMs} ` +
+        `input_mb=${(inputBytes / 1048576).toFixed(2)} output_mb=${(outputBytes / 1048576).toFixed(2)}`
+    );
 
     await updateChunkStatus(chunkId, {
       recipeId,
@@ -149,7 +184,7 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.post("/process", async (req, res) => {
-  const { chunkId, recipeId, rawObject, outputObject, recipe, videoUrl } = req.body || {};
+  const { chunkId, recipeId, rawObject, outputObject, recipe, videoUrl, startTime, duration } = req.body || {};
   if (!chunkId || !recipeId) {
     return res.status(400).json({
       ok: false,
@@ -165,6 +200,8 @@ app.post("/process", async (req, res) => {
       outputObject,
       recipe,
       videoUrl,
+      startTime,
+      duration,
     });
     return res.status(200).json({ ok: true, result });
   } catch (err) {
@@ -173,6 +210,64 @@ app.post("/process", async (req, res) => {
       ok: false,
       error: err?.message || "unknown_error",
     });
+  }
+});
+
+app.post("/merge", async (req, res) => {
+  const { recipeId, chunkFilenames } = req.body || {};
+  if (!recipeId || !Array.isArray(chunkFilenames) || chunkFilenames.length === 0) {
+    return res.status(400).json({ ok: false, error: "recipeId and chunkFilenames array are required" });
+  }
+
+  const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "marvedge-gcp-merge-"));
+  const finalFilename = `${recipeId}.mp4`;
+  const finalPath = path.join(workDir, finalFilename);
+  const concatTextPath = path.join(workDir, "concat.txt");
+
+  try {
+    let concatLines = "";
+    for (let i = 0; i < chunkFilenames.length; i++) {
+      const chunkName = chunkFilenames[i];
+      const localChunkPath = path.join(workDir, chunkName);
+      await downloadRawChunkFromGcs({ bucketName: processedBucket, objectName: chunkName, destinationPath: localChunkPath });
+      concatLines += `file '${chunkName}'\n`;
+    }
+
+    await fs.writeFile(concatTextPath, concatLines);
+
+    await new Promise((resolve, reject) => {
+      require("fluent-ffmpeg")()
+        .input(concatTextPath)
+        .inputOptions(["-f concat", "-safe 0"])
+        .outputOptions("-c copy")
+        .output(finalPath)
+        .on("end", resolve)
+        .on("error", reject)
+        .run();
+    });
+
+    await uploadProcessedChunkToGcs({
+      bucketName: processedBucket,
+      objectName: finalFilename,
+      sourcePath: finalPath,
+    });
+
+    const fileRef = storage.bucket(processedBucket).file(finalFilename);
+    try { await fileRef.makePublic(); } catch (e) { /* Ignore if UBLA is enforced */ }
+    
+    const publicUrl = `https://storage.googleapis.com/${processedBucket}/${finalFilename}`;
+
+    for (let i = 0; i < chunkFilenames.length; i++) {
+      storage.bucket(processedBucket).file(chunkFilenames[i]).delete().catch(() => {});
+    }
+
+    return res.status(200).json({ ok: true, result: { recipeId, mergedObject: finalFilename, exportedUrl: publicUrl } });
+  } catch (err) {
+    console.error("[worker] merge failed:", err);
+    return res.status(500).json({ ok: false, error: err?.message || "unknown_error" });
+  } finally {
+    fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 

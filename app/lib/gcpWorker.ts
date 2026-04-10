@@ -1,20 +1,25 @@
 export type GcpWorkerPayload = {
-  chunkId: string;
+  chunkId?: string;
   recipeId: string;
   rawObject?: string;
   outputObject?: string;
   videoUrl?: string;
   recipe?: Record<string, unknown>;
+  startTime?: number;
+  duration?: number;
+  chunkFilenames?: string[];
 };
 
 export type GcpWorkerResponse = {
   ok: boolean;
   result?: {
-    chunkId: string;
+    chunkId?: string;
     recipeId: string;
-    status: string;
+    status?: string;
     processedBucket?: string;
     processedObject?: string;
+    mergedObject?: string;
+    exportedUrl?: string;
   };
   error?: string;
 };
@@ -23,11 +28,17 @@ function getGcpWorkerUrl() {
   return process.env.GCP_VIDEO_WORKER_URL || "";
 }
 
-export async function invokeGcpWorker(payload: GcpWorkerPayload) {
-  const url = getGcpWorkerUrl();
+export async function invokeGcpWorker(payload: GcpWorkerPayload, endpoint = "/process") {
+  let url = getGcpWorkerUrl();
   if (!url) {
     throw new Error("GCP_VIDEO_WORKER_URL is not configured");
   }
+
+  if (url.endsWith("/process")) {
+    url = url.replace(/\/process$/, "");
+  }
+  url = url.endsWith("/") ? url.slice(0, -1) : url;
+  url += endpoint;
 
   const controller = new AbortController();
   const timeoutMs = Number.parseInt(process.env.GCP_VIDEO_WORKER_TIMEOUT_MS || "180000", 10);
