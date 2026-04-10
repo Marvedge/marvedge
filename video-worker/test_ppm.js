@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require("fs");
 
 function writeGradientPpm(outputPath, width, height, colors) {
   // colors: { offset: 0-1, r, g, b }[]
@@ -7,7 +7,7 @@ function writeGradientPpm(outputPath, width, height, colors) {
 
   let idx = 0;
   // 135 deg = top-left to bottom-right
-  const maxDist = width + height; 
+  const maxDist = width + height;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -18,9 +18,9 @@ function writeGradientPpm(outputPath, width, height, colors) {
       let c1 = colors[0];
       let c2 = colors[colors.length - 1];
       for (let i = 0; i < colors.length - 1; i++) {
-        if (t >= colors[i].offset && t <= colors[i+1].offset) {
+        if (t >= colors[i].offset && t <= colors[i + 1].offset) {
           c1 = colors[i];
-          c2 = colors[i+1];
+          c2 = colors[i + 1];
           break;
         }
       }
@@ -41,8 +41,8 @@ function writeGradientPpm(outputPath, width, height, colors) {
   fs.writeFileSync(outputPath, Buffer.concat([header, pixels]));
 }
 
-writeGradientPpm('grad.ppm', 256, 256, [
-    { offset: 0, r: 0xf0, g: 0x93, b: 0xfb },
-    { offset: 0.5, r: 0xf5, g: 0x57, b: 0x6c },
-    { offset: 1.0, r: 0x4f, g: 0xac, b: 0xfe }
+writeGradientPpm("grad.ppm", 256, 256, [
+  { offset: 0, r: 0xf0, g: 0x93, b: 0xfb },
+  { offset: 0.5, r: 0xf5, g: 0x57, b: 0x6c },
+  { offset: 1.0, r: 0x4f, g: 0xac, b: 0xfe },
 ]);

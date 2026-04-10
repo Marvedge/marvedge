@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
+    "@aws-sdk/client-lambda": "^3.911.0",
+    "@aws-sdk/client-dynamodb": "^3.911.0",
     "@ffmpeg/ffmpeg": "^0.10.1",
     "@headlessui/react": "^2.2.4",
     "@prisma/client": "^6.7.0",

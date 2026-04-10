@@ -832,7 +832,10 @@ export default function EditorPage() {
 
   const buildEditingPayload = React.useCallback(() => {
     return {
-      segments: segments.map((s) => ({ start: String(s.start), end: String(s.end) })),
+      segments: segments.map((s) => ({
+        start: String(s.start),
+        end: String(s.end),
+      })),
       zoom: zoomSegments,
       background: selectedBackground ?? null,
       backgroundType: backgroundType || "",

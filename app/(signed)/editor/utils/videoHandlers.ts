@@ -708,15 +708,19 @@ export const exportVideo = async ({
     }
 
     toast.loading("Processing video...", { id: toastId });
-    const downloadAsMp4 = async (url: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const downloadAsMp4 = async (_url: string) => {
       const safeName = (sidebarTitle || "Exported_Demo")
         .replace(/[^\w\s-]/g, "")
         .trim()
         .replace(/\s+/g, "_");
       const filename = `${safeName || "Exported_Demo"}.mp4`;
+      const downloadUrl = `/api/jobs/${jobId}/download?title=${encodeURIComponent(
+        sidebarTitle || "Exported_Demo"
+      )}`;
 
       try {
-        const response = await fetch(url, { mode: "cors" });
+        const response = await fetch(downloadUrl, { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`Download failed: ${response.status}`);
         }
@@ -732,8 +736,9 @@ export const exportVideo = async ({
       } catch (err) {
         console.error("Blob download failed, falling back to direct link:", err);
         const link = document.createElement("a");
-        link.href = url;
+        link.href = downloadUrl;
         link.download = filename;
+        link.target = "_blank";
         link.rel = "noopener noreferrer";
         document.body.appendChild(link);
         link.click();

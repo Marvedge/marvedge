@@ -44,9 +44,7 @@ const prisma = new PrismaClient({
   ),
 });
 
-console.log(
-  `🧩 Env check: DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ? "set" : "missing"}`
-);
+console.log(`🧩 Env check: DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ? "set" : "missing"}`);
 
 // Retry wrapper for Neon cold-start (free tier suspends after 5 min inactivity)
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
@@ -131,7 +129,13 @@ function toSeconds(t: string | number): number {
 }
 
 type TimeRange = { start: number; end: number };
-type ZoomRange = { startTime: number; endTime: number; zoomLevel: number; x: number; y: number };
+type ZoomRange = {
+  startTime: number;
+  endTime: number;
+  zoomLevel: number;
+  x: number;
+  y: number;
+};
 type TextRange = {
   startTime: number;
   endTime: number;
@@ -357,7 +361,10 @@ function normalizeHexColor(input: string, fallback = "white"): string {
   return fallback;
 }
 
-function writeTextOverlayFiles(tempDir: string, overlays: TextRange[]): { path: string; overlay: TextRange }[] {
+function writeTextOverlayFiles(
+  tempDir: string,
+  overlays: TextRange[]
+): { path: string; overlay: TextRange }[] {
   return overlays.map((overlay, idx) => {
     const p = path.join(tempDir, `text-${idx}.txt`);
     // Keep it UTF-8; FFmpeg drawtext textfile supports it.
@@ -452,7 +459,9 @@ function remapSubtitleCuesToTrimmedTimeline(
       end: Number(c.end),
       text: String(c.text ?? "").trim(),
     }))
-    .filter((c: SubtitleCue) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0)
+    .filter(
+      (c: SubtitleCue) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0
+    )
     .map((c: SubtitleCue) => ({
       start: Math.min(c.start, c.end),
       end: Math.max(c.start, c.end),
@@ -538,10 +547,7 @@ function writeAssSubtitles(tempDir: string, cues: SubtitleCue[], w: number, h: n
   return assPath;
 }
 
-function pickBestMicAudioStreamIndex(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  meta: any
-): number | null {
+function pickBestMicAudioStreamIndex(meta: any): number | null {
   const audioStreams = (meta?.streams || []).filter((s: any) => s.codec_type === "audio");
   if (audioStreams.length === 0) {
     return null;
@@ -553,7 +559,8 @@ function pickBestMicAudioStreamIndex(
   // Best-effort mic selection: prefer streams whose tags mention mic/microphone.
   const micLike = audioStreams.find((s: any) => {
     const tags = s?.tags || {};
-    const hay = `${tags.title || ""} ${tags.handler_name || ""} ${tags.language || ""}`.toLowerCase();
+    const hay =
+      `${tags.title || ""} ${tags.handler_name || ""} ${tags.language || ""}`.toLowerCase();
     return hay.includes("mic") || hay.includes("microphone");
   });
   return Number((micLike || audioStreams[0]).index);
@@ -576,10 +583,7 @@ async function extractAudioWav16kMono(
   await runFfmpeg(cmd);
 }
 
-function buildSubtitleCuesFromDeepgramWords(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  words: any[]
-): SubtitleCue[] {
+function buildSubtitleCuesFromDeepgramWords(words: any[]): SubtitleCue[] {
   if (!Array.isArray(words) || words.length === 0) {
     return [];
   }
@@ -647,7 +651,9 @@ async function transcribeWithDeepgram(wavPath: string, language: string): Promis
   params.set("model", "nova-2");
   params.set("smart_format", "true");
   params.set("punctuate", "true");
-  const lang = String(language || "").trim().toLowerCase();
+  const lang = String(language || "")
+    .trim()
+    .toLowerCase();
   if (lang && lang !== "multi") {
     params.set("language", lang);
   } else {
@@ -663,11 +669,12 @@ async function transcribeWithDeepgram(wavPath: string, language: string): Promis
     timeout: 120000,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = resp.data;
   const words =
     data?.results?.channels?.[0]?.alternatives?.[0]?.words ||
-    data?.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs?.flatMap((p: any) => p.words) ||
+    data?.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs?.flatMap(
+      (p: any) => p.words
+    ) ||
     [];
 
   return buildSubtitleCuesFromDeepgramWords(words);
@@ -678,9 +685,7 @@ function parseAspectRatioRatio(aspectRatio: string | null | undefined, fallback:
     return fallback;
   }
 
-  const [wStr, hStr] = aspectRatio.includes(":")
-    ? aspectRatio.split(":")
-    : aspectRatio.split("/");
+  const [wStr, hStr] = aspectRatio.includes(":") ? aspectRatio.split(":") : aspectRatio.split("/");
   const w = Number(wStr);
   const h = Number(hStr);
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
@@ -695,7 +700,10 @@ function ensureEvenDimension(value: number): number {
   return v % 2 === 0 ? v : v + 1;
 }
 
-function computeTargetSizeForRatio(quality: string, ratio: number): { width: number; height: number } {
+function computeTargetSizeForRatio(
+  quality: string,
+  ratio: number
+): { width: number; height: number } {
   const longSide = quality === "720p" ? 1280 : 1920;
   const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
 
@@ -769,8 +777,11 @@ const worker = new Worker(
     }
 
     const picked = pickVideoEncoder(process.env.FFMPEG_VIDEO_CODEC);
-    const videoEncoder =
-      picked.available ? picked.encoder : process.platform === "darwin" ? "libx264" : "libx264";
+    const videoEncoder = picked.available
+      ? picked.encoder
+      : process.platform === "darwin"
+        ? "libx264"
+        : "libx264";
     console.log(
       `[${jobId}] Encoder selection: requested=${process.env.FFMPEG_VIDEO_CODEC || "auto"} ` +
         `picked=${picked.encoder} available=${picked.available} using=${videoEncoder}`
@@ -778,9 +789,10 @@ const worker = new Worker(
 
     // Parallelize filter evaluation (especially helps with zoompan + overlays).
     const filterThreadsEnv = parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
-    const filterThreads = Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
-      ? filterThreadsEnv
-      : Math.max(1, Math.min(8, os.cpus().length || 4));
+    const filterThreads =
+      Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
+        ? filterThreadsEnv
+        : Math.max(1, Math.min(8, os.cpus().length || 4));
 
     let speedFactor = 1.0;
     if (qSettings.speed === "0.75") {
@@ -826,7 +838,10 @@ const worker = new Worker(
       console.log(`[${jobId}] Download completed in ${Date.now() - downloadStartTs}ms`);
       await job.updateProgress(20);
       await withRetry(() =>
-        prisma.videoJob.update({ where: { id: jobId }, data: { progress: 20 } })
+        prisma.videoJob.update({
+          where: { id: jobId },
+          data: { progress: 20 },
+        })
       );
 
       // ── 2. Probe ─────────────────────────────────────────────────────────────
@@ -850,8 +865,7 @@ const worker = new Worker(
           });
         });
       });
-      const nativeRatio =
-        sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
+      const nativeRatio = sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
       const selectedRatio = parseAspectRatioRatio(aspectRatio, nativeRatio);
       const computedTarget = computeTargetSizeForRatio(qSettings.quality, selectedRatio);
       targetWidth = computedTarget.width;
@@ -859,7 +873,7 @@ const worker = new Worker(
 
       console.log(
         `[${jobId}] Duration=${videoDuration}s hasAudio=${hasAudio} source=${sourceWidth}x${sourceHeight} ` +
-        `aspect=${aspectRatio || "native"} target=${targetWidth}x${targetHeight}`
+          `aspect=${aspectRatio || "native"} target=${targetWidth}x${targetHeight}`
       );
       console.log(`[${jobId}] Probe completed in ${Date.now() - probeStartTs}ms`);
 
@@ -901,7 +915,7 @@ const worker = new Worker(
             where: { id: String(demoId) },
             select: { subtitles: true },
           });
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const s: any = demo?.subtitles;
           if (s && Array.isArray(s.cues)) {
             rawSubtitleCues = s.cues as SubtitleCue[];
@@ -917,7 +931,10 @@ const worker = new Worker(
       );
 
       await job.updateProgress(50);
-      await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 50 } });
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: { progress: 50 },
+      });
       console.log(
         `[${jobId}] Trim ranges remove=${removeSegments.length} keep=${keepSegments.length} ` +
           `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length} subtitles=${remappedSubtitleCues.length}`
@@ -989,7 +1006,11 @@ const worker = new Worker(
           (a: any, b: any) => a.startTime - b.startTime
         );
 
-        type ZSeg = { start: number; end: number; zoom?: { level: number; x: number; y: number } };
+        type ZSeg = {
+          start: number;
+          end: number;
+          zoom?: { level: number; x: number; y: number };
+        };
         const zSegs: ZSeg[] = [];
         let zCur = 0;
         for (const z of sortedZooms) {
@@ -1003,7 +1024,11 @@ const worker = new Worker(
           }
           const segStart = Math.max(zCur, start);
           if (end - segStart > EPS) {
-            zSegs.push({ start: segStart, end, zoom: { level: z.zoomLevel, x: z.x, y: z.y } });
+            zSegs.push({
+              start: segStart,
+              end,
+              zoom: { level: z.zoomLevel, x: z.x, y: z.y },
+            });
             zCur = end;
           }
         }
@@ -1105,12 +1130,24 @@ const worker = new Worker(
             `[1:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase:flags=lanczos,` +
             `crop=${targetWidth}:${targetHeight},loop=loop=-1:size=1:start=0,fps=${targetFps},` +
             "setsar=1,format=yuv420p[bg]";
-          const cardFilter =
-            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
+          const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
           if (drawCardShadow) {
-            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
-            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            // Build a proper soft drop shadow (no hard black bars):
+            // draw a smaller filled rect on a transparent canvas, blur it at low-res, then scale up.
+            const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
+            const baseW = 320;
+            const baseH = Math.max(180, Math.round((baseW * cardH) / Math.max(1, cardW)));
+            const baseSpread = 20;
+            // Important: keep an alpha channel through the shadow pipeline.
+            // If we stay in yuv420p, the "@0.0" alpha is lost and the shadow becomes a solid dark plate.
+            const shadowSrc =
+              `color=c=black@0.0:s=${baseW + baseSpread * 2}x${baseH + baseSpread * 2}:r=${targetFps},` +
+              "format=rgba[sh0]";
+            const shadowFx =
+              `[sh0]drawbox=x=${baseSpread}:y=${baseSpread}:w=${baseW}:h=${baseH}:` +
+              "color=black@0.30:t=fill,boxblur=14:1," +
+              `scale=${cardW + spread * 2}:${cardH + spread * 2}:flags=bicubic,format=rgba[sh]`;
             filters.push(
               `${customBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
                 "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
@@ -1123,14 +1160,21 @@ const worker = new Worker(
             );
           }
         } else {
-          const solidBgFilter =
-            `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
-          const cardFilter =
-            `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
+          const solidBgFilter = `color=c=${bgHex}:s=${targetWidth}x${targetHeight}:r=${targetFps}[bg]`;
+          const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
           if (drawCardShadow) {
-            const shadowSrc = `color=c=black@0.32:s=320x180:r=${targetFps}[sh0]`;
-            const shadowFx = `[sh0]boxblur=10:1,scale=${cardW}:${cardH}[sh]`;
+            const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
+            const baseW = 320;
+            const baseH = Math.max(180, Math.round((baseW * cardH) / Math.max(1, cardW)));
+            const baseSpread = 20;
+            const shadowSrc =
+              `color=c=black@0.0:s=${baseW + baseSpread * 2}x${baseH + baseSpread * 2}:r=${targetFps},` +
+              "format=rgba[sh0]";
+            const shadowFx =
+              `[sh0]drawbox=x=${baseSpread}:y=${baseSpread}:w=${baseW}:h=${baseH}:` +
+              "color=black@0.30:t=fill,boxblur=14:1," +
+              `scale=${cardW + spread * 2}:${cardH + spread * 2}:flags=bicubic,format=rgba[sh]`;
             filters.push(
               `${solidBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
                 "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
@@ -1168,7 +1212,7 @@ const worker = new Worker(
             `${prev}drawtext=textfile=${safeFile}:reload=0:` +
               `fontsize=${size}:fontcolor=${safeColor}:` +
               `x='${xExpr}':y='${yExpr}':` +
-              `shadowcolor=black@0.55:shadowx=1:shadowy=1:` +
+              "shadowcolor=black@0.55:shadowx=1:shadowy=1:" +
               `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`
           );
           prev = next;
@@ -1270,7 +1314,10 @@ const worker = new Worker(
       console.log(`[${jobId}] Encode done. Uploading to Cloudinary...`);
 
       await job.updateProgress(90);
-      await prisma.videoJob.update({ where: { id: jobId }, data: { progress: 90 } });
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: { progress: 90 },
+      });
 
       // ── 5. Upload ─────────────────────────────────────────────────────────────
       const uploadStartTs = Date.now();
@@ -1337,7 +1384,12 @@ const subtitleWorker = new Worker(
 
       await downloadVideo(videoUrl, inputPath);
       await job.updateProgress(25);
-      await withRetry(() => prisma.videoJob.update({ where: { id: jobId }, data: { progress: 25 } }));
+      await withRetry(() =>
+        prisma.videoJob.update({
+          where: { id: jobId },
+          data: { progress: 25 },
+        })
+      );
 
       // Probe for best-effort mic stream selection.
       const meta = await new Promise<any>((res, rej) => {
@@ -1347,7 +1399,12 @@ const subtitleWorker = new Worker(
 
       await extractAudioWav16kMono(inputPath, wavPath, micIdx);
       await job.updateProgress(55);
-      await withRetry(() => prisma.videoJob.update({ where: { id: jobId }, data: { progress: 55 } }));
+      await withRetry(() =>
+        prisma.videoJob.update({
+          where: { id: jobId },
+          data: { progress: 55 },
+        })
+      );
 
       const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
 
@@ -1382,7 +1439,10 @@ const subtitleWorker = new Worker(
       console.error(`[${jobId}] ❌ Subtitle job failed:`, error?.message || error);
       await prisma.videoJob.update({
         where: { id: jobId },
-        data: { status: "FAILED", error: error?.message || "Subtitle generation failed" },
+        data: {
+          status: "FAILED",
+          error: error?.message || "Subtitle generation failed",
+        },
       });
       throw error;
     } finally {

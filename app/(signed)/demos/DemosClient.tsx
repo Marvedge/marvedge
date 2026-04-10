@@ -317,7 +317,7 @@ export default function DemosPage() {
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-2xl text-[#8B8B8B] font-normal">{demo.title}</div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex w-full items-center justify-center">
                       <button
                         className="text-red-400 hover:text-red-600 text-xl"
                         onClick={(e) => {
@@ -407,23 +407,25 @@ export default function DemosPage() {
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
                         {formatDate(demo.updatedAt)}
                       </td>
-                      <td className="py-4 px-6 flex gap-4 items-center">
-                        <button
-                          className="text-red-400 hover:text-red-600 text-xl cursor-pointer"
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteDemo(demo.id);
-                          }}
-                        >
-                          <Image
-                            src="/icons/delete-demo.svg"
-                            alt="Delete"
-                            width={24}
-                            height={24}
-                            className="w-6 h-6"
-                          />
-                        </button>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center justify-center">
+                          <button
+                            className="text-red-400 hover:text-red-600 text-xl cursor-pointer"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteDemo(demo.id);
+                            }}
+                          >
+                            <Image
+                              src="/icons/delete-demo.svg"
+                              alt="Delete"
+                              width={24}
+                              height={24}
+                              className="w-6 h-6"
+                            />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
