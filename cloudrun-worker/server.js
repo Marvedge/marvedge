@@ -3,6 +3,8 @@
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
 
 const express = require("express");
 const { Storage } = require("@google-cloud/storage");
@@ -20,6 +22,7 @@ const PROCESSED_PREFIX = process.env.PROCESSED_PREFIX || "";
 const RECIPES_COLLECTION = process.env.RECIPES_COLLECTION || "recipes";
 const CHUNKS_COLLECTION = process.env.CHUNKS_COLLECTION || "chunks";
 const CHUNK_DURATION_SECS = Number(process.env.CHUNK_DURATION_SECS || 10);
+const execFileAsync = promisify(execFile);
 
 function must(name, value) {
   if (!value) {
@@ -39,6 +42,135 @@ async function downloadFromUrl({ url, destinationPath }) {
   }
   const bytes = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(destinationPath, bytes);
+}
+
+async function extractAudioWav16kMono(inputPath, wavPath) {
+  await execFileAsync("/usr/bin/ffmpeg", [
+    "-y",
+    "-i",
+    inputPath,
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-c:a",
+    "pcm_s16le",
+    wavPath,
+  ]);
+}
+
+function cuesFromDeepgramWords(words) {
+  if (!Array.isArray(words) || words.length === 0) return [];
+  const cues = [];
+  let cueStart = Number(words[0].start || 0);
+  let cueEnd = Number(words[0].end || cueStart + 0.3);
+  let text = String(words[0].punctuated_word || words[0].word || "").trim();
+
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    const wText = String(w.punctuated_word || w.word || "").trim();
+    const wStart = Number(w.start || cueEnd);
+    const wEnd = Number(w.end || wStart + 0.25);
+    const gap = wStart - cueEnd;
+    const nextTextLen = (text + " " + wText).trim().length;
+    const cueDur = cueEnd - cueStart;
+    const shouldBreak = gap > 0.8 || cueDur > 4.2 || nextTextLen > 56;
+
+    if (shouldBreak && text) {
+      cues.push({
+        start: Math.max(0, cueStart),
+        end: Math.max(cueStart + 0.04, cueEnd),
+        text: text.trim(),
+      });
+      cueStart = wStart;
+      cueEnd = wEnd;
+      text = wText;
+    } else {
+      cueEnd = Math.max(cueEnd, wEnd);
+      text = `${text} ${wText}`.trim();
+    }
+  }
+
+  if (text) {
+    cues.push({
+      start: Math.max(0, cueStart),
+      end: Math.max(cueStart + 0.04, cueEnd),
+      text: text.trim(),
+    });
+  }
+  return cues.filter((c) => c.text.length > 0 && c.end - c.start > 0.01);
+}
+
+async function transcribeWithDeepgram(wavPath, language = "multi") {
+  const apiKey = (process.env.DEEPGRAM_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("Missing DEEPGRAM_API_KEY in Cloud Run environment");
+  }
+
+  const params = new URLSearchParams({
+    model: "nova-2",
+    punctuate: "true",
+    smart_format: "true",
+  });
+  if (language && language !== "multi") {
+    params.set("language", language);
+  } else {
+    params.set("detect_language", "true");
+  }
+
+  const audio = await fs.readFile(wavPath);
+  const resp = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "audio/wav",
+    },
+    body: audio,
+  });
+
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    throw new Error(
+      `Deepgram failed (${resp.status}): ${typeof body === "object" ? JSON.stringify(body) : String(body)}`
+    );
+  }
+
+  const words = body?.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+  const cues = cuesFromDeepgramWords(words);
+  if (cues.length > 0) return cues;
+
+  const transcript = String(body?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "").trim();
+  if (!transcript) return [];
+  return [{ start: 0, end: 3, text: transcript }];
+}
+
+async function processSubtitlesJob({ videoUrl, language }) {
+  if (!videoUrl) throw new Error("videoUrl is required");
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "marvedge-subtitles-"));
+  const inputPath = path.join(tempDir, "input.webm");
+  const wavPath = path.join(tempDir, "audio.wav");
+  const startedAt = Date.now();
+  try {
+    const dlStart = Date.now();
+    await downloadFromUrl({ url: String(videoUrl), destinationPath: inputPath });
+    const dlMs = Date.now() - dlStart;
+
+    const exStart = Date.now();
+    await extractAudioWav16kMono(inputPath, wavPath);
+    const extractMs = Date.now() - exStart;
+
+    const dgStart = Date.now();
+    const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+    const deepgramMs = Date.now() - dgStart;
+
+    console.log(
+      `[subtitles] Timing download_ms=${dlMs} extract_ms=${extractMs} deepgram_ms=${deepgramMs} total_ms=${Date.now() - startedAt} cues=${cues.length}`
+    );
+    return cues;
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath }) {
@@ -221,6 +353,29 @@ app.post("/process", async (req, res) => {
     return res.status(200).json({ ok: true, result });
   } catch (err) {
     console.error("[worker] process failed:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "unknown_error",
+    });
+  }
+});
+
+app.post("/subtitles", async (req, res) => {
+  const { videoUrl, language } = req.body || {};
+  if (!videoUrl) {
+    return res.status(400).json({ ok: false, error: "videoUrl is required" });
+  }
+  try {
+    const cues = await processSubtitlesJob({ videoUrl, language });
+    return res.status(200).json({
+      ok: true,
+      result: {
+        recipeId: "subtitles",
+        cues,
+      },
+    });
+  } catch (err) {
+    console.error("[worker] subtitles failed:", err);
     return res.status(500).json({
       ok: false,
       error: err?.message || "unknown_error",
