@@ -40,6 +40,7 @@ import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import ZoomModal from "@/app/components/ZoomModal";
 import ExportSettingsModal, { ExportSettings } from "@/app/components/ExportSettingsModal";
 import ExportResultModal from "@/app/components/ExportResultModal";
+import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
 
 type TextOverlayItem = {
   id: string;
@@ -508,15 +509,12 @@ export default function EditorPage() {
           throw new Error("Failed to read recorded video blob");
         }
         const blob = await resp.blob();
-
-        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-        const formData = new FormData();
-        formData.append("file", blob, "subtitle_source.webm");
-        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-        const uploadRes = await axios.post(CLOUDINARY_API_URL, formData);
-        subtitleSourceUrl = uploadRes.data.secure_url as string;
+        const upload = await uploadBlobToGcs({
+          blob,
+          filename: "subtitle_source.webm",
+          kind: "subtitle-source",
+        });
+        subtitleSourceUrl = upload.url;
       }
 
       const createRes = await axios.post("/api/subtitles/create", {

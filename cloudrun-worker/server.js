@@ -35,6 +35,48 @@ async function downloadRawChunkFromGcs({ bucketName, objectName, destinationPath
   await storage.bucket(bucketName).file(objectName).download({ destination: destinationPath });
 }
 
+function parseGsUri(uri) {
+  if (typeof uri !== "string" || !uri.startsWith("gs://")) {
+    return null;
+  }
+  const trimmed = uri.slice("gs://".length);
+  const slashIndex = trimmed.indexOf("/");
+  if (slashIndex <= 0) {
+    return null;
+  }
+  const bucket = trimmed.slice(0, slashIndex);
+  const object = trimmed.slice(slashIndex + 1);
+  if (!bucket || !object) {
+    return null;
+  }
+  return { bucket, object };
+}
+
+async function downloadFromGsUri({ uri, destinationPath }) {
+  const parsed = parseGsUri(uri);
+  if (!parsed) {
+    throw new Error(`Invalid gs:// uri: ${uri}`);
+  }
+  await downloadRawChunkFromGcs({
+    bucketName: parsed.bucket,
+    objectName: parsed.object,
+    destinationPath,
+  });
+}
+
+async function getSignedHttpUrlForGsUri(uri) {
+  const parsed = parseGsUri(uri);
+  if (!parsed) {
+    throw new Error(`Invalid gs:// uri: ${uri}`);
+  }
+  const [signedUrl] = await storage.bucket(parsed.bucket).file(parsed.object).getSignedUrl({
+    version: "v4",
+    action: "read",
+    expires: Date.now() + 2 * 60 * 60 * 1000,
+  });
+  return signedUrl;
+}
+
 async function downloadFromUrl({ url, destinationPath }) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -153,7 +195,11 @@ async function processSubtitlesJob({ videoUrl, language }) {
   const startedAt = Date.now();
   try {
     const dlStart = Date.now();
-    await downloadFromUrl({ url: String(videoUrl), destinationPath: inputPath });
+    if (typeof videoUrl === "string" && videoUrl.startsWith("gs://")) {
+      await downloadFromGsUri({ uri: String(videoUrl), destinationPath: inputPath });
+    } else {
+      await downloadFromUrl({ url: String(videoUrl), destinationPath: inputPath });
+    }
     const dlMs = Date.now() - dlStart;
 
     const exStart = Date.now();
@@ -238,13 +284,25 @@ async function processChunkJob({
     let dlMs = 0;
 
     if (typeof startTime === "number" && typeof duration === "number" && videoUrl) {
-      // Logical splitting: Skip physical download, use URL directly as inputPath
-      inputPath = String(videoUrl);
+      // Logical splitting: Skip physical download, use URL directly as inputPath.
+      // For gs:// sources, sign URL so ffmpeg can stream it.
+      if (String(videoUrl).startsWith("gs://")) {
+        inputPath = await getSignedHttpUrlForGsUri(String(videoUrl));
+      } else {
+        inputPath = String(videoUrl);
+      }
     } else if (videoUrl) {
-      await downloadFromUrl({
-        url: String(videoUrl),
-        destinationPath: inputPath,
-      });
+      if (String(videoUrl).startsWith("gs://")) {
+        await downloadFromGsUri({
+          uri: String(videoUrl),
+          destinationPath: inputPath,
+        });
+      } else {
+        await downloadFromUrl({
+          url: String(videoUrl),
+          destinationPath: inputPath,
+        });
+      }
       dlMs = Date.now() - dlStartMs;
     } else {
       await downloadRawChunkFromGcs({

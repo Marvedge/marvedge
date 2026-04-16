@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "../hooks/useEditorState";
+import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
 
 function getDemoIdFromApiResponse(data: unknown): string | null {
   if (!data || typeof data !== "object") {
@@ -114,8 +115,8 @@ export async function handleSaveDemo(
         : null;
     const existingDemoId = savedDemoId ?? urlDemoId ?? null;
 
-    // First, upload video to Cloudinary if it's a blob URL
-    let cloudinaryVideoUrl = videoUrl;
+    // First, upload source video to GCS if it's a blob URL
+    let sourceVideoUrl = videoUrl;
     if (!existingDemoId && videoUrl.startsWith("blob:")) {
       try {
         // Get the video blob
@@ -125,37 +126,17 @@ export async function handleSaveDemo(
         }
         const videoBlob = await response.blob();
 
-        // Create FormData for Cloudinary upload
-        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-
-        const cloudFormData = new FormData();
-        cloudFormData.append("file", videoBlob, "video.webm");
-        cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-
-        console.log("Uploading to Cloudinary...");
-
-        try {
-          const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
-          console.log("Upload success:", cloudRes.data);
-          cloudinaryVideoUrl = cloudRes.data.secure_url;
-        } catch (error: unknown) {
-          if (axios.isAxiosError(error)) {
-            console.log("cloudinary failed... ... ");
-            console.error("Cloudinary upload failed:");
-            console.error("Status:", error.response?.status);
-            console.error("Status Text:", error.response?.statusText);
-            console.error("Response Data:", error.response?.data);
-            console.error("Headers:", error.response?.headers);
-          } else {
-            console.error("Unexpected error:", error);
-          }
-        }
+        console.log("Uploading source video to GCS...");
+        const upload = await uploadBlobToGcs({
+          blob: videoBlob,
+          filename: "video.webm",
+          kind: "demo-source",
+        });
+        sourceVideoUrl = upload.url;
       } catch (cloudError) {
-        console.error("Error uploading to Cloudinary:", cloudError);
+        console.error("Error uploading source video to GCS:", cloudError);
         toast.dismiss();
-        toast.error("Failed to upload video to Cloudinary");
+        toast.error("Failed to upload source video");
         return;
       }
     }
@@ -198,7 +179,7 @@ export async function handleSaveDemo(
         : await axios.post("/api/demo", {
             title: data.title,
             description: data.description,
-            videoUrl: cloudinaryVideoUrl,
+            videoUrl: sourceVideoUrl,
             editing: editingToSave,
           });
       console.log("Demo saved/updated:", response.data);
@@ -509,17 +490,13 @@ interface ExportVideoResult {
   uploadedSourceVideo: boolean;
 }
 
-async function uploadImageBlobToCloudinary(imageBlob: Blob): Promise<string> {
-  const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-  const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-  const CLOUDINARY_IMAGE_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-
-  const formData = new FormData();
-  formData.append("file", imageBlob, "background.png");
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-  const cloudRes = await axios.post(CLOUDINARY_IMAGE_API_URL, formData);
-  return cloudRes.data.secure_url as string;
+async function uploadImageBlobToGcs(imageBlob: Blob): Promise<string> {
+  const uploaded = await uploadBlobToGcs({
+    blob: imageBlob,
+    filename: "background.png",
+    kind: "background",
+  });
+  return uploaded.url;
 }
 
 async function rasterizeSvgToPngBlob(svgPath: string, width = 1920, height = 1080): Promise<Blob> {
@@ -610,7 +587,7 @@ export const exportVideo = async ({
           throw new Error("Failed to read custom background");
         }
         const bgBlob = await response.blob();
-        resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(bgBlob);
+        resolvedCustomBackgroundUrl = await uploadImageBlobToGcs(bgBlob);
         backgroundToUse = "custom";
       } catch (bgError) {
         console.error("Custom background upload failed:", bgError);
@@ -628,11 +605,11 @@ export const exportVideo = async ({
           toast.loading("Preparing selected background...", { id: toastId });
           if (mappedValue.toLowerCase().endsWith(".svg")) {
             const pngBlob = await rasterizeSvgToPngBlob(mappedValue, 1920, 1080);
-            resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(pngBlob);
+            resolvedCustomBackgroundUrl = await uploadImageBlobToGcs(pngBlob);
           } else {
             // Public-root images like /staticbackground.jpg etc.
             const blob = await fetchPublicAssetAsBlob(mappedValue);
-            resolvedCustomBackgroundUrl = await uploadImageBlobToCloudinary(blob);
+            resolvedCustomBackgroundUrl = await uploadImageBlobToGcs(blob);
           }
           backgroundToUse = "custom";
         } catch (svgBgError) {
@@ -648,8 +625,8 @@ export const exportVideo = async ({
 
     toast.loading("Preparing video for backend...", { id: toastId });
 
-    let cloudinaryVideoUrl = videoUrl;
-    // If it's a blob, upload it to Cloudinary first so the backend worker can access it
+    let sourceVideoUrl = videoUrl;
+    // If it's a blob, upload it to GCS first so the backend worker can access it
     if (videoUrl.startsWith("blob:")) {
       try {
         const response = await fetch(videoUrl);
@@ -657,22 +634,17 @@ export const exportVideo = async ({
           throw new Error("Failed to fetch video blob");
         }
         const videoBlob = await response.blob();
-
-        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-
-        const cloudFormData = new FormData();
-        cloudFormData.append("file", videoBlob, "video.webm");
-        cloudFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-
-        toast.loading("Uploading raw video to Cloudinary...", { id: toastId });
-        const cloudRes = await axios.post(CLOUDINARY_API_URL, cloudFormData);
-        cloudinaryVideoUrl = cloudRes.data.secure_url;
+        toast.loading("Uploading raw video to GCS...", { id: toastId });
+        const uploaded = await uploadBlobToGcs({
+          blob: videoBlob,
+          filename: "video.webm",
+          kind: "export-source",
+        });
+        sourceVideoUrl = uploaded.url;
         uploadedSourceVideo = true;
       } catch (cloudError) {
-        console.error("Error uploading to Cloudinary:", cloudError);
-        toast.error("Failed to upload video to Cloudinary", { id: toastId });
+        console.error("Error uploading source to GCS:", cloudError);
+        toast.error("Failed to upload source video", { id: toastId });
         return null;
       }
     }
@@ -681,7 +653,7 @@ export const exportVideo = async ({
     toast.loading("Sending job to server...", { id: toastId });
 
     const createRes = await axios.post("/api/jobs/create", {
-      videoUrl: cloudinaryVideoUrl,
+      videoUrl: sourceVideoUrl,
       title: sidebarTitle || "Untitled Demo",
       description: sidebarDescription || "",
       demoId: savedDemoId || null,
@@ -772,7 +744,7 @@ export const exportVideo = async ({
 
           return {
             exportedUrl,
-            sourceVideoUrl: cloudinaryVideoUrl,
+            sourceVideoUrl,
             downloadAsMp4,
             uploadedSourceVideo,
           };

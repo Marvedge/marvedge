@@ -8,7 +8,10 @@ import { prisma } from "@/app/lib/prisma";
 const storage = new Storage();
 
 function sanitizeFilename(name: string) {
-  return name.replace(/[^\w.\-]+/g, "_").replace(/_+/g, "_").slice(0, 120);
+  return name
+    .replace(/[^\w.\-]+/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 120);
 }
 
 function extFromFilename(name: string) {
@@ -78,13 +81,16 @@ export async function POST(req: NextRequest) {
     const suffix = ext ? `.${ext}` : "";
     const object = `uploads/${kind}/${userId}/${Date.now()}-${randomUUID()}${suffix}`;
 
-    await storage.bucket(bucketName).file(object).save(bytes, {
-      resumable: false,
-      contentType: file.type || "application/octet-stream",
-      metadata: {
-        cacheControl: "public, max-age=31536000, immutable",
-      },
-    });
+    await storage
+      .bucket(bucketName)
+      .file(object)
+      .save(bytes, {
+        resumable: false,
+        contentType: file.type || "application/octet-stream",
+        metadata: {
+          cacheControl: "public, max-age=31536000, immutable",
+        },
+      });
 
     return NextResponse.json({
       ok: true,
