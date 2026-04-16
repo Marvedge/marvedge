@@ -117,7 +117,32 @@ export function useURLParams({
     }
 
     if (urlVideo) {
-      setVideoUrl(urlVideo);
+      const resolvePlayableUrl = async () => {
+        try {
+          if (!urlVideo.startsWith("gs://")) {
+            setVideoUrl(urlVideo);
+            return;
+          }
+
+          const response = await fetch(`/api/gcs/resolve?url=${encodeURIComponent(urlVideo)}`, {
+            cache: "no-store",
+          });
+          const data = (await response.json().catch(() => ({}))) as {
+            ok?: boolean;
+            playableUrl?: string;
+          };
+          if (response.ok && data.ok && data.playableUrl) {
+            setVideoUrl(data.playableUrl);
+            return;
+          }
+          // Fallback to public URL so we still surface an explicit load failure in UI if resolve fails, but without throwing a scheme error.
+          setVideoUrl(urlVideo.replace("gs://", "https://storage.googleapis.com/"));
+        } catch {
+          setVideoUrl(urlVideo.replace("gs://", "https://storage.googleapis.com/"));
+        }
+      };
+
+      resolvePlayableUrl();
 
       // Set timeline values if provided
       if (urlStartTime && urlEndTime) {
