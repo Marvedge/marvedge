@@ -5,7 +5,7 @@ import { ChevronUp, ChevronDown } from "lucide-react";
 
 export interface ExportSettings {
   quality: "720p" | "1080p";
-  fps: "30 FPS" | "60 FPS";
+  fps: "24 FPS" | "30 FPS" | "60 FPS";
   compression: "Web" | "Medium" | "High" | "Ultra";
   // Speed is controlled from the main editor (not this modal).
   speed: "Default" | "0.75" | "1.25" | "1.5" | "1.75" | "2";
@@ -27,7 +27,7 @@ export default function ExportSettingsModal({
   const defaultSettings: ExportSettings = useMemo(
     () => ({
       quality: "720p",
-      fps: "30 FPS",
+      fps: "24 FPS",
       compression: "Web",
       speed: "Default",
     }),
@@ -51,6 +51,9 @@ export default function ExportSettingsModal({
     let baseMultiplier = 1.0;
     if (settings.quality === "1080p") {
       baseMultiplier *= 1.5;
+    }
+    if (settings.fps === "24 FPS") {
+      baseMultiplier *= 0.9;
     }
     if (settings.fps === "60 FPS") {
       baseMultiplier *= 1.2;
@@ -133,7 +136,12 @@ export default function ExportSettingsModal({
               onClick={() =>
                 setSettings({
                   ...settings,
-                  fps: settings.fps === "60 FPS" ? "30 FPS" : "60 FPS",
+                  fps:
+                    settings.fps === "24 FPS"
+                      ? "30 FPS"
+                      : settings.fps === "30 FPS"
+                        ? "60 FPS"
+                        : "24 FPS",
                 })
               }
             >

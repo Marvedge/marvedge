@@ -64,8 +64,11 @@ function parseAspectRatioRatio(aspectRatio, nativeRatio) {
 }
 
 function computeTargetSizeForRatio(quality, ratio) {
-  const longSide = quality === "1080p" ? 1920 : 1280;
+  let longSide = quality === "1080p" ? 1920 : 1280;
   const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
+  if (quality !== "1080p" && Math.abs(safeRatio - 1) < 0.001) {
+    longSide = 960;
+  }
   let width;
   let height;
 
@@ -487,11 +490,11 @@ async function renderChunkFromRecipe({
 
   const qSettings = recipe.settings || {
     quality: "720p",
-    fps: "30 FPS",
+    fps: "24 FPS",
     compression: "Web",
     speed: "Default",
   };
-  const targetFps = qSettings.fps === "60 FPS" ? 60 : 30;
+  const targetFps = qSettings.fps === "60 FPS" ? 60 : qSettings.fps === "30 FPS" ? 30 : 24;
   const { overrideCrf, overridePreset } = pickCompression(recipe);
   const filterThreadsEnv = Number.parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
   const filterThreads =
@@ -693,7 +696,7 @@ async function renderChunkFromRecipe({
     recipe.selectedBackground !== "hidden" &&
     recipe.selectedBackground !== "none" &&
     recipe.selectedBackground !== "transparent";
-  const drawCardShadow = Boolean(recipe.browserFrame?.drawShadow);
+  const drawCardShadow = false;
   const drawCardBorder = Boolean(recipe.browserFrame?.drawBorder);
   const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 

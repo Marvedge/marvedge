@@ -593,7 +593,7 @@ export const exportVideo = async ({
   const toastId = toast.loading("Preparing to export...");
   const exportSettings = settings || {
     quality: "720p",
-    fps: "30 FPS",
+    fps: "24 FPS",
     compression: "Web",
     speed: "Default",
   };

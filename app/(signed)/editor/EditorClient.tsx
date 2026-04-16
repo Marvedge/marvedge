@@ -554,6 +554,11 @@ export default function EditorPage() {
       setSubtitlesLoading(false);
     }
   };
+
+  const handleSkipSubtitles = React.useCallback(() => {
+    setSubtitleCues([]);
+    toast.success("Subtitles skipped for export");
+  }, []);
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showExportResultModal, setShowExportResultModal] = useState(false);
   const [resultActionLoading, setResultActionLoading] = useState(false);
@@ -685,8 +690,8 @@ export default function EditorPage() {
       savedDemoId: editorState.savedDemoId,
       settings: {
         ...settings,
-        // We intentionally keep exports at 30fps even if UI shows 60fps.
-        fps: "30 FPS",
+        // Keep export default at 24fps for faster render throughput.
+        fps: "24 FPS",
         // Speed is controlled from the main editor controls (not export modal).
         speed:
           playbackSpeed === 1
@@ -1443,6 +1448,7 @@ export default function EditorPage() {
               setTextOverlayColor={handleTextOverlayColorChange}
               onAddTextOverlay={handleAddTextOverlay}
               onAddSubtitles={handleAddSubtitles}
+              onClearSubtitles={handleSkipSubtitles}
               subtitlesLoading={subtitlesLoading}
               hasSubtitles={subtitleCues.length > 0}
               onOpenSaveDemo={() => setShowSaveDemoModal(true)}
@@ -1510,6 +1516,7 @@ export default function EditorPage() {
                 setTextOverlayColor={handleTextOverlayColorChange}
                 onAddTextOverlay={handleAddTextOverlay}
                 onAddSubtitles={handleAddSubtitles}
+                onClearSubtitles={handleSkipSubtitles}
                 subtitlesLoading={subtitlesLoading}
                 hasSubtitles={subtitleCues.length > 0}
                 onOpenSaveDemo={() => setShowSaveDemoModal(true)}
