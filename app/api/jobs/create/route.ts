@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await req.json();
-    const {
+    let {
       videoUrl,
       duration,
       segments,
@@ -31,6 +31,14 @@ export async function POST(req: NextRequest) {
 
     if (!videoUrl) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
+    }
+
+    if (typeof videoUrl === "string" && videoUrl.startsWith("gs://")) {
+      videoUrl = videoUrl.replace("gs://", "https://storage.googleapis.com/");
+    }
+
+    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.startsWith("gs://")) {
+      customBackgroundUrl = customBackgroundUrl.replace("gs://", "https://storage.googleapis.com/");
     }
 
     if (!duration || typeof duration !== "number") {
