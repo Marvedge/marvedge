@@ -126,6 +126,7 @@ const Hero1: React.FC = () => {
 
   return (
     <section
+      id="features"
       ref={sectionRef}
       className="relative overflow-hidden bg-white pt-4 sm:pt-12 md:pt-16 pb-1 sm:pb-3 md:pb-4"
     >
