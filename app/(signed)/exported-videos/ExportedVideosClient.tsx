@@ -43,6 +43,7 @@ export default function ExportedVideosClient() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [shareVideo, setShareVideo] = useState<Pick<ExportedVideo, "id" | "title"> | null>(null);
+  const [sortOption, setSortOption] = useState<"title" | "updatedAt" | "createdAt" | "views">("updatedAt");
 
   const fetchExportedVideos = async () => {
     try {
@@ -79,11 +80,24 @@ export default function ExportedVideosClient() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredVideos = videos.filter(
-    (video) =>
-      video.title.toLowerCase().includes(search.toLowerCase()) ||
-      (video.description || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredAndSortedVideos = videos
+    .filter(
+      (video) =>
+        video.title.toLowerCase().includes(search.toLowerCase()) ||
+        (video.description || "").toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortOption === "title") {
+        return a.title.localeCompare(b.title);
+      } else if (sortOption === "updatedAt") {
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      } else if (sortOption === "createdAt") {
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      } else if (sortOption === "views") {
+        return 0; // Views sorting logic fallback
+      }
+      return 0;
+    });
 
   const openVideo = (url: string) => {
     if (!url) {
@@ -122,7 +136,7 @@ export default function ExportedVideosClient() {
           <h2 className="text-2xl font-normal text-[#8B8B8B] mb-2">
             Manage and organize all your exported videos.
           </h2>
-          <div className="flex flex-wrap gap-4 items-center mt-6">
+          <div className="flex flex-wrap items-center justify-between mt-6 gap-4">
             <input
               type="text"
               placeholder="Search your exported videos"
@@ -130,56 +144,8 @@ export default function ExportedVideosClient() {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[300px] px-4 py-3 rounded-lg bg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
             />
-            <div className="relative">
-              <button
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
-                onClick={() => setStatusDropdownOpen((v) => !v)}
-              >
-                <FaFilter className="text-lg" /> All Status
-              </button>
-              {statusDropdownOpen && (
-                <div
-                  ref={statusDropdownRef}
-                  className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
-                >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <Image
-                        src="/icons/all-status.svg"
-                        alt="All status"
-                        width={24}
-                        height={24}
-                        className="w-6 h-6"
-                      />
-                      All Status
-                    </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <FaRegFileAlt className="text-lg" /> Draft
-                    </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <Image
-                        src="/icons/publish.svg"
-                        alt="Published"
-                        width={24}
-                        height={24}
-                        className="w-6 h-6"
-                      />
-                      Published
-                    </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <Image
-                        src="/icons/aarcheive.svg"
-                        alt="Archived"
-                        width={24}
-                        height={24}
-                        className="w-6 h-6"
-                      />
-                      Archived
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            
+            <div className="flex items-center gap-6 ml-auto">
             <div className="relative">
               <button
                 className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
@@ -193,23 +159,24 @@ export default function ExportedVideosClient() {
                   className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
                 >
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("title"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "title" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaListUl className="text-lg" /> Title
                     </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("updatedAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "updatedAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaRegClock className="text-lg" /> Last Updated
                     </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("createdAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "createdAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaPlusSquare className="text-lg" /> Created date
                     </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("views"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "views" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaEye className="text-lg" /> Views
                     </div>
                   </div>
                 </div>
               )}
             </div>
-            <div className="flex gap-2 ml-auto">
+            </div>
+            <div className="flex gap-2">
               <button
                 className={`p-3 rounded-lg border ${
                   view === "grid"
@@ -233,11 +200,12 @@ export default function ExportedVideosClient() {
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="mt-8">
+      <div className="mt-8">
           <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Exported Videos</h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
-            {filteredVideos.length}/{videos.length} videos
+            {filteredAndSortedVideos.length}/{videos.length} videos
           </div>
 
           {loading ? (
@@ -248,13 +216,13 @@ export default function ExportedVideosClient() {
             <div className="flex items-center justify-center py-12">
               <div className="text-red-500 text-lg">{error}</div>
             </div>
-          ) : filteredVideos.length === 0 ? (
+          ) : filteredAndSortedVideos.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-[#8B8B8B] text-lg">No exported videos found</div>
             </div>
           ) : view === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
-              {filteredVideos.map((video) => (
+              {filteredAndSortedVideos.map((video) => (
                 <div
                   key={video.id}
                   className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm cursor-pointer hover:shadow-md transition"
@@ -321,11 +289,11 @@ export default function ExportedVideosClient() {
                     <th className="py-4 px-6 font-medium">Videos</th>
                     <th className="py-4 px-6 font-medium">Status</th>
                     <th className="py-4 px-6 font-medium">Updated</th>
-                    <th className="py-4 px-6 font-medium">Actions</th>
+                    <th className="py-4 px-6 font-medium text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredVideos.map((video) => (
+                  {filteredAndSortedVideos.map((video) => (
                     <tr
                       key={video.id}
                       className="border-t border-[#F3F0FC] hover:bg-[#F8F6FF] cursor-pointer"
@@ -352,8 +320,9 @@ export default function ExportedVideosClient() {
                       <td className="py-4 px-6 text-[#8B8B8B] font-medium">
                         {formatDate(video.updatedAt)}
                       </td>
-                      <td className="py-4 px-6 flex gap-4 items-center">
-                        <button
+                      <td className="py-4 px-6">
+                        <div className="flex gap-4 items-center justify-center">
+                          <button
                           className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -377,7 +346,8 @@ export default function ExportedVideosClient() {
                             height={24}
                             className="w-6 h-6"
                           />
-                        </button>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

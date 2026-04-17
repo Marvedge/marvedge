@@ -59,6 +59,7 @@ export default function DemosPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [sortOption, setSortOption] = useState<"title" | "updatedAt" | "createdAt" | "views">("updatedAt");
 
   const fetchDemos = async () => {
     try {
@@ -96,12 +97,25 @@ export default function DemosPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filter demos based on search
-  const filteredDemos = demos.filter(
-    (demo) =>
-      demo.title.toLowerCase().includes(search.toLowerCase()) ||
-      demo.description.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter and Sort demos
+  const filteredAndSortedDemos = demos
+    .filter(
+      (demo) =>
+        demo.title.toLowerCase().includes(search.toLowerCase()) ||
+        demo.description.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortOption === "title") {
+        return a.title.localeCompare(b.title);
+      } else if (sortOption === "updatedAt") {
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      } else if (sortOption === "createdAt") {
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      } else if (sortOption === "views") {
+        return 0; // Views logic to be implemented on backend
+      }
+      return 0;
+    });
 
   const handleEditDemo = (demo: Demo) => {
     const params = new URLSearchParams({
@@ -179,7 +193,7 @@ export default function DemosPage() {
           <h2 className="text-2xl font-normal text-[#8B8B8B] mb-2">
             Manage and organize all your interactive demos.
           </h2>
-          <div className="flex flex-wrap gap-4 items-center mt-6">
+          <div className="flex flex-wrap items-center justify-between mt-6 gap-4">
             <input
               type="text"
               placeholder="Search your demos"
@@ -187,56 +201,8 @@ export default function DemosPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[300px] px-4 py-3 rounded-lg bg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
             />
-            <div className="relative">
-              <button
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
-                onClick={() => setStatusDropdownOpen((v) => !v)}
-              >
-                <FaFilter className="text-lg" /> All Status
-              </button>
-              {statusDropdownOpen && (
-                <div
-                  ref={statusDropdownRef}
-                  className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
-                >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <Image
-                        src="/icons/all-status.svg"
-                        alt="Notifications"
-                        width={24}
-                        height={24}
-                        className="w-6 h-6"
-                      />{" "}
-                      All Status
-                    </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <FaRegFileAlt className="text-lg" /> Draft
-                    </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <Image
-                        src="/icons/publish.svg"
-                        alt="Notifications"
-                        width={24}
-                        height={24}
-                        className="w-6 h-6"
-                      />{" "}
-                      Published
-                    </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
-                      <Image
-                        src="/icons/aarcheive.svg"
-                        alt="Notifications"
-                        width={24}
-                        height={24}
-                        className="w-6 h-6"
-                      />{" "}
-                      Archived
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            
+            <div className="flex items-center gap-6 ml-auto">
             <div className="relative">
               <button
                 className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
@@ -250,23 +216,23 @@ export default function DemosPage() {
                   className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
                 >
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("title"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "title" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaListUl className="text-lg" /> Title
                     </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("updatedAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "updatedAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaRegClock className="text-lg" /> Last Updated
                     </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("createdAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "createdAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaPlusSquare className="text-lg" /> Created date
                     </div>
-                    <div className="flex items-center gap-3 text-[#A594F9] text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC]">
+                    <div onClick={() => { setSortOption("views"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "views" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
                       <FaEye className="text-lg" /> Views
                     </div>
                   </div>
                 </div>
               )}
             </div>
-            <div className="flex gap-2 ml-auto">
+            <div className="flex gap-2">
               <button
                 className={`p-3 rounded-lg border ${
                   view === "grid"
@@ -290,26 +256,27 @@ export default function DemosPage() {
             </div>
           </div>
         </div>
-        <div className="mt-8">
-          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
-          <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
-            {filteredDemos.length}/{demos.length} demos
-          </div>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-[#A594F9] text-lg">Loading demos...</div>
+      </div>
+      <div className="mt-8">
+        <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
+            <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
+              {filteredAndSortedDemos.length}/{demos.length} demos
             </div>
-          ) : error ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-red-500 text-lg">{error}</div>
-            </div>
-          ) : filteredDemos.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-[#8B8B8B] text-lg">No demos found</div>
-            </div>
-          ) : view === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
-              {filteredDemos.map((demo: Demo) => (
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-[#A594F9] text-lg">Loading demos...</div>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-red-500 text-lg">{error}</div>
+              </div>
+            ) : filteredAndSortedDemos.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-[#8B8B8B] text-lg">No demos found</div>
+              </div>
+            ) : view === "grid" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
+                {filteredAndSortedDemos.map((demo: Demo) => (
                 <div
                   key={demo.id}
                   className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm cursor-pointer hover:shadow-md transition"
@@ -372,11 +339,11 @@ export default function DemosPage() {
                     {/* <th className="py-4 px-6 font-medium">Duration</th> */}
                     <th className="py-4 px-6 font-medium">Status</th>
                     <th className="py-4 px-6 font-medium">Updated</th>
-                    <th className="py-4 px-6 font-medium">Actions</th>
+                    <th className="py-4 px-6 font-medium text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDemos.map((demo: Demo) => (
+                  {filteredAndSortedDemos.map((demo: Demo) => (
                     <tr
                       key={demo.id}
                       className="border-t border-[#F3F0FC] hover:bg-[#F8F6FF] cursor-pointer"
