@@ -63,9 +63,14 @@ export async function POST(req: NextRequest) {
 
     const isExempt = session.user.email === "aryaanandpathak30@gmail.com";
     if (!isExempt) {
-      const exportCount = await prisma.exportedVideo.count({
+      const jobCount = await prisma.videoJob.count({
+        where: { userId, status: "COMPLETED" },
+      });
+      const savedCount = await prisma.exportedVideo.count({
         where: { userId },
       });
+      const exportCount = Math.max(jobCount, savedCount);
+
       if (exportCount >= 3) {
         return NextResponse.json(
           { error: "Free trial limit of 3 exports reached. Please upgrade your plan." },
@@ -133,9 +138,8 @@ export async function POST(req: NextRequest) {
 
       const chunkDuration = 10;
       const chunksCount = Math.ceil(duration / chunkDuration);
-
-      const fetchPromises = [];
-      const chunkFilenames = [];
+      const chunkFilenames: string[] = [];
+      const fetchTasks = [];
 
       for (let i = 0; i < chunksCount; i++) {
         const startTime = i * chunkDuration;
@@ -145,23 +149,38 @@ export async function POST(req: NextRequest) {
 
         chunkFilenames.push(outputObject);
 
-        const chunkPromise = invokeGcpWorker(
-          {
-            chunkId,
-            recipeId: jobRecord.id,
-            outputObject,
-            videoUrl,
-            recipe: normalizedPayload as unknown as Record<string, unknown>,
-            startTime,
-            duration: currentChunkDuration,
-          },
-          "/process"
+        // Store a function that RETURNS the promise, but don't call it yet!
+        fetchTasks.push(() =>
+          invokeGcpWorker(
+            {
+              chunkId,
+              recipeId: jobRecord.id,
+              outputObject,
+              videoUrl,
+              recipe: normalizedPayload as unknown as Record<string, unknown>,
+              startTime,
+              duration: currentChunkDuration,
+            },
+            "/process"
+          )
         );
-
-        fetchPromises.push(chunkPromise);
       }
 
-      await Promise.all(fetchPromises);
+      // True Concurrency Queue Logic (Actual Deferred Execution)
+      const MAX_CONCURRENT_CHUNKS = 5;
+      const executing = new Set<Promise<unknown>>();
+      const results = [];
+
+      for (const task of fetchTasks) {
+        const promise = task().finally(() => executing.delete(promise));
+        executing.add(promise);
+        results.push(promise);
+        if (executing.size >= MAX_CONCURRENT_CHUNKS) {
+          await Promise.race(executing);
+        }
+      }
+      
+      await Promise.all(results);
 
       await prisma.videoJob.update({
         where: { id: jobRecord.id },

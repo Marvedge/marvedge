@@ -74,9 +74,14 @@ export async function POST(req: NextRequest) {
 
     const isExempt = session.user.email === "aryaanandpathak30@gmail.com";
     if (!isExempt) {
-      const exportCount = await prisma.exportedVideo.count({
+      const jobCount = await prisma.videoJob.count({
+        where: { userId, status: "COMPLETED" },
+      });
+      const savedCount = await prisma.exportedVideo.count({
         where: { userId },
       });
+      const exportCount = Math.max(jobCount, savedCount);
+
       if (exportCount >= 3) {
         return NextResponse.json(
           { error: "Free trial limit of 3 exports reached. Please upgrade to Pro." },

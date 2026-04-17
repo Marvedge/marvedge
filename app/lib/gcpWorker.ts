@@ -56,29 +56,62 @@ export async function invokeGcpWorker(payload: GcpWorkerPayload, endpoint = "/pr
     Number.isFinite(timeoutMs) ? timeoutMs : 180000
   );
 
+  let attempt = 0;
+  const maxAttempts = 3;
+
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-      cache: "no-store",
-    });
+    while (attempt < maxAttempts) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+          cache: "no-store",
+        });
 
-    const body = (await response.json().catch(() => ({}))) as GcpWorkerResponse;
+        const body = (await response.json().catch(() => ({}))) as GcpWorkerResponse;
 
-    if (!response.ok || !body.ok) {
-      throw new Error(
-        body.error || `GCP worker failed (${response.status}) at ${url}`
-      );
+        if (!response.ok || !body.ok) {
+          // If the Cloud Run instance rejects the burst with 503 or 429, we trigger a retry
+          if ([429, 502, 503, 504].includes(response.status) && attempt < maxAttempts - 1) {
+            const backoffMs = 1500 * Math.pow(2, attempt);
+            console.warn(`GCP worker scale-up delay (${response.status}). Retrying in ${backoffMs}ms...`);
+            await new Promise((res) => setTimeout(res, backoffMs));
+            attempt++;
+            continue;
+          }
+          throw new Error(
+            body.error || `GCP worker failed (${response.status}) at ${url}`
+          );
+        }
+
+        return body;
+      } catch (e: unknown) {
+        if (attempt >= maxAttempts - 1) {
+          throw e; // Max attempts reached
+        }
+        
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        // Throw fast on deterministic non-network exceptions (like aborts)
+        if (errorMessage.includes("aborted")) {
+            throw e;
+        }
+
+        // Network error like socket hang up
+        const backoffMs = 1500 * Math.pow(2, attempt);
+        console.warn(`GCP worker connection error. Retrying in ${backoffMs}ms...`);
+        await new Promise((res) => setTimeout(res, backoffMs));
+        attempt++;
+      }
     }
-
-    return body;
   } finally {
     clearTimeout(timer);
   }
+
+  throw new Error("GCP worker failed after multiple retries");
 }
 
 export type GcpSubtitlesPayload = {

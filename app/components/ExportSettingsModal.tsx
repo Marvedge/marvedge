@@ -50,10 +50,10 @@ export default function ExportSettingsModal({
   useEffect(() => {
     if (isOpen) {
       setSettings(defaultSettings);
-      axios.get("/api/exported-videos")
+      axios.get("/api/user/export-count")
         .then(res => {
-          if (res.data?.exportedVideos) {
-            setExportCount(res.data.exportedVideos.length);
+          if (res.data && typeof res.data.count === 'number') {
+            setExportCount(res.data.count);
           }
         })
         .catch(err => console.error("Could not fetch export count", err));
