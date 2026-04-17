@@ -468,8 +468,6 @@ const WaitlistSection: React.FC = () => {
   );
 };
 
-import Pricing from "./Pricing";
-
 const Footer: React.FC = () => {
   const sectionRef = useRef(null);
   // Set `once: true` to trigger only once when section enters viewport
@@ -485,7 +483,6 @@ const Footer: React.FC = () => {
   return (
     <>
       <WaitlistSection />
-      <Pricing />
       <div ref={sectionRef} className="w-full bg-[#261753] min-h-[40vh] relative overflow-hidden">
         <motion.div
           className="absolute top-20 left-1/4 w-32 h-32 bg-purple-900 rounded-full opacity-10"

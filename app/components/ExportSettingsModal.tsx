@@ -2,6 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 
 export interface ExportSettings {
   quality: "720p" | "1080p";
@@ -40,11 +43,25 @@ export default function ExportSettingsModal({
 
   const [estimatedSize, setEstimatedSize] = useState("1MB");
 
+  const { data: session } = useSession();
+  const router = useRouter();
+  const [exportCount, setExportCount] = useState<number | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       setSettings(defaultSettings);
+      axios.get("/api/exported-videos")
+        .then(res => {
+          if (res.data?.exportedVideos) {
+            setExportCount(res.data.exportedVideos.length);
+          }
+        })
+        .catch(err => console.error("Could not fetch export count", err));
     }
   }, [isOpen, defaultSettings]);
+
+  const isExempt = session?.user?.email === "aryaanandpathak30@gmail.com";
+  const limitReached = !isExempt && exportCount !== null && exportCount >= 3;
 
   // Basic heuristic for file size estimation based on duration and settings
   useEffect(() => {
@@ -191,23 +208,40 @@ export default function ExportSettingsModal({
         </div>
 
         {/* License Info Box */}
-        <div className="bg-[#EAE5FB] rounded-xl p-4 mb-6">
-          <h3 className="text-[#8A76FC] text-[15px] font-medium mb-1">You have 3/3 free renders</h3>
-          <p className="text-[#8A76FC] text-[13px] opacity-80 mb-2">
-            Free trial exports include a watermark on videos
-          </p>
-          <button className="text-[#8A76FC] font-bold text-[14px] hover:opacity-80 transition-opacity">
-            Buy license
-          </button>
-        </div>
+        {limitReached ? (
+          <div className="bg-[#FFEAEA] rounded-xl p-4 mb-6">
+            <h3 className="text-red-500 text-[15px] font-bold leading-snug">
+              Your free trial of 3 exports has expired please subscribe to our premium plan
+            </h3>
+          </div>
+        ) : (
+          <div className="bg-[#EAE5FB] rounded-xl p-4 mb-6">
+            <h3 className="text-[#8A76FC] text-[15px] font-medium mb-1">
+               You have {isExempt ? "unlimited" : `${Math.max(0, 3 - (exportCount || 0))}/3`} free renders
+            </h3>
+            <p className="text-[#8A76FC] text-[13px] opacity-80">
+              Free trial exports include a watermark on videos
+            </p>
+          </div>
+        )}
 
         {/* Confirm Action */}
-        <button
-          onClick={() => onConfirm(settings)}
-          className="w-full bg-[#8A76FC] text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-[#7C5CFC] transition-colors flex items-center justify-center gap-2"
-        >
-          Confirm and export <span>→</span>
-        </button>
+        {limitReached ? (
+          <button
+            onClick={() => router.push("/pricing")}
+            className="w-full bg-red-500 text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+          >
+            View Plans
+          </button>
+        ) : (
+          <button
+            onClick={() => onConfirm(settings)}
+            disabled={exportCount === null}
+            className="w-full bg-[#8A76FC] text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-[#7C5CFC] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {exportCount === null ? "Loading..." : "Confirm and export"} <span>→</span>
+          </button>
+        )}
       </div>
     </div>
   );

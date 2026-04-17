@@ -61,6 +61,19 @@ export async function POST(req: NextRequest) {
 
     const userId = user.id;
 
+    const isExempt = session.user.email === "aryaanandpathak30@gmail.com";
+    if (!isExempt) {
+      const exportCount = await prisma.exportedVideo.count({
+        where: { userId },
+      });
+      if (exportCount >= 3) {
+        return NextResponse.json(
+          { error: "Free trial limit of 3 exports reached. Please upgrade your plan." },
+          { status: 403 }
+        );
+      }
+    }
+
     // 1. Create a job record in the database
     const jobRecord = await prisma.videoJob.create({
       data: {

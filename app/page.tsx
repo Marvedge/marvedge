@@ -4,6 +4,7 @@ import { authOptions } from "@/app/lib/auth/options";
 import Navbar from "../app/components/Navbar";
 import HeroSection from "./components/HeroSection";
 import Footer from "./components/Footer";
+import Pricing from "./components/Pricing";
 
 export default async function LandingPage() {
   const session = await getServerSession(authOptions);
@@ -15,6 +16,7 @@ export default async function LandingPage() {
     <>
       <Navbar />
       <HeroSection />
+      <Pricing />
       <Footer />
     </>
   );

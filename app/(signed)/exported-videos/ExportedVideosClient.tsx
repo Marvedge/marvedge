@@ -175,7 +175,6 @@ export default function ExportedVideosClient() {
                 </div>
               )}
             </div>
-            </div>
             <div className="flex gap-2">
               <button
                 className={`p-3 rounded-lg border ${
@@ -200,9 +199,9 @@ export default function ExportedVideosClient() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
 
-      <div className="mt-8">
+        <div className="mt-8">
           <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Exported Videos</h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
             {filteredAndSortedVideos.length}/{videos.length} videos

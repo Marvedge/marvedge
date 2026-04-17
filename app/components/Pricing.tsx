@@ -3,10 +3,23 @@
 import React, { useRef } from "react";
 import { motion, useInView, easeOut } from "framer-motion";
 import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 const Pricing: React.FC = () => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-50px" });
+  const router = useRouter();
+  const { status } = useSession();
+
+  const handleAuthRedirect = () => {
+    if (status === "authenticated") {
+      // In the future this will open checkout, for now we do nothing or go to dashboard
+      console.log("Proceed to checkout / Stripe integration");
+    } else {
+      router.push("/auth/signup");
+    }
+  };
 
   return (
     <div
@@ -54,7 +67,10 @@ const Pricing: React.FC = () => {
                 <span className="text-gray-500 text-lg mb-1 ml-1">/month</span>
               </div>
             </div>
-            <button className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8">
+            <button 
+              onClick={handleAuthRedirect}
+              className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8"
+            >
               Get Started
             </button>
             <div className="flex-1">
@@ -97,7 +113,10 @@ const Pricing: React.FC = () => {
                 <span className="text-white/80 text-lg mb-1 ml-1">/month</span>
               </div>
             </div>
-            <button className="w-full bg-white hover:bg-gray-50 text-[#8C5BFF] font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8 shadow-md">
+            <button 
+              onClick={handleAuthRedirect}
+              className="w-full bg-white hover:bg-gray-50 text-[#8C5BFF] font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8 shadow-md"
+            >
               Start Free Trial
             </button>
             <div className="flex-1">
@@ -134,7 +153,10 @@ const Pricing: React.FC = () => {
             <div className="mb-8 h-[60px] flex items-end">
               <span className="text-4xl font-extrabold text-[#1A1A1A]">Enterprise</span>
             </div>
-            <button className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8">
+            <button 
+              onClick={handleAuthRedirect}
+              className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8"
+            >
               Start Free Trial
             </button>
             <div className="flex-1">

@@ -256,8 +256,8 @@ export default function DemosPage() {
             </div>
           </div>
         </div>
-      </div>
-      <div className="mt-8">
+        </div>
+        <div className="mt-8">
         <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
             <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
               {filteredAndSortedDemos.length}/{demos.length} demos
