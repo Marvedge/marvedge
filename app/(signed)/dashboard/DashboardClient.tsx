@@ -18,7 +18,12 @@ interface DashboardClientProps {
     endTime?: string | null;
     createdAt: string;
     updatedAt: string;
-    editing?: any;
+    editing?: {
+      segments?: unknown;
+      zoom?: unknown;
+      aspectRatio?: string;
+      browserFrame?: unknown;
+    };
   }[];
   totalViews: number;
   activeShares: number;

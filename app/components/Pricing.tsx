@@ -49,7 +49,6 @@ const Pricing: React.FC = () => {
 
         {/* Pricing Cards */}
         <div className="flex flex-col lg:flex-row justify-center items-stretch gap-8 lg:gap-10 mt-12 px-4 max-w-6xl mx-auto">
-          
           {/* Free Plan */}
           <motion.div
             className="flex-1 bg-white rounded-[2rem] border border-[#E9E4F5] p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 relative flex flex-col"
@@ -67,7 +66,7 @@ const Pricing: React.FC = () => {
                 <span className="text-gray-500 text-lg mb-1 ml-1">/month</span>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleAuthRedirect}
               className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8"
             >
@@ -80,10 +79,13 @@ const Pricing: React.FC = () => {
                   "Basic edit features",
                   "Up to 3 demos",
                   "Basic analytics included",
-                  "Export 1 demo"
+                  "Export 1 demo",
                 ].map((feature, i) => (
                   <li key={i} className="flex items-start text-[#4A4A4A]">
-                    <Check className="w-5 h-5 text-[#8C5BFF] mr-3 shrink-0 mt-0.5" strokeWidth={2.5} />
+                    <Check
+                      className="w-5 h-5 text-[#8C5BFF] mr-3 shrink-0 mt-0.5"
+                      strokeWidth={2.5}
+                    />
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -113,7 +115,7 @@ const Pricing: React.FC = () => {
                 <span className="text-white/80 text-lg mb-1 ml-1">/month</span>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleAuthRedirect}
               className="w-full bg-white hover:bg-gray-50 text-[#8C5BFF] font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8 shadow-md"
             >
@@ -126,7 +128,7 @@ const Pricing: React.FC = () => {
                   "AI voiceover & subtitles",
                   "5 GB storage",
                   "30 demos/month",
-                  "Request custom branding"
+                  "Request custom branding",
                 ].map((feature, i) => (
                   <li key={i} className="flex items-start text-white">
                     <span className="w-5 h-5 rounded-full bg-white flex items-center justify-center mr-3 shrink-0 mt-0.5">
@@ -153,7 +155,7 @@ const Pricing: React.FC = () => {
             <div className="mb-8 h-[60px] flex items-end">
               <span className="text-4xl font-extrabold text-[#1A1A1A]">Enterprise</span>
             </div>
-            <button 
+            <button
               onClick={handleAuthRedirect}
               className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8"
             >
@@ -166,17 +168,19 @@ const Pricing: React.FC = () => {
                   "SSO & advanced analytics",
                   "Onboarding support",
                   "Unlimited demos & viewers",
-                  "High usage or white-glove needs"
+                  "High usage or white-glove needs",
                 ].map((feature, i) => (
                   <li key={i} className="flex items-start text-[#4A4A4A]">
-                    <Check className="w-5 h-5 text-[#8C5BFF] mr-3 shrink-0 mt-0.5" strokeWidth={2.5} />
+                    <Check
+                      className="w-5 h-5 text-[#8C5BFF] mr-3 shrink-0 mt-0.5"
+                      strokeWidth={2.5}
+                    />
                     <span>{feature}</span>
                   </li>
                 ))}
               </ul>
             </div>
           </motion.div>
-
         </div>
       </div>
     </div>

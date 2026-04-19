@@ -50,13 +50,14 @@ export default function ExportSettingsModal({
   useEffect(() => {
     if (isOpen) {
       setSettings(defaultSettings);
-      axios.get("/api/user/export-count")
-        .then(res => {
-          if (res.data && typeof res.data.count === 'number') {
+      axios
+        .get("/api/user/export-count")
+        .then((res) => {
+          if (res.data && typeof res.data.count === "number") {
             setExportCount(res.data.count);
           }
         })
-        .catch(err => console.error("Could not fetch export count", err));
+        .catch((err) => console.error("Could not fetch export count", err));
     }
   }, [isOpen, defaultSettings]);
 
@@ -216,8 +217,9 @@ export default function ExportSettingsModal({
           </div>
         ) : (
           <div className="bg-[#EAE5FB] rounded-xl p-4 mb-6">
-            <h3 className="text-[#8A76FC] text-[15px] font-medium mb-1">
-               You have {isExempt ? "unlimited" : `${Math.max(0, 3 - (exportCount || 0))}/3`} free renders
+            <h3 className="text-[#8A76FC] text-[15px] font-medium">
+              You have {isExempt ? "unlimited" : `${Math.max(0, 3 - (exportCount || 0))}/3`} free
+              exports left.
             </h3>
             <p className="text-[#8A76FC] text-[13px] opacity-80">
               Free trial exports include a watermark on videos

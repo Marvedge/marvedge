@@ -72,20 +72,28 @@ const Navbar: React.FC = () => {
         </div>
         {/* Desktop nav links */}
         <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium absolute right-8 top-6">
-          <NavButton onClick={() => {
-            if (window.location.pathname === "/") {
-              document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
-            } else {
-              router.push("/#features");
-            }
-          }}>Features</NavButton>
-          <NavButton onClick={() => {
-             if (window.location.pathname === "/") {
-              document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
-            } else {
-              router.push("/#pricing");
-            }
-          }}>Pricing</NavButton>
+          <NavButton
+            onClick={() => {
+              if (window.location.pathname === "/") {
+                document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
+              } else {
+                router.push("/#features");
+              }
+            }}
+          >
+            Features
+          </NavButton>
+          <NavButton
+            onClick={() => {
+              if (window.location.pathname === "/") {
+                document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
+              } else {
+                router.push("/#pricing");
+              }
+            }}
+          >
+            Pricing
+          </NavButton>
           <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
         </div>
         {/* Mobile menu */}

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Play, Settings, Clock, Share2 } from "lucide-react";
+import { Menu, X, Settings, Share2 } from "lucide-react";
 import Image from "next/image";
 
 const SidemenuDashboard = () => {
@@ -214,7 +214,7 @@ const SidemenuDashboard = () => {
             </li>
           </Link>
         </ul>
-          {/* Removed recent feature walkthrough & sales demo from sidebar */}
+        {/* Removed recent feature walkthrough & sales demo from sidebar */}
       </div>
     </>
   );

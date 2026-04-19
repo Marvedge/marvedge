@@ -5,12 +5,10 @@ import {
   FaShareAlt,
   FaTh,
   FaThList,
-  FaFilter,
   FaSort,
   FaEye,
   FaRegCalendarAlt,
   FaListUl,
-  FaRegFileAlt,
   FaRegClock,
   FaPlusSquare,
 } from "react-icons/fa";
@@ -33,7 +31,7 @@ interface ExportedVideo {
 export default function ExportedVideosClient() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState("list");
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [, setStatusDropdownOpen] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
@@ -43,7 +41,9 @@ export default function ExportedVideosClient() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [shareVideo, setShareVideo] = useState<Pick<ExportedVideo, "id" | "title"> | null>(null);
-  const [sortOption, setSortOption] = useState<"title" | "updatedAt" | "createdAt" | "views">("updatedAt");
+  const [sortOption, setSortOption] = useState<"title" | "updatedAt" | "createdAt" | "views">(
+    "updatedAt"
+  );
 
   const fetchExportedVideos = async () => {
     try {
@@ -144,61 +144,85 @@ export default function ExportedVideosClient() {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[300px] px-4 py-3 rounded-lg bg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
             />
-            
+
             <div className="flex items-center gap-6 ml-auto">
-            <div className="relative">
-              <button
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
-                onClick={() => setSortDropdownOpen((v) => !v)}
-              >
-                <FaSort className="text-lg" /> Sort By
-              </button>
-              {sortDropdownOpen && (
-                <div
-                  ref={sortDropdownRef}
-                  className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
+              <div className="relative">
+                <button
+                  className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
+                  onClick={() => setSortDropdownOpen((v) => !v)}
                 >
-                  <div className="flex flex-col gap-2">
-                    <div onClick={() => { setSortOption("title"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "title" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaListUl className="text-lg" /> Title
-                    </div>
-                    <div onClick={() => { setSortOption("updatedAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "updatedAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaRegClock className="text-lg" /> Last Updated
-                    </div>
-                    <div onClick={() => { setSortOption("createdAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "createdAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaPlusSquare className="text-lg" /> Created date
-                    </div>
-                    <div onClick={() => { setSortOption("views"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "views" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaEye className="text-lg" /> Views
+                  <FaSort className="text-lg" /> Sort By
+                </button>
+                {sortDropdownOpen && (
+                  <div
+                    ref={sortDropdownRef}
+                    className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
+                  >
+                    <div className="flex flex-col gap-2">
+                      <div
+                        onClick={() => {
+                          setSortOption("title");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "title" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaListUl className="text-lg" /> Title
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("updatedAt");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "updatedAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaRegClock className="text-lg" /> Last Updated
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("createdAt");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "createdAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaPlusSquare className="text-lg" /> Created date
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("views");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "views" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaEye className="text-lg" /> Views
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                className={`p-3 rounded-lg border ${
-                  view === "grid"
-                    ? "bg-[#A594F9] text-white"
-                    : "bg-white text-[#A594F9] border-gray-200"
-                }`}
-                onClick={() => setView("grid")}
-              >
-                <FaTh className="text-xl" />
-              </button>
-              <button
-                className={`p-3 rounded-lg border ${
-                  view === "list"
-                    ? "bg-[#A594F9] text-white"
-                    : "bg-white text-[#A594F9] border-gray-200"
-                }`}
-                onClick={() => setView("list")}
-              >
-                <FaThList className="text-xl" />
-              </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className={`p-3 rounded-lg border ${
+                    view === "grid"
+                      ? "bg-[#A594F9] text-white"
+                      : "bg-white text-[#A594F9] border-gray-200"
+                  }`}
+                  onClick={() => setView("grid")}
+                >
+                  <FaTh className="text-xl" />
+                </button>
+                <button
+                  className={`p-3 rounded-lg border ${
+                    view === "list"
+                      ? "bg-[#A594F9] text-white"
+                      : "bg-white text-[#A594F9] border-gray-200"
+                  }`}
+                  onClick={() => setView("list")}
+                >
+                  <FaThList className="text-xl" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
         </div>
 
         <div className="mt-8">
@@ -322,29 +346,29 @@ export default function ExportedVideosClient() {
                       <td className="py-4 px-6">
                         <div className="flex gap-4 items-center justify-center">
                           <button
-                          className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShareVideo({ id: video.id, title: video.title });
-                          }}
-                        >
-                          <FaShareAlt />
-                        </button>
-                        <button
-                          className="text-red-400 hover:text-red-600 text-xl cursor-pointer"
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteVideo(video.id);
-                          }}
-                        >
-                          <Image
-                            src="/icons/delete-demo.svg"
-                            alt="Delete"
-                            width={24}
-                            height={24}
-                            className="w-6 h-6"
-                          />
+                            className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShareVideo({ id: video.id, title: video.title });
+                            }}
+                          >
+                            <FaShareAlt />
+                          </button>
+                          <button
+                            className="text-red-400 hover:text-red-600 text-xl cursor-pointer"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteVideo(video.id);
+                            }}
+                          >
+                            <Image
+                              src="/icons/delete-demo.svg"
+                              alt="Delete"
+                              width={24}
+                              height={24}
+                              className="w-6 h-6"
+                            />
                           </button>
                         </div>
                       </td>

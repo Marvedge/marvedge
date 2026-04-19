@@ -3,12 +3,10 @@ import { useState, useRef, useEffect } from "react";
 import {
   FaTh,
   FaThList,
-  FaFilter,
   FaSort,
   FaEye,
   FaRegCalendarAlt,
   FaListUl,
-  FaRegFileAlt,
   FaRegClock,
   FaPlusSquare,
 } from "react-icons/fa";
@@ -54,7 +52,7 @@ export default function DemosPage({ initialDemos }: DemosPageProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [view, setView] = useState("list");
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [, setStatusDropdownOpen] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
@@ -65,9 +63,12 @@ export default function DemosPage({ initialDemos }: DemosPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [sortOption, setSortOption] = useState<"title" | "updatedAt" | "createdAt" | "views">("updatedAt");
+  const [sortOption, setSortOption] = useState<"title" | "updatedAt" | "createdAt" | "views">(
+    "updatedAt"
+  );
 
   const fetchDemos = async () => {
+    setLoading(true);
     try {
       const response = await axios.get("/api/demo");
       setDemos(response.data.demos || []);
@@ -78,6 +79,8 @@ export default function DemosPage({ initialDemos }: DemosPageProps) {
       } else {
         setError("Failed to fetch demos");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -201,82 +204,106 @@ export default function DemosPage({ initialDemos }: DemosPageProps) {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[300px] px-4 py-3 rounded-lg bg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
             />
-            
+
             <div className="flex items-center gap-6 ml-auto">
-            <div className="relative">
-              <button
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
-                onClick={() => setSortDropdownOpen((v) => !v)}
-              >
-                <FaSort className="text-lg" /> Sort By
-              </button>
-              {sortDropdownOpen && (
-                <div
-                  ref={sortDropdownRef}
-                  className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
+              <div className="relative">
+                <button
+                  className="flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-200 text-[#A594F9] font-medium hover:bg-[#ede7fa]"
+                  onClick={() => setSortDropdownOpen((v) => !v)}
                 >
-                  <div className="flex flex-col gap-2">
-                    <div onClick={() => { setSortOption("title"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "title" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaListUl className="text-lg" /> Title
-                    </div>
-                    <div onClick={() => { setSortOption("updatedAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "updatedAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaRegClock className="text-lg" /> Last Updated
-                    </div>
-                    <div onClick={() => { setSortOption("createdAt"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "createdAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaPlusSquare className="text-lg" /> Created date
-                    </div>
-                    <div onClick={() => { setSortOption("views"); setSortDropdownOpen(false); }} className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "views" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}>
-                      <FaEye className="text-lg" /> Views
+                  <FaSort className="text-lg" /> Sort By
+                </button>
+                {sortDropdownOpen && (
+                  <div
+                    ref={sortDropdownRef}
+                    className="absolute left-0 top-full mt-2 bg-white rounded-2xl shadow-lg p-4 z-50 border border-gray-100 min-w-[180px] animate-fade-in"
+                  >
+                    <div className="flex flex-col gap-2">
+                      <div
+                        onClick={() => {
+                          setSortOption("title");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "title" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaListUl className="text-lg" /> Title
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("updatedAt");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "updatedAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaRegClock className="text-lg" /> Last Updated
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("createdAt");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "createdAt" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaPlusSquare className="text-lg" /> Created date
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("views");
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 text-base font-medium cursor-pointer px-2 py-2 rounded-lg hover:bg-[#F3F0FC] ${sortOption === "views" ? "text-purple-700 bg-purple-50" : "text-[#A594F9]"}`}
+                      >
+                        <FaEye className="text-lg" /> Views
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                className={`p-3 rounded-lg border ${
-                  view === "grid"
-                    ? "bg-[#A594F9] text-white"
-                    : "bg-white text-[#A594F9] border-gray-200"
-                }`}
-                onClick={() => setView("grid")}
-              >
-                <FaTh className="text-xl" />
-              </button>
-              <button
-                className={`p-3 rounded-lg border ${
-                  view === "list"
-                    ? "bg-[#A594F9] text-white"
-                    : "bg-white text-[#A594F9] border-gray-200"
-                }`}
-                onClick={() => setView("list")}
-              >
-                <FaThList className="text-xl" />
-              </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className={`p-3 rounded-lg border ${
+                    view === "grid"
+                      ? "bg-[#A594F9] text-white"
+                      : "bg-white text-[#A594F9] border-gray-200"
+                  }`}
+                  onClick={() => setView("grid")}
+                >
+                  <FaTh className="text-xl" />
+                </button>
+                <button
+                  className={`p-3 rounded-lg border ${
+                    view === "list"
+                      ? "bg-[#A594F9] text-white"
+                      : "bg-white text-[#A594F9] border-gray-200"
+                  }`}
+                  onClick={() => setView("list")}
+                >
+                  <FaThList className="text-xl" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        </div>
         <div className="mt-8">
-        <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
-            <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
-              {filteredAndSortedDemos.length}/{demos.length} demos
+          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Your Demos</h3>
+          <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
+            {filteredAndSortedDemos.length}/{demos.length} demos
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-[#A594F9] text-lg">Loading demos...</div>
             </div>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-[#A594F9] text-lg">Loading demos...</div>
-              </div>
-            ) : error ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-red-500 text-lg">{error}</div>
-              </div>
-            ) : filteredAndSortedDemos.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-[#8B8B8B] text-lg">No demos found</div>
-              </div>
-            ) : view === "grid" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
-                {filteredAndSortedDemos.map((demo: Demo) => (
+          ) : error ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-red-500 text-lg">{error}</div>
+            </div>
+          ) : filteredAndSortedDemos.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-[#8B8B8B] text-lg">No demos found</div>
+            </div>
+          ) : view === "grid" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8">
+              {filteredAndSortedDemos.map((demo: Demo) => (
                 <div
                   key={demo.id}
                   className="bg-white rounded-2xl p-8 flex flex-col h-full shadow-sm cursor-pointer hover:shadow-md transition"

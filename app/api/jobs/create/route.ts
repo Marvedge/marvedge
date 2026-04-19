@@ -13,21 +13,24 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await req.json();
-    let {
-      videoUrl,
+    const {
+      videoUrl: rawVideoUrl,
       duration,
       segments,
       zoomEffects,
       textOverlays,
       subtitles,
       selectedBackground,
-      customBackgroundUrl,
+      customBackgroundUrl: rawCustomBackgroundUrl,
       imageMap,
       demoId,
       settings,
       aspectRatio,
       browserFrame,
     } = data;
+
+    let videoUrl = rawVideoUrl;
+    let customBackgroundUrl = rawCustomBackgroundUrl;
 
     if (!videoUrl) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
@@ -179,7 +182,7 @@ export async function POST(req: NextRequest) {
           await Promise.race(executing);
         }
       }
-      
+
       await Promise.all(results);
 
       await prisma.videoJob.update({

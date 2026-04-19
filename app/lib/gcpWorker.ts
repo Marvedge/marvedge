@@ -30,7 +30,9 @@ function getGcpWorkerUrl() {
 
 function normalizeWorkerBaseUrl(rawUrl: string) {
   let url = rawUrl.trim();
-  if (!url) return "";
+  if (!url) {
+    return "";
+  }
   url = url.replace(/\/+$/, "");
   // Accept env values ending with /process, /process/, /subtitles, /subtitles/
   url = url.replace(/\/(process|subtitles)$/i, "");
@@ -78,14 +80,14 @@ export async function invokeGcpWorker(payload: GcpWorkerPayload, endpoint = "/pr
           // If the Cloud Run instance rejects the burst with 503 or 429, we trigger a retry
           if ([429, 502, 503, 504].includes(response.status) && attempt < maxAttempts - 1) {
             const backoffMs = 1500 * Math.pow(2, attempt);
-            console.warn(`GCP worker scale-up delay (${response.status}). Retrying in ${backoffMs}ms...`);
+            console.warn(
+              `GCP worker scale-up delay (${response.status}). Retrying in ${backoffMs}ms...`
+            );
             await new Promise((res) => setTimeout(res, backoffMs));
             attempt++;
             continue;
           }
-          throw new Error(
-            body.error || `GCP worker failed (${response.status}) at ${url}`
-          );
+          throw new Error(body.error || `GCP worker failed (${response.status}) at ${url}`);
         }
 
         return body;
@@ -93,11 +95,11 @@ export async function invokeGcpWorker(payload: GcpWorkerPayload, endpoint = "/pr
         if (attempt >= maxAttempts - 1) {
           throw e; // Max attempts reached
         }
-        
+
         const errorMessage = e instanceof Error ? e.message : String(e);
         // Throw fast on deterministic non-network exceptions (like aborts)
         if (errorMessage.includes("aborted")) {
-            throw e;
+          throw e;
         }
 
         // Network error like socket hang up
@@ -129,7 +131,8 @@ export async function invokeGcpSubtitles(payload: GcpSubtitlesPayload) {
     "/subtitles"
   );
 
-  const cues = (body.result as { cues?: Array<{ start: number; end: number; text: string }> } | undefined)
-    ?.cues;
+  const cues = (
+    body.result as { cues?: Array<{ start: number; end: number; text: string }> } | undefined
+  )?.cues;
   return Array.isArray(cues) ? cues : [];
 }

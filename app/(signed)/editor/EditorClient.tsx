@@ -1631,7 +1631,10 @@ export default function EditorPage() {
                           }}
                           onError={(e) => {
                             const errStr = String(e);
-                            if (errStr.includes("play() request was interrupted") || errStr.includes("AbortError")) {
+                            if (
+                              errStr.includes("play() request was interrupted") ||
+                              errStr.includes("AbortError")
+                            ) {
                               return;
                             }
                             console.error("Video failed to load", e);

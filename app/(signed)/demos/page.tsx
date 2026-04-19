@@ -37,7 +37,18 @@ export default async function Page() {
     endTime: demo.endTime || undefined,
     createdAt: demo.createdAt.toISOString(),
     updatedAt: demo.updatedAt.toISOString(),
-    editing: demo.editing as any,
+    editing: demo.editing
+      ? (demo.editing as {
+          segments?: unknown;
+          zoom?: unknown;
+          subtitles?: unknown;
+          textOverlays?: unknown;
+          background?: string | null;
+          backgroundType?: string;
+          aspectRatio?: string;
+          browserFrame?: unknown;
+        })
+      : undefined,
   }));
 
   return <DemosClient initialDemos={serializedDemos} />;
