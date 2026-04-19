@@ -18,6 +18,7 @@ interface DashboardClientProps {
     endTime?: string | null;
     createdAt: string;
     updatedAt: string;
+    editing?: any;
   }[];
   totalViews: number;
   activeShares: number;

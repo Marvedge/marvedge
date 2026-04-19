@@ -52,6 +52,7 @@ export default async function Page() {
     endTime: demo.endTime,
     createdAt: demo.createdAt.toISOString(),
     updatedAt: demo.updatedAt.toISOString(),
+    editing: demo.editing as any,
   }));
 
   return (
