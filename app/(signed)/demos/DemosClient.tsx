@@ -46,7 +46,11 @@ interface Demo {
   };
 }
 
-export default function DemosPage() {
+interface DemosPageProps {
+  initialDemos: Demo[];
+}
+
+export default function DemosPage({ initialDemos }: DemosPageProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [view, setView] = useState("list");
@@ -54,8 +58,10 @@ export default function DemosPage() {
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
-  const [demos, setDemos] = useState<Demo[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Initialize immediately from SSR props
+  const [demos, setDemos] = useState<Demo[]>(initialDemos);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -63,26 +69,20 @@ export default function DemosPage() {
 
   const fetchDemos = async () => {
     try {
-      setLoading(true);
-      setError(null);
       const response = await axios.get("/api/demo");
       setDemos(response.data.demos || []);
     } catch (err: unknown) {
       console.error("Error fetching demos:", err);
-
       if (axios.isAxiosError(err)) {
         setError(err.response?.data?.message || "Failed to fetch demos");
       } else {
         setError("Failed to fetch demos");
       }
-    } finally {
-      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchDemos();
-  }, []);
+  // We explicitly DO NOT fetchDemos on mount anymore because Next.js SSR passes initialDemos instantly!
+  // Removed global on-mount useEffect.
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
