@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
 
     const data = await req.json();
     const {
-      videoUrl,
+      videoUrl: rawVideoUrl,
       duration,
       segments,
       zoomEffects,
       textOverlays,
       subtitles,
       selectedBackground,
-      customBackgroundUrl,
+      customBackgroundUrl: rawCustomBackgroundUrl,
       imageMap,
       demoId,
       settings,
@@ -29,8 +29,19 @@ export async function POST(req: NextRequest) {
       browserFrame,
     } = data;
 
+    let videoUrl = rawVideoUrl;
+    let customBackgroundUrl = rawCustomBackgroundUrl;
+
     if (!videoUrl) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
+    }
+
+    if (typeof videoUrl === "string" && videoUrl.startsWith("gs://")) {
+      videoUrl = videoUrl.replace("gs://", "https://storage.googleapis.com/");
+    }
+
+    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.startsWith("gs://")) {
+      customBackgroundUrl = customBackgroundUrl.replace("gs://", "https://storage.googleapis.com/");
     }
 
     if (!duration || typeof duration !== "number") {
@@ -52,6 +63,24 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id;
+
+    const isExempt = session.user.email === "aryaanandpathak30@gmail.com";
+    if (!isExempt) {
+      const jobCount = await prisma.videoJob.count({
+        where: { userId, status: "COMPLETED" },
+      });
+      const savedCount = await prisma.exportedVideo.count({
+        where: { userId },
+      });
+      const exportCount = Math.max(jobCount, savedCount);
+
+      if (exportCount >= 3) {
+        return NextResponse.json(
+          { error: "Free trial limit of 3 exports reached. Please upgrade your plan." },
+          { status: 403 }
+        );
+      }
+    }
 
     // 1. Create a job record in the database
     const jobRecord = await prisma.videoJob.create({
@@ -112,9 +141,8 @@ export async function POST(req: NextRequest) {
 
       const chunkDuration = 10;
       const chunksCount = Math.ceil(duration / chunkDuration);
-
-      const fetchPromises = [];
-      const chunkFilenames = [];
+      const chunkFilenames: string[] = [];
+      const fetchTasks = [];
 
       for (let i = 0; i < chunksCount; i++) {
         const startTime = i * chunkDuration;
@@ -124,23 +152,38 @@ export async function POST(req: NextRequest) {
 
         chunkFilenames.push(outputObject);
 
-        const chunkPromise = invokeGcpWorker(
-          {
-            chunkId,
-            recipeId: jobRecord.id,
-            outputObject,
-            videoUrl,
-            recipe: normalizedPayload as unknown as Record<string, unknown>,
-            startTime,
-            duration: currentChunkDuration,
-          },
-          "/process"
+        // Store a function that RETURNS the promise, but don't call it yet!
+        fetchTasks.push(() =>
+          invokeGcpWorker(
+            {
+              chunkId,
+              recipeId: jobRecord.id,
+              outputObject,
+              videoUrl,
+              recipe: normalizedPayload as unknown as Record<string, unknown>,
+              startTime,
+              duration: currentChunkDuration,
+            },
+            "/process"
+          )
         );
-
-        fetchPromises.push(chunkPromise);
       }
 
-      await Promise.all(fetchPromises);
+      // True Concurrency Queue Logic (Actual Deferred Execution)
+      const MAX_CONCURRENT_CHUNKS = 5;
+      const executing = new Set<Promise<unknown>>();
+      const results = [];
+
+      for (const task of fetchTasks) {
+        const promise = task().finally(() => executing.delete(promise));
+        executing.add(promise);
+        results.push(promise);
+        if (executing.size >= MAX_CONCURRENT_CHUNKS) {
+          await Promise.race(executing);
+        }
+      }
+
+      await Promise.all(results);
 
       await prisma.videoJob.update({
         where: { id: jobRecord.id },

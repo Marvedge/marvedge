@@ -32,6 +32,7 @@ interface EditorSidebarProps {
   textOverlayColor?: string;
   setTextOverlayColor?: (value: string) => void;
   onAddSubtitles?: () => void;
+  onClearSubtitles?: () => void;
   subtitlesLoading?: boolean;
   hasSubtitles?: boolean;
   className?: string;
@@ -71,6 +72,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
   textOverlayColor = "#ffffff",
   setTextOverlayColor,
   onAddSubtitles,
+  onClearSubtitles,
   subtitlesLoading = false,
   hasSubtitles = false,
   onOpenSaveDemo,
@@ -957,6 +959,15 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                   ? "Regenerate Subtitles"
                   : "Add Subtitles"}
             </button>
+            {hasSubtitles && (
+              <button
+                type="button"
+                onClick={() => onClearSubtitles && onClearSubtitles()}
+                className="w-full mt-2 rounded-lg border border-[#8A76FC] text-[#8A76FC] py-2 text-sm font-semibold hover:bg-[#F6F3FF] transition"
+              >
+                Skip Subtitles
+              </button>
+            )}
           </div>
         </div>
       )}

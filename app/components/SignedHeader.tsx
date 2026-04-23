@@ -116,26 +116,7 @@ const SignedHeader = ({ titleText, iconSRC, iconALT, className }: SignedHeaderPr
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 md:gap-3 min-w-0">
-          <div className="relative flex-1 sm:flex-none">
-            <input
-              type="text"
-              placeholder="Search"
-              className="bg-gray-100 text-gray-700 placeholder-gray-400 rounded-full py-1.5 sm:py-2 pl-8 sm:pl-10 pr-3 sm:pr-4 w-full sm:w-52 md:w-64 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#7C5CFC] transition-all text-xs sm:text-sm"
-            />
-            <svg
-              className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
+          {/* Removed top search bar as requested */}
           <span className="hidden sm:inline text-gray-500 text-xs md:text-sm lg:text-lg whitespace-nowrap">
             Welcome{" "}
             <span className="text-[#7C5CFC] font-semibold">

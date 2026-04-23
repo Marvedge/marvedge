@@ -2,10 +2,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 
 export interface ExportSettings {
   quality: "720p" | "1080p";
-  fps: "30 FPS" | "60 FPS";
+  fps: "24 FPS" | "30 FPS" | "60 FPS";
   compression: "Web" | "Medium" | "High" | "Ultra";
   // Speed is controlled from the main editor (not this modal).
   speed: "Default" | "0.75" | "1.25" | "1.5" | "1.75" | "2";
@@ -27,7 +30,7 @@ export default function ExportSettingsModal({
   const defaultSettings: ExportSettings = useMemo(
     () => ({
       quality: "720p",
-      fps: "30 FPS",
+      fps: "24 FPS",
       compression: "Web",
       speed: "Default",
     }),
@@ -40,17 +43,35 @@ export default function ExportSettingsModal({
 
   const [estimatedSize, setEstimatedSize] = useState("1MB");
 
+  const { data: session } = useSession();
+  const router = useRouter();
+  const [exportCount, setExportCount] = useState<number | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       setSettings(defaultSettings);
+      axios
+        .get("/api/user/export-count")
+        .then((res) => {
+          if (res.data && typeof res.data.count === "number") {
+            setExportCount(res.data.count);
+          }
+        })
+        .catch((err) => console.error("Could not fetch export count", err));
     }
   }, [isOpen, defaultSettings]);
+
+  const isExempt = session?.user?.email === "aryaanandpathak30@gmail.com";
+  const limitReached = !isExempt && exportCount !== null && exportCount >= 3;
 
   // Basic heuristic for file size estimation based on duration and settings
   useEffect(() => {
     let baseMultiplier = 1.0;
     if (settings.quality === "1080p") {
       baseMultiplier *= 1.5;
+    }
+    if (settings.fps === "24 FPS") {
+      baseMultiplier *= 0.9;
     }
     if (settings.fps === "60 FPS") {
       baseMultiplier *= 1.2;
@@ -133,7 +154,12 @@ export default function ExportSettingsModal({
               onClick={() =>
                 setSettings({
                   ...settings,
-                  fps: settings.fps === "60 FPS" ? "30 FPS" : "60 FPS",
+                  fps:
+                    settings.fps === "24 FPS"
+                      ? "30 FPS"
+                      : settings.fps === "30 FPS"
+                        ? "60 FPS"
+                        : "24 FPS",
                 })
               }
             >
@@ -183,23 +209,41 @@ export default function ExportSettingsModal({
         </div>
 
         {/* License Info Box */}
-        <div className="bg-[#EAE5FB] rounded-xl p-4 mb-6">
-          <h3 className="text-[#8A76FC] text-[15px] font-medium mb-1">You have 3/3 free renders</h3>
-          <p className="text-[#8A76FC] text-[13px] opacity-80 mb-2">
-            Free trial exports include a watermark on videos
-          </p>
-          <button className="text-[#8A76FC] font-bold text-[14px] hover:opacity-80 transition-opacity">
-            Buy license
-          </button>
-        </div>
+        {limitReached ? (
+          <div className="bg-[#FFEAEA] rounded-xl p-4 mb-6">
+            <h3 className="text-red-500 text-[15px] font-bold leading-snug">
+              Your free trial of 3 exports has expired please subscribe to our premium plan
+            </h3>
+          </div>
+        ) : (
+          <div className="bg-[#EAE5FB] rounded-xl p-4 mb-6">
+            <h3 className="text-[#8A76FC] text-[15px] font-medium">
+              You have {isExempt ? "unlimited" : `${Math.max(0, 3 - (exportCount || 0))}/3`} free
+              exports left.
+            </h3>
+            <p className="text-[#8A76FC] text-[13px] opacity-80">
+              Free trial exports include a watermark on videos
+            </p>
+          </div>
+        )}
 
         {/* Confirm Action */}
-        <button
-          onClick={() => onConfirm(settings)}
-          className="w-full bg-[#8A76FC] text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-[#7C5CFC] transition-colors flex items-center justify-center gap-2"
-        >
-          Confirm and export <span>→</span>
-        </button>
+        {limitReached ? (
+          <button
+            onClick={() => router.push("/pricing")}
+            className="w-full bg-red-500 text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+          >
+            View Plans
+          </button>
+        ) : (
+          <button
+            onClick={() => onConfirm(settings)}
+            disabled={exportCount === null}
+            className="w-full bg-[#8A76FC] text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-[#7C5CFC] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {exportCount === null ? "Loading..." : "Confirm and export"} <span>→</span>
+          </button>
+        )}
       </div>
     </div>
   );

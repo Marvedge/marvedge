@@ -64,8 +64,11 @@ function parseAspectRatioRatio(aspectRatio, nativeRatio) {
 }
 
 function computeTargetSizeForRatio(quality, ratio) {
-  const longSide = quality === "1080p" ? 1920 : 1280;
+  let longSide = quality === "1080p" ? 1920 : 1280;
   const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
+  if (quality !== "1080p" && Math.abs(safeRatio - 1) < 0.001) {
+    longSide = 960;
+  }
   let width;
   let height;
 
@@ -80,23 +83,6 @@ function computeTargetSizeForRatio(quality, ratio) {
   return {
     width: ensureEvenDimension(width),
     height: ensureEvenDimension(height),
-  };
-}
-
-function fitInside(maxW, maxH, ratio) {
-  const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
-  let w = maxW;
-  let h = maxH;
-  if (maxW / maxH > safeRatio) {
-    h = maxH;
-    w = h * safeRatio;
-  } else {
-    w = maxW;
-    h = w / safeRatio;
-  }
-  return {
-    width: ensureEvenDimension(w),
-    height: ensureEvenDimension(h),
   };
 }
 
@@ -504,11 +490,11 @@ async function renderChunkFromRecipe({
 
   const qSettings = recipe.settings || {
     quality: "720p",
-    fps: "30 FPS",
+    fps: "24 FPS",
     compression: "Web",
     speed: "Default",
   };
-  const targetFps = qSettings.fps === "60 FPS" ? 60 : 30;
+  const targetFps = qSettings.fps === "60 FPS" ? 60 : qSettings.fps === "30 FPS" ? 30 : 24;
   const { overrideCrf, overridePreset } = pickCompression(recipe);
   const filterThreadsEnv = Number.parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
   const filterThreads =
@@ -548,14 +534,17 @@ async function renderChunkFromRecipe({
 
   let chunkAbsStart = 0;
   let chunkAbsEnd = probe.videoDuration;
+  let timelineDuration = probe.videoDuration;
 
   if (typeof startTime === "number" && typeof duration === "number") {
     chunkAbsStart = startTime;
     chunkAbsEnd = startTime + duration;
+    timelineDuration = duration;
   } else {
     const chunkIndex = parseChunkIndex(chunkId);
     chunkAbsStart = chunkIndex * chunkDurationSecs;
     chunkAbsEnd = chunkAbsStart + (probe.videoDuration || chunkDurationSecs);
+    timelineDuration = probe.videoDuration;
   }
 
   const slicedSegments = overlapSliceAbsolute(
@@ -627,19 +616,23 @@ async function renderChunkFromRecipe({
   let targetWidth = computedTarget.width;
   let targetHeight = computedTarget.height;
 
-  const removeSegments = normalizeRemoveSegments(slicedSegments, probe.videoDuration);
-  const keepSegments = invertToKeepSegments(removeSegments, probe.videoDuration);
+  const removeSegments = normalizeRemoveSegments(slicedSegments, timelineDuration);
+  const keepSegments = invertToKeepSegments(removeSegments, timelineDuration);
   const trimmedDuration = keepSegments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
   const hasTrimEdits =
     keepSegments.length > 0 &&
     !(
       keepSegments.length === 1 &&
       keepSegments[0].start <= EPS &&
-      Math.abs(keepSegments[0].end - probe.videoDuration) <= EPS
+      Math.abs(keepSegments[0].end - timelineDuration) <= EPS
     );
   if (keepSegments.length === 0) {
     throw new Error("All video content was trimmed out.");
   }
+
+  console.log(
+    `[${chunkId}] Window timeline_duration_s=${Math.max(0, timelineDuration).toFixed(3)} trimmed_duration_s=${Math.max(0, trimmedDuration).toFixed(3)}`
+  );
 
   const remappedZoomEffects = remapZoomEffectsToTrimmedTimeline(
     slicedZoom,
@@ -703,28 +696,16 @@ async function renderChunkFromRecipe({
     recipe.selectedBackground !== "hidden" &&
     recipe.selectedBackground !== "none" &&
     recipe.selectedBackground !== "transparent";
-  const drawCardShadow = Boolean(recipe.browserFrame?.drawShadow);
+  const drawCardShadow = false;
   const drawCardBorder = Boolean(recipe.browserFrame?.drawBorder);
   const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 
-  const sourceAspect =
-    probe.sourceWidth > 0 && probe.sourceHeight > 0
-      ? probe.sourceWidth / probe.sourceHeight
-      : targetWidth / Math.max(1, targetHeight);
-  const contentBox = hasBackgroundCanvas
-    ? fitInside(targetWidth, targetHeight, sourceAspect)
-    : { width: targetWidth, height: targetHeight };
-
-  if (hasBackgroundCanvas) {
-    filters.push(
-      `${videoOut}scale=${contentBox.width}:${contentBox.height}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1[res]`
-    );
-  } else {
-    filters.push(
-      `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-        `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
-    );
-  }
+  // Keep this exactly aligned with local video-worker behavior:
+  // always normalize into target canvas first, preserving full source frame.
+  filters.push(
+    `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+      `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+  );
   videoOut = "[res]";
 
   if (remappedZoomEffects.length > 0) {
@@ -791,7 +772,7 @@ async function renderChunkFromRecipe({
           filters.push(
             `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS,` +
               `zoompan=z='${zExpr}':x='${xExpr}':y='${yExpr}':d=1:` +
-              `s=${contentBox.width}x${contentBox.height}:fps=${targetFps}[zseg${i}]`
+              `s=${targetWidth}x${targetHeight}:fps=${targetFps}[zseg${i}]`
           );
         } else {
           filters.push(
@@ -829,15 +810,9 @@ async function renderChunkFromRecipe({
       bgHex = palette[recipe.selectedBackground];
     }
 
-    const cardMaxW = Math.max(2, Math.floor((targetWidth * 0.9) / 2) * 2);
-    const cardMaxH = Math.max(2, Math.floor((targetHeight * 0.9) / 2) * 2);
-    const cardFit = fitInside(
-      cardMaxW,
-      cardMaxH,
-      contentBox.width / Math.max(1, contentBox.height)
-    );
-    const cardW = cardFit.width;
-    const cardH = cardFit.height;
+    // Match local video-worker framing (inset card based on target frame directly).
+    const cardW = Math.max(2, Math.floor((targetWidth * 0.9) / 2) * 2);
+    const cardH = Math.max(2, Math.floor((targetHeight * 0.9) / 2) * 2);
     const borderFilter = drawCardBorder ? ",drawbox=x=0:y=0:w=iw:h=ih:color=white@0.95:t=9" : "";
 
     if (hasCustomBackground) {

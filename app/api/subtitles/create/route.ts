@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { subtitleQueue } from "@/app/lib/queue";
+import { invokeGcpSubtitles } from "@/app/lib/gcpWorker";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 
 export async function POST(req: NextRequest) {
+  let createdJobId: string | null = null;
   try {
     const session = await getServerSession(authOptions);
 
@@ -57,26 +58,65 @@ export async function POST(req: NextRequest) {
         },
       },
     });
+    createdJobId = jobRecord.id;
 
-    await subtitleQueue.add(
-      "transcribe-subtitles",
-      {
-        jobId: jobRecord.id,
-        userId,
-        demoId: demoId || null,
-        videoUrl,
-        language: typeof language === "string" && language.trim() ? language.trim() : "multi",
+    const normalizedLanguage =
+      typeof language === "string" && language.trim() ? language.trim() : "multi";
+
+    await prisma.videoJob.update({
+      where: { id: jobRecord.id },
+      data: { status: "PROCESSING", progress: 10 },
+    });
+
+    const cues = await invokeGcpSubtitles({
+      videoUrl,
+      language: normalizedLanguage,
+    });
+
+    if (demoId) {
+      await prisma.demo.update({
+        where: { id: demoId },
+        data: {
+          subtitles: {
+            provider: "deepgram",
+            language: normalizedLanguage,
+            cues,
+          },
+        },
+      });
+    }
+
+    await prisma.videoJob.update({
+      where: { id: jobRecord.id },
+      data: {
+        status: "COMPLETED",
+        progress: 100,
+        jobData: {
+          kind: "SUBTITLES",
+          provider: "deepgram",
+          language: normalizedLanguage,
+          subtitles: cues,
+        },
       },
-      {
-        jobId: jobRecord.id,
-        removeOnComplete: true,
-        removeOnFail: false,
-      }
-    );
+    });
 
     return NextResponse.json({ success: true, jobId: jobRecord.id });
   } catch (err) {
     console.error("Subtitle Job Creation Error:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    if (createdJobId) {
+      await prisma.videoJob
+        .update({
+          where: { id: createdJobId },
+          data: {
+            status: "FAILED",
+            error: err instanceof Error ? err.message : "Subtitle generation failed",
+          },
+        })
+        .catch(() => {});
+    }
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

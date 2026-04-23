@@ -52,6 +52,14 @@ export default async function Page() {
     endTime: demo.endTime,
     createdAt: demo.createdAt.toISOString(),
     updatedAt: demo.updatedAt.toISOString(),
+    editing: demo.editing
+      ? (demo.editing as {
+          segments?: unknown;
+          zoom?: unknown;
+          aspectRatio?: string;
+          browserFrame?: unknown;
+        })
+      : undefined,
   }));
 
   return (

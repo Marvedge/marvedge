@@ -72,6 +72,24 @@ export async function POST(req: NextRequest) {
       upsertByDemo = true,
     } = body;
 
+    const isExempt = session.user.email === "aryaanandpathak30@gmail.com";
+    if (!isExempt) {
+      const jobCount = await prisma.videoJob.count({
+        where: { userId, status: "COMPLETED" },
+      });
+      const savedCount = await prisma.exportedVideo.count({
+        where: { userId },
+      });
+      const exportCount = Math.max(jobCount, savedCount);
+
+      if (exportCount >= 3) {
+        return NextResponse.json(
+          { error: "Free trial limit of 3 exports reached. Please upgrade to Pro." },
+          { status: 403 }
+        );
+      }
+    }
+
     if (!exportedUrl) {
       return NextResponse.json({ error: "exportedUrl is required" }, { status: 400 });
     }

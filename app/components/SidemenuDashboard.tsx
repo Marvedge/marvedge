@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Play, Settings, Clock, Share2 } from "lucide-react";
+import { Menu, X, Settings, Share2 } from "lucide-react";
 import Image from "next/image";
 
 const SidemenuDashboard = () => {
@@ -214,38 +214,7 @@ const SidemenuDashboard = () => {
             </li>
           </Link>
         </ul>
-        <div className="mt-4 sm:mt-8">
-          <Link href="/demos" onClick={closeMobileMenu}>
-            <h3
-              className={`h-8 sm:h-10 text-xs sm:text-lg font-light flex items-center justify-start gap-1 sm:gap-5 pl-1 sm:pl-2 cursor-pointer transition-colors rounded-lg ${isActive("/demos") ? "bg-[#bcb3f7] text-white" : "text-white hover:bg-[#bcb3f7]"}`}
-            >
-              <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
-                <Clock color="#fff" size={14} className="sm:w-5 sm:h-5" />
-              </span>
-              <span>RECENT</span>
-            </h3>
-          </Link>
-          <ul className="space-y-0.5 sm:space-y-1 text-xs sm:text-base font-light">
-            <li className="w-full h-8 sm:h-10 cursor-pointer rounded hover:bg-[#bcb3f7] flex items-center justify-start gap-1 sm:gap-3 px-1 sm:px-2 text-white font-light transition-colors text-xs sm:text-base">
-              <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
-                <Play color="#fff" size={14} className="sm:w-5 sm:h-5" />
-              </span>
-              <span className="truncate">Product Onboarding</span>
-            </li>
-            <li className="w-full h-8 sm:h-10 cursor-pointer rounded hover:bg-[#bcb3f7] flex items-center justify-start gap-1 sm:gap-3 px-1 sm:px-2 text-white font-light transition-colors text-xs sm:text-base">
-              <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
-                <Play color="#fff" size={14} className="sm:w-5 sm:h-5" />
-              </span>
-              <span className="truncate">Feature Walkthrough</span>
-            </li>
-            <li className="w-full h-8 sm:h-10 cursor-pointer rounded hover:bg-[#bcb3f7] flex items-center justify-start gap-1 sm:gap-3 px-1 sm:px-2 text-white font-light transition-colors text-xs sm:text-base">
-              <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
-                <Play color="#fff" size={14} className="sm:w-5 sm:h-5" />
-              </span>
-              <span className="truncate">Sales Demo</span>
-            </li>
-          </ul>
-        </div>
+        {/* Removed recent feature walkthrough & sales demo from sidebar */}
       </div>
     </>
   );

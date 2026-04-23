@@ -40,6 +40,7 @@ import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import ZoomModal from "@/app/components/ZoomModal";
 import ExportSettingsModal, { ExportSettings } from "@/app/components/ExportSettingsModal";
 import ExportResultModal from "@/app/components/ExportResultModal";
+import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
 
 type TextOverlayItem = {
   id: string;
@@ -508,15 +509,12 @@ export default function EditorPage() {
           throw new Error("Failed to read recorded video blob");
         }
         const blob = await resp.blob();
-
-        const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
-        const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-        const formData = new FormData();
-        formData.append("file", blob, "subtitle_source.webm");
-        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-        const uploadRes = await axios.post(CLOUDINARY_API_URL, formData);
-        subtitleSourceUrl = uploadRes.data.secure_url as string;
+        const upload = await uploadBlobToGcs({
+          blob,
+          filename: "subtitle_source.webm",
+          kind: "subtitle-source",
+        });
+        subtitleSourceUrl = upload.url;
       }
 
       const createRes = await axios.post("/api/subtitles/create", {
@@ -554,6 +552,11 @@ export default function EditorPage() {
       setSubtitlesLoading(false);
     }
   };
+
+  const handleSkipSubtitles = React.useCallback(() => {
+    setSubtitleCues([]);
+    toast.success("Subtitles skipped for export");
+  }, []);
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showExportResultModal, setShowExportResultModal] = useState(false);
   const [resultActionLoading, setResultActionLoading] = useState(false);
@@ -685,8 +688,8 @@ export default function EditorPage() {
       savedDemoId: editorState.savedDemoId,
       settings: {
         ...settings,
-        // We intentionally keep exports at 30fps even if UI shows 60fps.
-        fps: "30 FPS",
+        // Keep export default at 24fps for faster render throughput.
+        fps: "24 FPS",
         // Speed is controlled from the main editor controls (not export modal).
         speed:
           playbackSpeed === 1
@@ -1443,6 +1446,7 @@ export default function EditorPage() {
               setTextOverlayColor={handleTextOverlayColorChange}
               onAddTextOverlay={handleAddTextOverlay}
               onAddSubtitles={handleAddSubtitles}
+              onClearSubtitles={handleSkipSubtitles}
               subtitlesLoading={subtitlesLoading}
               hasSubtitles={subtitleCues.length > 0}
               onOpenSaveDemo={() => setShowSaveDemoModal(true)}
@@ -1510,6 +1514,7 @@ export default function EditorPage() {
                 setTextOverlayColor={handleTextOverlayColorChange}
                 onAddTextOverlay={handleAddTextOverlay}
                 onAddSubtitles={handleAddSubtitles}
+                onClearSubtitles={handleSkipSubtitles}
                 subtitlesLoading={subtitlesLoading}
                 hasSubtitles={subtitleCues.length > 0}
                 onOpenSaveDemo={() => setShowSaveDemoModal(true)}
@@ -1624,7 +1629,16 @@ export default function EditorPage() {
                               },
                             },
                           }}
-                          onError={(e) => console.error("Video failed to load", e)}
+                          onError={(e) => {
+                            const errStr = String(e);
+                            if (
+                              errStr.includes("play() request was interrupted") ||
+                              errStr.includes("AbortError")
+                            ) {
+                              return;
+                            }
+                            console.error("Video failed to load", e);
+                          }}
                           onProgress={(data) => {
                             setCurrentTime(data.playedSeconds);
                             childHandleProgress?.(data);
