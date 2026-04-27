@@ -20,6 +20,7 @@ model User {
   bio            String?
   location       String?
   website        String?
+  plan           String          @default("FREE")
   accounts       Account[]
   Demo           Demo[]
   exportedVideos ExportedVideo[]
@@ -124,11 +125,13 @@ model Slide {
 }
 
 model View {
-  id        String   @id @default(cuid())
-  demoId    String
-  timestamp DateTime @default(now())
-  duration  Int?
-  demo      Demo     @relation(fields: [demoId], references: [id])
+  id              String         @id @default(cuid())
+  demoId          String?
+  exportedVideoId String?
+  timestamp       DateTime       @default(now())
+  duration        Int?
+  demo            Demo?          @relation(fields: [demoId], references: [id])
+  exportedVideo   ExportedVideo? @relation(fields: [exportedVideoId], references: [id])
 }
 
 model VideoJob {
@@ -155,12 +158,14 @@ model ExportedVideo {
   shareableUrl   String
   sourceVideoUrl String?
   settings       Json?
+  shareCount     Int      @default(1)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   userId         String
   demoId         String?  @unique
   demo           Demo?    @relation(fields: [demoId], references: [id])
   user           User     @relation(fields: [userId], references: [id])
+  views          View[]
 
   @@index([userId, createdAt])
 }

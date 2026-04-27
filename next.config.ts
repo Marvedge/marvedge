@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        source: "/video-editor/(.*)", // Only apply these headers to pages that strictly need ffmpeg.wasm
         headers: [
           {
             key: "Cross-Origin-Opener-Policy",

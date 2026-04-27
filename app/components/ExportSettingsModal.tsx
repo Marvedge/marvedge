@@ -46,6 +46,7 @@ export default function ExportSettingsModal({
   const { data: session } = useSession();
   const router = useRouter();
   const [exportCount, setExportCount] = useState<number | null>(null);
+  const [userPlan, setUserPlan] = useState<string>("FREE");
 
   useEffect(() => {
     if (isOpen) {
@@ -56,12 +57,15 @@ export default function ExportSettingsModal({
           if (res.data && typeof res.data.count === "number") {
             setExportCount(res.data.count);
           }
+          if (res.data && res.data.plan) {
+            setUserPlan(res.data.plan);
+          }
         })
         .catch((err) => console.error("Could not fetch export count", err));
     }
   }, [isOpen, defaultSettings]);
 
-  const isExempt = session?.user?.email === "aryaanandpathak30@gmail.com";
+  const isExempt = session?.user?.email === "aryaanandpathak30@gmail.com" || userPlan === "PRO" || userPlan === "ENTERPRISE";
   const limitReached = !isExempt && exportCount !== null && exportCount >= 3;
 
   // Basic heuristic for file size estimation based on duration and settings
@@ -215,22 +219,21 @@ export default function ExportSettingsModal({
               Your free trial of 3 exports has expired please subscribe to our premium plan
             </h3>
           </div>
-        ) : (
+        ) : !isExempt ? (
           <div className="bg-[#EAE5FB] rounded-xl p-4 mb-6">
             <h3 className="text-[#8A76FC] text-[15px] font-medium">
-              You have {isExempt ? "unlimited" : `${Math.max(0, 3 - (exportCount || 0))}/3`} free
-              exports left.
+              You have {Math.max(0, 3 - (exportCount || 0))}/3 free exports left.
             </h3>
             <p className="text-[#8A76FC] text-[13px] opacity-80">
               Free trial exports include a watermark on videos
             </p>
           </div>
-        )}
+        ) : null}
 
         {/* Confirm Action */}
         {limitReached ? (
           <button
-            onClick={() => router.push("/pricing")}
+            onClick={() => router.push("/pricing?returnUrl=" + encodeURIComponent(window.location.href))}
             className="w-full bg-red-500 text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
           >
             View Plans

@@ -1,23 +1,85 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { motion, useInView, easeOut } from "framer-motion";
 import { Check } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import Script from "next/script";
+import { toast } from "react-hot-toast";
 
 const Pricing: React.FC = () => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-50px" });
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status } = useSession();
+  const [loading, setLoading] = useState(false);
 
-  const handleAuthRedirect = () => {
-    if (status === "authenticated") {
-      // In the future this will open checkout, for now we do nothing or go to dashboard
-      console.log("Proceed to checkout / Stripe integration");
-    } else {
-      router.push("/auth/signup");
+  const pathname = usePathname();
+
+  const handleAuthRedirect = async (amount: number, plan: string) => {
+    if (amount === 0) {
+      router.push("/dashboard");
+      return;
+    }
+
+    if (status !== "authenticated") {
+      toast.error("Please login first to subscribe.");
+      router.push("/api/auth/signin?callbackUrl=" + encodeURIComponent(window.location.href));
+      return;
+    }
+
+    setLoading(true);
+    try {
+        const res = await fetch("/api/create-order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount }),
+        });
+        const data = await res.json();
+
+        const paymentData = {
+            key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+            order_id: data.id,
+            amount: data.amount,
+            currency: data.currency,
+            name: "Marvedge",
+            description: `Payment for ${plan} plan`,
+            handler: async function (response: any) {
+                try {
+                    const verifyRes = await fetch("/api/verify-payment", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(response),
+                    });
+                    const verifyData = await verifyRes.json();
+                    if (verifyData.success) {
+                        toast.success("Payment Successful!");
+                        const returnUrl = searchParams?.get("returnUrl");
+                        if (returnUrl) {
+                            const url = new URL(returnUrl, window.location.origin);
+                            url.searchParams.set("subscribed", "true");
+                            router.push(url.toString());
+                        } else {
+                            router.push("/dashboard?subscribed=true");
+                        }
+                    } else {
+                        toast.error("Payment verification failed.");
+                    }
+                } catch (err) {
+                    toast.error("Error verifying payment.");
+                }
+            },
+        };
+
+        const payment = new (window as any).Razorpay(paymentData);
+        payment.open();
+    } catch (error) {
+        console.error("Payment failed", error);
+        toast.error("Failed to open payment gateway.");
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -28,24 +90,27 @@ const Pricing: React.FC = () => {
       className="w-full bg-white pt-16 pb-24 px-4 sm:px-6 lg:px-8 relative z-10"
       style={{ fontFamily: "var(--font-raleway)" }}
     >
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
       <div className="max-w-7xl auto mx-auto">
         {/* Header */}
-        <motion.div
-          className="text-center mb-16"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: isInView ? 1 : 0, y: isInView ? 0 : 30 }}
-          transition={{ duration: 0.6, ease: easeOut }}
-        >
-          <div className="inline-block bg-[#EBE5FF] text-[#514088] rounded-full px-6 py-2 text-sm font-semibold mb-6">
-            Pricing Plans
-          </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-[#3B3356] mb-4">
-            Simple, <span className="text-[#8C5BFF]">Transparent Pricing</span>
-          </h2>
-          <p className="text-[#666666] text-lg max-w-2xl mx-auto">
-            All plans include a 14-day free trial with no credit card required.
-          </p>
-        </motion.div>
+        {pathname !== "/pricing" && (
+          <motion.div
+            className="text-center mb-16"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: isInView ? 1 : 0, y: isInView ? 0 : 30 }}
+            transition={{ duration: 0.6, ease: easeOut }}
+          >
+            <div className="inline-block bg-[#EBE5FF] text-[#514088] rounded-full px-6 py-2 text-sm font-semibold mb-6">
+              Pricing Plans
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold text-[#3B3356] mb-4">
+              Simple, <span className="text-[#8C5BFF]">Transparent Pricing</span>
+            </h2>
+            <p className="text-[#666666] text-lg max-w-2xl mx-auto">
+              All plans include a 14-day free trial with no credit card required.
+            </p>
+          </motion.div>
+        )}
 
         {/* Pricing Cards */}
         <div className="flex flex-col lg:flex-row justify-center items-stretch gap-8 lg:gap-10 mt-12 px-4 max-w-6xl mx-auto">
@@ -67,7 +132,7 @@ const Pricing: React.FC = () => {
               </div>
             </div>
             <button
-              onClick={handleAuthRedirect}
+              onClick={() => handleAuthRedirect(0, "free")}
               className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8"
             >
               Get Started
@@ -116,10 +181,11 @@ const Pricing: React.FC = () => {
               </div>
             </div>
             <button
-              onClick={handleAuthRedirect}
-              className="w-full bg-white hover:bg-gray-50 text-[#8C5BFF] font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8 shadow-md"
+              onClick={() => handleAuthRedirect(49, "pro")}
+              className="w-full bg-white hover:bg-gray-50 text-[#8C5BFF] font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8 shadow-md disabled:opacity-50"
+              disabled={loading}
             >
-              Start Free Trial
+              {loading ? "Loading..." : "Start Free Trial"}
             </button>
             <div className="flex-1">
               <ul className="space-y-4">
@@ -156,10 +222,10 @@ const Pricing: React.FC = () => {
               <span className="text-4xl font-extrabold text-[#1A1A1A]">Enterprise</span>
             </div>
             <button
-              onClick={handleAuthRedirect}
+              onClick={() => handleAuthRedirect(0, "enterprise")}
               className="w-full bg-[#8C5BFF] hover:bg-[#7a4fcf] text-white font-semibold rounded-xl py-4 text-lg transition-colors cursor-pointer mb-8"
             >
-              Start Free Trial
+              Contact Us
             </button>
             <div className="flex-1">
               <ul className="space-y-4">

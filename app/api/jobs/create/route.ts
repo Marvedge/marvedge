@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
           session.user.email ? { email: session.user.email } : undefined,
         ].filter(Boolean) as Array<{ id?: string; email?: string }>,
       },
-      select: { id: true },
+      select: { id: true, plan: true },
     });
 
     if (!user) {
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const userId = user.id;
 
-    const isExempt = session.user.email === "aryaanandpathak30@gmail.com";
+    const isExempt = session.user.email === "aryaanandpathak30@gmail.com" || user.plan === "PRO" || user.plan === "ENTERPRISE";
     if (!isExempt) {
       const jobCount = await prisma.videoJob.count({
         where: { userId, status: "COMPLETED" },

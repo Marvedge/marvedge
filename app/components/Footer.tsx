@@ -5,6 +5,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer, toast } from "react-toastify";
 import Image from "next/image";
 import { motion, useInView, easeOut, useScroll, useTransform } from "framer-motion";
+import { usePathname } from "next/navigation";
 
 const socialIcons = [
   {
@@ -470,6 +471,7 @@ const WaitlistSection: React.FC = () => {
 
 const Footer: React.FC = () => {
   const sectionRef = useRef(null);
+  const pathname = usePathname();
   // Set `once: true` to trigger only once when section enters viewport
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
   const { scrollYProgress } = useScroll({
@@ -482,7 +484,7 @@ const Footer: React.FC = () => {
 
   return (
     <>
-      <WaitlistSection />
+      {pathname !== "/pricing" && <WaitlistSection />}
       <div ref={sectionRef} className="w-full bg-[#261753] min-h-[40vh] relative overflow-hidden">
         <motion.div
           className="absolute top-20 left-1/4 w-32 h-32 bg-purple-900 rounded-full opacity-10"

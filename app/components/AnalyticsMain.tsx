@@ -1,15 +1,41 @@
 "use client";
 
-import { Eye, CheckCircle, Clock, MousePointerClick } from "lucide-react";
+import { Eye, CheckCircle, Clock, Share2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 export const metadata = {
   title: "Settings",
   icon: "/icons/settings.svg",
 };
-const AnalyticsMain = () => {
+
+type AnalyticsMainProps = {
+  totalViews?: number;
+  avgDuration?: string;
+  completionRate?: string;
+  activeShares?: number;
+  topDemos?: { title: string; views: number }[];
+  viewsOverTime?: { date: string; views: number }[];
+};
+
+const AnalyticsMain = ({
+  totalViews = 0,
+  avgDuration = "0m 0s",
+  completionRate = "0%",
+  activeShares = 0,
+  topDemos = [],
+  viewsOverTime = [],
+}: AnalyticsMainProps) => {
   const [isVisible, setIsVisible] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
@@ -29,8 +55,8 @@ const AnalyticsMain = () => {
     {
       id: "views",
       label: "Total Views",
-      value: "0",
-      trend: "+23.2%",
+      value: totalViews.toString(),
+      trend: "+12%",
       trendLabel: "vs last month",
       icon: <Eye className="w-6 h-6 md:w-7 md:h-7 text-[#8A76FC]" />,
       bgColor: "bg-[#C5B6F1]/19",
@@ -41,7 +67,7 @@ const AnalyticsMain = () => {
     {
       id: "completion",
       label: "Completion Rate",
-      value: "0%",
+      value: completionRate,
       trend: "+5.2%",
       trendLabel: "vs last month",
       icon: <CheckCircle className="w-6 h-6 md:w-7 md:h-7 text-[#2F80EC]" />,
@@ -53,8 +79,8 @@ const AnalyticsMain = () => {
     {
       id: "duration",
       label: "Avg Duration",
-      value: "2m 34s",
-      trend: "+12s",
+      value: avgDuration,
+      trend: "+2s",
       trendLabel: "vs last month",
       icon: <Clock className="w-6 h-6 md:w-7 md:h-7 text-[#6356D7]" />,
       bgColor: "bg-[#261753]/6",
@@ -63,18 +89,24 @@ const AnalyticsMain = () => {
       textColor: "text-[#261753]",
     },
     {
-      id: "ctr",
-      label: "Click through rate",
-      value: "4.8%",
-      trend: "+0.3%",
+      id: "shares",
+      label: "Active Shares",
+      value: activeShares.toString(),
+      trend: "+8.3%",
       trendLabel: "vs last month",
-      icon: <MousePointerClick className="w-6 h-6 md:w-7 md:h-7 text-[#E33629]" />,
+      icon: <Share2 className="w-6 h-6 md:w-7 md:h-7 text-[#E33629]" />,
       bgColor: "bg-[#DE610E]/10",
       hoverColor: "from-[#F9E6E6] to-[#E33629]",
       shadow: "shadow-[#E33629]/50",
       textColor: "text-[#261753]",
     },
   ];
+
+  const chartData = viewsOverTime.length
+    ? viewsOverTime
+    : [
+        { date: "No data", views: 0 },
+      ];
 
   return (
     <div className="p-4 md:p-8 bg-[#F1ECFF] min-h-screen">
@@ -145,31 +177,61 @@ const AnalyticsMain = () => {
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: 1.01 }}
           transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
           className="bg-[#FBF9FF] rounded-[20px] p-8 shadow-sm min-h-[350px] flex flex-col"
         >
-          <div className="mb-6">
-            <h3 className="text-[22px] font-semibold text-[#2D2154] leading-tight">
-              Views over time
-            </h3>
-            <p className="text-base text-[#8C82B4] mt-1">Demo views in last 30 days</p>
+          <div className="mb-6 flex justify-between items-start">
+            <div>
+              <h3 className="text-[22px] font-semibold text-[#2D2154] leading-tight">
+                Views over time
+              </h3>
+              <p className="text-base text-[#8C82B4] mt-1">Demo views tracking</p>
+            </div>
+            <select className="border border-[#E5DCFF] text-sm text-[#2D2154] rounded-lg px-3 py-1.5 bg-white outline-none">
+              <option>Past 30 days</option>
+              <option>Past 3 months</option>
+              <option>Past 1 year</option>
+            </select>
           </div>
-          <div className="flex-1 rounded-2xl flex flex-col items-center justify-center px-6 py-10 text-center">
-            <Eye className="w-10 h-10 text-[#C5B6F1] mb-4" />
-            <p className="text-[#7569A5] font-semibold text-base">
-              Chart visualization would go here
-            </p>
-            <p className="text-base text-[#8C82B4] mt-1">Showing growth trend over time</p>
+          <div className="flex-1 w-full h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5DCFF" />
+                <XAxis 
+                  dataKey="date" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#8C82B4', fontSize: 12 }} 
+                  dy={10}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#8C82B4', fontSize: 12 }}
+                  dx={-10}
+                />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                  labelStyle={{ color: '#8C82B4', fontWeight: 600, marginBottom: '4px' }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="views" 
+                  stroke="#8A76FC" 
+                  strokeWidth={4} 
+                  dot={{ r: 4, fill: '#8A76FC', strokeWidth: 2, stroke: '#fff' }}
+                  activeDot={{ r: 6 }} 
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: 1.01 }}
           transition={{ duration: 0.6, ease: "easeOut", delay: 0.4 }}
           className="bg-[#FBF9FF] rounded-[20px] p-8 shadow-sm min-h-[350px] flex flex-col"
         >
@@ -177,22 +239,33 @@ const AnalyticsMain = () => {
             <h3 className="text-[22px] font-semibold text-[#2D2154] leading-tight">
               Top performing Demos
             </h3>
-            <p className="text-base text-[#8C82B4] mt-1">Your best performing demos this month</p>
+            <p className="text-base text-[#8C82B4] mt-1">Your most viewed demos</p>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
-            <div className="bg-[#F6F3FF] p-4 rounded-full">
-              <Image
-                src="/icons/ana-tick.svg"
-                alt="Notifications"
-                width={20}
-                height={20}
-                className="md:w-6 md:h-6"
-              />
-            </div>
-            <p className="text-[#7569A5] font-semibold text-base">No Analytics yet</p>
-            <p className="text-base text-[#8C82B4]">
-              Create and share demos to share performance data
-            </p>
+          <div className="flex-1 flex flex-col gap-3">
+            {topDemos.length > 0 ? (
+              topDemos.map((demo, i) => (
+                <div key={i} className="flex justify-between items-center bg-white border border-[#E5DCFF] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#EAE5FB] flex items-center justify-center text-[#8A76FC] font-semibold">
+                      {i + 1}
+                    </div>
+                    <p className="font-medium text-[#2D2154] truncate max-w-[200px] md:max-w-[250px]">{demo.title}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[#6356D7] bg-[#F4F1FD] px-3 py-1 rounded-full">
+                    <Eye size={14} />
+                    <span className="font-semibold text-sm">{demo.views} views</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
+                <div className="bg-[#F6F3FF] p-4 rounded-full">
+                  <Image src="/icons/ana-tick.svg" alt="Notifications" width={20} height={20} className="md:w-6 md:h-6" />
+                </div>
+                <p className="text-[#7569A5] font-semibold text-base">No Analytics yet</p>
+                <p className="text-base text-[#8C82B4]">Create and share demos to see performance data</p>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

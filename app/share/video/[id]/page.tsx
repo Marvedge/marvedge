@@ -28,6 +28,7 @@ export default async function SharedExportedVideoPage({ params }: PageProps) {
       videoUrl={video.exportedUrl || ""}
       backgroundStyle={{}}
       aspectRatio="native"
+      videoId={id}
     />
   );
 }
