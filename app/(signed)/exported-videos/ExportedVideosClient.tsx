@@ -349,7 +349,10 @@ export default function ExportedVideosClient() {
                             className="text-[#A594F9] hover:text-[#7C6FEF] text-xl cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setShareVideo({ id: video.id, title: video.title });
+                              setShareVideo({
+                                id: video.id,
+                                title: video.title,
+                              });
                             }}
                           >
                             <FaShareAlt />

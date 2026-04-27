@@ -32,54 +32,59 @@ const Pricing: React.FC = () => {
 
     setLoading(true);
     try {
-        const res = await fetch("/api/create-order", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ amount }),
-        });
-        const data = await res.json();
+      const res = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+      const data = await res.json();
 
-        const paymentData = {
-            key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-            order_id: data.id,
-            amount: data.amount,
-            currency: data.currency,
-            name: "Marvedge",
-            description: `Payment for ${plan} plan`,
-            handler: async function (response: any) {
-                try {
-                    const verifyRes = await fetch("/api/verify-payment", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(response),
-                    });
-                    const verifyData = await verifyRes.json();
-                    if (verifyData.success) {
-                        toast.success("Payment Successful!");
-                        const returnUrl = searchParams?.get("returnUrl");
-                        if (returnUrl) {
-                            const url = new URL(returnUrl, window.location.origin);
-                            url.searchParams.set("subscribed", "true");
-                            router.push(url.toString());
-                        } else {
-                            router.push("/dashboard?subscribed=true");
-                        }
-                    } else {
-                        toast.error("Payment verification failed.");
-                    }
-                } catch (err) {
-                    toast.error("Error verifying payment.");
-                }
-            },
-        };
+      const paymentData = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        order_id: data.id,
+        amount: data.amount,
+        currency: data.currency,
+        name: "Marvedge",
+        description: `Payment for ${plan} plan`,
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            const verifyRes = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              toast.success("Payment Successful!");
+              const returnUrl = searchParams?.get("returnUrl");
+              if (returnUrl) {
+                const url = new URL(returnUrl, window.location.origin);
+                url.searchParams.set("subscribed", "true");
+                router.push(url.toString());
+              } else {
+                router.push("/dashboard?subscribed=true");
+              }
+            } else {
+              toast.error("Payment verification failed.");
+            }
+          } catch {
+            toast.error("Error verifying payment.");
+          }
+        },
+      };
 
-        const payment = new (window as any).Razorpay(paymentData);
-        payment.open();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payment = new (window as any).Razorpay(paymentData);
+      payment.open();
     } catch (error) {
-        console.error("Payment failed", error);
-        toast.error("Failed to open payment gateway.");
+      console.error("Payment failed", error);
+      toast.error("Failed to open payment gateway.");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 

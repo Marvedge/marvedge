@@ -36,27 +36,37 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
-const workerConcurrency = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || "1", 10) || 1);
+const workerConcurrency = Math.max(
+  1,
+  parseInt(process.env.WORKER_CONCURRENCY || "1", 10) || 1,
+);
 const prisma = new PrismaClient({
   datasourceUrl: (process.env.DATABASE_URL || "").replace(
     "?sslmode=require",
-    "?sslmode=require&connect_timeout=30"
+    "?sslmode=require&connect_timeout=30",
   ),
 });
 
-console.log(`🧩 Env check: DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ? "set" : "missing"}`);
+console.log(
+  `🧩 Env check: DEEPGRAM_API_KEY=${process.env.DEEPGRAM_API_KEY ? "set" : "missing"}`,
+);
 
 // Retry wrapper for Neon cold-start (free tier suspends after 5 min inactivity)
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delayMs = 2000,
+): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
     } catch (e: any) {
       const isConnErr =
-        e?.message?.includes("Can't reach database") || e?.message?.includes("connect");
+        e?.message?.includes("Can't reach database") ||
+        e?.message?.includes("connect");
       if (isConnErr && i < retries - 1) {
         console.warn(
-          `[DB] Connection failed (attempt ${i + 1}/${retries}), retrying in ${delayMs}ms...`
+          `[DB] Connection failed (attempt ${i + 1}/${retries}), retrying in ${delayMs}ms...`,
         );
         await new Promise((r) => setTimeout(r, delayMs));
       } else {
@@ -75,10 +85,14 @@ cloudinary.config({
 
 function listEncoders(): Set<string> {
   try {
-    const out = execFileSync(ffmpegStatic as string, ["-hide_banner", "-encoders"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    const out = execFileSync(
+      ffmpegStatic as string,
+      ["-hide_banner", "-encoders"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
     const enc = new Set<string>();
     for (const line of out.split("\n")) {
       // Typical format: " V....D h264_videotoolbox VideoToolbox H.264 Encoder"
@@ -102,7 +116,10 @@ function pickVideoEncoder(preferred: string | null | undefined) {
   }
 
   // Auto-pick best available.
-  if (process.platform === "darwin" && AVAILABLE_ENCODERS.has("h264_videotoolbox")) {
+  if (
+    process.platform === "darwin" &&
+    AVAILABLE_ENCODERS.has("h264_videotoolbox")
+  ) {
     return { encoder: "h264_videotoolbox", available: true };
   }
   if (AVAILABLE_ENCODERS.has("h264_nvenc")) {
@@ -148,14 +165,19 @@ type TextRange = {
 
 const EPS = 0.001;
 
-function normalizeRemoveSegments(rawSegments: any[], duration: number): TimeRange[] {
+function normalizeRemoveSegments(
+  rawSegments: any[],
+  duration: number,
+): TimeRange[] {
   if (!rawSegments || rawSegments.length === 0) {
     return [];
   }
 
   const cleaned = rawSegments
     .map((s: any) => ({ start: toSeconds(s.start), end: toSeconds(s.end) }))
-    .filter((s: TimeRange) => Number.isFinite(s.start) && Number.isFinite(s.end))
+    .filter(
+      (s: TimeRange) => Number.isFinite(s.start) && Number.isFinite(s.end),
+    )
     .map((s: TimeRange) => ({
       start: Math.max(0, Math.min(duration, Math.min(s.start, s.end))),
       end: Math.max(0, Math.min(duration, Math.max(s.start, s.end))),
@@ -180,7 +202,10 @@ function normalizeRemoveSegments(rawSegments: any[], duration: number): TimeRang
   return merged;
 }
 
-function invertToKeepSegments(removeSegments: TimeRange[], duration: number): TimeRange[] {
+function invertToKeepSegments(
+  removeSegments: TimeRange[],
+  duration: number,
+): TimeRange[] {
   if (duration <= EPS) {
     return [];
   }
@@ -218,9 +243,13 @@ function buildRemovedBefore(removeSegments: TimeRange[]) {
 function remapZoomEffectsToTrimmedTimeline(
   rawZoomEffects: any[],
   keepSegments: TimeRange[],
-  removeSegments: TimeRange[]
+  removeSegments: TimeRange[],
 ): ZoomRange[] {
-  if (!rawZoomEffects || rawZoomEffects.length === 0 || keepSegments.length === 0) {
+  if (
+    !rawZoomEffects ||
+    rawZoomEffects.length === 0 ||
+    keepSegments.length === 0
+  ) {
     return [];
   }
 
@@ -240,7 +269,7 @@ function remapZoomEffectsToTrimmedTimeline(
         Number.isFinite(z.endTime) &&
         Number.isFinite(z.zoomLevel) &&
         Number.isFinite(z.x) &&
-        Number.isFinite(z.y)
+        Number.isFinite(z.y),
     )
     .map((z: ZoomRange) => ({
       startTime: Math.min(z.startTime, z.endTime),
@@ -277,9 +306,13 @@ function remapZoomEffectsToTrimmedTimeline(
 function remapTextOverlaysToTrimmedTimeline(
   rawTextOverlays: any[],
   keepSegments: TimeRange[],
-  removeSegments: TimeRange[]
+  removeSegments: TimeRange[],
 ): TextRange[] {
-  if (!rawTextOverlays || rawTextOverlays.length === 0 || keepSegments.length === 0) {
+  if (
+    !rawTextOverlays ||
+    rawTextOverlays.length === 0 ||
+    keepSegments.length === 0
+  ) {
     return [];
   }
 
@@ -301,7 +334,7 @@ function remapTextOverlaysToTrimmedTimeline(
         Number.isFinite(t.endTime) &&
         Number.isFinite(t.x) &&
         Number.isFinite(t.y) &&
-        Number.isFinite(t.fontSize)
+        Number.isFinite(t.fontSize),
     )
     .map((t: TextRange) => ({
       startTime: Math.min(t.startTime, t.endTime),
@@ -312,7 +345,10 @@ function remapTextOverlaysToTrimmedTimeline(
       fontSize: Math.max(10, Math.min(160, Math.round(t.fontSize))),
       color: t.color,
     }))
-    .filter((t: TextRange) => t.text.trim().length > 0 && t.endTime - t.startTime > EPS)
+    .filter(
+      (t: TextRange) =>
+        t.text.trim().length > 0 && t.endTime - t.startTime > EPS,
+    )
     .sort((a: TextRange, b: TextRange) => a.startTime - b.startTime);
 
   for (const t of sorted) {
@@ -363,7 +399,7 @@ function normalizeHexColor(input: string, fallback = "white"): string {
 
 function writeTextOverlayFiles(
   tempDir: string,
-  overlays: TextRange[]
+  overlays: TextRange[],
 ): { path: string; overlay: TextRange }[] {
   return overlays.map((overlay, idx) => {
     const p = path.join(tempDir, `text-${idx}.txt`);
@@ -397,11 +433,14 @@ function writeRoundedMaskPgm(
   outputPath: string,
   width: number,
   height: number,
-  radius: number
+  radius: number,
 ): void {
   const w = Math.max(2, Math.floor(width));
   const h = Math.max(2, Math.floor(height));
-  const r = Math.max(0, Math.min(Math.floor(radius), Math.floor(Math.min(w, h) / 2)));
+  const r = Math.max(
+    0,
+    Math.min(Math.floor(radius), Math.floor(Math.min(w, h) / 2)),
+  );
 
   const header = Buffer.from(`P5\n${w} ${h}\n255\n`, "ascii");
   const pixels = Buffer.alloc(w * h);
@@ -447,7 +486,7 @@ type SubtitleCue = { start: number; end: number; text: string };
 function remapSubtitleCuesToTrimmedTimeline(
   rawCues: any[],
   keepSegments: TimeRange[],
-  removeSegments: TimeRange[]
+  removeSegments: TimeRange[],
 ): SubtitleCue[] {
   if (!rawCues || rawCues.length === 0 || keepSegments.length === 0) {
     return [];
@@ -460,7 +499,8 @@ function remapSubtitleCuesToTrimmedTimeline(
       text: String(c.text ?? "").trim(),
     }))
     .filter(
-      (c: SubtitleCue) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0
+      (c: SubtitleCue) =>
+        Number.isFinite(c.start) && Number.isFinite(c.end) && c.text.length > 0,
     )
     .map((c: SubtitleCue) => ({
       start: Math.min(c.start, c.end),
@@ -513,7 +553,12 @@ function escapeAssText(text: string): string {
     .replace(/}/g, ")");
 }
 
-function writeAssSubtitles(tempDir: string, cues: SubtitleCue[], w: number, h: number): string {
+function writeAssSubtitles(
+  tempDir: string,
+  cues: SubtitleCue[],
+  w: number,
+  h: number,
+): string {
   const fontSize = Math.max(20, Math.min(58, Math.round(h * 0.05)));
   const marginV = Math.max(20, Math.min(96, Math.round(h * 0.06)));
   const outline = Math.max(1, Math.min(4, Math.round(fontSize / 16)));
@@ -548,7 +593,9 @@ function writeAssSubtitles(tempDir: string, cues: SubtitleCue[], w: number, h: n
 }
 
 function pickBestMicAudioStreamIndex(meta: any): number | null {
-  const audioStreams = (meta?.streams || []).filter((s: any) => s.codec_type === "audio");
+  const audioStreams = (meta?.streams || []).filter(
+    (s: any) => s.codec_type === "audio",
+  );
   if (audioStreams.length === 0) {
     return null;
   }
@@ -569,10 +616,11 @@ function pickBestMicAudioStreamIndex(meta: any): number | null {
 async function extractAudioWav16kMono(
   inputPath: string,
   outputPath: string,
-  audioStreamIndex: number | null
+  audioStreamIndex: number | null,
 ): Promise<void> {
   const cmd = ffmpeg(inputPath);
-  const map = audioStreamIndex != null ? [`-map 0:${audioStreamIndex}`] : ["-map 0:a:0"];
+  const map =
+    audioStreamIndex != null ? [`-map 0:${audioStreamIndex}`] : ["-map 0:a:0"];
   cmd
     .noVideo()
     .audioChannels(1)
@@ -638,7 +686,10 @@ function buildSubtitleCuesFromDeepgramWords(words: any[]): SubtitleCue[] {
     .filter((c) => c.text.trim().length > 0 && c.end - c.start > 0.01);
 }
 
-async function transcribeWithDeepgram(wavPath: string, language: string): Promise<SubtitleCue[]> {
+async function transcribeWithDeepgram(
+  wavPath: string,
+  language: string,
+): Promise<SubtitleCue[]> {
   const apiKey = (process.env.DEEPGRAM_API_KEY || "").trim();
   if (!apiKey) {
     throw new Error("Missing DEEPGRAM_API_KEY");
@@ -673,19 +724,24 @@ async function transcribeWithDeepgram(wavPath: string, language: string): Promis
   const words =
     data?.results?.channels?.[0]?.alternatives?.[0]?.words ||
     data?.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs?.flatMap(
-      (p: any) => p.words
+      (p: any) => p.words,
     ) ||
     [];
 
   return buildSubtitleCuesFromDeepgramWords(words);
 }
 
-function parseAspectRatioRatio(aspectRatio: string | null | undefined, fallback: number): number {
+function parseAspectRatioRatio(
+  aspectRatio: string | null | undefined,
+  fallback: number,
+): number {
   if (!aspectRatio || aspectRatio === "native") {
     return fallback;
   }
 
-  const [wStr, hStr] = aspectRatio.includes(":") ? aspectRatio.split(":") : aspectRatio.split("/");
+  const [wStr, hStr] = aspectRatio.includes(":")
+    ? aspectRatio.split(":")
+    : aspectRatio.split("/");
   const w = Number(wStr);
   const h = Number(hStr);
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
@@ -702,7 +758,7 @@ function ensureEvenDimension(value: number): number {
 
 function computeTargetSizeForRatio(
   quality: string,
-  ratio: number
+  ratio: number,
 ): { width: number; height: number } {
   const longSide = quality === "720p" ? 1280 : 1920;
   const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
@@ -784,11 +840,14 @@ const worker = new Worker(
         : "libx264";
     console.log(
       `[${jobId}] Encoder selection: requested=${process.env.FFMPEG_VIDEO_CODEC || "auto"} ` +
-        `picked=${picked.encoder} available=${picked.available} using=${videoEncoder}`
+        `picked=${picked.encoder} available=${picked.available} using=${videoEncoder}`,
     );
 
     // Parallelize filter evaluation (especially helps with zoompan + overlays).
-    const filterThreadsEnv = parseInt(process.env.FFMPEG_FILTER_THREADS || "", 10);
+    const filterThreadsEnv = parseInt(
+      process.env.FFMPEG_FILTER_THREADS || "",
+      10,
+    );
     const filterThreads =
       Number.isFinite(filterThreadsEnv) && filterThreadsEnv > 0
         ? filterThreadsEnv
@@ -816,14 +875,15 @@ const worker = new Worker(
     const bgPath = path.join(tempDir, "background.png");
     const outputPath = path.join(tempDir, "output.mp4");
     const roundedMaskPath = path.join(tempDir, "rounded-mask.pgm");
-    const hasCustomBackground = selectedBackground === "custom" && !!customBackgroundUrl;
+    const hasCustomBackground =
+      selectedBackground === "custom" && !!customBackgroundUrl;
 
     try {
       await withRetry(() =>
         prisma.videoJob.update({
           where: { id: jobId },
           data: { status: "PROCESSING", progress: 5 },
-        })
+        }),
       );
       await job.updateProgress(5);
 
@@ -835,53 +895,72 @@ const worker = new Worker(
         console.log(`[${jobId}] Downloading custom background...`);
         await downloadFile(customBackgroundUrl, bgPath);
       }
-      console.log(`[${jobId}] Download completed in ${Date.now() - downloadStartTs}ms`);
+      console.log(
+        `[${jobId}] Download completed in ${Date.now() - downloadStartTs}ms`,
+      );
       await job.updateProgress(20);
       await withRetry(() =>
         prisma.videoJob.update({
           where: { id: jobId },
           data: { progress: 20 },
-        })
+        }),
       );
 
       // ── 2. Probe ─────────────────────────────────────────────────────────────
       const probeStartTs = Date.now();
-      const { hasAudio, videoDuration, sourceWidth, sourceHeight } = await new Promise<{
-        hasAudio: boolean;
-        videoDuration: number;
-        sourceWidth: number;
-        sourceHeight: number;
-      }>((res, rej) => {
-        ffmpeg.ffprobe(inputPath, (err, meta) => {
-          if (err) {
-            return rej(err);
-          }
-          const videoStream = meta.streams.find((s) => s.codec_type === "video");
-          res({
-            hasAudio: meta.streams.some((s) => s.codec_type === "audio"),
-            videoDuration: meta.format.duration || 0,
-            sourceWidth: Number(videoStream?.width || 0),
-            sourceHeight: Number(videoStream?.height || 0),
+      const { hasAudio, videoDuration, sourceWidth, sourceHeight } =
+        await new Promise<{
+          hasAudio: boolean;
+          videoDuration: number;
+          sourceWidth: number;
+          sourceHeight: number;
+        }>((res, rej) => {
+          ffmpeg.ffprobe(inputPath, (err, meta) => {
+            if (err) {
+              return rej(err);
+            }
+            const videoStream = meta.streams.find(
+              (s) => s.codec_type === "video",
+            );
+            res({
+              hasAudio: meta.streams.some((s) => s.codec_type === "audio"),
+              videoDuration: meta.format.duration || 0,
+              sourceWidth: Number(videoStream?.width || 0),
+              sourceHeight: Number(videoStream?.height || 0),
+            });
           });
         });
-      });
-      const nativeRatio = sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
+      const nativeRatio =
+        sourceWidth > 0 && sourceHeight > 0
+          ? sourceWidth / sourceHeight
+          : 16 / 9;
       const selectedRatio = parseAspectRatioRatio(aspectRatio, nativeRatio);
-      const computedTarget = computeTargetSizeForRatio(qSettings.quality, selectedRatio);
+      const computedTarget = computeTargetSizeForRatio(
+        qSettings.quality,
+        selectedRatio,
+      );
       targetWidth = computedTarget.width;
       targetHeight = computedTarget.height;
 
       console.log(
         `[${jobId}] Duration=${videoDuration}s hasAudio=${hasAudio} source=${sourceWidth}x${sourceHeight} ` +
-          `aspect=${aspectRatio || "native"} target=${targetWidth}x${targetHeight}`
+          `aspect=${aspectRatio || "native"} target=${targetWidth}x${targetHeight}`,
       );
-      console.log(`[${jobId}] Probe completed in ${Date.now() - probeStartTs}ms`);
+      console.log(
+        `[${jobId}] Probe completed in ${Date.now() - probeStartTs}ms`,
+      );
 
       // ── 3. Build edit timeline (deterministic trim + remapped zoom) ──────────
       // segments = array of REMOVE regions from timeline
-      const removeSegments = normalizeRemoveSegments(segments || [], videoDuration);
+      const removeSegments = normalizeRemoveSegments(
+        segments || [],
+        videoDuration,
+      );
       const keepSegments = invertToKeepSegments(removeSegments, videoDuration);
-      const trimmedDuration = keepSegments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+      const trimmedDuration = keepSegments.reduce(
+        (sum, seg) => sum + (seg.end - seg.start),
+        0,
+      );
       const hasTrimEdits =
         keepSegments.length > 0 &&
         !(
@@ -891,18 +970,20 @@ const worker = new Worker(
         );
 
       if (keepSegments.length === 0) {
-        throw new Error("All video content was trimmed out. Keep at least a small range.");
+        throw new Error(
+          "All video content was trimmed out. Keep at least a small range.",
+        );
       }
 
       const remappedZoomEffects = remapZoomEffectsToTrimmedTimeline(
         zoomEffects || [],
         keepSegments,
-        removeSegments
+        removeSegments,
       );
       const remappedTextOverlays = remapTextOverlaysToTrimmedTimeline(
         textOverlays || [],
         keepSegments,
-        removeSegments
+        removeSegments,
       );
       let rawSubtitleCues: SubtitleCue[] = [];
       if (Array.isArray(subtitles)) {
@@ -927,7 +1008,7 @@ const worker = new Worker(
       const remappedSubtitleCues = remapSubtitleCuesToTrimmedTimeline(
         rawSubtitleCues || [],
         keepSegments,
-        removeSegments
+        removeSegments,
       );
 
       await job.updateProgress(50);
@@ -937,7 +1018,7 @@ const worker = new Worker(
       });
       console.log(
         `[${jobId}] Trim ranges remove=${removeSegments.length} keep=${keepSegments.length} ` +
-          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length} subtitles=${remappedSubtitleCues.length}`
+          `trimmedDuration=${trimmedDuration.toFixed(3)}s zoom=${remappedZoomEffects.length} text=${remappedTextOverlays.length} subtitles=${remappedSubtitleCues.length}`,
       );
 
       // ── 4. Final encode pass: trim + zoom + background + speed ───────────────
@@ -947,10 +1028,14 @@ const worker = new Worker(
 
       if (hasTrimEdits) {
         const n = keepSegments.length;
-        const vSplits = Array.from({ length: n }, (_, i) => `[tvs${i}]`).join("");
+        const vSplits = Array.from({ length: n }, (_, i) => `[tvs${i}]`).join(
+          "",
+        );
         filters.push(`${videoOut}split=${n}${vSplits}`);
         if (hasAudio && audioOut) {
-          const aSplits = Array.from({ length: n }, (_, i) => `[tas${i}]`).join("");
+          const aSplits = Array.from({ length: n }, (_, i) => `[tas${i}]`).join(
+            "",
+          );
           filters.push(`${audioOut}asplit=${n}${aSplits}`);
         }
 
@@ -958,11 +1043,11 @@ const worker = new Worker(
         for (let i = 0; i < n; i++) {
           const seg = keepSegments[i];
           filters.push(
-            `[tvs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[tvseg${i}]`
+            `[tvs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[tvseg${i}]`,
           );
           if (hasAudio && audioOut) {
             filters.push(
-              `[tas${i}]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS[taseg${i}]`
+              `[tas${i}]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS[taseg${i}]`,
             );
             trimConcatIn += `[tvseg${i}][taseg${i}]`;
           } else {
@@ -996,14 +1081,14 @@ const worker = new Worker(
       // This avoids hidden crop when converting landscape recordings to portrait outputs.
       filters.push(
         `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-          `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+          `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`,
       );
       videoOut = "[res]";
 
       // Zoom: split → per-segment trim+crop → concat
       if (remappedZoomEffects.length > 0) {
         const sortedZooms = [...remappedZoomEffects].sort(
-          (a: any, b: any) => a.startTime - b.startTime
+          (a: any, b: any) => a.startTime - b.startTime,
         );
 
         type ZSeg = {
@@ -1038,7 +1123,9 @@ const worker = new Worker(
 
         const n = zSegs.length;
         if (n > 0) {
-          const vSplits = Array.from({ length: n }, (_, i) => `[vs${i}]`).join("");
+          const vSplits = Array.from({ length: n }, (_, i) => `[vs${i}]`).join(
+            "",
+          );
           filters.push(`${videoOut}split=${n}${vSplits}`);
 
           let concatIn = "";
@@ -1055,9 +1142,15 @@ const worker = new Worker(
               const totalFrames = Math.max(2, Math.round(duration * targetFps));
               const rampFrames = Math.max(
                 1,
-                Math.min(Math.round(targetFps * 0.35), Math.floor(totalFrames / 2))
+                Math.min(
+                  Math.round(targetFps * 0.35),
+                  Math.floor(totalFrames / 2),
+                ),
               );
-              const holdEndFrame = Math.max(rampFrames, totalFrames - rampFrames);
+              const holdEndFrame = Math.max(
+                rampFrames,
+                totalFrames - rampFrames,
+              );
 
               // Smooth zoom profile (ease in -> hold -> ease out), clamped to avoid overshoot.
               const easeInExpr = `pow(min(1,max(0,on/${rampFrames})),2)*(3-2*min(1,max(0,on/${rampFrames})))`;
@@ -1076,11 +1169,11 @@ const worker = new Worker(
               filters.push(
                 `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS,` +
                   `zoompan=z='${zExpr}':x='${xExpr}':y='${yExpr}':d=1:` +
-                  `s=${targetWidth}x${targetHeight}:fps=${targetFps}[zseg${i}]`
+                  `s=${targetWidth}x${targetHeight}:fps=${targetFps}[zseg${i}]`,
               );
             } else {
               filters.push(
-                `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[zseg${i}]`
+                `[vs${i}]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[zseg${i}]`,
               );
             }
             concatIn += `[zseg${i}]`;
@@ -1135,9 +1228,15 @@ const worker = new Worker(
           if (drawCardShadow) {
             // Build a proper soft drop shadow (no hard black bars):
             // draw a smaller filled rect on a transparent canvas, blur it at low-res, then scale up.
-            const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
+            const spread = Math.max(
+              10,
+              Math.round(Math.min(cardW, cardH) * 0.02),
+            );
             const baseW = 320;
-            const baseH = Math.max(180, Math.round((baseW * cardH) / Math.max(1, cardW)));
+            const baseH = Math.max(
+              180,
+              Math.round((baseW * cardH) / Math.max(1, cardW)),
+            );
             const baseSpread = 20;
             // Important: keep an alpha channel through the shadow pipeline.
             // If we stay in yuv420p, the "@0.0" alpha is lost and the shadow becomes a solid dark plate.
@@ -1151,12 +1250,12 @@ const worker = new Worker(
             filters.push(
               `${customBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
                 "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
-                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]",
             );
           } else {
             filters.push(
               `${customBgFilter};${cardFilter};` +
-                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]",
             );
           }
         } else {
@@ -1164,9 +1263,15 @@ const worker = new Worker(
           const cardFilter = `${videoOut}setsar=1,scale=${cardW}:${cardH}:flags=lanczos,format=yuv420p${borderFilter}[svid]`;
 
           if (drawCardShadow) {
-            const spread = Math.max(10, Math.round(Math.min(cardW, cardH) * 0.02));
+            const spread = Math.max(
+              10,
+              Math.round(Math.min(cardW, cardH) * 0.02),
+            );
             const baseW = 320;
-            const baseH = Math.max(180, Math.round((baseW * cardH) / Math.max(1, cardW)));
+            const baseH = Math.max(
+              180,
+              Math.round((baseW * cardH) / Math.max(1, cardW)),
+            );
             const baseSpread = 20;
             const shadowSrc =
               `color=c=black@0.0:s=${baseW + baseSpread * 2}x${baseH + baseSpread * 2}:r=${targetFps},` +
@@ -1178,12 +1283,12 @@ const worker = new Worker(
             filters.push(
               `${solidBgFilter};${shadowSrc};${shadowFx};${cardFilter};` +
                 "[bg][sh]overlay=(W-w)/2+6:(H-h)/2+10:format=auto[bgsh];" +
-                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+                "[bgsh][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]",
             );
           } else {
             filters.push(
               `${solidBgFilter};${cardFilter};` +
-                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]"
+                "[bg][svid]overlay=(W-w)/2:(H-h)/2:format=auto:shortest=1[bgout]",
             );
           }
         }
@@ -1200,7 +1305,10 @@ const worker = new Worker(
           const safeColor = normalizeHexColor(overlay.color, "white");
           const start = Math.max(0, overlay.startTime);
           const end = Math.max(start + EPS, overlay.endTime);
-          const size = Math.max(10, Math.min(160, Math.round(overlay.fontSize)));
+          const size = Math.max(
+            10,
+            Math.min(160, Math.round(overlay.fontSize)),
+          );
           const nx = Math.max(0, Math.min(1, overlay.x));
           const ny = Math.max(0, Math.min(1, overlay.y));
 
@@ -1213,7 +1321,7 @@ const worker = new Worker(
               `fontsize=${size}:fontcolor=${safeColor}:` +
               `x='${xExpr}':y='${yExpr}':` +
               "shadowcolor=black@0.55:shadowx=1:shadowy=1:" +
-              `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`
+              `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`,
           );
           prev = next;
         });
@@ -1222,7 +1330,12 @@ const worker = new Worker(
 
       // Subtitles (burn-in) using an ASS file for fast, high-quality rendering.
       if (remappedSubtitleCues.length > 0) {
-        const assPath = writeAssSubtitles(tempDir, remappedSubtitleCues, targetWidth, targetHeight);
+        const assPath = writeAssSubtitles(
+          tempDir,
+          remappedSubtitleCues,
+          targetWidth,
+          targetHeight,
+        );
         const safeAss = ffmpegEscapeFilterValue(assPath);
         filters.push(`${videoOut}subtitles=${safeAss}[subv]`);
         videoOut = "[subv]";
@@ -1305,12 +1418,16 @@ const worker = new Worker(
         .on("progress", (p) => {
           const pct = Math.min(Math.floor(50 + (p.percent || 0) * 0.45), 95);
           job.updateProgress(pct).catch(() => {});
-          prisma.videoJob.update({ where: { id: jobId }, data: { progress: pct } }).catch(() => {});
+          prisma.videoJob
+            .update({ where: { id: jobId }, data: { progress: pct } })
+            .catch(() => {});
         });
 
       const encodeStartTs = Date.now();
       await runFfmpeg(finalCmd);
-      console.log(`[${jobId}] Encode completed in ${Date.now() - encodeStartTs}ms`);
+      console.log(
+        `[${jobId}] Encode completed in ${Date.now() - encodeStartTs}ms`,
+      );
       console.log(`[${jobId}] Encode done. Uploading to Cloudinary...`);
 
       await job.updateProgress(90);
@@ -1325,7 +1442,9 @@ const worker = new Worker(
         resource_type: "video",
         folder: "processed_exports",
       });
-      console.log(`[${jobId}] Upload completed in ${Date.now() - uploadStartTs}ms`);
+      console.log(
+        `[${jobId}] Upload completed in ${Date.now() - uploadStartTs}ms`,
+      );
       const exportedUrl = uploadResult.secure_url;
 
       await job.updateProgress(100);
@@ -1350,19 +1469,21 @@ const worker = new Worker(
   {
     connection: connection as any,
     concurrency: workerConcurrency,
-  }
+  },
 );
 
 worker.on("failed", (job, err) => {
   console.log(`Job ${job?.id} failed: ${err.message}`);
 });
 
-console.log(`🎬 Video Worker running and waiting for jobs (concurrency=${workerConcurrency})...`);
+console.log(
+  `🎬 Video Worker running and waiting for jobs (concurrency=${workerConcurrency})...`,
+);
 
 // ── Subtitle Worker (Deepgram) ────────────────────────────────────────────────
 const subtitleConcurrency = Math.max(
   1,
-  parseInt(process.env.SUBTITLE_WORKER_CONCURRENCY || "1", 10) || 1
+  parseInt(process.env.SUBTITLE_WORKER_CONCURRENCY || "1", 10) || 1,
 );
 
 const subtitleWorker = new Worker(
@@ -1378,7 +1499,7 @@ const subtitleWorker = new Worker(
         prisma.videoJob.update({
           where: { id: jobId },
           data: { status: "PROCESSING", progress: 5 },
-        })
+        }),
       );
       await job.updateProgress(5);
 
@@ -1388,7 +1509,7 @@ const subtitleWorker = new Worker(
         prisma.videoJob.update({
           where: { id: jobId },
           data: { progress: 25 },
-        })
+        }),
       );
 
       // Probe for best-effort mic stream selection.
@@ -1403,10 +1524,13 @@ const subtitleWorker = new Worker(
         prisma.videoJob.update({
           where: { id: jobId },
           data: { progress: 55 },
-        })
+        }),
       );
 
-      const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+      const cues = await transcribeWithDeepgram(
+        wavPath,
+        String(language || "multi"),
+      );
 
       if (demoId) {
         await prisma.demo.update({
@@ -1436,7 +1560,10 @@ const subtitleWorker = new Worker(
       });
       await job.updateProgress(100);
     } catch (error: any) {
-      console.error(`[${jobId}] ❌ Subtitle job failed:`, error?.message || error);
+      console.error(
+        `[${jobId}] ❌ Subtitle job failed:`,
+        error?.message || error,
+      );
       await prisma.videoJob.update({
         where: { id: jobId },
         data: {
@@ -1452,7 +1579,7 @@ const subtitleWorker = new Worker(
   {
     connection: connection as any,
     concurrency: subtitleConcurrency,
-  }
+  },
 );
 
 subtitleWorker.on("failed", (job, err) => {

@@ -22,9 +22,9 @@ export async function POST(req: NextRequest) {
     const cookieHeader = req.headers.get("cookie") || "";
     const hasViewedKey = `viewed_${exportedVideoId || demoId}`;
     if (cookieHeader.includes(hasViewedKey) && !viewId) {
-       // Return success but don't record a new view (simple deduplication)
-       // We'll still return a dummy viewId so the client can "update" it, but we won't actually hit the DB
-       return NextResponse.json({ success: true, viewId: "deduped" });
+      // Return success but don't record a new view (simple deduplication)
+      // We'll still return a dummy viewId so the client can "update" it, but we won't actually hit the DB
+      return NextResponse.json({ success: true, viewId: "deduped" });
     }
 
     // Create a new view

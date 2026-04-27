@@ -65,7 +65,10 @@ export default function ExportSettingsModal({
     }
   }, [isOpen, defaultSettings]);
 
-  const isExempt = session?.user?.email === "aryaanandpathak30@gmail.com" || userPlan === "PRO" || userPlan === "ENTERPRISE";
+  const isExempt =
+    session?.user?.email === "aryaanandpathak30@gmail.com" ||
+    userPlan === "PRO" ||
+    userPlan === "ENTERPRISE";
   const limitReached = !isExempt && exportCount !== null && exportCount >= 3;
 
   // Basic heuristic for file size estimation based on duration and settings
@@ -233,7 +236,9 @@ export default function ExportSettingsModal({
         {/* Confirm Action */}
         {limitReached ? (
           <button
-            onClick={() => router.push("/pricing?returnUrl=" + encodeURIComponent(window.location.href))}
+            onClick={() =>
+              router.push("/pricing?returnUrl=" + encodeURIComponent(window.location.href))
+            }
             className="w-full bg-red-500 text-white py-[14px] rounded-xl font-medium text-[16px] hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
           >
             View Plans

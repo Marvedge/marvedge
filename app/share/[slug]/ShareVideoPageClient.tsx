@@ -45,8 +45,10 @@ export default function ShareVideoPageClient({
   }, [demoId, videoId]);
 
   useEffect(() => {
-    if (!viewId) return;
-    
+    if (!viewId) {
+      return;
+    }
+
     // Periodically update the view duration on the server if the video is playing
     const interval = setInterval(() => {
       const vid = videoRef.current;
@@ -57,7 +59,10 @@ export default function ShareVideoPageClient({
         fetch("/api/views", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ viewId, duration: watchedDurationRef.current }),
+          body: JSON.stringify({
+            viewId,
+            duration: watchedDurationRef.current,
+          }),
         }).catch(console.error);
       }
     }, 5000);

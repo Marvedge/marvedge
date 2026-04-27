@@ -32,10 +32,7 @@ export default async function Page() {
 
   const totalViews = await prisma.view.count({
     where: {
-      OR: [
-        { demo: { userId: session.user.id } },
-        { exportedVideo: { userId: session.user.id } },
-      ],
+      OR: [{ demo: { userId: session.user.id } }, { exportedVideo: { userId: session.user.id } }],
     },
   });
 

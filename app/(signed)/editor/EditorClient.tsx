@@ -195,7 +195,9 @@ export default function EditorPage() {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     if (searchParams.get("subscribed") === "true") {
-      toast.success("Congrats! You are subscribed to premium! You can now export your videos.", { duration: 5000 });
+      toast.success("Congrats! You are subscribed to premium! You can now export your videos.", {
+        duration: 5000,
+      });
       searchParams.delete("subscribed");
       const newQuery = searchParams.toString();
       const newUrl = window.location.pathname + (newQuery ? "?" + newQuery : "");
@@ -795,11 +797,11 @@ export default function EditorPage() {
         pendingExport.settings,
         pendingExport.demoId
       );
-      
+
       const generatedShareUrl = `${window.location.origin}/share/video/${exportedVideoId}`;
-      setPendingExport(prev => prev ? { ...prev, shareUrl: generatedShareUrl } : null);
+      setPendingExport((prev) => (prev ? { ...prev, shareUrl: generatedShareUrl } : null));
       setShareLinkSaved(true);
-      
+
       toast.success("Share link generated successfully!");
     } catch (saveError) {
       console.error("Failed to generate share link:", saveError);

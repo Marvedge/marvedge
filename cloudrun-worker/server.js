@@ -31,8 +31,15 @@ function must(name, value) {
   return value;
 }
 
-async function downloadRawChunkFromGcs({ bucketName, objectName, destinationPath }) {
-  await storage.bucket(bucketName).file(objectName).download({ destination: destinationPath });
+async function downloadRawChunkFromGcs({
+  bucketName,
+  objectName,
+  destinationPath,
+}) {
+  await storage
+    .bucket(bucketName)
+    .file(objectName)
+    .download({ destination: destinationPath });
 }
 
 function parseGsUri(uri) {
@@ -69,11 +76,14 @@ async function getSignedHttpUrlForGsUri(uri) {
   if (!parsed) {
     throw new Error(`Invalid gs:// uri: ${uri}`);
   }
-  const [signedUrl] = await storage.bucket(parsed.bucket).file(parsed.object).getSignedUrl({
-    version: "v4",
-    action: "read",
-    expires: Date.now() + 2 * 60 * 60 * 1000,
-  });
+  const [signedUrl] = await storage
+    .bucket(parsed.bucket)
+    .file(parsed.object)
+    .getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 2 * 60 * 60 * 1000,
+    });
   return signedUrl;
 }
 
@@ -162,19 +172,22 @@ async function transcribeWithDeepgram(wavPath, language = "multi") {
   }
 
   const audio = await fs.readFile(wavPath);
-  const resp = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${apiKey}`,
-      "Content-Type": "audio/wav",
+  const resp = await fetch(
+    `https://api.deepgram.com/v1/listen?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": "audio/wav",
+      },
+      body: audio,
     },
-    body: audio,
-  });
+  );
 
   const body = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     throw new Error(
-      `Deepgram failed (${resp.status}): ${typeof body === "object" ? JSON.stringify(body) : String(body)}`
+      `Deepgram failed (${resp.status}): ${typeof body === "object" ? JSON.stringify(body) : String(body)}`,
     );
   }
 
@@ -182,23 +195,33 @@ async function transcribeWithDeepgram(wavPath, language = "multi") {
   const cues = cuesFromDeepgramWords(words);
   if (cues.length > 0) return cues;
 
-  const transcript = String(body?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "").trim();
+  const transcript = String(
+    body?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "",
+  ).trim();
   if (!transcript) return [];
   return [{ start: 0, end: 3, text: transcript }];
 }
 
 async function processSubtitlesJob({ videoUrl, language }) {
   if (!videoUrl) throw new Error("videoUrl is required");
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "marvedge-subtitles-"));
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "marvedge-subtitles-"),
+  );
   const inputPath = path.join(tempDir, "input.webm");
   const wavPath = path.join(tempDir, "audio.wav");
   const startedAt = Date.now();
   try {
     const dlStart = Date.now();
     if (typeof videoUrl === "string" && videoUrl.startsWith("gs://")) {
-      await downloadFromGsUri({ uri: String(videoUrl), destinationPath: inputPath });
+      await downloadFromGsUri({
+        uri: String(videoUrl),
+        destinationPath: inputPath,
+      });
     } else {
-      await downloadFromUrl({ url: String(videoUrl), destinationPath: inputPath });
+      await downloadFromUrl({
+        url: String(videoUrl),
+        destinationPath: inputPath,
+      });
     }
     const dlMs = Date.now() - dlStart;
 
@@ -207,11 +230,14 @@ async function processSubtitlesJob({ videoUrl, language }) {
     const extractMs = Date.now() - exStart;
 
     const dgStart = Date.now();
-    const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+    const cues = await transcribeWithDeepgram(
+      wavPath,
+      String(language || "multi"),
+    );
     const deepgramMs = Date.now() - dgStart;
 
     console.log(
-      `[subtitles] Timing download_ms=${dlMs} extract_ms=${extractMs} deepgram_ms=${deepgramMs} total_ms=${Date.now() - startedAt} cues=${cues.length}`
+      `[subtitles] Timing download_ms=${dlMs} extract_ms=${extractMs} deepgram_ms=${deepgramMs} total_ms=${Date.now() - startedAt} cues=${cues.length}`,
     );
     return cues;
   } finally {
@@ -219,7 +245,11 @@ async function processSubtitlesJob({ videoUrl, language }) {
   }
 }
 
-async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath }) {
+async function uploadProcessedChunkToGcs({
+  bucketName,
+  objectName,
+  sourcePath,
+}) {
   await storage.bucket(bucketName).upload(sourcePath, {
     destination: objectName,
     contentType: "video/mp4",
@@ -228,7 +258,10 @@ async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath })
 }
 
 async function getRecipeById(recipeId) {
-  const snap = await firestore.collection(RECIPES_COLLECTION).doc(recipeId).get();
+  const snap = await firestore
+    .collection(RECIPES_COLLECTION)
+    .doc(recipeId)
+    .get();
   if (!snap.exists) {
     throw new Error(`Recipe not found: ${recipeId}`);
   }
@@ -244,7 +277,7 @@ async function updateChunkStatus(chunkId, patch) {
         ...patch,
         updatedAt: FieldValue.serverTimestamp(),
       },
-      { merge: true }
+      { merge: true },
     );
 }
 
@@ -283,7 +316,11 @@ async function processChunkJob({
     const dlStartMs = Date.now();
     let dlMs = 0;
 
-    if (typeof startTime === "number" && typeof duration === "number" && videoUrl) {
+    if (
+      typeof startTime === "number" &&
+      typeof duration === "number" &&
+      videoUrl
+    ) {
       // Logical splitting: Skip physical download, use URL directly as inputPath.
       // For gs:// sources, sign URL so ffmpeg can stream it.
       if (String(videoUrl).startsWith("gs://")) {
@@ -350,7 +387,7 @@ async function processChunkJob({
 
     console.log(
       `[${chunkId}] Timing download_ms=${dlMs} render_ms=${renderMs} upload_ms=${uploadMs} total_ms=${totalMs} ` +
-        `input_mb=${(inputBytes / 1048576).toFixed(2)} output_mb=${(outputBytes / 1048576).toFixed(2)}`
+        `input_mb=${(inputBytes / 1048576).toFixed(2)} output_mb=${(outputBytes / 1048576).toFixed(2)}`,
     );
 
     await updateChunkStatus(chunkId, {
@@ -388,8 +425,16 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.post("/process", async (req, res) => {
-  const { chunkId, recipeId, rawObject, outputObject, recipe, videoUrl, startTime, duration } =
-    req.body || {};
+  const {
+    chunkId,
+    recipeId,
+    rawObject,
+    outputObject,
+    recipe,
+    videoUrl,
+    startTime,
+    duration,
+  } = req.body || {};
   if (!chunkId || !recipeId) {
     return res.status(400).json({
       ok: false,
@@ -443,7 +488,11 @@ app.post("/subtitles", async (req, res) => {
 
 app.post("/merge", async (req, res) => {
   const { recipeId, chunkFilenames } = req.body || {};
-  if (!recipeId || !Array.isArray(chunkFilenames) || chunkFilenames.length === 0) {
+  if (
+    !recipeId ||
+    !Array.isArray(chunkFilenames) ||
+    chunkFilenames.length === 0
+  ) {
     return res.status(400).json({
       ok: false,
       error: "recipeId and chunkFilenames array are required",
@@ -451,7 +500,9 @@ app.post("/merge", async (req, res) => {
   }
 
   const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "marvedge-gcp-merge-"));
+  const workDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "marvedge-gcp-merge-"),
+  );
   const finalFilename = `${recipeId}.mp4`;
   const finalPath = path.join(workDir, finalFilename);
   const concatTextPath = path.join(workDir, "concat.txt");
@@ -515,7 +566,9 @@ app.post("/merge", async (req, res) => {
     });
   } catch (err) {
     console.error("[worker] merge failed:", err);
-    return res.status(500).json({ ok: false, error: err?.message || "unknown_error" });
+    return res
+      .status(500)
+      .json({ ok: false, error: err?.message || "unknown_error" });
   } finally {
     fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }

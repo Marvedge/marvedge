@@ -22,7 +22,12 @@ export async function uploadBlobToGcs({
   blob: Blob;
   filename: string;
   kind: GcsUploadKind;
-}): Promise<{ url: string; publicUrl?: string; object?: string; bucket?: string }> {
+}): Promise<{
+  url: string;
+  publicUrl?: string;
+  object?: string;
+  bucket?: string;
+}> {
   const formData = new FormData();
   formData.append("file", blob, filename);
   formData.append("kind", kind);

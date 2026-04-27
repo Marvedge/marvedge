@@ -102,11 +102,7 @@ const AnalyticsMain = ({
     },
   ];
 
-  const chartData = viewsOverTime.length
-    ? viewsOverTime
-    : [
-        { date: "No data", views: 0 },
-      ];
+  const chartData = viewsOverTime.length ? viewsOverTime : [{ date: "No data", views: 0 }];
 
   return (
     <div className="p-4 md:p-8 bg-[#F1ECFF] min-h-screen">
@@ -198,30 +194,43 @@ const AnalyticsMain = ({
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5DCFF" />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#8C82B4', fontSize: 12 }} 
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#8C82B4", fontSize: 12 }}
                   dy={10}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#8C82B4', fontSize: 12 }}
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#8C82B4", fontSize: 12 }}
                   dx={-10}
                 />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
-                  labelStyle={{ color: '#8C82B4', fontWeight: 600, marginBottom: '4px' }}
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                  }}
+                  labelStyle={{
+                    color: "#8C82B4",
+                    fontWeight: 600,
+                    marginBottom: "4px",
+                  }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="views" 
-                  stroke="#8A76FC" 
-                  strokeWidth={4} 
-                  dot={{ r: 4, fill: '#8A76FC', strokeWidth: 2, stroke: '#fff' }}
-                  activeDot={{ r: 6 }} 
+                <Line
+                  type="monotone"
+                  dataKey="views"
+                  stroke="#8A76FC"
+                  strokeWidth={4}
+                  dot={{
+                    r: 4,
+                    fill: "#8A76FC",
+                    strokeWidth: 2,
+                    stroke: "#fff",
+                  }}
+                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -244,12 +253,17 @@ const AnalyticsMain = ({
           <div className="flex-1 flex flex-col gap-3">
             {topDemos.length > 0 ? (
               topDemos.map((demo, i) => (
-                <div key={i} className="flex justify-between items-center bg-white border border-[#E5DCFF] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                <div
+                  key={i}
+                  className="flex justify-between items-center bg-white border border-[#E5DCFF] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#EAE5FB] flex items-center justify-center text-[#8A76FC] font-semibold">
                       {i + 1}
                     </div>
-                    <p className="font-medium text-[#2D2154] truncate max-w-[200px] md:max-w-[250px]">{demo.title}</p>
+                    <p className="font-medium text-[#2D2154] truncate max-w-[200px] md:max-w-[250px]">
+                      {demo.title}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1.5 text-[#6356D7] bg-[#F4F1FD] px-3 py-1 rounded-full">
                     <Eye size={14} />
@@ -260,10 +274,18 @@ const AnalyticsMain = ({
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
                 <div className="bg-[#F6F3FF] p-4 rounded-full">
-                  <Image src="/icons/ana-tick.svg" alt="Notifications" width={20} height={20} className="md:w-6 md:h-6" />
+                  <Image
+                    src="/icons/ana-tick.svg"
+                    alt="Notifications"
+                    width={20}
+                    height={20}
+                    className="md:w-6 md:h-6"
+                  />
                 </div>
                 <p className="text-[#7569A5] font-semibold text-base">No Analytics yet</p>
-                <p className="text-base text-[#8C82B4]">Create and share demos to see performance data</p>
+                <p className="text-base text-[#8C82B4]">
+                  Create and share demos to see performance data
+                </p>
               </div>
             )}
           </div>
