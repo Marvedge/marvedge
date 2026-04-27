@@ -41,10 +41,24 @@ export default async function Page() {
 
   const demos = await prisma.demo.findMany({
     where: { userId },
-    include: { views: true },
+    include: { 
+      views: true,
+      exportedVideo: {
+        include: { views: true }
+      }
+    },
   });
   const topDemos = demos
-    .map((d) => ({ title: d.title, views: d.views.length }))
+    .map((d) => {
+      const directViews = d.views.length;
+      const exportedViews = d.exportedVideo?.views.length || 0;
+      // To avoid double counting, we could use a Set of view IDs
+      const allViewIds = new Set([
+        ...d.views.map(v => v.id),
+        ...(d.exportedVideo?.views.map(v => v.id) || [])
+      ]);
+      return { title: d.title, views: allViewIds.size };
+    })
     .sort((a, b) => b.views - a.views)
     .slice(0, 5);
 
