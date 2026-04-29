@@ -27,6 +27,7 @@ model User {
   sessions       Session[]
   tutorials      Tutorial[]      @relation("UserTutorials")
   videoJobs      VideoJob[]
+  reviews        Review[]
 }
 
 model Account {
@@ -169,3 +170,13 @@ model ExportedVideo {
 
   @@index([userId, createdAt])
 }
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  rating    Int
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+

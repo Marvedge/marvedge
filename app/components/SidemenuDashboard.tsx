@@ -3,12 +3,14 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Settings, Share2 } from "lucide-react";
+import { Menu, X, Settings, Share2, Star } from "lucide-react";
 import Image from "next/image";
+import ReviewModal from "./ReviewModal";
 
 const SidemenuDashboard = () => {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   const isActive = (path: string) => {
     return pathname === path;
@@ -43,7 +45,7 @@ const SidemenuDashboard = () => {
       )}
 
       <div
-        className={`w-56 sm:w-64 md:w-72 h-screen bg-[#6356d7] text-white p-3 sm:p-6 fixed top-0 left-0 z-30 overflow-y-auto transition-transform duration-300 ease-in-out ${
+        className={`w-56 sm:w-64 md:w-72 h-screen flex flex-col bg-[#6356d7] text-white p-3 sm:p-6 fixed top-0 left-0 z-30 overflow-y-auto transition-transform duration-300 ease-in-out ${
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
@@ -215,7 +217,19 @@ const SidemenuDashboard = () => {
           </Link>
         </ul>
         {/* Removed recent feature walkthrough & sales demo from sidebar */}
+        <div className="mt-auto pt-6 pb-2">
+          <button
+            onClick={() => setIsReviewModalOpen(true)}
+            className="w-full flex items-center justify-start gap-1 sm:gap-3 h-8 sm:h-10 px-1 sm:px-2 transition-colors cursor-pointer text-xs sm:text-base text-white font-light hover:bg-[#bcb3f7] rounded-lg"
+          >
+            <span className="flex items-center justify-center shrink-0 w-5 sm:w-7">
+              <Star color="#fff" size={18} className="sm:w-5 sm:h-5" />
+            </span>
+            <span>Review Marvedge</span>
+          </button>
+        </div>
       </div>
+      <ReviewModal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} />
     </>
   );
 };
