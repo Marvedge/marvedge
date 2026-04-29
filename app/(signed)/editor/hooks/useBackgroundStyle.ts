@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const imageMap: Record<string, string> = {
   // Default thumbnails shown when no type is selected
@@ -53,6 +53,18 @@ export function useBackgroundStyle({
   selectedBackground,
   customBackground,
 }: UseBackgroundStyleProps) {
+  const [customBgUrl, setCustomBgUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (customBackground) {
+      const url = URL.createObjectURL(customBackground);
+      setCustomBgUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setCustomBgUrl(null);
+    }
+  }, [customBackground]);
+
   const getBackgroundStyle = useCallback(() => {
     if (!selectedBackground) {
       return {};
@@ -62,9 +74,9 @@ export function useBackgroundStyle({
       return { background: "transparent" };
     }
 
-    if (selectedBackground === "custom" && customBackground) {
+    if (selectedBackground === "custom" && customBgUrl) {
       return {
-        backgroundImage: `url(${URL.createObjectURL(customBackground)})`,
+        backgroundImage: `url(${customBgUrl})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
@@ -99,7 +111,7 @@ export function useBackgroundStyle({
     }
 
     return {};
-  }, [selectedBackground, customBackground]);
+  }, [selectedBackground, customBgUrl]);
 
   return { getBackgroundStyle, imageMap };
 }

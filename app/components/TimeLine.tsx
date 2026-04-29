@@ -1644,8 +1644,8 @@ export default function TimelineRuler({
                       key={`segment-${idx}`}
                       className={`absolute top-0 h-[84px] mt-[50px] group cursor-grab transition-opacity ${
                         idx == activeZoomIdx
-                          ? "bg-[#FF3939]/54 opacity-70 z-10 hover:border-2 border-yellow-400 rounded-md"
-                          : "bg-[#FF3939]/35 opacity-50 hover:opacity-65 z-8"
+                          ? "bg-[#36B37E]/40 opacity-80 z-10 hover:border-2 border-[#36B37E] rounded-md"
+                          : "bg-[#36B37E]/25 opacity-70 hover:opacity-90 z-8"
                       }`}
                       style={{
                         left: `${startPosition}px`,
@@ -1684,7 +1684,7 @@ export default function TimelineRuler({
 
                       {/* Left Resize Handle */}
                       <div
-                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#FF3939]/54 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#36B37E]/80 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#36B37E]"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           setDragZoomState({
@@ -1703,7 +1703,7 @@ export default function TimelineRuler({
 
                       {/* Right Resize Handle */}
                       <div
-                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#FF3939]/54 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#36B37E]/80 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#36B37E]"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           setDragZoomState({
