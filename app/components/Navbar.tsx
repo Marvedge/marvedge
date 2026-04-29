@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Menu, X } from "lucide-react";
 // import Hero from "./Hero";
@@ -22,6 +22,7 @@ const NavButton: React.FC<{
 
 const Navbar: React.FC = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const { status } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -71,33 +72,35 @@ const Navbar: React.FC = () => {
           {/* Second Row: Bell and Avatar, right-aligned */}
         </div>
         {/* Desktop nav links */}
-        <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium absolute right-8 top-6">
-          <NavButton
-            onClick={() => {
-              if (window.location.pathname === "/") {
-                document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
-              } else {
-                router.push("/#features");
-              }
-            }}
-          >
-            Features
-          </NavButton>
-          <NavButton
-            onClick={() => {
-              if (window.location.pathname === "/") {
-                document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
-              } else {
-                router.push("/#pricing");
-              }
-            }}
-          >
-            Pricing
-          </NavButton>
-          <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
-        </div>
+        {pathname !== "/pricing" && (
+          <div className="hidden md:flex items-center space-x-8 text-[#313053] font-medium absolute right-8 top-6">
+            <NavButton
+              onClick={() => {
+                if (window.location.pathname === "/") {
+                  document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
+                } else {
+                  router.push("/#features");
+                }
+              }}
+            >
+              Features
+            </NavButton>
+            <NavButton
+              onClick={() => {
+                if (window.location.pathname === "/") {
+                  document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
+                } else {
+                  router.push("/#pricing");
+                }
+              }}
+            >
+              Pricing
+            </NavButton>
+            <NavButton onClick={() => router.push("/reviews")}>Reviews</NavButton>
+          </div>
+        )}
         {/* Mobile menu */}
-        {isMenuOpen && (
+        {isMenuOpen && pathname !== "/pricing" && (
           <div className="md:hidden absolute top-20 left-0 w-full bg-white z-40 flex flex-col items-start p-4 space-y-3 shadow-md">
             <NavButton
               onClick={() => {

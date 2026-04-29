@@ -12,11 +12,11 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true },
+      select: { id: true, plan: true },
     });
 
     if (!user) {
-      return NextResponse.json({ count: 0 }, { status: 404 });
+      return NextResponse.json({ count: 0, plan: "FREE" }, { status: 404 });
     }
 
     // A user can "export" a video by creating a successful VideoJob
@@ -31,7 +31,7 @@ export async function GET() {
 
     const exportCount = Math.max(jobCount, savedCount);
 
-    return NextResponse.json({ count: exportCount });
+    return NextResponse.json({ count: exportCount, plan: user.plan });
   } catch (error) {
     console.error("Error fetching export count", error);
     return NextResponse.json({ count: 0 }, { status: 500 });

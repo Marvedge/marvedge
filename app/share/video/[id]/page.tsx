@@ -11,6 +11,7 @@ export default async function SharedExportedVideoPage({ params }: PageProps) {
   const video = await prisma.exportedVideo.findUnique({
     where: { id },
     select: {
+      demoId: true,
       title: true,
       description: true,
       exportedUrl: true,
@@ -28,6 +29,8 @@ export default async function SharedExportedVideoPage({ params }: PageProps) {
       videoUrl={video.exportedUrl || ""}
       backgroundStyle={{}}
       aspectRatio="native"
+      videoId={id}
+      demoId={video.demoId ?? undefined}
     />
   );
 }

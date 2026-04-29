@@ -3,14 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-
 type ShareVideoPageClientProps = {
   title: string;
   description: string | null;
   videoUrl: string;
   backgroundStyle: CSSProperties;
   aspectRatio: string;
+  demoId?: string;
+  videoId?: string;
 };
 
 export default function ShareVideoPageClient({
@@ -19,7 +21,54 @@ export default function ShareVideoPageClient({
   videoUrl,
   backgroundStyle,
   aspectRatio,
+  demoId,
+  videoId,
 }: ShareVideoPageClientProps) {
+  const [viewId, setViewId] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const watchedDurationRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Record a view when the page loads
+    fetch("/api/views", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ demoId, exportedVideoId: videoId }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.viewId && data.viewId !== "deduped") {
+          setViewId(data.viewId);
+        }
+      })
+      .catch(console.error);
+  }, [demoId, videoId]);
+
+  useEffect(() => {
+    if (!viewId) {
+      return;
+    }
+
+    // Periodically update the view duration on the server if the video is playing
+    const interval = setInterval(() => {
+      const vid = videoRef.current;
+      if (vid && !vid.paused) {
+        // Simple heuristic: just increment by the interval duration
+        // (A more robust way would be to track actual played ranges)
+        watchedDurationRef.current += 5;
+        fetch("/api/views", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            viewId,
+            duration: watchedDurationRef.current,
+          }),
+        }).catch(console.error);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [viewId]);
   const { status } = useSession();
   const isLoggedIn = status === "authenticated";
 
@@ -102,6 +151,7 @@ export default function ShareVideoPageClient({
               }}
             >
               <video
+                ref={videoRef}
                 className="h-full w-full object-contain"
                 src={videoUrl}
                 controls

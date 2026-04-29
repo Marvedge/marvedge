@@ -57,6 +57,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     return owned.error;
   }
 
+  await prisma.exportedVideo.update({
+    where: { id: owned.record.id },
+    data: { shareCount: { increment: 1 } },
+  });
+
   return NextResponse.json({
     success: true,
     shareUrl: buildPublicUrl(request, owned.record.id),

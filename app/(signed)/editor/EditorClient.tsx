@@ -192,6 +192,19 @@ export default function EditorPage() {
   }, [setParams, setSavedDemoId]);
 
   // URL params handling
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("subscribed") === "true") {
+      toast.success("Congrats! You are subscribed to premium! You can now export your videos.", {
+        duration: 5000,
+      });
+      searchParams.delete("subscribed");
+      const newQuery = searchParams.toString();
+      const newUrl = window.location.pathname + (newQuery ? "?" + newQuery : "");
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
+
   useURLParams({
     params,
     setVideoUrl,
@@ -588,7 +601,9 @@ export default function EditorPage() {
     uploadedSourceVideo: boolean;
     settings: ExportSettings;
     demoId: string | null;
+    shareUrl?: string;
   } | null>(null);
+
   const hasCanvasBackground =
     !!selectedBackground &&
     selectedBackground !== "none" &&
@@ -627,7 +642,7 @@ export default function EditorPage() {
     settings: ExportSettings,
     demoId?: string | null
   ) => {
-    await axios.post("/api/exported-videos", {
+    const res = await axios.post("/api/exported-videos", {
       title: sidebarTitle?.trim() || "Untitled Export",
       description: sidebarDescription?.trim() || "",
       exportedUrl,
@@ -636,6 +651,7 @@ export default function EditorPage() {
       demoId: demoId || null,
       upsertByDemo: Boolean(demoId),
     });
+    return res.data?.exportedVideo?.id;
   };
 
   // Called when the user confirms their settings in the new modal
@@ -775,20 +791,21 @@ export default function EditorPage() {
 
     try {
       setResultActionLoading(true);
-      await saveExportedVideoRecord(
+      const exportedVideoId = await saveExportedVideoRecord(
         pendingExport.exportedUrl,
         pendingExport.sourceVideoUrl,
         pendingExport.settings,
         pendingExport.demoId
       );
+
+      const generatedShareUrl = `${window.location.origin}/share/video/${exportedVideoId}`;
+      setPendingExport((prev) => (prev ? { ...prev, shareUrl: generatedShareUrl } : null));
       setShareLinkSaved(true);
-      await navigator.clipboard.writeText(pendingExport.exportedUrl);
-      toast.success("Share link saved in Exported Videos and copied");
-      setShowExportResultModal(false);
-      setPendingExport(null);
+
+      toast.success("Share link generated successfully!");
     } catch (saveError) {
-      console.error("Failed to save share link:", saveError);
-      toast.error("Failed to save share link");
+      console.error("Failed to generate share link:", saveError);
+      toast.error("Failed to generate share link");
     } finally {
       setResultActionLoading(false);
     }
@@ -1373,7 +1390,7 @@ export default function EditorPage() {
       />
       <ExportResultModal
         isOpen={showExportResultModal}
-        exportedUrl={pendingExport?.exportedUrl || ""}
+        shareUrl={pendingExport?.shareUrl || null}
         loading={resultActionLoading}
         onClose={() => {
           if (resultActionLoading) {

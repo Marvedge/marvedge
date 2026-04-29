@@ -110,6 +110,7 @@ export default async function SharePage({ params }: PageProps) {
       OR: [{ publicLink: slug }, { id: slug }],
     },
     select: {
+      id: true,
       title: true,
       description: true,
       videoUrl: true,
@@ -133,6 +134,7 @@ export default async function SharePage({ params }: PageProps) {
           ? String((demo.editing as Record<string, unknown>).aspectRatio)
           : "16:9"
       }
+      demoId={demo.id}
     />
   );
 }
