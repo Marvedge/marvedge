@@ -65,8 +65,18 @@ export default function ExportSettingsModal({
     }
   }, [isOpen, defaultSettings]);
 
+  const EXEMPT_EMAILS = [
+    "aryaanandpathak30@gmail.com",
+    "sarthakbehera10@gmail.com",
+    "ashishmishra19122000@gmail.com",
+    "sandipsubham.32@gmail.com",
+    "kanupriya2052017@gmail.com",
+    "rathourrahul21@gmail.com",
+    "ajitkumarshankhwar25@gmail.com",
+  ];
+
   const isExempt =
-    session?.user?.email === "aryaanandpathak30@gmail.com" ||
+    (session?.user?.email && EXEMPT_EMAILS.includes(session.user.email)) ||
     userPlan === "PRO" ||
     userPlan === "ENTERPRISE";
   const limitReached = !isExempt && exportCount !== null && exportCount >= 3;

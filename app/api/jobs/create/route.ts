@@ -64,8 +64,18 @@ export async function POST(req: NextRequest) {
 
     const userId = user.id;
 
+    const EXEMPT_EMAILS = [
+      "aryaanandpathak30@gmail.com",
+      "sarthakbehera10@gmail.com",
+      "ashishmishra19122000@gmail.com",
+      "sandipsubham.32@gmail.com",
+      "kanupriya2052017@gmail.com",
+      "rathourrahul21@gmail.com",
+      "ajitkumarshankhwar25@gmail.com",
+    ];
+
     const isExempt =
-      session.user.email === "aryaanandpathak30@gmail.com" ||
+      (session.user.email && EXEMPT_EMAILS.includes(session.user.email)) ||
       user.plan === "PRO" ||
       user.plan === "ENTERPRISE";
     if (!isExempt) {
