@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
       "kanupriya2052017@gmail.com",
       "rathourrahul21@gmail.com",
       "ajitkumarshankhwar25@gmail.com",
+      "somyanayak281@gmail.com",
     ];
 
     const isExempt =
