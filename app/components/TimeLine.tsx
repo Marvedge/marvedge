@@ -1342,16 +1342,6 @@ export default function TimelineRuler({
             <Image src="/icons/Vector (1) copy.svg" alt="delete_icon" width={18.67} height={21} />
           </button>
           <button
-            onClick={() => {
-              console.log("Screen Fliped");
-            }}
-            disabled={segments.length === 0}
-            className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Flip Video"
-          >
-            <Image src="/icons/Vector copy.svg" alt="flip_icon" width={23.33} height={23.33} />
-          </button>
-          <button
             onClick={handleUndo}
             disabled={undoStack.length === 0}
             className="h-[51px] w-[51px] px-3 flex items-center justify-center font-medium bg-white hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"

@@ -623,7 +623,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                   }}
                   className="w-full border cursor-pointer border-[#ede7fa] rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#A594F9] text-[#7C5CFC]"
                 >
-                  <option value="">Select Type</option>
+                  <option value=""> backgrounds</option>
                   <option value="solid">solid</option>
                   <option value="gradient">gradient</option>
                 </select>
