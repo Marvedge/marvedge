@@ -782,12 +782,12 @@ const SettingsPage = () => {
                 <div>
                   <div className="font-semibold text-base sm:text-lg text-[#1A0033]">Free Plan</div>
                   <div className="text-xs sm:text-sm text-gray-500">
-                    Create up to 5 demos and basic features
+                    Create up to 3 demos and basic features
                   </div>
                 </div>
-                <button className="px-4 sm:px-6 py-2 rounded-lg bg-[#7C5CFC] text-white text-sm sm:text-base font-semibold shadow hover:bg-[#8A76FC] transition whitespace-nowrap w-full sm:w-auto">
+                {/* <button className="px-4 sm:px-6 py-2 rounded-lg bg-[#7C5CFC] text-white text-sm sm:text-base font-semibold shadow hover:bg-[#8A76FC] transition whitespace-nowrap w-full sm:w-auto">
                   Upgrade to Pro
-                </button>
+                </button> */}
               </div>
             </div>
             <div className="px-4 sm:px-6 pb-6">

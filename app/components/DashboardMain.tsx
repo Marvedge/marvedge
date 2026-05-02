@@ -368,8 +368,8 @@ const DashboardMain = ({
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-8">
-        <div className="lg:col-span-2 bg-white rounded-xl p-3 sm:p-4 shadow-sm min-h-[350px] sm:min-h-[410px] hover:shadow-lg transform flex flex-col">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-8">
+        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm min-h-[350px] sm:min-h-[410px] hover:shadow-lg transform flex flex-col">
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-3 sm:mb-4">
             <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-[#7569A5]">
@@ -465,96 +465,7 @@ const DashboardMain = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:gap-4 md:gap-8">
-          {/* <div
-            className="bg-[#6B5FFC] rounded-xl p-3 sm:p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-40 sm:min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu"
-            style={{ fontFamily: "var(--font-raleway), sans-serif" }}
-          >
-            <div>
-              <div className="flex items-center mb-2 sm:mb-3 md:mb-4">
-                <span className="inline-block p-1.5 sm:p-2 rounded-lg mr-2 sm:mr-3 bg-white/20">
-                  <Image
-                    src="/ri_gemini-fill(1).png"
-                    alt="AI Assistant"
-                    width={16}
-                    height={16}
-                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
-                  />
-                </span>
-                <span className="text-base sm:text-lg md:text-xl font-bold text-white">
-                  AI Assistant
-                </span>
-              </div>
-              <div className="text-white text-xs sm:text-sm md:text-base mb-3 sm:mb-4 md:mb-6 leading-relaxed">
-                Ready to help you create better demos with smart suggestions and content.
-              </div>
-            </div>
-            <button className="w-full py-1.5 sm:py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-xs sm:text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
-              Get AI Help
-            </button>
-          </div> */}
 
-          {/* <div className="bg-white rounded-xl p-3 sm:p-4 md:p-6 shadow-sm hover:shadow-lg transform">
-            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-[#2D2154] mb-3 sm:mb-4 md:mb-6">
-              Popular Templates
-            </h3>
-            <div className="flex flex-col gap-2 sm:gap-3 md:gap-4">
-              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#C6F7D0] p-1.5 sm:p-2 rounded-lg shrink-0">
-                  <Image
-                    src="/icons/dash-users.svg"
-                    alt="Google"
-                    width={16}
-                    height={16}
-                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
-                  />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
-                    User Onboarding
-                  </div>
-                  <div className="text-gray-500 text-xs"> Guide new users through setup</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#D0F0FF] p-1.5 sm:p-2 rounded-lg shrink-0">
-                  <Image
-                    src="/icons/dash-rocket.svg"
-                    alt="Google"
-                    width={16}
-                    height={16}
-                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
-                  />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
-                    Feature Launch
-                  </div>
-                  <div className="text-gray-500 text-xs">Showcase new capabilities</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 hover:bg-gray-50 p-2 rounded-lg transition-all duration-300 hover:scale-105 transform">
-                <span className="bg-[#E6E1FA] p-1.5 sm:p-2 rounded-lg shrink-0">
-                  <Image
-                    src="/icons/play fill.png"
-                    alt="Google"
-                    width={16}
-                    height={16}
-                    className="sm:w-5 sm:h-5 md:w-[25px] md:h-[25px]"
-                  />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-[#2D2154] text-xs sm:text-sm md:text-base">
-                    Sales Demo
-                  </div>
-                  <div className="text-gray-500 text-xs">Impress prospects</div>
-                </div>
-              </div>
-            </div>
-          </div> */}
-        </div>
       </div>
     </div>
   );
