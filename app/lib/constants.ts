@@ -1,6 +1,6 @@
 // Store shared arrays and constants here
 
-export const TABS = ["Profile", "Notification", "Privacy", "Preferences", "Account"];
+export const TABS = ["Profile", "Account"];
 
 export const NOTIFICATION_SETTINGS = [
   {

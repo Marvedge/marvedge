@@ -466,7 +466,7 @@ const DashboardMain = ({
         </div>
 
         <div className="flex flex-col gap-3 sm:gap-4 md:gap-8">
-          <div
+          {/* <div
             className="bg-[#6B5FFC] rounded-xl p-3 sm:p-4 md:p-6 shadow-sm flex flex-col justify-between min-h-40 sm:min-h-[180px] md:min-h-[200px] cursor-pointer transition-all duration-500 ease-out hover:scale-105 sm:hover:scale-110 hover:shadow-lg transform-gpu"
             style={{ fontFamily: "var(--font-raleway), sans-serif" }}
           >
@@ -492,9 +492,9 @@ const DashboardMain = ({
             <button className="w-full py-1.5 sm:py-2 md:py-3 bg-white/40 text-white font-semibold rounded-md transition-all text-xs sm:text-sm md:text-base transform hover:bg-white/60 hover:scale-105">
               Get AI Help
             </button>
-          </div>
+          </div> */}
 
-          <div className="bg-white rounded-xl p-3 sm:p-4 md:p-6 shadow-sm hover:shadow-lg transform">
+          {/* <div className="bg-white rounded-xl p-3 sm:p-4 md:p-6 shadow-sm hover:shadow-lg transform">
             <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-[#2D2154] mb-3 sm:mb-4 md:mb-6">
               Popular Templates
             </h3>
@@ -553,7 +553,7 @@ const DashboardMain = ({
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

@@ -8,11 +8,11 @@ import { motion, useInView, easeOut, useScroll, useTransform } from "framer-moti
 import { usePathname } from "next/navigation";
 
 const socialIcons = [
-  {
-    image: "/Icon(1).png",
-    label: "Twitter",
-    url: "https://twitter.com/marvedgemedia",
-  },
+  // {
+  //   image: "/Icon(1).png",
+  //   label: "Twitter",
+  //   url: "https://twitter.com/marvedgemedia",
+  // },
   {
     image: "/Icon.png",
     label: "Instagram",
@@ -27,8 +27,8 @@ const socialIcons = [
 
 const linkSections = [
   {
-    title: "Company",
-    items: ["About Us", "Blog"],
+    // title: "Company",
+    items: ["", ""],
   },
 ];
 
@@ -331,7 +331,7 @@ const WaitlistSection: React.FC = () => {
         transition={{ duration: 0.8, ease: easeOut }}
       >
         {/* Early Access Label */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{
             opacity: isInView ? 1 : 0,
@@ -345,10 +345,10 @@ const WaitlistSection: React.FC = () => {
           >
             Get Early Access
           </p>
-        </motion.div>
+        </motion.div> */}
 
         {/* Title */}
-        <motion.h2
+        {/* <motion.h2
           className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#2d2347] mb-3 sm:mb-4"
           style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
           initial={{ opacity: 0, y: 20 }}
@@ -359,10 +359,10 @@ const WaitlistSection: React.FC = () => {
           transition={{ duration: 0.6, ease: easeOut, delay: 0.1 }}
         >
           Join Our <span className="text-[#8A76FC]/70">Waitlist</span>
-        </motion.h2>
+        </motion.h2> */}
 
         {/* Description */}
-        <motion.p
+        {/* <motion.p
           className="text-[#666666] text-sm sm:text-base md:text-lg mb-6 sm:mb-8 px-2 sm:px-0"
           style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
           initial={{ opacity: 0, y: 20 }}
@@ -373,7 +373,7 @@ const WaitlistSection: React.FC = () => {
           transition={{ duration: 0.6, ease: easeOut, delay: 0.2 }}
         >
           Be among the first to access Marvedge and transform your videos to eye catchy demo
-        </motion.p>
+        </motion.p> */}
 
         {/* Form */}
         <motion.form
@@ -387,17 +387,17 @@ const WaitlistSection: React.FC = () => {
           transition={{ duration: 0.7, ease: easeOut, delay: 0.3 }}
         >
           {[
-            {
-              type: "email",
-              placeholder: "Enter Your Email address",
-              name: "email",
-            },
-            { type: "text", placeholder: "Enter Your Full Name", name: "name" },
-            {
-              placeholder: "Enter Your Message",
-              isTextarea: true,
-              name: "message",
-            },
+            // {
+            //   type: "email",
+            //   placeholder: "Enter Your Email address",
+            //   name: "email",
+            // },
+            // { type: "text", placeholder: "Enter Your Full Name", name: "name" },
+            // {
+            //   placeholder: "Enter Your Message",
+            //   isTextarea: true,
+            //   name: "message",
+            // },
           ].map((input, index) => (
             <motion.div
               key={index}
@@ -445,7 +445,7 @@ const WaitlistSection: React.FC = () => {
           ))}
 
           {/* Submit Button */}
-          <motion.button
+          {/* <motion.button
             type="submit"
             className="bg-[#8C5BFF] text-white font-semibold rounded-lg py-3 text-sm sm:text-base hover:bg-[#7a4fcf] transition cursor-pointer"
             style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
@@ -462,7 +462,7 @@ const WaitlistSection: React.FC = () => {
             transition={{ duration: 0.6, ease: easeOut, delay: 0.6 }}
           >
             Join the waitlist
-          </motion.button>
+          </motion.button> */}
         </motion.form>
       </motion.div>
     </div>

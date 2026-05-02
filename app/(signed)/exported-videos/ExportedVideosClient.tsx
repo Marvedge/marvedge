@@ -134,12 +134,12 @@ export default function ExportedVideosClient() {
       <div className="bg-[#F3F0FC] rounded-xl p-8">
         <div className="mb-8">
           <h2 className="text-2xl font-normal text-[#8B8B8B] mb-2">
-            Manage and organize all your exported videos.
+            Manage and organize all your shared videos.
           </h2>
           <div className="flex flex-wrap items-center justify-between mt-6 gap-4">
             <input
               type="text"
-              placeholder="Search your exported videos"
+              placeholder="Search your shared videos"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[300px] px-4 py-3 rounded-lg bg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#A594F9]"
@@ -226,7 +226,7 @@ export default function ExportedVideosClient() {
         </div>
 
         <div className="mt-8">
-          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Exported Videos</h3>
+          <h3 className="text-3xl font-semibold text-[#1A0033] mb-6">Shared Videos</h3>
           <div className="flex justify-end text-[#A594F9] mb-2 font-medium">
             {filteredAndSortedVideos.length}/{videos.length} videos
           </div>

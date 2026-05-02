@@ -810,16 +810,16 @@ const SettingsPage = () => {
           <div className="w-full mb-12">
             <h2 className="text-xl sm:text-2xl font-bold mb-4">Data Management</h2>
             <div className="flex flex-col gap-3 sm:gap-4 px-4 sm:px-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg border border-[#ede7fa] p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
+              <div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm sm:text-base text-[#1A0033]">
+                  {/* <div className="font-semibold text-sm sm:text-base text-[#1A0033]">
                     Export My Data
-                  </div>
-                  <div className="text-xs sm:text-sm text-gray-400 mt-1">
+                  </div> */}
+                  {/* <div className="text-xs sm:text-sm text-gray-400 mt-1">
                     Download a copy of all your data including demos, teams and settings.
-                  </div>
+                  </div> */}
                 </div>
-                <button className="text-[#7C5CFC] text-xl sm:text-2xl focus:outline-none shrink-0">
+                {/* <button className="text-[#7C5CFC] text-xl sm:text-2xl focus:outline-none shrink-0">
                   <Image
                     src="/icons/icon1.png"
                     alt="Chevron Down"
@@ -827,7 +827,7 @@ const SettingsPage = () => {
                     height={24}
                     className="feather feather-chevron-down"
                   />
-                </button>
+                </button> */}
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-red-50 rounded-lg border border-red-200 p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
                 <div className="flex-1 min-w-0">
