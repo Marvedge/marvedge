@@ -176,9 +176,9 @@ export default function RecorderPage() {
     }
   };
 
-  // UI after user selects a screen/tab (screenStream is set) or uploads a video file
-  if (screenStream || uploadedFileUrl) {
-    const isUploaded = !!uploadedFileUrl && !screenStream;
+  // UI after user starts recording/sharing, uploads a file, or has a completed recording URL
+  if (screenStream || uploadedFileUrl || videoUrl) {
+    const isUploaded = !!uploadedFileUrl && !screenStream && !videoUrl;
     return (
       <div
         className="flex flex-col h-screen w-full overflow-hidden"

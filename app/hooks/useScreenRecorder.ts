@@ -6,6 +6,10 @@ import { toast } from "sonner";
 export const useScreenRecorder = () => {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const combinedStreamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const hasFinalizedRef = useRef(false);
+  const recorderMimeTypeRef = useRef("video/webm");
   const [recording, setRecording] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
@@ -14,6 +18,33 @@ export const useScreenRecorder = () => {
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const recordingStartTimeRef = useRef<number>(0);
   const setBlob = useBlobStore((state) => state.setBlob);
+
+  const finalizeRecording = () => {
+    if (hasFinalizedRef.current) {
+      return;
+    }
+    hasFinalizedRef.current = true;
+
+    if (chunksRef.current.length > 0) {
+      const blob = new Blob(chunksRef.current, { type: recorderMimeTypeRef.current });
+      const url = URL.createObjectURL(blob);
+      setBlob(blob);
+      setVideoUrl(url);
+    }
+
+    const endTime = Date.now();
+    const actualDuration = (endTime - recordingStartTimeRef.current) / 1000;
+    if (actualDuration > 0) {
+      setRecordingDuration(actualDuration);
+    }
+
+    combinedStreamRef.current?.getTracks().forEach((track) => track.stop());
+    combinedStreamRef.current = null;
+    screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    screenStreamRef.current = null;
+    setScreenStream(null);
+    setRecording(false);
+  };
 
   const toggleMic = () => setMicEnabled((prev) => !prev);
 
@@ -68,8 +99,9 @@ export const useScreenRecorder = () => {
         ...screenStreamRef.current.getVideoTracks(),
         ...destination.stream.getAudioTracks(),
       ]);
-
-      const chunks: Blob[] = [];
+      combinedStreamRef.current = combinedStream;
+      chunksRef.current = [];
+      hasFinalizedRef.current = false;
 
       const mimeType = MediaRecorder.isTypeSupported("video/webm; codecs=vp8,opus")
         ? "video/webm; codecs=vp8,opus"
@@ -80,33 +112,19 @@ export const useScreenRecorder = () => {
       mediaRecorder.current = mimeType
         ? new MediaRecorder(combinedStream, { mimeType })
         : new MediaRecorder(combinedStream);
+      recorderMimeTypeRef.current = mediaRecorder.current.mimeType || "video/webm";
 
       mediaRecorder.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          chunks.push(e.data);
+          chunksRef.current.push(e.data);
         }
       };
 
       mediaRecorder.current.onstop = () => {
-        const blobType = mediaRecorder.current?.mimeType || "video/webm";
-        const blob = new Blob(chunks, { type: blobType });
-        const url = URL.createObjectURL(blob);
-        setBlob(blob);
-        setVideoUrl(url);
-
-        // Calculate and set the actual recording duration
-        const endTime = Date.now();
-        const actualDuration = (endTime - recordingStartTimeRef.current) / 1000;
-        setRecordingDuration(actualDuration);
-
-        combinedStream.getTracks().forEach((track) => track.stop());
-        screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-        screenStreamRef.current = null;
-        setScreenStream(null);
-        setRecording(false);
+        finalizeRecording();
       };
 
-      mediaRecorder.current.start();
+      mediaRecorder.current.start(250);
       setRecording(true);
       recordingStartTimeRef.current = Date.now();
       setRecordingDuration(0);
@@ -162,10 +180,7 @@ export const useScreenRecorder = () => {
     if (mediaRecorder.current && mediaRecorder.current.state !== "inactive") {
       mediaRecorder.current.stop();
     } else {
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-      screenStreamRef.current = null;
-      setScreenStream(null);
-      setRecording(false);
+      finalizeRecording();
     }
     if (showToast) {
       toast("Recording stopped", { icon: "⏹️" });
