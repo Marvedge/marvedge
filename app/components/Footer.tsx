@@ -27,7 +27,7 @@ const socialIcons = [
 
 const linkSections = [
   {
-    // title: "Company",
+    title: "",
     items: ["", ""],
   },
 ];
@@ -386,63 +386,78 @@ const WaitlistSection: React.FC = () => {
           }}
           transition={{ duration: 0.7, ease: easeOut, delay: 0.3 }}
         >
-          {[
-            // {
-            //   type: "email",
-            //   placeholder: "Enter Your Email address",
-            //   name: "email",
-            // },
-            // { type: "text", placeholder: "Enter Your Full Name", name: "name" },
-            // {
-            //   placeholder: "Enter Your Message",
-            //   isTextarea: true,
-            //   name: "message",
-            // },
-          ].map((input, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{
-                opacity: isInView ? 1 : 0,
-                x: isInView ? 0 : -20,
-              }}
-              transition={{
-                duration: 0.5,
-                ease: easeOut,
-                delay: 0.3 + index * 0.1,
-              }}
-            >
-              {input.isTextarea ? (
-                <motion.textarea
-                  name={input.name}
-                  placeholder={input.placeholder}
-                  value={form[input.name as keyof typeof form]}
-                  onChange={handleChange}
-                  rows={4}
-                  className="bg-white text-[#2d2347] w-full placeholder:text-[#999999] rounded-lg px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] resize-none border border-[#e0e0e0]"
-                  style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
-                  whileFocus={{
-                    scale: 1.02,
-                    boxShadow: "0 0 20px rgba(140, 91, 255, 0.2)",
-                  }}
-                />
-              ) : (
-                <motion.input
-                  type={input.type}
-                  name={input.name}
-                  placeholder={input.placeholder}
-                  value={form[input.name as keyof typeof form]}
-                  onChange={handleChange}
-                  className="bg-white text-[#2d2347] w-full placeholder:text-[#999999] rounded-lg px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] border border-[#e0e0e0]"
-                  style={{ fontFamily: "var(--font-raleway)", fontWeight: 400 }}
-                  whileFocus={{
-                    scale: 1.02,
-                    boxShadow: "0 0 20px rgba(140, 91, 255, 0.2)",
-                  }}
-                />
-              )}
-            </motion.div>
-          ))}
+          {(
+            [] as Array<{
+              type?: string;
+              placeholder: string;
+              name: "email" | "name" | "message";
+              isTextarea?: boolean;
+            }>
+          ) /* currently disabled form fields */
+            .concat([
+              // {
+              //   type: "email",
+              //   placeholder: "Enter Your Email address",
+              //   name: "email",
+              // },
+              // { type: "text", placeholder: "Enter Your Full Name", name: "name" },
+              // {
+              //   placeholder: "Enter Your Message",
+              //   isTextarea: true,
+              //   name: "message",
+              // },
+            ])
+            .map((input, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{
+                  opacity: isInView ? 1 : 0,
+                  x: isInView ? 0 : -20,
+                }}
+                transition={{
+                  duration: 0.5,
+                  ease: easeOut,
+                  delay: 0.3 + index * 0.1,
+                }}
+              >
+                {input.isTextarea ? (
+                  <motion.textarea
+                    name={input.name}
+                    placeholder={input.placeholder}
+                    value={form[input.name as keyof typeof form]}
+                    onChange={handleChange}
+                    rows={4}
+                    className="bg-white text-[#2d2347] w-full placeholder:text-[#999999] rounded-lg px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] resize-none border border-[#e0e0e0]"
+                    style={{
+                      fontFamily: "var(--font-raleway)",
+                      fontWeight: 400,
+                    }}
+                    whileFocus={{
+                      scale: 1.02,
+                      boxShadow: "0 0 20px rgba(140, 91, 255, 0.2)",
+                    }}
+                  />
+                ) : (
+                  <motion.input
+                    type={input.type}
+                    name={input.name}
+                    placeholder={input.placeholder}
+                    value={form[input.name as keyof typeof form]}
+                    onChange={handleChange}
+                    className="bg-white text-[#2d2347] w-full placeholder:text-[#999999] rounded-lg px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#8C5BFF] border border-[#e0e0e0]"
+                    style={{
+                      fontFamily: "var(--font-raleway)",
+                      fontWeight: 400,
+                    }}
+                    whileFocus={{
+                      scale: 1.02,
+                      boxShadow: "0 0 20px rgba(140, 91, 255, 0.2)",
+                    }}
+                  />
+                )}
+              </motion.div>
+            ))}
 
           {/* Submit Button */}
           {/* <motion.button

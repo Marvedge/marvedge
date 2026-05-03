@@ -100,6 +100,10 @@ export const useScreenRecorder = () => {
         setRecordingDuration(actualDuration);
 
         combinedStream.getTracks().forEach((track) => track.stop());
+        screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+        screenStreamRef.current = null;
+        setScreenStream(null);
+        setRecording(false);
       };
 
       mediaRecorder.current.start();
@@ -127,6 +131,13 @@ export const useScreenRecorder = () => {
         audio: true,
       });
 
+      const [videoTrack] = screen.getVideoTracks();
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          stopRecording(false);
+        };
+      }
+
       screenStreamRef.current = screen;
       setScreenStream(screen);
       toast.success("Screen sharing started!");
@@ -147,10 +158,18 @@ export const useScreenRecorder = () => {
     }
   };
 
-  const stopRecording = () => {
-    mediaRecorder.current?.stop();
-    setRecording(false);
-    toast("Recording stopped", { icon: "⏹️" });
+  const stopRecording = (showToast = true) => {
+    if (mediaRecorder.current && mediaRecorder.current.state !== "inactive") {
+      mediaRecorder.current.stop();
+    } else {
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+      setScreenStream(null);
+      setRecording(false);
+    }
+    if (showToast) {
+      toast("Recording stopped", { icon: "⏹️" });
+    }
   };
 
   const reset = () => {

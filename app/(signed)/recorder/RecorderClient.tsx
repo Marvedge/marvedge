@@ -14,7 +14,6 @@ import { sanitizeFilename } from "@/app/lib/constants";
 
 // Import custom hooks
 import { useRecorderState, useRecordingTimer } from "./hooks/useRecorderState";
-import { useCameraControls } from "./hooks/useCameraControls";
 import { useVideoDuration } from "./hooks/useVideoDuration";
 
 // Import components
@@ -73,9 +72,6 @@ export default function RecorderPage() {
     fileInputRef,
     recordingIntervalRef,
   } = useRecorderState();
-
-  const { cameraStream, enableCamera, setEnableCamera, videoPreview, startCamera, stopCamera } =
-    useCameraControls();
 
   const { setBlob, blob, title, setTitle } = useBlobStore();
 
@@ -248,15 +244,9 @@ export default function RecorderPage() {
                   recording={recording}
                   isUploaded={isUploaded}
                   videoUrl={videoUrl}
-                  cameraStream={cameraStream}
-                  enableCamera={enableCamera}
                   saveMessage={saveMessage}
-                  videoPreview={videoPreview}
                   startScreenShare={startScreenShare}
                   stopRecording={stopRecording}
-                  setEnableCamera={setEnableCamera}
-                  startCamera={startCamera}
-                  stopCamera={stopCamera}
                   setUploadedFileUrl={setUploadedFileUrl}
                   setUploadedFileType={setUploadedFileType}
                   setBlob={setBlob}

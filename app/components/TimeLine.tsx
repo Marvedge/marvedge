@@ -1727,8 +1727,8 @@ export default function TimelineRuler({
                       key={`text-${overlay.id}`}
                       className={`absolute top-0 h-[84px] mt-[50px] group cursor-grab transition-opacity ${
                         isSelected
-                          ? "bg-[#FF3939]/60 opacity-80 z-10 hover:border-2 border-[#7C5CFC] rounded-md"
-                          : "bg-[#FF3939]/35 opacity-55 hover:opacity-70 z-8"
+                          ? "bg-[#FFF4A8]/85 opacity-90 z-10 hover:border-2 border-[#B38700] rounded-md"
+                          : "bg-[#FFF4A8]/65 opacity-75 hover:opacity-90 border border-[#D4A017] z-8 rounded-md"
                       }`}
                       style={{
                         left: `${startPosition}px`,
@@ -1769,7 +1769,7 @@ export default function TimelineRuler({
                       </div>
 
                       <div
-                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#FF3939]/60 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        className="flex items-center justify-center absolute py-1 top-0 -left-1 h-[84px] w-[23px] bg-[#D4A017]/75 rounded-l-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#B38700]"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           setDragTextState({
@@ -1787,7 +1787,7 @@ export default function TimelineRuler({
                       </div>
 
                       <div
-                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#FF3939]/60 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#FF3939]"
+                        className="flex items-center justify-center absolute py-1 top-0 -right-1 h-[84px] w-[23px] bg-[#D4A017]/75 rounded-r-md group-hover:opacity-100 cursor-ew-resize transition-opacity hover:bg-[#B38700]"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           setDragTextState({
