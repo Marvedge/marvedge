@@ -29,11 +29,7 @@ const ForgotPassword = () => {
       forgotPasswordSchema.parse({ email });
       const res = await axios.post("/api/auth/request-reset", { email });
       if (res.status === 200) {
-        toast.success("OTP sent to your email!");
-        setTimeout(
-          () => router.push(`/auth/reset-password?email=${encodeURIComponent(email!)}`),
-          1500
-        );
+        toast.success("Password reset link sent to your email!");
       }
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -107,7 +103,7 @@ const ForgotPassword = () => {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">Forgot Password</h1>
             <p className="text-sm text-gray-600 font-semibold">
-              Enter your email to receive an OTP for password reset.
+              Enter your email to receive a password reset link.
             </p>
           </div>
           <input
@@ -124,7 +120,7 @@ const ForgotPassword = () => {
             disabled={isLoading}
             className="w-full py-3 bg-[#6356D7] text-white rounded-md hover:bg-[#7E5FFF] font-semibold transition-all text-sm shadow-md"
           >
-            {isLoading ? "Sending..." : "Send OTP"}
+            {isLoading ? "Sending..." : "Send Reset Link"}
           </button>
         </form>
       </div>

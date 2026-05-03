@@ -9,7 +9,7 @@ import axios from "axios";
 const resetPasswordSchema = z
   .object({
     email: z.string().min(1, "Please enter your email").email("Invalid email address"),
-    otp: z.string().min(4, "Please enter the OTP"),
+    token: z.string().min(1, "Invalid reset token"),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
   })
@@ -24,7 +24,6 @@ const ResetPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [animatePanel, setAnimatePanel] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
-  const otpRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -51,7 +50,7 @@ const ResetPassword = () => {
     setIsLoading(true);
     const formData = {
       email: emailRef.current?.value.trim(),
-      otp: otpRef.current?.value.trim(),
+      token: searchParams.get("token") || "",
       password: passwordRef.current?.value,
       confirmPassword: confirmPasswordRef.current?.value,
     };
@@ -132,7 +131,7 @@ const ResetPassword = () => {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">Reset Password</h1>
             <p className="text-sm text-gray-600 font-semibold">
-              Enter your email, OTP, and new password to reset your account.
+              Enter your new password to reset your account.
             </p>
           </div>
           <input
@@ -141,15 +140,6 @@ const ResetPassword = () => {
             autoComplete="email"
             placeholder="Your Email"
             ref={emailRef}
-            required
-            className="w-full p-3 border-2 border-gray-500 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
-          />
-          <input
-            type="text"
-            name="otp"
-            autoComplete="one-time-code"
-            placeholder="Enter OTP"
-            ref={otpRef}
             required
             className="w-full p-3 border-2 border-gray-500 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#6A4EFF] transition-all duration-300 focus:scale-[1.02] hover:border-[#B8AAFF]"
           />
