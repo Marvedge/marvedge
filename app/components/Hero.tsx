@@ -226,7 +226,7 @@ const Hero: React.FC = () => {
               transition={{ duration: 0.1 }}
             >
               <Image src="/ri_gemini-fill.png" alt="Explore Examples" width={20} height={20} />
-              Explore Examples
+              Book a Demo
             </motion.button>
           </motion.div>
         </motion.div>

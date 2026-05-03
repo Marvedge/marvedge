@@ -9,7 +9,6 @@ interface TiltCardProps {
   description: string;
   icon: string;
   image: string;
-  linkText?: string;
   index: number;
   bgColor?: string;
 }
@@ -23,7 +22,6 @@ const TiltCard: React.FC<TiltCardProps> = ({
   title,
   description,
   image,
-  linkText = "Learn more >",
   bgColor = "bg-gray-100",
 }) => {
   return (
@@ -54,9 +52,6 @@ const TiltCard: React.FC<TiltCardProps> = ({
       >
         {description}
       </p>
-      <a href="#" className="mt-4 inline-block text-blue-500 text-base hover:underline">
-        {linkText}
-      </a>
     </div>
   );
 };
