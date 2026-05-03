@@ -3,8 +3,8 @@
 import React, { useRef, useState } from "react";
 import { motion, useInView, easeOut, useScroll, useTransform } from "framer-motion";
 import { Check } from "lucide-react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { toast } from "sonner";
 
 const Hero3: React.FC = () => {
   const sectionRef = useRef(null);
@@ -23,18 +23,50 @@ const Hero3: React.FC = () => {
   const y2 = useTransform(scrollYProgress, [0, 1], [0, 50]);
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1.02, 1]);
 
-  const router = useRouter();
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !name) {
+      toast.error("Email and Full Name are required.");
       return;
     }
 
-    router.push(`/auth/signup?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
+    try {
+      setIsSubmitting(true);
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          name,
+          company,
+          productUrl: url,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to submit request.");
+        return;
+      }
+      toast.success("Demo request sent. We'll contact you soon.");
+      setEmail("");
+      setName("");
+      setCompany("");
+      setUrl("");
+    } catch (error) {
+      console.error("Failed to submit demo request", error);
+      toast.error("Failed to submit request.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div
+      id="book-demo"
       ref={sectionRef}
       className="bg-white min-h-[400px] relative overflow-hidden pt-12 sm:pt-16 md:pt-32 lg:pt-[170px] pb-12"
     >
@@ -254,6 +286,7 @@ const Hero3: React.FC = () => {
               />
               <motion.button
                 type="submit"
+                disabled={isSubmitting}
                 className="w-full cursor-pointer py-3 sm:py-4 bg-white text-[#8370F0] font-semibold rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base hover:bg-purple-100 transition"
                 whileHover={{
                   scale: 1.05,
@@ -273,7 +306,7 @@ const Hero3: React.FC = () => {
                 }}
               >
                 <Image src="/Group 55.png" alt="Start Free Trial" width={20} height={20} />
-                Start Free trial
+                {isSubmitting ? "Sending..." : "Book a Demo"}
               </motion.button>
             </form>
           </motion.div>

@@ -24,6 +24,12 @@ const Hero: React.FC = () => {
       router.push("/auth/signup");
     }
   };
+  const handleExploreExamplesClick = () => {
+    const section = document.getElementById("book-demo");
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const actionButtonText = status === "authenticated" ? "Go to Dashboard" : "Start Free Trial";
 
@@ -212,6 +218,7 @@ const Hero: React.FC = () => {
               {actionButtonText}
             </motion.button>
             <motion.button
+              onClick={handleExploreExamplesClick}
               className="flex items-center justify-center cursor-pointer gap-2 border-2 border-gray-300 bg-white shadow-md px-8 sm:px-12 py-3 sm:py-4 rounded-lg text-[#261753] text-base sm:text-lg font-semibold hover:shadow-lg transition whitespace-nowrap"
               style={{ fontFamily: "var(--font-raleway)", fontWeight: 500 }}
               whileHover={{ scale: 1.05, y: -2 }}
