@@ -41,6 +41,7 @@ const SettingsPage = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
   const [originalForm, setOriginalForm] = useState({ ...form });
 
   const initials = useMemo(() => {
@@ -275,6 +276,28 @@ const SettingsPage = () => {
       signOut({ callbackUrl: "/" });
     } else {
       alert(`Failed to delete account: ${data.error}`);
+    }
+  };
+
+  const handleSendPasswordReset = async () => {
+    try {
+      setIsSendingPasswordReset(true);
+      const res = await fetch("/api/auth/request-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authenticatedOnly: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to send reset email.");
+        return;
+      }
+      toast.success("Password reset link sent to your email.");
+    } catch (error) {
+      console.error("Failed to send password reset:", error);
+      toast.error("Failed to send reset email.");
+    } finally {
+      setIsSendingPasswordReset(false);
     }
   };
 
@@ -773,53 +796,36 @@ const SettingsPage = () => {
       )}
       {activeTab === "Account" && (
         <div className="px-2 sm:px-4 md:px-8 lg:px-16 xl:px-24 flex flex-col">
-          <div className="w-full mt-8 mb-2">
-            <h2 className="text-xl sm:text-2xl font-bold mb-1">Plan and Billing</h2>
-          </div>
-          <div className="w-full mb-4 bg-[#F3F0FC] rounded-xl">
-            <div className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <div>
-                  <div className="font-semibold text-base sm:text-lg text-[#1A0033]">Free Plan</div>
-                  <div className="text-xs sm:text-sm text-gray-500">
-                    Create up to 5 demos and basic features
-                  </div>
-                </div>
-                <button className="px-4 sm:px-6 py-2 rounded-lg bg-[#7C5CFC] text-white text-sm sm:text-base font-semibold shadow hover:bg-[#8A76FC] transition whitespace-nowrap w-full sm:w-auto">
-                  Upgrade to Pro
-                </button>
-              </div>
-            </div>
-            <div className="px-4 sm:px-6 pb-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 justify-start">
-                <div className="bg-white rounded-lg p-4 sm:p-6 flex flex-col items-center justify-center">
-                  <div className="text-gray-400 text-xs sm:text-sm mb-2">Demos created</div>
-                  <div className="text-2xl sm:text-3xl font-bold text-[#7C5CFC]">5</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 sm:p-6 flex flex-col items-center justify-center">
-                  <div className="text-gray-400 text-xs sm:text-sm mb-2">Teams joined</div>
-                  <div className="text-2xl sm:text-3xl font-bold text-[#7C5CFC]">1</div>
-                </div>
-                <div className="bg-white rounded-lg p-4 sm:p-6 flex flex-col items-center justify-center">
-                  <div className="text-gray-400 text-xs sm:text-sm mb-2">Total views</div>
-                  <div className="text-2xl sm:text-3xl font-bold text-[#7C5CFC]">25</div>
-                </div>
-              </div>
-            </div>
-          </div>
           <div className="w-full mb-12">
             <h2 className="text-xl sm:text-2xl font-bold mb-4">Data Management</h2>
             <div className="flex flex-col gap-3 sm:gap-4 px-4 sm:px-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg border border-[#ede7fa] p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-[#F3F0FC] rounded-lg border border-[#ede7fa] p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm sm:text-base text-[#1A0033]">
-                    Export My Data
+                    Update Password
                   </div>
-                  <div className="text-xs sm:text-sm text-gray-400 mt-1">
-                    Download a copy of all your data including demos, teams and settings.
+                  <div className="text-xs sm:text-sm text-gray-500 mt-1">
+                    We will send a secure reset link to your email.
                   </div>
                 </div>
-                <button className="text-[#7C5CFC] text-xl sm:text-2xl focus:outline-none shrink-0">
+                <button
+                  onClick={handleSendPasswordReset}
+                  disabled={isSendingPasswordReset}
+                  className="text-[#7C5CFC] text-sm sm:text-base font-semibold px-4 py-2 rounded-lg border border-[#d9d1fb] bg-white hover:bg-[#ede7fa] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSendingPasswordReset ? "Sending..." : "Send Link"}
+                </button>
+              </div>
+              <div>
+                <div className="flex-1 min-w-0">
+                  {/* <div className="font-semibold text-sm sm:text-base text-[#1A0033]">
+                    Export My Data
+                  </div> */}
+                  {/* <div className="text-xs sm:text-sm text-gray-400 mt-1">
+                    Download a copy of all your data including demos, teams and settings.
+                  </div> */}
+                </div>
+                {/* <button className="text-[#7C5CFC] text-xl sm:text-2xl focus:outline-none shrink-0">
                   <Image
                     src="/icons/icon1.png"
                     alt="Chevron Down"
@@ -827,7 +833,7 @@ const SettingsPage = () => {
                     height={24}
                     className="feather feather-chevron-down"
                   />
-                </button>
+                </button> */}
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-red-50 rounded-lg border border-red-200 p-4 sm:px-6 sm:py-4 gap-3 sm:gap-4">
                 <div className="flex-1 min-w-0">

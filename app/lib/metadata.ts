@@ -32,9 +32,9 @@ const pageMetadata: Record<string, { title: string; navbar: NavbarConfig }> = {
     },
   },
   "exported-videos": {
-    title: "Exported Videos",
+    title: "Shared Videos",
     navbar: {
-      titleText: "Exported Videos",
+      titleText: "Shared Videos",
       iconSRC: "/Group.png",
       iconALT: "exported_videos_icon",
     },

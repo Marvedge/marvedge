@@ -1887,7 +1887,7 @@ export default function EditorPage() {
                               <button
                                 type="button"
                                 aria-label="Delete text"
-                                className="absolute -top-7 right-0 bg-red-500 text-white px-2 py-1 rounded shadow hover:bg-red-600"
+                                className="absolute -top-7 right-0 h-6 w-6 rounded bg-red-500 text-white shadow hover:bg-red-600 flex items-center justify-center"
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -1897,7 +1897,19 @@ export default function EditorPage() {
                                   setSelectedTextOverlayId(null);
                                 }}
                               >
-                                Delete
+                                <svg
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 7h12M9 7V5h6v2m-7 3v7m4-7v7m4-7v7M8 21h8a1 1 0 001-1V7H7v13a1 1 0 001 1z"
+                                  />
+                                </svg>
                               </button>
                             )}
                             {isSelected && (

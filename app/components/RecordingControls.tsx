@@ -3,15 +3,9 @@ interface RecordingControlsProps {
   recording: boolean;
   isUploaded: boolean;
   videoUrl: string | null;
-  cameraStream: MediaStream | null;
-  enableCamera: boolean;
   saveMessage: string;
-  videoPreview: React.RefObject<HTMLVideoElement | null>;
   startScreenShare: () => void;
   stopRecording: () => void;
-  setEnableCamera: (value: boolean | ((prev: boolean) => boolean)) => void;
-  startCamera: () => void;
-  stopCamera: () => void;
   setUploadedFileUrl: (url: string | null) => void;
   setUploadedFileType: (type: string | null) => void;
   setBlob: (blob: Blob | null) => void;
@@ -25,15 +19,9 @@ export default function RecordingControls({
   recording,
   isUploaded,
   videoUrl,
-  cameraStream,
-  enableCamera,
   saveMessage,
-  videoPreview,
   startScreenShare,
   stopRecording,
-  setEnableCamera,
-  startCamera,
-  stopCamera,
   setUploadedFileUrl,
   setUploadedFileType,
   setBlob,
@@ -68,36 +56,7 @@ export default function RecordingControls({
             >
               Stop Recording
             </button>
-
-            <button
-              onClick={() => {
-                setEnableCamera((prev) => !prev);
-                if (cameraStream) {
-                  stopCamera();
-                } else {
-                  startCamera();
-                }
-              }}
-              className={`px-8 py-3 rounded-2xl font-semibold shadow-lg transition text-sm sm:text-base ${
-                cameraStream
-                  ? "bg-[#EF4444] hover:bg-[#EF4444] text-white"
-                  : "bg-white hover:bg-[#F3F0FC] border border-[#ede7fa] text-[#8A76FC]"
-              }`}
-            >
-              {cameraStream ? "Stop Camera" : "Start Camera"}
-            </button>
           </div>
-        </div>
-      )}
-
-      {screenStream && recording && !isUploaded && enableCamera && !videoUrl && (
-        <div className="fixed bottom-2 right-5 w-32 h-32 bg-black shadow z-50 rounded-full overflow-hidden">
-          <video
-            ref={videoPreview}
-            autoPlay
-            playsInline
-            className="w-full h-full object-cover rounded-full"
-          />
         </div>
       )}
 

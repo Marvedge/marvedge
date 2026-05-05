@@ -19,6 +19,20 @@ const Pricing: React.FC = () => {
   const pathname = usePathname();
 
   const handleAuthRedirect = async (amount: number, plan: string) => {
+    if (plan === "enterprise") {
+      if (pathname === "/pricing") {
+        router.push("/contact-us");
+      } else {
+        const section = document.getElementById("book-demo");
+        if (section) {
+          section.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          router.push("/#book-demo");
+        }
+      }
+      return;
+    }
+
     if (amount === 0) {
       router.push("/dashboard");
       return;

@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { email, otp, password, confirmPassword } = await req.json();
+    const { email, otp, token, password, confirmPassword } = await req.json();
+    const resetToken = token || otp;
 
-    if (!email || !otp || !password || !confirmPassword) {
+    if (!email || !resetToken || !password || !confirmPassword) {
       return NextResponse.json({ error: "All fields are required." }, { status: 400 });
     }
 
@@ -17,16 +18,19 @@ export async function POST(req: Request) {
     const resetRequest = await prisma.passwordReset.findFirst({
       where: {
         email,
-        otp,
+        otp: resetToken,
       },
     });
 
     if (!resetRequest) {
-      return NextResponse.json({ error: "Invalid OTP or email." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid or expired reset link." }, { status: 400 });
     }
 
     if (new Date() > resetRequest.expiresAt) {
-      return NextResponse.json({ error: "OTP expired. Please request again." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Reset link expired. Please request again." },
+        { status: 400 }
+      );
     }
 
     const user = await prisma.user.findUnique({

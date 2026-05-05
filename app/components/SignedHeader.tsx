@@ -125,18 +125,6 @@ const SignedHeader = ({ titleText, iconSRC, iconALT, className }: SignedHeaderPr
             <span className="inline-block">👋</span>
           </span>
           <div className="flex items-center gap-1 sm:gap-1.5">
-            <button
-              className="relative p-1 sm:p-2 rounded-full hover:bg-[#F1ECFF] transition-colors focus:outline-none"
-              title="Notifications"
-            >
-              <Image
-                src="/icons/bell.png"
-                alt="Notifications"
-                width={18}
-                height={18}
-                className="w-4.5 h-4.5 sm:w-6 sm:h-6"
-              />
-            </button>
             <div className="relative" ref={dropdownRef}>
               <button
                 className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer border-2 sm:border-4 border-white hover:scale-105 transition-all overflow-hidden"
