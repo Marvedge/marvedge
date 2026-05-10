@@ -74,6 +74,7 @@ export default function ExportSettingsModal({
     "rathourrahul21@gmail.com",
     "ajitkumarshankhwar25@gmail.com",
     "somyanayak281@gmail.com",
+    "manushichillar412@gmail.com",
   ];
 
   const isExempt =
