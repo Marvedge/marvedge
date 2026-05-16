@@ -161,6 +161,7 @@ type TextRange = {
   y: number;
   fontSize: number;
   color: string;
+  fontFamily: string;
 };
 
 const EPS = 0.001;
@@ -327,6 +328,7 @@ function remapTextOverlaysToTrimmedTimeline(
       y: Number(t.y),
       fontSize: Number(t.fontSize),
       color: String(t.color ?? "#ffffff"),
+      fontFamily: String(t.fontFamily ?? "Arial"),
     }))
     .filter(
       (t: TextRange) =>
@@ -344,6 +346,7 @@ function remapTextOverlaysToTrimmedTimeline(
       y: Math.max(0, Math.min(1, t.y)),
       fontSize: Math.max(10, Math.min(160, Math.round(t.fontSize))),
       color: t.color,
+      fontFamily: t.fontFamily,
     }))
     .filter(
       (t: TextRange) =>
@@ -366,6 +369,7 @@ function remapTextOverlaysToTrimmedTimeline(
         y: t.y,
         fontSize: t.fontSize,
         color: t.color,
+        fontFamily: t.fontFamily,
       });
     }
   }
@@ -1316,9 +1320,14 @@ const worker = new Worker(
           const xExpr = `(w*${nx.toFixed(4)}-text_w/2)`;
           const yExpr = `(h*${ny.toFixed(4)}-text_h/2)`;
 
+          let fontOpt = "";
+          if (overlay.fontFamily) {
+            fontOpt = `font='${overlay.fontFamily}':`;
+          }
+
           filters.push(
             `${prev}drawtext=textfile=${safeFile}:reload=0:` +
-              `fontsize=${size}:fontcolor=${safeColor}:` +
+              `fontsize=${size}:fontcolor=${safeColor}:${fontOpt}` +
               `x='${xExpr}':y='${yExpr}':` +
               "shadowcolor=black@0.55:shadowx=1:shadowy=1:" +
               `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`,

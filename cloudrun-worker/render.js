@@ -240,6 +240,7 @@ function remapTextOverlaysToTrimmedTimeline(
       y: Number(t.y),
       fontSize: Number(t.fontSize),
       color: String(t.color ?? "#ffffff"),
+      fontFamily: String(t.fontFamily ?? "Arial"),
     }))
     .filter(
       (t) =>
@@ -257,6 +258,7 @@ function remapTextOverlaysToTrimmedTimeline(
       y: Math.max(0, Math.min(1, t.y)),
       fontSize: Math.max(10, Math.min(160, Math.round(t.fontSize))),
       color: t.color,
+      fontFamily: t.fontFamily,
     }))
     .filter((t) => t.text.trim().length > 0 && t.endTime - t.startTime > EPS)
     .sort((a, b) => a.startTime - b.startTime);
@@ -276,6 +278,7 @@ function remapTextOverlaysToTrimmedTimeline(
         y: t.y,
         fontSize: t.fontSize,
         color: t.color,
+        fontFamily: t.fontFamily,
       });
     }
   }
@@ -341,6 +344,39 @@ function remapSubtitleCuesToTrimmedTimeline(
 
 function ffmpegEscapeFilterValue(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
+function resolveFontForDrawtext(fontFamily) {
+  const raw = String(fontFamily || "").trim();
+  if (!raw) return { kind: "none", value: "" };
+
+  // Prefer explicit font files for exact rendering fidelity.
+  const candidates = {
+    arial: [
+      "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+      "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ],
+    roboto: ["/usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf"],
+    inter: [
+      "/app/fonts/Inter-Regular.ttf",
+      "/usr/share/fonts/truetype/inter/Inter-Regular.ttf",
+      "/usr/share/fonts/truetype/inter-vf/Inter.var.ttf",
+    ],
+    poppins: ["/app/fonts/Poppins-Regular.ttf"],
+    caveat: ["/app/fonts/Caveat-Regular.ttf"],
+    georgia: ["/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"],
+  };
+
+  const key = raw.toLowerCase();
+  const paths = candidates[key] || [];
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      return { kind: "fontfile", value: p };
+    }
+  }
+
+  // Fallback to family name if no file exists.
+  return { kind: "font", value: raw };
 }
 
 function normalizeHexColor(input, fallback = "white") {
@@ -625,6 +661,7 @@ async function renderChunkFromRecipe({
       y: Number(t.y),
       fontSize: Number(t.fontSize),
       color: String(t.color ?? "#ffffff"),
+      fontFamily: String(t.fontFamily ?? "Arial"),
     }),
   ).map((t) => ({
     startTime: t.start,
@@ -634,6 +671,7 @@ async function renderChunkFromRecipe({
     y: t.y,
     fontSize: t.fontSize,
     color: t.color,
+    fontFamily: t.fontFamily,
   }));
 
   const subtitleList = Array.isArray(recipe.subtitles)
@@ -955,9 +993,20 @@ async function renderChunkFromRecipe({
       const xExpr = `(w*${nx.toFixed(4)}-text_w/2)`;
       const yExpr = `(h*${ny.toFixed(4)}-text_h/2)`;
 
+      let fontOpt = "";
+      if (overlay.fontFamily) {
+        const resolved = resolveFontForDrawtext(overlay.fontFamily);
+        if (resolved.kind === "fontfile" && resolved.value) {
+          const safeFontFile = ffmpegEscapeFilterValue(resolved.value);
+          fontOpt = `fontfile='${safeFontFile}':`;
+        } else if (resolved.kind === "font" && resolved.value) {
+          fontOpt = `font='${resolved.value}':`;
+        }
+      }
+
       filters.push(
         `${prev}drawtext=textfile=${safeFile}:reload=0:` +
-          `fontsize=${size}:fontcolor=${safeColor}:` +
+          `fontsize=${size}:fontcolor=${safeColor}:${fontOpt}` +
           `x='${xExpr}':y='${yExpr}':` +
           "shadowcolor=black@0.55:shadowx=1:shadowy=1:" +
           `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'${next}`,
