@@ -3,6 +3,7 @@ import axios from "axios";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "../hooks/useEditorState";
 import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
+import { fixWebmDurationIfNeeded } from "@/app/lib/fixWebmDuration";
 
 function getDemoIdFromApiResponse(data: unknown): string | null {
   if (!data || typeof data !== "object") {
@@ -125,10 +126,11 @@ export async function handleSaveDemo(
           throw new Error("Failed to fetch video blob");
         }
         const videoBlob = await response.blob();
+        const fixedVideoBlob = await fixWebmDurationIfNeeded(videoBlob);
 
         console.log("Uploading source video to GCS...");
         const upload = await uploadBlobToGcs({
-          blob: videoBlob,
+          blob: fixedVideoBlob,
           filename: "video.webm",
           kind: "demo-source",
         });
@@ -634,9 +636,10 @@ export const exportVideo = async ({
           throw new Error("Failed to fetch video blob");
         }
         const videoBlob = await response.blob();
+        const fixedVideoBlob = await fixWebmDurationIfNeeded(videoBlob);
         toast.loading("Uploading raw video to GCS...", { id: toastId });
         const uploaded = await uploadBlobToGcs({
-          blob: videoBlob,
+          blob: fixedVideoBlob,
           filename: "video.webm",
           kind: "export-source",
         });
