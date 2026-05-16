@@ -9,7 +9,6 @@ interface CustomVideoControlsProps {
   duration: number;
   currentTime: number;
   setCurrentTime: (t: number) => void;
-  recordingDuration: number;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   playing: boolean;
   volume: number;
@@ -23,7 +22,6 @@ export default function CustomVideoControls({
   duration,
   currentTime,
   setCurrentTime,
-  recordingDuration,
   setPlaying,
   playing,
   volume,
@@ -84,7 +82,7 @@ export default function CustomVideoControls({
     setDragging(false);
   };
 
-  const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+  const displayDuration = duration;
   const speed = Math.max(0.0001, playbackSpeed);
   const effectiveDuration = displayDuration / speed;
   const effectiveCurrentTime = currentTime / speed;

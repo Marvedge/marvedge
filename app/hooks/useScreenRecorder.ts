@@ -18,6 +18,7 @@ export const useScreenRecorder = () => {
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
   const recordingStartTimeRef = useRef<number>(0);
   const setBlob = useBlobStore((state) => state.setBlob);
+  const setSourceDuration = useBlobStore((state) => state.setSourceDuration);
 
   const finalizeRecording = () => {
     if (hasFinalizedRef.current) {
@@ -36,6 +37,7 @@ export const useScreenRecorder = () => {
     const actualDuration = (endTime - recordingStartTimeRef.current) / 1000;
     if (actualDuration > 0) {
       setRecordingDuration(actualDuration);
+      setSourceDuration(actualDuration);
     }
 
     combinedStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -192,6 +194,7 @@ export const useScreenRecorder = () => {
     setScreenStream(null);
     screenStreamRef.current = null;
     setRecordingDuration(0);
+    setSourceDuration(0);
   };
 
   return {

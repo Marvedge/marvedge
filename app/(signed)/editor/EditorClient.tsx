@@ -25,7 +25,6 @@ import CustomVideoControls from "@/app/components/CustomVideoControls";
 // Hooks
 import { useEditor } from "@/app/hooks/useEditor";
 import { useBlobStore } from "@/app/store/blobStore";
-import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { useEditorState } from "./hooks/useEditorState";
 import { useURLParams, useFormatTime } from "./hooks/useURLParams";
 import { useVideoDuration } from "./hooks/useVideoDuration";
@@ -161,7 +160,7 @@ export default function EditorPage() {
   const { videoUrl: recordedVideoUrl, thumbnailUrl, processing, resetVideo } = useEditor();
 
   const blob = useBlobStore((state) => state.blob);
-  const { recordingDuration } = useScreenRecorder();
+  const sourceDuration = useBlobStore((state) => state.sourceDuration);
   // const { data: session } = useSession();
 
   // Format time helper
@@ -238,7 +237,7 @@ export default function EditorPage() {
   useVideoDuration({
     videoUrl,
     duration,
-    recordingDuration,
+    recordingDuration: sourceDuration,
     blob,
     playerRef,
     setDuration,
@@ -330,13 +329,7 @@ export default function EditorPage() {
 
   // Use recording duration if available, otherwise use detected duration
   //const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
-  const resolvedDuration = Math.max(
-    0,
-    duration || 0,
-    recordingDuration || 0,
-    timelineEndTime || 0,
-    currentTime || 0
-  );
+  const resolvedDuration = Math.max(0, duration || 0);
 
   // Timeline change handler
   const handleTimelineChange = useCallback(
@@ -1686,26 +1679,12 @@ export default function EditorPage() {
                           }}
                           onProgress={(data) => {
                             setCurrentTime(data.playedSeconds);
-                            if (
-                              Number.isFinite(data.playedSeconds) &&
-                              data.playedSeconds > resolvedDuration
-                            ) {
-                              const nextDuration = Math.ceil(data.playedSeconds);
-                              setDuration(nextDuration);
-                              if (timelineEndTime < nextDuration) {
-                                setTimelineEndTime(nextDuration);
-                                setInputEndTime(formatTimeForInput(nextDuration));
-                              }
-                            }
                             childHandleProgress?.(data);
                           }}
                           onDuration={(loadedDuration) => {
                             if (Number.isFinite(loadedDuration) && loadedDuration > 0) {
-                              setDuration((prev) =>
-                                Number.isFinite(prev) && prev > loadedDuration
-                                  ? prev
-                                  : Math.ceil(loadedDuration)
-                              );
+                              const nextDuration = Math.ceil(loadedDuration);
+                              setDuration((prev) => Math.max(prev, nextDuration));
                             }
                           }}
                           onEnded={() => setPlaying(false)}
@@ -1988,7 +1967,6 @@ export default function EditorPage() {
                       setCurrentTime(t);
                       playerRef.current?.seekTo(t, "seconds");
                     }}
-                    recordingDuration={recordingDuration}
                     setPlaying={setPlaying}
                     playing={playing}
                     volume={volume}
