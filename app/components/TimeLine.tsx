@@ -393,7 +393,7 @@ export default function TimelineRuler({
       updateCurrentTimeFromMouse(e);
     };
     const onUp = () => {
-      setPlaying(false);
+      setPlaying(true);
       setDraggingCurrentTime(false);
     };
     window.addEventListener("mousemove", onMove);

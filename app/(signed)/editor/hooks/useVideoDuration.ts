@@ -46,11 +46,24 @@ export function useVideoDuration({
     };
 
     video.onloadedmetadata = () => {
-      const d = Number(video.duration);
-      if (Number.isFinite(d) && d > 0) {
-        setDuration(Math.floor(d));
+      if (video.duration === Infinity) {
+        video.currentTime = Number.MAX_SAFE_INTEGER;
+        video.ontimeupdate = () => {
+          video.ontimeupdate = null;
+          const d = video.duration;
+          if (Number.isFinite(d) && d > 0) {
+            setDuration(Math.floor(d));
+          }
+          video.currentTime = 0;
+          cleanup();
+        };
+      } else {
+        const d = Number(video.duration);
+        if (Number.isFinite(d) && d > 0) {
+          setDuration(Math.floor(d));
+        }
+        cleanup();
       }
-      cleanup();
     };
 
     video.onerror = () => {
