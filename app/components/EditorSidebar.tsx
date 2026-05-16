@@ -937,9 +937,9 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
                 >
                   Add Text
                 </button>
-                <div className="w-full rounded-lg border border-transparent text-[#8A76FC] py-2 text-sm font-semibold opacity-60 select-none flex items-center justify-center">
+                {/* <div className="w-full rounded-lg border border-transparent text-[#8A76FC] py-2 text-sm font-semibold opacity-60 select-none flex items-center justify-center">
                   Delete via canvas
-                </div>
+                </div> */}
               </div>
             </div>
           </div>
