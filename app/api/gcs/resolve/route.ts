@@ -47,6 +47,22 @@ function parseGsUri(uri: string) {
   return { bucket, object };
 }
 
+async function firstExistingObject(storage: Storage, bucket: string, object: string) {
+  const candidates = [object];
+  if (object.endsWith(".bin")) {
+    const base = object.slice(0, -4);
+    candidates.push(`${base}.webm`, `${base}.mp4`, `${base}.mov`);
+  }
+
+  for (const candidate of candidates) {
+    const [exists] = await storage.bucket(bucket).file(candidate).exists();
+    if (exists) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -69,9 +85,18 @@ export async function GET(req: NextRequest) {
     }
 
     const storage = getStorageClient();
+    const existingObject = await firstExistingObject(storage, parsed.bucket, parsed.object);
+
+    if (!existingObject) {
+      return NextResponse.json(
+        { ok: false, error: "Source video object not found in GCS" },
+        { status: 404 }
+      );
+    }
+
     const [signedUrl] = await storage
       .bucket(parsed.bucket)
-      .file(parsed.object)
+      .file(existingObject)
       .getSignedUrl({
         version: "v4",
         action: "read",
@@ -81,7 +106,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       playableUrl: signedUrl,
-      sourceUrl: inputUrl,
+      sourceUrl: `gs://${parsed.bucket}/${existingObject}`,
     });
   } catch (error) {
     console.error("GCS resolve error:", error);

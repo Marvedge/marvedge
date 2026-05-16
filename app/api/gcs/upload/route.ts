@@ -47,6 +47,23 @@ function extFromFilename(name: string) {
   return name.slice(idx + 1).toLowerCase();
 }
 
+function extFromContentType(contentType: string) {
+  const normalized = contentType.toLowerCase();
+  if (normalized.includes("video/webm")) {
+    return "webm";
+  }
+  if (normalized.includes("video/mp4")) {
+    return "mp4";
+  }
+  if (normalized.includes("image/png")) {
+    return "png";
+  }
+  if (normalized.includes("image/jpeg")) {
+    return "jpg";
+  }
+  return "";
+}
+
 function toSafeKind(kind: unknown) {
   if (typeof kind !== "string") {
     return "generic";
@@ -98,11 +115,12 @@ export async function POST(req: NextRequest) {
       kind?: string;
     };
     const kind = toSafeKind(body.kind);
-    const safeOriginal = sanitizeFilename(body.filename || "upload.bin");
-    const ext = extFromFilename(safeOriginal);
+    const contentType = String(body.contentType || "application/octet-stream");
+    const fallbackName = contentType.startsWith("video/") ? "upload.webm" : "upload.bin";
+    const safeOriginal = sanitizeFilename(body.filename || fallbackName);
+    const ext = extFromFilename(safeOriginal) || extFromContentType(contentType);
     const suffix = ext ? `.${ext}` : "";
     const object = `uploads/${kind}/${userId}/${Date.now()}-${randomUUID()}${suffix}`;
-    const contentType = String(body.contentType || "application/octet-stream");
 
     const storage = getStorageClient();
     const file = storage.bucket(bucketName).file(object);
