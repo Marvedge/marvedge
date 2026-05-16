@@ -3,7 +3,32 @@ import { getServerSession } from "next-auth";
 import { Storage } from "@google-cloud/storage";
 import { authOptions } from "@/app/lib/auth/options";
 
-const storage = new Storage();
+function getStorageClient() {
+  const projectId = (
+    process.env.GOOGLE_CLOUD_PROJECT_ID ||
+    process.env.GCP_PROJECT_ID ||
+    ""
+  ).trim();
+  const clientEmail = (process.env.GOOGLE_CLOUD_CLIENT_EMAIL || "").trim();
+  const privateKeyRaw = process.env.GOOGLE_CLOUD_PRIVATE_KEY || "";
+  const privateKey = privateKeyRaw.includes("\\n")
+    ? privateKeyRaw.replace(/\\n/g, "\n")
+    : privateKeyRaw;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      "Missing Google Cloud credentials env (GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_CLIENT_EMAIL, GOOGLE_CLOUD_PRIVATE_KEY)"
+    );
+  }
+
+  return new Storage({
+    projectId,
+    credentials: {
+      client_email: clientEmail,
+      private_key: privateKey,
+    },
+  });
+}
 
 function parseGsUri(uri: string) {
   if (!uri.startsWith("gs://")) {
@@ -43,6 +68,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid gs:// URL" }, { status: 400 });
     }
 
+    const storage = getStorageClient();
     const [signedUrl] = await storage
       .bucket(parsed.bucket)
       .file(parsed.object)

@@ -5,7 +5,32 @@ import { Storage } from "@google-cloud/storage";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 
-const storage = new Storage();
+function getStorageClient() {
+  const projectId = (
+    process.env.GOOGLE_CLOUD_PROJECT_ID ||
+    process.env.GCP_PROJECT_ID ||
+    ""
+  ).trim();
+  const clientEmail = (process.env.GOOGLE_CLOUD_CLIENT_EMAIL || "").trim();
+  const privateKeyRaw = process.env.GOOGLE_CLOUD_PRIVATE_KEY || "";
+  const privateKey = privateKeyRaw.includes("\\n")
+    ? privateKeyRaw.replace(/\\n/g, "\n")
+    : privateKeyRaw;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      "Missing Google Cloud credentials env (GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_CLIENT_EMAIL, GOOGLE_CLOUD_PRIVATE_KEY)"
+    );
+  }
+
+  return new Storage({
+    projectId,
+    credentials: {
+      client_email: clientEmail,
+      private_key: privateKey,
+    },
+  });
+}
 
 function sanitizeFilename(name: string) {
   return name
@@ -67,35 +92,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const formData = await req.formData();
-    const file = formData.get("file");
-    const kind = toSafeKind(formData.get("kind"));
-
-    if (!(file instanceof File)) {
-      return NextResponse.json({ ok: false, error: "No file provided" }, { status: 400 });
-    }
-
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const safeOriginal = sanitizeFilename(file.name || "upload.bin");
+    const body = (await req.json().catch(() => ({}))) as {
+      filename?: string;
+      contentType?: string;
+      kind?: string;
+    };
+    const kind = toSafeKind(body.kind);
+    const safeOriginal = sanitizeFilename(body.filename || "upload.bin");
     const ext = extFromFilename(safeOriginal);
     const suffix = ext ? `.${ext}` : "";
     const object = `uploads/${kind}/${userId}/${Date.now()}-${randomUUID()}${suffix}`;
+    const contentType = String(body.contentType || "application/octet-stream");
 
-    await storage
-      .bucket(bucketName)
-      .file(object)
-      .save(bytes, {
-        resumable: false,
-        contentType: file.type || "application/octet-stream",
-        metadata: {
-          cacheControl: "public, max-age=31536000, immutable",
-        },
-      });
+    const storage = getStorageClient();
+    const file = storage.bucket(bucketName).file(object);
+    const [signedUploadUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: Date.now() + 15 * 60 * 1000,
+      contentType,
+    });
+
+    // Optional signed GET for immediate playback if bucket is private.
+    const [signedReadUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 24 * 60 * 60 * 1000,
+    });
 
     return NextResponse.json({
       ok: true,
       bucket: bucketName,
       object,
+      uploadUrl: signedUploadUrl,
+      signedReadUrl,
       url: `gs://${bucketName}/${object}`,
       publicUrl: `https://storage.googleapis.com/${bucketName}/${object}`,
     });
