@@ -24,10 +24,10 @@ model User {
   accounts       Account[]
   Demo           Demo[]
   exportedVideos ExportedVideo[]
+  reviews        Review[]
   sessions       Session[]
   tutorials      Tutorial[]      @relation("UserTutorials")
   videoJobs      VideoJob[]
-  reviews        Review[]
 }
 
 model Account {
@@ -128,9 +128,9 @@ model Slide {
 model View {
   id              String         @id @default(cuid())
   demoId          String?
-  exportedVideoId String?
   timestamp       DateTime       @default(now())
   duration        Int?
+  exportedVideoId String?
   demo            Demo?          @relation(fields: [demoId], references: [id])
   exportedVideo   ExportedVideo? @relation(fields: [exportedVideoId], references: [id])
 }
@@ -159,11 +159,11 @@ model ExportedVideo {
   shareableUrl   String
   sourceVideoUrl String?
   settings       Json?
-  shareCount     Int      @default(1)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   userId         String
   demoId         String?  @unique
+  shareCount     Int      @default(1)
   demo           Demo?    @relation(fields: [demoId], references: [id])
   user           User     @relation(fields: [userId], references: [id])
   views          View[]
@@ -179,4 +179,3 @@ model Review {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 }
-
