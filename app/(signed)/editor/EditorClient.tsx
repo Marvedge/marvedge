@@ -25,7 +25,6 @@ import CustomVideoControls from "@/app/components/CustomVideoControls";
 // Hooks
 import { useEditor } from "@/app/hooks/useEditor";
 import { useBlobStore } from "@/app/store/blobStore";
-import { useScreenRecorder } from "@/app/hooks/useScreenRecorder";
 import { useEditorState } from "./hooks/useEditorState";
 import { useURLParams, useFormatTime } from "./hooks/useURLParams";
 import { useVideoDuration } from "./hooks/useVideoDuration";
@@ -161,7 +160,7 @@ export default function EditorPage() {
   const { videoUrl: recordedVideoUrl, thumbnailUrl, processing, resetVideo } = useEditor();
 
   const blob = useBlobStore((state) => state.blob);
-  const { recordingDuration } = useScreenRecorder();
+  const sourceDuration = useBlobStore((state) => state.sourceDuration);
   // const { data: session } = useSession();
 
   // Format time helper
@@ -238,7 +237,7 @@ export default function EditorPage() {
   useVideoDuration({
     videoUrl,
     duration,
-    recordingDuration,
+    recordingDuration: sourceDuration,
     blob,
     playerRef,
     setDuration,
@@ -330,6 +329,7 @@ export default function EditorPage() {
 
   // Use recording duration if available, otherwise use detected duration
   //const displayDuration = recordingDuration > 0 ? recordingDuration : duration;
+  const resolvedDuration = Math.max(0, duration || 0);
 
   // Timeline change handler
   const handleTimelineChange = useCallback(
@@ -339,6 +339,27 @@ export default function EditorPage() {
     },
     [formatTimeForInput, setInputStartTime, setInputEndTime]
   );
+
+  // Keep timeline bounds synced with the best-known runtime duration.
+  useEffect(() => {
+    if (!Number.isFinite(resolvedDuration) || resolvedDuration <= 0) {
+      return;
+    }
+    if (timelineEndTime <= 0 || Math.abs(timelineEndTime - resolvedDuration) > 0.5) {
+      setTimelineStartTime(0);
+      setTimelineEndTime(resolvedDuration);
+      setInputStartTime(formatTimeForInput(0));
+      setInputEndTime(formatTimeForInput(resolvedDuration));
+    }
+  }, [
+    resolvedDuration,
+    timelineEndTime,
+    setTimelineStartTime,
+    setTimelineEndTime,
+    setInputStartTime,
+    setInputEndTime,
+    formatTimeForInput,
+  ]);
 
   function handleResetTimeline() {
     resetVideo();
@@ -1386,7 +1407,7 @@ export default function EditorPage() {
         isOpen={showExportSettings}
         onClose={() => setShowExportSettings(false)}
         onConfirm={onExportVideo}
-        durationInSeconds={duration || 0}
+        durationInSeconds={resolvedDuration || 0}
       />
       <ExportResultModal
         isOpen={showExportResultModal}
@@ -1659,6 +1680,12 @@ export default function EditorPage() {
                           onProgress={(data) => {
                             setCurrentTime(data.playedSeconds);
                             childHandleProgress?.(data);
+                          }}
+                          onDuration={(loadedDuration) => {
+                            if (Number.isFinite(loadedDuration) && loadedDuration > 0) {
+                              const nextDuration = Math.ceil(loadedDuration);
+                              setDuration((prev) => Math.max(prev, nextDuration));
+                            }
                           }}
                           onEnded={() => setPlaying(false)}
                           progressInterval={50}
@@ -1934,13 +1961,12 @@ export default function EditorPage() {
                 <div className="w-full flex flex-col gap-3 mt-5">
                   <CustomVideoControls
                     playerRef={playerRef}
-                    duration={duration}
+                    duration={resolvedDuration}
                     currentTime={currentTime}
                     setCurrentTime={(t) => {
                       setCurrentTime(t);
                       playerRef.current?.seekTo(t, "seconds");
                     }}
-                    recordingDuration={recordingDuration}
                     setPlaying={setPlaying}
                     playing={playing}
                     volume={volume}
@@ -1979,17 +2005,23 @@ export default function EditorPage() {
           {/* Timeline - only show when video is available */}
           {videoUrl && (
             <div className="mr-2 mt-8 mb-5 pr-8 sm:mr-0 mx-4 sm:mx-8">
-              {duration > 0 ? (
+              {resolvedDuration > 0 ? (
                 <TimelineRuler
                   minValue={0}
-                  maxValue={duration}
+                  maxValue={resolvedDuration}
                   currentValue={Math.max(0, currentTime)}
                   playbackSpeed={playbackSpeed}
                   setPlaybackSpeed={setPlaybackSpeed}
                   onValueChange={(value) => {
-                    const clampedValue = Math.max(0, Math.min(duration, value));
+                    const safeDuration = Number.isFinite(resolvedDuration)
+                      ? Math.max(0, resolvedDuration)
+                      : 0;
+                    const safeValue = Number.isFinite(value) ? value : 0;
+                    const clampedValue = Math.max(0, Math.min(safeDuration, safeValue));
                     setCurrentTime(clampedValue);
-                    playerRef.current?.seekTo(clampedValue, "seconds");
+                    if (Number.isFinite(clampedValue)) {
+                      playerRef.current?.seekTo(clampedValue, "seconds");
+                    }
                   }}
                   step={0.1}
                   majorStep={20}
@@ -2049,7 +2081,7 @@ export default function EditorPage() {
         zoomEffects={zoomEffects}
         onZoomEffectsChange={onZoomEffectsChange}
         currentTime={currentTime}
-        duration={duration}
+        duration={resolvedDuration}
         onSeek={(time) => {
           if (playerRef.current) {
             const player = playerRef.current.getInternalPlayer();

@@ -393,7 +393,7 @@ export default function TimelineRuler({
       updateCurrentTimeFromMouse(e);
     };
     const onUp = () => {
-      setPlaying(false);
+      setPlaying(true);
       setDraggingCurrentTime(false);
     };
     window.addEventListener("mousemove", onMove);
@@ -932,6 +932,7 @@ export default function TimelineRuler({
     }
 
     const onMove = (e: MouseEvent) => {
+      let pendingFlip: null | { side: "left" | "right"; startValue: number; startX: number } = null;
       const deltaX = e.clientX - dragZoomState.startX;
       const pixelsPerUnit = zoomedTimelineWidth / (maxValue - minValue);
       const deltaValue = deltaX / pixelsPerUnit;
@@ -963,16 +964,11 @@ export default function TimelineRuler({
                 newEnd = flippedEnd;
 
                 // auto change handle
-                setDragZoomState((d) =>
-                  d && d.mode === "edge"
-                    ? {
-                        ...d,
-                        side: "right",
-                        startValue: flippedEnd,
-                        startX: e.clientX,
-                      }
-                    : d
-                );
+                pendingFlip = {
+                  side: "right",
+                  startValue: flippedEnd,
+                  startX: e.clientX,
+                };
               }
             }
 
@@ -988,16 +984,11 @@ export default function TimelineRuler({
                 newEnd = flippedEnd;
 
                 // auto change handle
-                setDragZoomState((d) =>
-                  d && d.mode === "edge"
-                    ? {
-                        ...d,
-                        side: "left",
-                        startValue: flippedStart,
-                        startX: e.clientX,
-                      }
-                    : d
-                );
+                pendingFlip = {
+                  side: "left",
+                  startValue: flippedStart,
+                  startX: e.clientX,
+                };
               }
             }
 
@@ -1027,6 +1018,19 @@ export default function TimelineRuler({
           return seg;
         })
       );
+
+      if (pendingFlip) {
+        setDragZoomState((d) =>
+          d && d.mode === "edge"
+            ? {
+                ...d,
+                side: pendingFlip!.side,
+                startValue: pendingFlip!.startValue,
+                startX: pendingFlip!.startX,
+              }
+            : d
+        );
+      }
     };
 
     const onUp = () => setDragZoomState(null);
