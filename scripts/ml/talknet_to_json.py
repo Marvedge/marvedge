@@ -133,6 +133,7 @@ def build_json(tracks: list, scores: list, fps: float, threshold: float,
             "threshold":    threshold,
             "generated_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "smoothing_window_frames": SMOOTHING_WINDOW,
+            "score_type":   "sigmoid_probability"
         },
         "speakers": []
     }
@@ -159,7 +160,11 @@ def build_json(tracks: list, scores: list, fps: float, threshold: float,
         for fidx in range(n_frames):
             abs_frame   = int(frames_arr[fidx])
             timestamp   = round(abs_frame / fps, 4)
-            prob        = round(smoothed[fidx], 4)
+            
+            # TalkNet outputs raw logits. Convert to a true [0, 1] probability via Sigmoid.
+            raw_logit   = smoothed[fidx]
+            prob        = round(float(1 / (1 + numpy.exp(-numpy.clip(raw_logit, -15, 15)))), 4)
+            
             bbox        = [round(float(v), 2) for v in bboxes_arr[fidx]]
 
             frame_records.append({
@@ -190,8 +195,8 @@ def main():
                         help="TalkNet save directory (contains pywork/, pycrop/, ...)")
     parser.add_argument("--fps",       type=float, default=25.0,
                         help="Source video FPS (default: 25)")
-    parser.add_argument("--threshold", type=float, default=0.0,
-                        help="Speaking prob threshold for is_speaking flag (default: 0.0)")
+    parser.add_argument("--threshold", type=float, default=0.5,
+                        help="Speaking probability threshold for is_speaking flag (default: 0.5)")
     parser.add_argument("--output",    type=str, default="speaking_results.json",
                         help="Output filename relative to --saveDir (default: speaking_results.json)")
     args = parser.parse_args()
