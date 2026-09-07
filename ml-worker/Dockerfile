@@ -36,6 +36,9 @@ RUN sed -i 's/np\.int)/int)/g' /app/TalkNet-ASD/model/faceDetector/s3fd/box_util
 # Copy our custom preprocessing script into the TalkNet-ASD folder
 COPY preprocess_faces.py /app/TalkNet-ASD/preprocess_faces.py
 
+# Copy the validation test suite so reviewers can run it inside the container
+COPY test_preprocess_faces.py /app/test_preprocess_faces.py
+
 # Copy the Gradio app
 COPY app.py /app/app.py
 

@@ -5,6 +5,24 @@ import json
 import tempfile
 import cv2
 
+def run_validation(out_dir):
+    """Run test_preprocess_faces.py and return a structured summary dict."""
+    result = subprocess.run(
+        ["python", "/app/test_preprocess_faces.py", "--outputDir", out_dir],
+        capture_output=True, text=True
+    )
+    lines = (result.stdout + result.stderr).splitlines()
+    passed = sum(1 for l in lines if "[PASS]" in l)
+    failed = sum(1 for l in lines if "[FAIL]" in l)
+    warned = sum(1 for l in lines if "[WARN]" in l)
+    return {
+        "passed": passed,
+        "failed": failed,
+        "warnings": warned,
+        "status": "✅ ALL PASS" if failed == 0 else f"❌ {failed} FAILED",
+        "detail": lines[-3:] if lines else []
+    }
+
 def process_video(video_path):
     if not video_path:
         return {"error": "No video provided."}, None
@@ -31,6 +49,10 @@ def process_video(video_path):
             
         with open(meta_path, 'r') as f:
             metadata = json.load(f)
+
+        # Auto-run validation suite and embed results
+        validation = run_validation(out_dir)
+        metadata["_validation"] = validation
             
         # Draw bounding boxes onto the video
         pyavi_video = os.path.join(out_dir, "pyavi", "video.avi")
@@ -91,17 +113,24 @@ def process_video(video_path):
 
 with gr.Blocks(title="Marvedge Face Tracking Demo", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🤖 Marvedge Face Tracking Pipeline")
-    gr.Markdown("Upload a video to test the S3FD + IoU face tracking pipeline in a containerized environment.")
+    gr.Markdown(
+        "Upload a video to test the **S3FD + IoU** face tracking pipeline in a containerized environment. "
+        "The pipeline automatically validates its own output and reports results in the metadata panel."
+    )
     
     with gr.Row():
         with gr.Column(scale=1):
             video_in = gr.Video(label="Input Video")
             btn = gr.Button("Process Video", variant="primary")
         with gr.Column(scale=1):
-            meta_out = gr.JSON(label="Pipeline Metadata")
+            meta_out = gr.JSON(label="Pipeline Metadata + Validation Results")
             
     gr.Markdown("### Tracked Output")
-    gr.Markdown("The pipeline generates an annotated video showing the detected speaker bounding boxes.")
+    gr.Markdown(
+        "The pipeline overlays green bounding boxes onto each detected speaker and returns "
+        "a single annotated video. The `_validation` key in the metadata panel shows the "
+        "automated test suite results."
+    )
     video_out = gr.Video(label="Annotated Tracking Output")
     
     btn.click(fn=process_video, inputs=video_in, outputs=[meta_out, video_out])
