@@ -69,7 +69,7 @@ const EditorTopbarUserMenu = ({
                 {session?.user?.email}
               </div>
               <button
-                onClick={() => signOut({ callbackUrl: "/" })}
+                onClick={() => signOut({ redirect: false }).then(() => window.location.assign("/"))}
                 className="mt-3 md:mt-4 w-full px-3 md:px-4 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm md:text-base"
               >
                 Sign out

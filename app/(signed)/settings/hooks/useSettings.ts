@@ -102,7 +102,7 @@ export function useSettings() {
     const { res, data } = await deleteAccountRequest();
     if (res.ok) {
       alert("Your account has been deleted.");
-      signOut({ callbackUrl: "/" });
+      signOut({ redirect: false }).then(() => window.location.assign("/"));
     } else {
       alert(`Failed to delete account: ${data.error}`);
     }
