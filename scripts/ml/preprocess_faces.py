@@ -32,7 +32,12 @@ def scene_detect(args):
     return sceneList
 
 def inference_video(args):
-    DET = S3FD(device='cuda')
+    try:
+        import torch
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    except ImportError:
+        device = 'cpu'
+    DET = S3FD(device=device)
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
     dets = []
@@ -113,17 +118,27 @@ def crop_video(args, track, cropFile):
         frame_pad = numpy.pad(image, ((bsi,bsi), (bsi,bsi), (0, 0)), 'constant', constant_values=(110, 110))
         my  = dets['y'][fidx] + bsi  
         mx  = dets['x'][fidx] + bsi  
-        face = frame_pad[int(my-bs):int(my+bs*(1+2*cs)),int(mx-bs*(1+cs)):int(mx+bs*(1+cs))]
+        H, W = frame_pad.shape[:2]
+        y1 = max(0, int(my-bs))
+        y2 = max(0, min(H, int(my+bs*(1+2*cs))))
+        x1 = max(0, int(mx-bs*(1+cs)))
+        x2 = max(0, min(W, int(mx+bs*(1+cs))))
+        
+        if y2 <= y1 or x2 <= x1:
+            face = numpy.zeros((224, 224, 3), dtype=numpy.uint8)
+        else:
+            face = frame_pad[y1:y2, x1:x2]
+            
         vOut.write(cv2.resize(face, (224, 224)))
     audioTmp    = cropFile + '.wav'
     audioStart  = (track['frame'][0]) / 25
     audioEnd    = (track['frame'][-1]+1) / 25
     vOut.release()
-    command = ("ffmpeg -y -i %s -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads %d -ss %.3f -to %.3f %s -loglevel panic" % \
+    command = ("ffmpeg -y -i \"%s\" -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads %d -ss %.3f -to %.3f \"%s\" -loglevel panic" % \
               (args.audioFilePath, args.nDataLoaderThread, audioStart, audioEnd, audioTmp)) 
     subprocess.call(command, shell=True, stdout=None)
     _, audio = wavfile.read(audioTmp)
-    command = ("ffmpeg -y -i %st.avi -i %s -threads %d -c:v copy -c:a copy %s.avi -loglevel panic" % \
+    command = ("ffmpeg -y -i \"%st.avi\" -i \"%s\" -threads %d -c:v copy -c:a copy \"%s.avi\" -loglevel panic" % \
               (cropFile, audioTmp, args.nDataLoaderThread, cropFile))
     subprocess.call(command, shell=True, stdout=None)
     os.remove(cropFile + 't.avi')
@@ -185,18 +200,18 @@ def main():
     os.makedirs(args.pycropPath, exist_ok = True)
 
     args.videoFilePath = os.path.join(args.pyaviPath, 'video.avi')
-    command = ("ffmpeg -y -i %s -qscale:v 2 -threads %d -async 1 -r 25 %s -loglevel panic" % \
+    command = ("ffmpeg -y -i \"%s\" -qscale:v 2 -threads %d -async 1 -r 25 \"%s\" -loglevel panic" % \
         (args.videoPath, args.nDataLoaderThread, args.videoFilePath))
     subprocess.call(command, shell=True, stdout=None)
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the video and save in %s \r\n" %(args.videoFilePath))
     
     args.audioFilePath = os.path.join(args.pyaviPath, 'audio.wav')
-    command = ("ffmpeg -y -i %s -qscale:a 0 -ac 1 -vn -threads %d -ar 16000 %s -loglevel panic" % \
+    command = ("ffmpeg -y -i \"%s\" -qscale:a 0 -ac 1 -vn -threads %d -ar 16000 \"%s\" -loglevel panic" % \
         (args.videoFilePath, args.nDataLoaderThread, args.audioFilePath))
     subprocess.call(command, shell=True, stdout=None)
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the audio and save in %s \r\n" %(args.audioFilePath))
 
-    command = ("ffmpeg -y -i %s -qscale:v 2 -threads %d -f image2 %s -loglevel panic" % \
+    command = ("ffmpeg -y -i \"%s\" -qscale:v 2 -threads %d -f image2 \"%s\" -loglevel panic" % \
         (args.videoFilePath, args.nDataLoaderThread, os.path.join(args.pyframesPath, '%06d.jpg'))) 
     subprocess.call(command, shell=True, stdout=None)
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the frames and save in %s \r\n" %(args.pyframesPath))
