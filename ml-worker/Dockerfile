@@ -29,6 +29,10 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 
+# Fix numpy 2.0 incompatibility in TalkNet-ASD's S3FD code (np.int removed)
+RUN sed -i 's/np\.int)/int)/g' /app/TalkNet-ASD/model/faceDetector/s3fd/box_utils.py && \
+    sed -i 's/np\.float)/float)/g' /app/TalkNet-ASD/model/faceDetector/s3fd/box_utils.py
+
 # Copy our custom preprocessing script into the TalkNet-ASD folder
 COPY preprocess_faces.py /app/TalkNet-ASD/preprocess_faces.py
 

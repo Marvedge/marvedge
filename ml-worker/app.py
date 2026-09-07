@@ -8,7 +8,7 @@ from shutil import copyfile
 
 def process_video(video_path):
     if not video_path:
-        return "No video provided.", []
+        return {"error": "No video provided."}, []
     
     # Run the pipeline
     with tempfile.TemporaryDirectory() as out_dir:
