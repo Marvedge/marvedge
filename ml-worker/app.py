@@ -3,12 +3,11 @@ import subprocess
 import os
 import json
 import tempfile
-import glob
-from shutil import copyfile
+import cv2
 
 def process_video(video_path):
     if not video_path:
-        return {"error": "No video provided."}, []
+        return {"error": "No video provided."}, None
     
     # Run the pipeline
     with tempfile.TemporaryDirectory() as out_dir:
@@ -24,38 +23,71 @@ def process_video(video_path):
             # Run inside TalkNet-ASD directory so local imports (model.faceDetector) work
             subprocess.run(cmd, check=True, cwd="/app/TalkNet-ASD")
         except subprocess.CalledProcessError as e:
-            return {"error": f"Pipeline failed: {str(e)}"}, []
+            return {"error": f"Pipeline failed: {str(e)}"}, None
         
         meta_path = os.path.join(out_dir, "metadata.json")
         if not os.path.exists(meta_path):
-            return {"error": "Failed to generate metadata."}, []
+            return {"error": "Failed to generate metadata."}, None
             
         with open(meta_path, 'r') as f:
             metadata = json.load(f)
             
-        # Convert all .avi in pycrop to .mp4 for native browser playback
-        out_videos = []
-        crop_dir = os.path.join(out_dir, "pycrop")
-        if os.path.exists(crop_dir):
-            for avi_file in sorted(glob.glob(os.path.join(crop_dir, "*.avi"))):
-                mp4_file = avi_file.replace(".avi", ".mp4")
-                # Convert using ffmpeg
-                subprocess.run([
-                    "ffmpeg", "-y", "-i", avi_file,
-                    "-vcodec", "libx264", "-acodec", "aac",
-                    mp4_file
-                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                out_videos.append(mp4_file)
+        # Draw bounding boxes onto the video
+        pyavi_video = os.path.join(out_dir, "pyavi", "video.avi")
+        pyavi_audio = os.path.join(out_dir, "pyavi", "audio.wav")
+        annotated_avi = os.path.join(out_dir, "annotated.avi")
         
-        # Copy to a persistent temp dir so Gradio can serve them after the context manager closes
-        gradio_out = tempfile.mkdtemp(prefix="gradio_out_")
-        served_videos = []
-        for v in out_videos:
-            dest = os.path.join(gradio_out, os.path.basename(v))
-            copyfile(v, dest)
-            served_videos.append(dest)
+        frame_bboxes = {}
+        for track in metadata['tracks']:
+            for item in track['bbox_history']:
+                f_idx = item['frame']
+                bbox = item['bbox']
+                if f_idx not in frame_bboxes:
+                    frame_bboxes[f_idx] = []
+                frame_bboxes[f_idx].append(bbox)
+                
+        cap = cv2.VideoCapture(pyavi_video)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0 or fps != fps:
+            fps = 25.0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        out = cv2.VideoWriter(annotated_avi, fourcc, fps, (width, height))
+        
+        frame_idx = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            if frame_idx in frame_bboxes:
+                for bbox in frame_bboxes[frame_idx]:
+                    x1, y1, x2, y2 = map(int, bbox)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                    
+            out.write(frame)
+            frame_idx += 1
             
-        return metadata, served_videos
+        cap.release()
+        out.release()
+        
+        # Convert annotated video to mp4 with original audio
+        gradio_out = tempfile.mkdtemp(prefix="gradio_out_")
+        final_mp4 = os.path.join(gradio_out, "annotated_tracked.mp4")
+        
+        subprocess.run([
+            "ffmpeg", "-y", 
+            "-i", annotated_avi,
+            "-i", pyavi_audio,
+            "-vcodec", "libx264", 
+            "-acodec", "aac",
+            "-strict", "experimental",
+            final_mp4
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        return metadata, final_mp4
 
 with gr.Blocks(title="Marvedge Face Tracking Demo", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🤖 Marvedge Face Tracking Pipeline")
@@ -68,11 +100,11 @@ with gr.Blocks(title="Marvedge Face Tracking Demo", theme=gr.themes.Soft()) as d
         with gr.Column(scale=1):
             meta_out = gr.JSON(label="Pipeline Metadata")
             
-    gr.Markdown("### Extracted Face Tracks")
-    gr.Markdown("The pipeline outputs individual cropped video tracks for each detected speaker. Download or preview them below.")
-    files_out = gr.File(label="Processed Face Crops (.mp4)", file_count="multiple")
+    gr.Markdown("### Tracked Output")
+    gr.Markdown("The pipeline generates an annotated video showing the detected speaker bounding boxes.")
+    video_out = gr.Video(label="Annotated Tracking Output")
     
-    btn.click(fn=process_video, inputs=video_in, outputs=[meta_out, files_out])
+    btn.click(fn=process_video, inputs=video_in, outputs=[meta_out, video_out])
 
 if __name__ == "__main__":
     # Expose on 0.0.0.0:8080 for Docker / Cloud Run compatibility
