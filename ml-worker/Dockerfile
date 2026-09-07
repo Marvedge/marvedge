@@ -20,8 +20,8 @@ WORKDIR /app
 RUN git clone https://github.com/TaoRuijie/TalkNet-ASD.git /app/TalkNet-ASD
 
 # Download the S3FD pretrained face detector weights (not included in the git repo)
-RUN wget -q -O /app/TalkNet-ASD/model/faceDetector/s3fd/sfd_face.pth \
-    https://huggingface.co/lithiumice/syncnet/resolve/main/syncnet/sfd_face.pth
+RUN pip install gdown && \
+    gdown 1KafnHz7ccT-3IyddBsL5yi2xGtxAKypt -O /app/TalkNet-ASD/model/faceDetector/s3fd/sfd_face.pth
 
 # Copy requirements and install them
 # We install PyTorch first with the CPU index to keep the container lightweight for local demos
