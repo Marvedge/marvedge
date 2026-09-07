@@ -9,8 +9,6 @@ ENV PIP_NO_CACHE_DIR=1
 # Install system dependencies required for OpenCV, ffmpeg, and git
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
     git \
     wget \
     && rm -rf /var/lib/apt/lists/*
