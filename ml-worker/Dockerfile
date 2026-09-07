@@ -20,9 +20,9 @@ WORKDIR /app
 RUN git clone https://github.com/TaoRuijie/TalkNet-ASD.git /app/TalkNet-ASD
 
 # Copy requirements and install them
-# We install PyTorch first with the CUDA 11.8 extra index
+# We install PyTorch first with the CPU index to keep the container lightweight for local demos
 COPY requirements.txt /app/requirements.txt
-RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
+RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 
 # Copy our custom preprocessing script into the TalkNet-ASD folder
