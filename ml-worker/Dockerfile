@@ -28,7 +28,7 @@ RUN pip install torch torchvision torchaudio --index-url https://download.pytorc
 RUN pip install -r requirements.txt
 
 # Copy our custom preprocessing script into the TalkNet-ASD folder
-COPY ../scripts/ml/preprocess_faces.py /app/TalkNet-ASD/preprocess_faces.py
+COPY preprocess_faces.py /app/TalkNet-ASD/preprocess_faces.py
 
 # Copy the Gradio app
 COPY app.py /app/app.py
