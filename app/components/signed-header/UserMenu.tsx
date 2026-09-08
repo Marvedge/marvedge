@@ -72,7 +72,7 @@ const UserMenu = ({ session, isDark, profileImage }: UserMenuProps) => {
             {session?.user?.email}
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => signOut({ redirect: false }).then(() => window.location.assign("/"))}
             className="mt-2 sm:mt-3 w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-xs sm:text-sm"
           >
             Sign out
