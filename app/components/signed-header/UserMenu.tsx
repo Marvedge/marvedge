@@ -58,7 +58,7 @@ const UserMenu = ({ session, isDark, profileImage }: UserMenuProps) => {
             alt="Profile"
             width={40}
             height={40}
-            className={`${isDark ? "w-7 h-7 sm:w-8 sm:h-8" : "w-full h-full"} object-cover`}
+            className={`${isDark ? "w-7 h-7 sm:w-8 sm:h-8" : "w-full h-full"} object-cover rounded-full`}
             unoptimized
           />
         ) : (
