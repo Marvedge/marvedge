@@ -113,7 +113,19 @@ def crop_video(args, track, cropFile):
         frame_pad = numpy.pad(image, ((bsi,bsi), (bsi,bsi), (0, 0)), 'constant', constant_values=(110, 110))
         my  = dets['y'][fidx] + bsi  
         mx  = dets['x'][fidx] + bsi  
-        face = frame_pad[int(my-bs):int(my+bs*(1+2*cs)),int(mx-bs*(1+cs)):int(mx+bs*(1+cs))]
+        
+        # Prevent negative indices which cause numpy to slice from the end
+        y1 = max(0, int(my - bs))
+        y2 = max(0, int(my + bs * (1 + 2 * cs)))
+        x1 = max(0, int(mx - bs * (1 + cs)))
+        x2 = max(0, int(mx + bs * (1 + cs)))
+        
+        face = frame_pad[y1:y2, x1:x2]
+        
+        # Fallback if face is somehow completely out of bounds (empty)
+        if face.size == 0:
+            face = numpy.zeros((224, 224, 3), dtype=numpy.uint8)
+            
         vOut.write(cv2.resize(face, (224, 224)))
     audioTmp    = cropFile + '.wav'
     audioStart  = (track['frame'][0]) / 25
