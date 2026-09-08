@@ -29,6 +29,19 @@ function fireCtaClick(cta: ShareCta, demoId: string) {
   );
 }
 
+// FIX: block javascript/data urls at render
+function sanitizeHref(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:") {
+      return url;
+    }
+  } catch {
+    // fall through to safe fallback
+  }
+  return "#";
+}
+
 export default function ShareCtaButtons({ ctas, demoId }: { ctas: ShareCta[]; demoId?: string }) {
   if (!ctas.length || !demoId) {
     return null;
@@ -39,7 +52,7 @@ export default function ShareCtaButtons({ ctas, demoId }: { ctas: ShareCta[]; de
       {ctas.map((cta) => (
         <a
           key={cta.id}
-          href={cta.url}
+          href={sanitizeHref(cta.url)}
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => fireCtaClick(cta, demoId)}
