@@ -258,3 +258,54 @@ Landscape video containing a primary object and additional salient objects enter
 - Crop remains stable despite changes in subject position and lighting.
 - No noticeable jitter or abrupt crop changes.
 - No incorrect subject tracking observed.
+
+---
+
+## Task-00014 — Saliency Region Validation
+
+### Problem observed
+
+The baseline graph could produce incorrect crop prioritization even when face
+detection remained stable. In particular, VCD 04 lost face coverage during
+lateral movement, and official sample 02 could shift away from the primary
+machine when secondary objects entered.
+
+### Hypothesis
+
+`LocalizationToRegionCalculator` with `output_all_signals: true` emitted
+duplicate generic `OBJECT` regions in addition to semantic regions. These
+regions entered downstream signal fusion and crop-region fitting, potentially
+distorting crop selection.
+
+### Change made
+
+The final graph keeps semantic object signals while disabling the duplicate
+generic object output:
+
+```text
+output_all_signals: false
+```
+
+Face weights, stabilization, score aggregation, salient-point bounds, shot
+detection, and models were not changed.
+
+### Validation
+
+| Video | Result | Summary |
+| --- | --- | --- |
+| Official sample 01 | MIXED | Primary machine retained; some peripheral objects remain excluded. |
+| Official sample 02 | PASS | Primary machine substantially better retained when secondary objects enter. |
+| VCD 02 | FAIL | Startup face adaptation lag remains; later framing recovers. |
+| VCD 04 | PASS | Face remains visible during lateral movement. |
+| VCD 06 | PASS | Subject remains visible without a new crop failure. |
+| VCD 08 | PASS | Subject remains visible without a persistent crop failure. |
+| VCD 09 | PASS | No new excessive-zoom or subject-loss regression observed. |
+
+### Verdict
+
+**KEEP.** The change improves the principal prioritization and lateral-motion
+failure cases without introducing a meaningful regression in the validated
+sample set. VCD 02 startup adaptation lag remains unresolved.
+
+Cursor detection and static-UI detection were not implemented because those
+signals are not present in the current AutoFlip architecture.

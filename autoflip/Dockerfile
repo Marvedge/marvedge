@@ -182,6 +182,11 @@ RUN bazel build -c opt \
     mediapipe/examples/desktop/autoflip:run_autoflip
 
 # ---------------------------------------------------------
+# Copy Marvedge AutoFlip graph
+# ---------------------------------------------------------
+COPY autoflip/autoflip_graph.pbtxt /mediapipe/mediapipe/examples/desktop/autoflip/autoflip_graph.pbtxt
+
+# ---------------------------------------------------------
 # Container shell
 # ---------------------------------------------------------
 ENTRYPOINT ["/bin/bash"]
