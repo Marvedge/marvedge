@@ -36,9 +36,7 @@ const UserMenu = ({ session, isDark, profileImage }: UserMenuProps) => {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        className={`avatar user-avatar w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer hover:scale-105 transition-all overflow-hidden ${
-          isDark ? "border-2 sm:border-4 border-[#040617]" : "border-2 sm:border-4 border-white"
-        }`}
+        className="avatar user-avatar w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer hover:scale-105 transition-all overflow-hidden border-2 sm:border-4 border-white"
         onClick={() => setShowDropdown((v) => !v)}
         title={session?.user?.name || session?.user?.email || undefined}
         style={
