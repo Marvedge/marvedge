@@ -46,9 +46,11 @@ def inference_video(args):
     dets = []
     for fidx, fname in enumerate(flist):
         image = cv2.imread(fname)
+        dets.append([])
+        if image is None:
+            continue
         imageNumpy = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         bboxes = DET.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
-        dets.append([])
         for bbox in bboxes:
           dets[-1].append({'frame':fidx, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]}) 
         sys.stderr.write('%s-%05d; %d dets\r' % (args.videoFilePath, fidx, len(dets[-1])))
@@ -169,9 +171,10 @@ def track_shot(args, sceneFaces):
     tracks.sort(key=lambda x: x['frame'][0])
     return tracks
 
-def crop_video(args, track, cropFile):
-    flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) 
-    flist.sort()
+def crop_video(args, track, cropFile, flist=None):
+    if flist is None:
+        flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) 
+        flist.sort()
     vOut = cv2.VideoWriter(cropFile + 't.avi', cv2.VideoWriter_fourcc(*'XVID'), TARGET_FPS, (224, 224))
     dets = {'x': [], 'y': [], 's': []}
     for det in track['bbox']: 
@@ -371,8 +374,10 @@ def main():
             allTracks.extend(track_shot(args, faces[shot[0].frame_num:shot[1].frame_num]))
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face track and detected %d tracks \r\n" %len(allTracks))
 
+    flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
+    flist.sort()
     for ii, track in tqdm.tqdm(enumerate(allTracks), total = len(allTracks)):
-        vidTracks.append(crop_video(args, track, os.path.join(args.pycropPath, '%05d'%ii)))
+        vidTracks.append(crop_video(args, track, os.path.join(args.pycropPath, '%05d'%ii), flist=flist))
     
     savePath = os.path.join(args.pyworkPath, 'tracks.pckl')
     with open(savePath, 'wb') as fil:
