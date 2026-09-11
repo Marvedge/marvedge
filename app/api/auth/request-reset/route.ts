@@ -44,15 +44,20 @@ export async function POST(req: Request) {
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
+    // reply the same whether or not the account exists, so the
+    // response never confirms which emails are registered
     if (!user) {
-      return NextResponse.json({ error: "No user found with this email" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Password reset link sent to your email." },
+        { status: 200 }
+      );
     }
 
     // Optional: block users without passwords (OAuth accounts)
     if (!user.password) {
       return NextResponse.json(
-        { error: "This account does not support password reset" },
-        { status: 400 }
+        { message: "Password reset link sent to your email." },
+        { status: 200 }
       );
     }
 
