@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
@@ -20,6 +23,18 @@ export async function POST(req: Request) {
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
+
+    // keep inbox spam and guessing cheap: 5 sends per 15 minutes
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded
+      ? forwarded.split(",")[0].trim()
+      : req.headers.get("x-real-ip")?.trim() || "unknown";
+    if (await isRateLimited(`request-reset:${ip}:${email.toLowerCase()}`, 5, 900)) {
+      return NextResponse.json(
+        { error: "Too many attempts, please try again later" },
+        { status: 429 }
+      );
     }
 
     // Check for Resend API key early
