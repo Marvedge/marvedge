@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 
 function sanitizeFilename(input: string) {
   const cleaned = input
@@ -39,6 +40,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     if (!job.exportedUrl) {
       return NextResponse.json({ error: "No exported URL available" }, { status: 400 });
+    }
+
+    // recheck the stored url: poisoned rows fail closed here
+    if (!isSafeUrl(job.exportedUrl)) {
+      return NextResponse.json({ error: "Exported file URL is not allowed" }, { status: 400 });
     }
 
     const upstream = await fetch(job.exportedUrl, { cache: "no-store" });
