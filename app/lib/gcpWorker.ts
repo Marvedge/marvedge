@@ -104,6 +104,8 @@ export async function invokeGcpWorker(
 
   let attempt = 0;
   const maxAttempts = 3;
+  // shared secret so random callers cannot burn our video budget
+  const workerSecret = (process.env.WORKER_SECRET || "").trim();
 
   try {
     while (attempt < maxAttempts) {
@@ -112,6 +114,7 @@ export async function invokeGcpWorker(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(workerSecret ? { Authorization: `Bearer ${workerSecret}` } : {}),
           },
           body: JSON.stringify(payload),
           signal: controller.signal,
