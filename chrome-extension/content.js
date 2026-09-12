@@ -2,11 +2,17 @@ let startTime = 0;
 let lastClickTime = 0;
 const DEBOUNCE_DELAY = 250;
 
+// Command gate lives in trustedHosts.js (loaded first). The script itself
+// must keep running everywhere: recording walkthroughs on third-party sites
+// is the product, so the manifest matches stay <all_urls> on purpose. Any
+// page can postMessage its own window, so commands from anywhere else are
+// dropped here and the timeline below only ever goes back to our origin.
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;
 
   const message = event.data;
   if (message && message.source === "marvedge-web") {
+    if (!isTrustedPage(window.location.hostname)) return;
     console.log("[Marvedge Extension Content Script] Received action:", message.action);
     
     if (message.action === "START_CAPTURE") {
@@ -28,7 +34,7 @@ window.addEventListener("message", (event) => {
           source: "marvedge-extension",
           type: "SEND_TIMELINE",
           lastSession: res.lastSession || null
-        }, "*");
+        }, window.location.origin);
       });
     }
   }
