@@ -140,8 +140,8 @@ node {
       }
       signal_settings {
         type: { standard: OBJECT }
-        min_score: 0.0
-        max_score: 0.0
+        min_score: 0.6
+        max_score: 0.7
         is_required: false
       }
     }
@@ -171,6 +171,14 @@ node {
       padding_parameters: {
         blur_cv_size: 200
         overlay_opacity: 0.6
+      }
+      camera_motion_options: {
+        kinematic_options: {
+          update_rate_seconds: 1.2
+          max_velocity: 18.0
+          min_motion_to_reframe: 2.0
+          filtering_time_window_us: 1000000
+        }
       }
       target_size_type: MAXIMIZE_TARGET_DIMENSION
     }
