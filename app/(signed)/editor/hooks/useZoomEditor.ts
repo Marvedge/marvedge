@@ -57,6 +57,13 @@ function useExtensionTimelineListener(
 ) {
   useEffect(() => {
     const handleExtensionMessage = (event: MessageEvent) => {
+      // only our own page's content script may feed the editor
+      if (event.source !== window) {
+        return;
+      }
+      if (event.origin !== window.location.origin) {
+        return;
+      }
       if (event.data && event.data.source === "marvedge-extension") {
         if (event.data.type === "SEND_TIMELINE" && event.data.lastSession) {
           const timeline = event.data.lastSession.eventsTimeline || [];
@@ -72,7 +79,10 @@ function useExtensionTimelineListener(
 
     // Prompt extension to send the last session event timeline
     const timer = setTimeout(() => {
-      window.postMessage({ source: "marvedge-web", action: "GET_LAST_SESSION" }, "*");
+      window.postMessage(
+        { source: "marvedge-web", action: "GET_LAST_SESSION" },
+        window.location.origin
+      );
     }, 800);
 
     return () => {
