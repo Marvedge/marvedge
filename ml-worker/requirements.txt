@@ -1,0 +1,6 @@
+scenedetect==0.6.2
+opencv-python-headless
+scipy
+gradio
+tqdm
+numpy

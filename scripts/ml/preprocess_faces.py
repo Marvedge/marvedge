@@ -40,7 +40,12 @@ def scene_detect(args):
     return sceneList
 
 def inference_video(args):
-    DET = S3FD(device='cuda')
+    try:
+        import torch
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    except ImportError:
+        device = 'cpu'
+    DET = S3FD(device=device)
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
     dets = []
@@ -212,18 +217,16 @@ def crop_video(args, track, cropFile, flist=None):
         my = dets['y'][fidx] + bsi  
         mx = dets['x'][fidx] + bsi  
         
-        # Prevent negative indices which cause numpy to slice from the end
-        y1 = max(0, int(my - bs))
-        y2 = max(0, int(my + bs * (1 + 2 * cs)))
-        x1 = max(0, int(mx - bs * (1 + cs)))
-        x2 = max(0, int(mx + bs * (1 + cs)))
+        H, W = frame_pad.shape[:2]
+        y1 = max(0, int(my-bs))
+        y2 = max(0, min(H, int(my+bs*(1+2*cs))))
+        x1 = max(0, int(mx-bs*(1+cs)))
+        x2 = max(0, min(W, int(mx+bs*(1+cs))))
         
-        face = frame_pad[y1:y2, x1:x2]
-        
-        # Fallback if face is somehow completely out of bounds (empty)
-        if face.size == 0 or face.shape[0] == 0 or face.shape[1] == 0:
+        if y2 <= y1 or x2 <= x1:
             face = numpy.zeros((224, 224, 3), dtype=numpy.uint8)
         else:
+            face = frame_pad[y1:y2, x1:x2]
             face = cv2.resize(face, (224, 224))
             
         vOut.write(face)
@@ -232,7 +235,6 @@ def crop_video(args, track, cropFile, flist=None):
     audioStart = (track['frame'][0]) / TARGET_FPS
     audioEnd = (track['frame'][-1] + 1) / TARGET_FPS
     vOut.release()
-
     cmd_audio = [
         "ffmpeg", "-y",
         "-i", args.audioFilePath,
