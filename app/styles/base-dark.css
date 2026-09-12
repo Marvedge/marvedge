@@ -123,6 +123,10 @@
   color: #ffffff !important;
 }
 
+.dark .avatar.user-avatar.dark-avatar-clear {
+  background: transparent !important;
+}
+
 .dark .sub-heading {
   color: rgba(255, 255, 255, 0.65);
 }
