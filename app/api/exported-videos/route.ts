@@ -4,6 +4,7 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { deleteCloudinaryVideoByUrl } from "@/app/lib/cloudinary-utils";
 import { packageDemoHls } from "@/app/lib/hls/package";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 
 // HLS packaging runs in after(), so the invocation stays alive after the
 // response is sent and needs a ceiling above the default. 300s is the platform
@@ -124,6 +125,16 @@ export async function POST(req: NextRequest) {
 
     if (!exportedUrl) {
       return NextResponse.json({ error: "exportedUrl is required" }, { status: 400 });
+    }
+
+    // refuse to store urls the server must never fetch
+    if (!isSafeUrl(exportedUrl)) {
+      return NextResponse.json({ error: "Exported URL is not allowed" }, { status: 400 });
+    }
+    if (typeof sourceVideoUrl === "string" && sourceVideoUrl.trim().length > 0) {
+      if (!isSafeUrl(sourceVideoUrl)) {
+        return NextResponse.json({ error: "Source video URL is not allowed" }, { status: 400 });
+      }
     }
 
     const normalizedTitle =
