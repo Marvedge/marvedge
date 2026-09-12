@@ -30,13 +30,13 @@ export const useSignIn = () => {
 
     const email = emailRef.current?.value ?? "";
     const password = passwordRef.current?.value ?? "";
-    console.log(email, password, "first");
+    // console.log(email, password, "first");
     setIsLoading(true);
 
     try {
       // ✅ Validate input
       signInSchema.parse({ email, password });
-      console.log(email, password);
+      // console.log(email, password);
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -52,7 +52,7 @@ export const useSignIn = () => {
         password,
         redirect: false,
       });
-      console.log(email, password);
+      // console.log(email, password);
       console.log("Sign-in response:", res);
 
       if (res?.ok) {

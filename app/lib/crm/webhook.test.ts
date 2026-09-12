@@ -126,4 +126,19 @@ describe("deliverToWebhook", () => {
       client.restore();
     }
   });
+
+  it("refuses to send when the host turns out to be internal", async () => {
+    const receiver = mockReceiver(200);
+    try {
+      const outcome = await deliverToWebhook(
+        { url: "http://169.254.169.254/hook", secret: "whsec_marvedge_test" },
+        "lead_1",
+        CONTACT
+      );
+      expect(outcome).toMatchObject({ ok: false, retryable: false });
+      expect(receiver.captured).toHaveLength(0);
+    } finally {
+      receiver.restore();
+    }
+  });
 });

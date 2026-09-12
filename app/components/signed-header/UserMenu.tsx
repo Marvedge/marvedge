@@ -37,7 +37,9 @@ const UserMenu = ({ session, isDark, profileImage }: UserMenuProps) => {
     <div className="relative" ref={dropdownRef}>
       <button
         className={`avatar user-avatar w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-lg font-bold shadow cursor-pointer hover:scale-105 transition-all overflow-hidden ${
-          isDark ? "border-none" : "border-2 sm:border-4 border-white"
+          isDark
+            ? `border-none${profileImage ? " dark-avatar-clear" : ""}`
+            : "border-2 sm:border-4 border-white"
         }`}
         onClick={() => setShowDropdown((v) => !v)}
         title={session?.user?.name || session?.user?.email || undefined}
@@ -56,7 +58,7 @@ const UserMenu = ({ session, isDark, profileImage }: UserMenuProps) => {
             alt="Profile"
             width={40}
             height={40}
-            className="w-full h-full object-cover"
+            className={`${isDark ? "w-7 h-7 sm:w-8 sm:h-8" : "w-full h-full"} object-cover rounded-full`}
             unoptimized
           />
         ) : (
@@ -72,7 +74,7 @@ const UserMenu = ({ session, isDark, profileImage }: UserMenuProps) => {
             {session?.user?.email}
           </div>
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => signOut({ redirect: false }).then(() => window.location.assign("/"))}
             className="mt-2 sm:mt-3 w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-xs sm:text-sm"
           >
             Sign out
