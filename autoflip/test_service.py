@@ -7,7 +7,6 @@ and directory cleanup using mocked execution boundaries.
 import json
 import os
 import subprocess
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,8 +14,6 @@ from fastapi.testclient import TestClient
 
 from server import app
 from service import (
-    DEFAULT_DOWNLOAD_TIMEOUT_SEC,
-    DEFAULT_PROCESS_TIMEOUT_SEC,
     DownloadError,
     ExecutionError,
     TimeoutError,

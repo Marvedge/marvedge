@@ -11,8 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import requests
 

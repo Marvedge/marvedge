@@ -6,7 +6,7 @@ Stateless microservice exposing POST /reframe.
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
