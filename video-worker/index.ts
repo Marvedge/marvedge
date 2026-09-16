@@ -1581,3 +1581,9 @@ audioWorker.on("failed", (job, err) => {
 });
 
 console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
+
+// ── Reframe Worker (Task-00023 Architecture) ──────────────────────────────────
+// Note: Video reframing is decoupled from this monolithic worker. It runs in a
+// dedicated lightweight worker process (reframe-worker/index.ts; npm run worker:reframe)
+// with zero Prisma/Postgres imports, communicating with pure ML inference over HTTP
+// and reporting results via authenticated backend callback.

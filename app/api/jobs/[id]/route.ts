@@ -62,6 +62,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     // AVS time-alignment (kind: "AVS_SYNC") surfaces its aligned source here so
     // the client can poll for it; additive and inert for every other job kind.
     let aligned: { alignedVideoUrl: unknown; duration: unknown } | null = null;
+    // Reframe saliency trajectory (kind: "REFRAME") surfaces cropTargets here.
+    let cropTargets: unknown = null;
     if (jobData && typeof jobData === "object") {
       const rec = jobData as Record<string, unknown>;
       if (rec.kind === "SUBTITLES") {
@@ -71,6 +73,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
           alignedVideoUrl: rec.alignedVideoUrl ?? null,
           duration: rec.duration ?? null,
         };
+      } else if (rec.kind === "REFRAME") {
+        cropTargets = rec.cropTargets ?? null;
       }
     }
 
@@ -82,6 +86,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       error,
       subtitles,
       ...(aligned ? { aligned } : {}),
+      ...(cropTargets ? { cropTargets } : {}),
     });
   } catch (err) {
     console.error("Fetch Job Error:", err);
