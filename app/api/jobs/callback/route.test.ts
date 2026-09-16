@@ -8,6 +8,7 @@ vi.mock("@/app/lib/prisma", () => ({
     videoJob: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     demo: {
       update: vi.fn(),
@@ -66,6 +67,7 @@ const validCropTargets = {
 describe("POST /api/jobs/callback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
   });
 
   describe("Authentication", () => {
@@ -139,7 +141,7 @@ describe("POST /api/jobs/callback", () => {
         },
       } as never);
 
-      vi.mocked(prisma.videoJob.update).mockResolvedValue({} as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
 
       const req = makePostRequest({
         jobId: "reframe-job-1",
@@ -152,8 +154,11 @@ describe("POST /api/jobs/callback", () => {
       const json = await res.json();
       expect(json.success).toBe(true);
 
-      expect(prisma.videoJob.update).toHaveBeenCalledWith({
-        where: { id: "reframe-job-1" },
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "reframe-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -186,7 +191,7 @@ describe("POST /api/jobs/callback", () => {
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.error).toBe("Missing cropTargets for completed reframe job");
-      expect(prisma.videoJob.update).not.toHaveBeenCalled();
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
     });
 
     it("rejects invalid CropTargetData with 400 and validation error message", async () => {
@@ -217,7 +222,7 @@ describe("POST /api/jobs/callback", () => {
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.error).toContain("crop target timestamps must be strictly increasing");
-      expect(prisma.videoJob.update).not.toHaveBeenCalled();
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
     });
 
     it("successfully handles failed reframe callback", async () => {
@@ -230,7 +235,7 @@ describe("POST /api/jobs/callback", () => {
         },
       } as never);
 
-      vi.mocked(prisma.videoJob.update).mockResolvedValue({} as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
 
       const req = makePostRequest({
         jobId: "reframe-job-1",
@@ -243,8 +248,11 @@ describe("POST /api/jobs/callback", () => {
       const json = await res.json();
       expect(json.success).toBe(true);
 
-      expect(prisma.videoJob.update).toHaveBeenCalledWith({
-        where: { id: "reframe-job-1" },
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "reframe-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "FAILED",
           error: "AutoFlip inference timed out",
@@ -261,7 +269,7 @@ describe("POST /api/jobs/callback", () => {
         jobData: { kind: "EXPORT" },
       } as never);
 
-      vi.mocked(prisma.videoJob.update).mockResolvedValue({} as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
       vi.mocked(prisma.demo.update).mockResolvedValue({} as never);
 
       const req = makePostRequest({
@@ -275,8 +283,11 @@ describe("POST /api/jobs/callback", () => {
       const json = await res.json();
       expect(json.success).toBe(true);
 
-      expect(prisma.videoJob.update).toHaveBeenCalledWith({
-        where: { id: "export-job-1" },
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "export-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -300,7 +311,7 @@ describe("POST /api/jobs/callback", () => {
         jobData: { kind: "EXPORT" },
       } as never);
 
-      vi.mocked(prisma.videoJob.update).mockResolvedValue({} as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
 
       const req = makePostRequest({
         jobId: "export-job-1",
@@ -313,8 +324,11 @@ describe("POST /api/jobs/callback", () => {
       const json = await res.json();
       expect(json.success).toBe(true);
 
-      expect(prisma.videoJob.update).toHaveBeenCalledWith({
-        where: { id: "export-job-1" },
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "export-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "FAILED",
           progress: undefined,
@@ -322,6 +336,390 @@ describe("POST /api/jobs/callback", () => {
           error: "FFmpeg rendering failed with exit code 1",
         },
       });
+
+      expect(prisma.demo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Terminal-state protection (Task-00026)", () => {
+    it("ignores late FAILED callback against already COMPLETED job", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "COMPLETED",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "FAILED",
+        error: "Delayed worker timeout",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+      expect(json.message).toContain("already in terminal state: COMPLETED");
+
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("ignores late PROCESSING callback against already COMPLETED job", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "COMPLETED",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 50,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("ignores late COMPLETED callback against already COMPLETED job (idempotent)", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "COMPLETED",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "COMPLETED",
+        cropTargets: validCropTargets,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("ignores PROCESSING callback against CANCELLED job", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "CANCELLED",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 25,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+      expect(json.message).toContain("already in terminal state: CANCELLED");
+
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("ignores FAILED callback against CANCELLED job", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "export-job-1",
+        status: "CANCELLED",
+        demoId: null,
+        jobData: { kind: "EXPORT" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "export-job-1",
+        status: "FAILED",
+        error: "FFmpeg killed",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("PROCESSING callbacks with progress (Task-00026)", () => {
+    it("successfully updates progress for valid PROCESSING callback", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME", targetAspectRatio: "9:16" },
+      } as never);
+
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 45,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "reframe-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        data: {
+          status: "PROCESSING",
+          progress: 45,
+        },
+      });
+    });
+
+    it("accepts progress = 0", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 0,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "reframe-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        data: { status: "PROCESSING", progress: 0 },
+      });
+    });
+
+    it("accepts progress = 100", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 100,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "reframe-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        data: { status: "PROCESSING", progress: 100 },
+      });
+    });
+
+    it("rejects progress < 0 with 400", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: -5,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Invalid progress: must be a number between 0 and 100");
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects progress > 100 with 400", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 105,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Invalid progress: must be a number between 0 and 100");
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects missing progress with 400", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Invalid progress: must be a number between 0 and 100");
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-numeric progress (string) with 400", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: "50",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Invalid progress: must be a number between 0 and 100");
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Atomic conditional updateMany concurrency safety", () => {
+    it("handles concurrent race when COMPLETED updateMany matches 0 rows", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PROCESSING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 0 });
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "COMPLETED",
+        cropTargets: validCropTargets,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+      expect(json.message).toContain("already in a terminal state");
+    });
+
+    it("handles concurrent race when FAILED updateMany matches 0 rows", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PROCESSING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 0 });
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "FAILED",
+        error: "Late failure",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+    });
+
+    it("handles concurrent race when PROCESSING updateMany matches 0 rows", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        status: "PROCESSING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 0 });
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "PROCESSING",
+        progress: 80,
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
+    });
+
+    it("handles concurrent race when export updateMany matches 0 rows and skips demo update", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "export-job-1",
+        status: "PROCESSING",
+        demoId: "demo-42",
+        jobData: { kind: "EXPORT" },
+      } as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 0 });
+
+      const req = makePostRequest({
+        jobId: "export-job-1",
+        status: "COMPLETED",
+        exportedUrl: "https://cloudinary.com/video/export-42.mp4",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.ignored).toBe(true);
 
       expect(prisma.demo.update).not.toHaveBeenCalled();
     });

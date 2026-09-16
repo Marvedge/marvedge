@@ -1,15 +1,16 @@
 // Background job execution boundary for the video reframing feature (Task-00023).
 //
-// Defines the consumer lifecycle contract for when the AI/ML service or worker picks up
-// a "reframe" job from BullMQ.
+// @deprecated Legacy prototype runner (Task-00023 Phase 1).
+// In the production Task-00023 / Task-00026 architecture, reframing jobs are
+// consumed by the standalone `reframe-worker` (`npm run worker:reframe`), which has
+// ZERO database access and reports results back exclusively via authenticated HTTP
+// callbacks to POST /api/jobs/callback. Direct DB writes are forbidden in workers.
+// This module and its tests are preserved for backward compatibility.
 //
 // In accordance with Task-00023 constraints:
 // - The AI/ML service is an external integration boundary.
 // - No synthetic or deterministic crop coordinates are manufactured here.
 // - If no external ML execution backend is provided, the runner fails explicitly and cleanly.
-//
-// This module uses relative imports only (for worker process compatibility) and
-// accepts a DB client argument so tests can inject a mock.
 
 import type { CropTargetData } from "../../types/editor/crop-target";
 import { validateCropTargetData } from "../../types/editor/crop-target";

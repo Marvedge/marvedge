@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { validateCropTargetData } from "@/app/types/editor/crop-target";
 
 export async function POST(req: NextRequest) {
@@ -27,9 +28,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
     }
 
-    const { jobId, status, exportedUrl, error, cropTargets } = body as {
+    const { jobId, status, progress, exportedUrl, error, cropTargets } = body as {
       jobId?: string;
       status?: string;
+      progress?: unknown;
       exportedUrl?: string;
       error?: string;
       cropTargets?: unknown;
@@ -42,11 +44,23 @@ export async function POST(req: NextRequest) {
     // ── Fetch existing job ────────────────────────────────────────────
     const job = await prisma.videoJob.findUnique({
       where: { id: jobId },
-      select: { id: true, demoId: true, jobData: true },
+      select: { id: true, demoId: true, jobData: true, status: true },
     });
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // ── Terminal-state protection (Task-00026) ─────────────────────────
+    if (job.status === "COMPLETED" || job.status === "CANCELLED") {
+      console.log(
+        `[callback] Ignored callback for terminal job ${jobId} (current: ${job.status}, incoming: ${status})`
+      );
+      return NextResponse.json({
+        success: true,
+        ignored: true,
+        message: `Job ${jobId} is already in terminal state: ${job.status}`,
+      });
     }
 
     const existingJobData =
@@ -64,14 +78,77 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (status === "PROCESSING") {
+        if (
+          progress === undefined ||
+          progress === null ||
+          typeof progress !== "number" ||
+          Number.isNaN(progress) ||
+          !Number.isFinite(progress) ||
+          progress < 0 ||
+          progress > 100
+        ) {
+          return NextResponse.json(
+            { error: "Invalid progress: must be a number between 0 and 100" },
+            { status: 400 }
+          );
+        }
+
+        const updateResult = await prisma.videoJob.updateMany({
+          where: {
+            id: jobId,
+            status: {
+              notIn: ["COMPLETED", "CANCELLED"],
+            },
+          },
+          data: {
+            status: "PROCESSING",
+            progress: Math.round(progress),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          console.log(
+            `[callback] Ignored PROCESSING callback; job ${jobId} is already in terminal state.`
+          );
+          return NextResponse.json({
+            success: true,
+            ignored: true,
+            message: `Job ${jobId} is already in a terminal state`,
+          });
+        }
+
+        console.log(
+          `[callback] Reframe Job ${jobId} → PROCESSING (${Math.round(progress)}%)`
+        );
+        return NextResponse.json({ success: true });
+      }
+
       if (status === "FAILED") {
-        await prisma.videoJob.update({
-          where: { id: jobId },
+        const updateResult = await prisma.videoJob.updateMany({
+          where: {
+            id: jobId,
+            status: {
+              notIn: ["COMPLETED", "CANCELLED"],
+            },
+          },
           data: {
             status: "FAILED",
             error: error || "Reframe job failed",
           },
         });
+
+        if (updateResult.count === 0) {
+          console.log(
+            `[callback] Ignored FAILED callback; job ${jobId} is already in terminal state.`
+          );
+          return NextResponse.json({
+            success: true,
+            ignored: true,
+            message: `Job ${jobId} is already in a terminal state`,
+          });
+        }
+
         console.log(`[callback] Reframe Job ${jobId} → FAILED: ${error || "Reframe job failed"}`);
         return NextResponse.json({ success: true });
       }
@@ -92,8 +169,13 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: message }, { status: 400 });
         }
 
-        await prisma.videoJob.update({
-          where: { id: jobId },
+        const updateResult = await prisma.videoJob.updateMany({
+          where: {
+            id: jobId,
+            status: {
+              notIn: ["COMPLETED", "CANCELLED"],
+            },
+          },
           data: {
             status: "COMPLETED",
             progress: 100,
@@ -101,10 +183,21 @@ export async function POST(req: NextRequest) {
               ...existingJobData,
               kind: "REFRAME",
               cropTargets,
-            },
+            } as unknown as Prisma.InputJsonValue,
             error: null,
           },
         });
+
+        if (updateResult.count === 0) {
+          console.log(
+            `[callback] Ignored COMPLETED callback; job ${jobId} is already in terminal state.`
+          );
+          return NextResponse.json({
+            success: true,
+            ignored: true,
+            message: `Job ${jobId} is already in a terminal state`,
+          });
+        }
 
         console.log(`[callback] Reframe Job ${jobId} → COMPLETED`);
         return NextResponse.json({ success: true });
@@ -119,8 +212,13 @@ export async function POST(req: NextRequest) {
     // ── Existing AVS/WTM/Export Handling ─────────────────────────────
     const isCompleted = status === "COMPLETED" && exportedUrl;
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
+    const updateResult = await prisma.videoJob.updateMany({
+      where: {
+        id: jobId,
+        status: {
+          notIn: ["COMPLETED", "CANCELLED"],
+        },
+      },
       data: {
         status: isCompleted ? "COMPLETED" : "FAILED",
         progress: isCompleted ? 100 : undefined,
@@ -128,6 +226,17 @@ export async function POST(req: NextRequest) {
         error: error || (isCompleted ? undefined : "Export failed"),
       },
     });
+
+    if (updateResult.count === 0) {
+      console.log(
+        `[callback] Ignored export callback; job ${jobId} is already in terminal state.`
+      );
+      return NextResponse.json({
+        success: true,
+        ignored: true,
+        message: `Job ${jobId} is already in a terminal state`,
+      });
+    }
 
     // ── Also update Demo.exportedUrl if linked ────────────────────────
     if (isCompleted && job.demoId && exportedUrl) {
