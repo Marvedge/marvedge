@@ -1,7 +1,7 @@
-// Configuration loader for the lightweight Reframe Worker (Task-00023).
+// Configuration loader for the lightweight Reframe Worker (Task-00023 / Task-00029).
 //
 // Reads and validates environment variables for BullMQ Redis, backend callback,
-// and external ML inference service.
+// and the internal ML API gateway (REFRAME_ML_SERVICE_URL).
 // Contains ZERO Prisma / Postgres imports.
 
 export interface ReframeWorkerConfig {

@@ -1,0 +1,56 @@
+services:
+  ml-gateway:
+    build:
+      context: ./ml-gateway
+      dockerfile: Dockerfile
+    container_name: marvedge-ml-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTOFILP_SERVICE_URL=http://autoflip:8000
+      - TALKNET_SERVICE_URL=http://talknet:8000
+      - GATEWAY_TIMEOUT_SEC=180.0
+      - GATEWAY_HEALTH_TIMEOUT_SEC=5.0
+    depends_on:
+      - autoflip
+      - talknet
+    networks:
+      - marvedge-ml-net
+
+  autoflip:
+    build:
+      context: .
+      dockerfile: autoflip/Dockerfile.service
+    container_name: marvedge-autoflip
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - AUTOFILP_TIMEOUT_SEC=150
+      - DOWNLOAD_TIMEOUT_SEC=60
+    networks:
+      - marvedge-ml-net
+
+  talknet:
+    build:
+      context: ./talknet
+      dockerfile: Dockerfile
+    container_name: marvedge-talknet
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - TALKNET_S3FD_WEIGHTS=/app/weights/sfd_face.pth
+      - TALKNET_MODEL_WEIGHTS=/app/weights/pretrain_TalkSet.model
+      - TALKNET_TIMEOUT_SEC=150
+      - DOWNLOAD_TIMEOUT_SEC=60
+    volumes:
+      - ${TALKNET_HOST_WEIGHTS_DIR:-./talknet/weights}:/app/weights:ro
+    networks:
+      - marvedge-ml-net
+
+networks:
+  marvedge-ml-net:
+    name: marvedge-ml-net
+    driver: bridge
