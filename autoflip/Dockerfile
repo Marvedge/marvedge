@@ -172,16 +172,80 @@ ENV CC=clang-15
 ENV CXX=clang++-15
 
 # ---------------------------------------------------------
-# Build AutoFlip
+# Copy headless AutoFlip graph and JSON runner
+# ---------------------------------------------------------
+COPY autoflip/run_autoflip_to_json.cc /mediapipe/mediapipe/examples/desktop/autoflip/
+COPY autoflip/autoflip_headless_graph.pbtxt /mediapipe/mediapipe/examples/desktop/autoflip/
+
+RUN cat >> mediapipe/examples/desktop/autoflip/BUILD <<'EOF'
+
+cc_binary(
+    name = "run_autoflip_to_json",
+    srcs = ["run_autoflip_to_json.cc"],
+    data = [
+        "//mediapipe/modules/face_detection:face_detection_full_range_sparse.tflite",
+    ],
+    deps = [
+        ":autoflip_messages_cc_proto",
+        "//mediapipe/calculators/core:packet_thinner_calculator",
+        "//mediapipe/calculators/image:scale_image_calculator",
+        "//mediapipe/calculators/video:opencv_video_decoder_calculator",
+        "//mediapipe/examples/desktop/autoflip/calculators:border_detection_calculator",
+        "//mediapipe/examples/desktop/autoflip/calculators:face_to_region_calculator",
+        "//mediapipe/examples/desktop/autoflip/calculators:localization_to_region_calculator",
+        "//mediapipe/examples/desktop/autoflip/calculators:scene_cropping_calculator",
+        "//mediapipe/examples/desktop/autoflip/calculators:shot_boundary_calculator",
+        "//mediapipe/examples/desktop/autoflip/calculators:signal_fusing_calculator",
+        "//mediapipe/examples/desktop/autoflip/subgraph:autoflip_face_detection_subgraph",
+        "//mediapipe/examples/desktop/autoflip/subgraph:autoflip_object_detection_subgraph",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/formats:video_stream_header",
+        "//mediapipe/framework/port:file_helpers",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:ret_check",
+        "//mediapipe/framework/port:status",
+        "//mediapipe/framework/port:statusor",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings",
+    ],
+)
+EOF
+
+# ---------------------------------------------------------
+# Build AutoFlip (both video renderer and headless JSON runner)
 # ---------------------------------------------------------
 RUN bazel build -c opt \
     --define MEDIAPIPE_DISABLE_GPU=1 \
     --define=xnn_enable_avxvnniint8=false \
     --repo_env=HERMETIC_PYTHON_VERSION=3.9 \
     --experimental_repository_downloader_retries=5 \
-    mediapipe/examples/desktop/autoflip:run_autoflip
+    mediapipe/examples/desktop/autoflip:run_autoflip \
+    mediapipe/examples/desktop/autoflip:run_autoflip_to_json \
+    && ln -sf /mediapipe/bazel-bin/mediapipe/examples/desktop/autoflip/run_autoflip /usr/local/bin/run_autoflip \
+    && ln -sf /mediapipe/bazel-bin/mediapipe/examples/desktop/autoflip/run_autoflip_to_json /usr/local/bin/run_autoflip_to_json
 
 # ---------------------------------------------------------
-# Container shell
+# Copy object detection models and create resource symlinks
 # ---------------------------------------------------------
-ENTRYPOINT ["/bin/bash"]
+COPY mediapipe-models/ssdlite_object_detection.tflite /mediapipe/mediapipe/models/
+COPY mediapipe-models/ssdlite_object_detection_labelmap.txt /mediapipe/mediapipe/models/
+
+RUN mkdir -p /mediapipe/bazel-bin/mediapipe/models \
+    && ln -sf /mediapipe/mediapipe/models/ssdlite_object_detection.tflite /mediapipe/bazel-bin/mediapipe/models/ \
+    && ln -sf /mediapipe/mediapipe/models/ssdlite_object_detection_labelmap.txt /mediapipe/bazel-bin/mediapipe/models/ \
+    && ln -sf /mediapipe/mediapipe/models /mediapipe/models
+
+# ---------------------------------------------------------
+# Deploy ML HTTP inference service (Task-00023)
+# ---------------------------------------------------------
+WORKDIR /app
+COPY autoflip/requirements.txt /app/
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
+
+COPY autoflip/service.py autoflip/server.py autoflip/test_service.py /app/
+
+EXPOSE 8000
+ENTRYPOINT ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+
