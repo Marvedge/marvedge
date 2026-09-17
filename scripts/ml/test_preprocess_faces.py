@@ -427,6 +427,83 @@ def run_unit_tests():
     check("5-frame track filtered out when minTrack=10", len(tracks_short) == 0,
           f"Expected 0 tracks, got {len(tracks_short)}")
 
+    # ── Task-00043: Fallback unit tests ─────────────────────────────────────
+
+    # Lazy-import to avoid requiring ML deps in unit mode
+    try:
+        from preprocess_faces import center_crop_fallback
+        HAS_FALLBACK = True
+    except ImportError:
+        HAS_FALLBACK = False
+        print(f"  {WARN} center_crop_fallback not importable — skipping fallback tests")
+
+    if HAS_FALLBACK:
+        # --- Fallback Test 1: Zero detections → exactly 1 fallback track ---
+        print("\n🛡️  Fallback Test 1: zero detections produces exactly 1 fallback track")
+        import tempfile, shutil
+        tmp_dir = tempfile.mkdtemp()
+        args_fb = MockArgs()
+        args_fb.pyframesPath = tmp_dir   # empty dir, no frames → default resolution
+        args_fb.minTrack = 10
+
+        fb_track = center_crop_fallback(args_fb, 0, 100)
+        check("Fallback track is not None for 100-frame scene", fb_track is not None)
+        if fb_track is not None:
+            check("is_fallback flag is True",
+                  fb_track.get('is_fallback') is True,
+                  f"Got is_fallback={fb_track.get('is_fallback')}")
+            check("fallback_reason is 'no_face_detected'",
+                  fb_track.get('fallback_reason') == 'no_face_detected',
+                  f"Got fallback_reason={fb_track.get('fallback_reason')}")
+            check("Fallback bbox has correct shape (100, 4)",
+                  fb_track['bbox'].shape == (100, 4),
+                  f"Got shape {fb_track['bbox'].shape}")
+            check("Fallback frames span [0, 99]",
+                  int(fb_track['frame'][0]) == 0 and int(fb_track['frame'][-1]) == 99,
+                  f"Got [{fb_track['frame'][0]}, {fb_track['frame'][-1]}]")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        # --- Fallback Test 2: Scene shorter than minTrack → returns None ---
+        print("\n🛡️  Fallback Test 2: scene shorter than minTrack returns None")
+        tmp_dir2 = tempfile.mkdtemp()
+        args_fb2 = MockArgs()
+        args_fb2.pyframesPath = tmp_dir2
+        args_fb2.minTrack = 10
+
+        fb_short = center_crop_fallback(args_fb2, 0, 5)  # only 5 frames < minTrack=10
+        check("center_crop_fallback returns None for 5-frame scene", fb_short is None,
+              f"Expected None, got {fb_short}")
+        shutil.rmtree(tmp_dir2, ignore_errors=True)
+
+        # --- Fallback Test 3: Real-face scene NOT tagged as fallback ---
+        print("\n🛡️  Fallback Test 3: real-face tracks are tagged is_fallback=False")
+        scene_real = []
+        for f in range(25):
+            scene_real.append([{'frame': f, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.95}])
+        tracks_real = track_shot(args, scene_real)
+        if tracks_real:
+            check("Real face track has is_fallback=False",
+                  tracks_real[0].get('is_fallback') is False,
+                  f"Got is_fallback={tracks_real[0].get('is_fallback')}")
+            check("Real face track has fallback_reason=None",
+                  tracks_real[0].get('fallback_reason') is None,
+                  f"Got fallback_reason={tracks_real[0].get('fallback_reason')}")
+        else:
+            check("Real face track present to test fallback tag", False, "No real tracks returned")
+
+        # --- Fallback Test 4: Degenerate bbox (width=0) does not crash fallback ---
+        print("\n🛡️  Fallback Test 4: degenerate bbox in crop_video does not crash")
+        scene_degenerate = [
+            [{'frame': f, 'bbox': [100.0, 100.0, 100.0, 100.0], 'conf': 0.9}]
+            for f in range(25)
+        ]
+        try:
+            tracks_degen = track_shot(args, scene_degenerate)
+            # Tracks with zero-area bbox will be filtered by minFaceSize; that is correct.
+            check("Degenerate-bbox scene does not crash track_shot", True)
+        except Exception as e:
+            check("Degenerate-bbox scene does not crash track_shot", False, str(e))
+
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():

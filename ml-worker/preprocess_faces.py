@@ -95,8 +95,32 @@ def track_shot(args, sceneFaces):
                 bboxesI.append(interpfn(frameI))
             bboxesI  = numpy.stack(bboxesI, axis=1)
             if max(numpy.mean(bboxesI[:,2]-bboxesI[:,0]), numpy.mean(bboxesI[:,3]-bboxesI[:,1])) > args.minFaceSize:
-                tracks.append({'frame':frameI,'bbox':bboxesI})
+                tracks.append({'frame':frameI,'bbox':bboxesI,'is_fallback':False,'fallback_reason':None})
     return tracks
+
+
+def center_crop_fallback(args, scene_start_frame, scene_end_frame):
+    """Emit a synthetic center-crop track when no faces are detected in a scene."""
+    n_frames = scene_end_frame - scene_start_frame
+    if n_frames < args.minTrack:
+        return None
+    flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
+    flist.sort()
+    H, W = 720, 1280
+    if flist:
+        probe = cv2.imread(flist[min(scene_start_frame, len(flist) - 1)])
+        if probe is not None:
+            H, W = probe.shape[:2]
+    pad = 0.33
+    x1, y1 = int(W*(0.5-pad/2)), int(H*(0.5-pad/2))
+    x2, y2 = int(W*(0.5+pad/2)), int(H*(0.5+pad/2))
+    frames = numpy.arange(scene_start_frame, scene_end_frame)
+    bboxes = numpy.tile(numpy.array([x1,y1,x2,y2], dtype=float), (len(frames),1))
+    sys.stderr.write(
+        f'[FALLBACK] No face in frames {scene_start_frame}–{scene_end_frame}. '
+        f'Center-crop track emitted ({x1},{y1},{x2},{y2}).\n'
+    )
+    return {'frame':frames,'bbox':bboxes,'is_fallback':True,'fallback_reason':'no_face_detected'}
 
 def crop_video(args, track, cropFile):
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) 
@@ -142,15 +166,20 @@ def crop_video(args, track, cropFile):
               (cropFile, audioTmp, args.nDataLoaderThread, cropFile))
     subprocess.call(command, shell=True, stdout=None)
     os.remove(cropFile + 't.avi')
-    return {'track':track, 'proc_track':dets}
+    return {
+        'track': track,
+        'proc_track': dets,
+        'is_fallback': track.get('is_fallback', False),
+        'fallback_reason': track.get('fallback_reason', None),
+    }
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}
     for ii, track in enumerate(vidTracks):
-        # Convert NumPy arrays to Python lists for JSON serialization
         frames = track['track']['frame'].tolist()
         bboxes = track['track']['bbox'].tolist()
-        
+        is_fallback     = track.get('is_fallback', False)
+        fallback_reason = track.get('fallback_reason', None)
         metadata["tracks"].append({
             "track_id": f"{ii:05d}",
             "start_frame": int(frames[0]),
@@ -159,14 +188,13 @@ def generate_metadata(vidTracks, args):
             "end_time_sec": float(frames[-1]) / 25.0,
             "video_path": f"{ii:05d}.avi",
             "audio_path": f"{ii:05d}.wav",
+            "is_fallback": is_fallback,
+            "fallback_reason": fallback_reason,
             "bbox_history": [
-                {
-                    "frame": int(f),
-                    "bbox": [float(b) for b in bbox]
-                } for f, bbox in zip(frames, bboxes)
+                {"frame": int(f), "bbox": [float(b) for b in bbox]}
+                for f, bbox in zip(frames, bboxes)
             ]
         })
-    
     meta_path = os.path.join(args.savePath, 'metadata.json')
     with open(meta_path, 'w') as f:
         json.dump(metadata, f, indent=4)
@@ -224,9 +252,23 @@ def main():
 
     allTracks, vidTracks = [], []
     for shot in scene:
-        if shot[1].frame_num - shot[0].frame_num >= args.minTrack:
-            allTracks.extend(track_shot(args, faces[shot[0].frame_num:shot[1].frame_num]))
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face track and detected %d tracks \r\n" %len(allTracks))
+        shot_start = shot[0].frame_num
+        shot_end   = shot[1].frame_num
+        if shot_end - shot_start >= args.minTrack:
+            shot_tracks = track_shot(args, faces[shot_start:shot_end])
+            if shot_tracks:
+                allTracks.extend(shot_tracks)
+            else:
+                fb = center_crop_fallback(args, shot_start, shot_end)
+                if fb is not None:
+                    allTracks.append(fb)
+    sys.stderr.write(
+        time.strftime("%Y-%m-%d %H:%M:%S") +
+        " Face track and detected %d tracks (%d fallback) \r\n" % (
+            len(allTracks),
+            sum(1 for t in allTracks if t.get('is_fallback', False))
+        )
+    )
 
     for ii, track in tqdm.tqdm(enumerate(allTracks), total = len(allTracks)):
         vidTracks.append(crop_video(args, track, os.path.join(args.pycropPath, '%05d'%ii)))
