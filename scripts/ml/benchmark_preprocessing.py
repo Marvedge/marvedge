@@ -28,12 +28,12 @@ from scipy.io import wavfile
 from scipy.interpolate import interp1d
 
 try:
-    from scenedetect.video_manager import VideoManager
-    from scenedetect.scene_manager import SceneManager
-    from scenedetect.stats_manager import StatsManager
+    from scenedetect import detect as scene_detect_fn
     from scenedetect.detectors import ContentDetector
+    HAS_SCENEDETECT = True
 except ImportError:
-    VideoManager = SceneManager = StatsManager = ContentDetector = None
+    HAS_SCENEDETECT = False
+    scene_detect_fn = ContentDetector = None
 
 try:
     from model.faceDetector.s3fd import S3FD
@@ -77,40 +77,102 @@ def gpu_total_mb():
 
 # ── Pipeline stages (same logic as preprocess_faces.py) ───────────────────────
 def scene_detect(args):
-    videoManager = VideoManager([args.videoFilePath])
-    statsManager = StatsManager()
-    sceneManager = SceneManager(statsManager)
-    sceneManager.add_detector(ContentDetector())
-    baseTimecode = videoManager.get_base_timecode()
-    videoManager.set_downscale_factor()
-    videoManager.start()
-    sceneManager.detect_scenes(frame_source=videoManager)
-    sceneList = sceneManager.get_scene_list(baseTimecode)
     savePath = os.path.join(args.pyworkPath, 'scene.pckl')
-    if sceneList == []:
-        sceneList = [(videoManager.get_base_timecode(), videoManager.get_current_timecode())]
+    if not HAS_SCENEDETECT:
+        # Graceful degradation: treat entire video as one scene.
+        print("  [WARNING] scenedetect library not available — treating video as single scene.")
+        sceneList = []
+        with open(savePath, 'wb') as fil:
+            pickle.dump(sceneList, fil)
+        return sceneList
+
+    # scenedetect >= 0.6: use the high-level detect() API
+    # Must run on videoFilePath (25fps AVI) to ensure scene timecodes match tracking frame indices.
+    sceneList = scene_detect_fn(
+        args.videoFilePath,
+        ContentDetector(threshold=27.0),
+        start_in_scene=True,
+    )
+    if not sceneList:
+        sceneList = []
     with open(savePath, 'wb') as fil:
         pickle.dump(sceneList, fil)
     return sceneList
 
 def inference_video(args):
-    DET = S3FD(device='cuda')
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
     dets = []
-    for fidx, fname in enumerate(flist):
-        image = cv2.imread(fname)
-        dets.append([])
-        if image is None:
-            continue
-        imageNumpy = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        bboxes = DET.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
-        for bbox in bboxes:
-            dets[-1].append({'frame': fidx, 'bbox': (bbox[:-1]).tolist(), 'conf': bbox[-1]})
+
+    if S3FD is None:
+        # S3FD not available — use OpenCV FaceDetectorYN (YuNet ONNX, OpenCV 5+ native).
+        _yunet = os.path.join(
+            os.path.dirname(__file__),
+            '../../model/faceDetector/dnn/face_detection_yunet_2023mar.onnx'
+        )
+        if os.path.exists(_yunet):
+            print("  [INFO] S3FD unavailable — using OpenCV FaceDetectorYN / YuNet (CPU fallback).")
+            # Read first frame to get resolution, init detector once.
+            first_img = cv2.imread(flist[0]) if flist else None
+            h0, w0 = (first_img.shape[:2] if first_img is not None else (720, 1280))
+            detector = cv2.FaceDetectorYN.create(
+                _yunet, "", (w0, h0), score_threshold=0.5, nms_threshold=0.3
+            )
+            last_size = (w0, h0)
+            for fidx, fname in enumerate(flist):
+                image = cv2.imread(fname)
+                dets.append([])
+                if image is None:
+                    continue
+                h, w = image.shape[:2]
+                if (w, h) != last_size:
+                    detector.setInputSize((w, h))
+                    last_size = (w, h)
+                _, faces = detector.detect(image)
+                if faces is not None:
+                    for face in faces:
+                        # YuNet output: [x, y, w, h, ...landmarks..., confidence]
+                        x, y, fw, fh = int(face[0]), int(face[1]), int(face[2]), int(face[3])
+                        conf = round(float(face[-1]), 3)
+                        dets[-1].append({
+                            'frame': fidx,
+                            'bbox': [x, y, x + fw, y + fh],
+                            'conf': conf
+                        })
+        else:
+            # No detector at all — return zero detections (tests "no face visible" path).
+            print(
+                "  [WARNING] No face detector available — returning zero detections.\n"
+                "  Download YuNet to model/faceDetector/dnn/ for local CPU testing.\n"
+                "  For production, use S3FD with GPU."
+            )
+            for _ in flist:
+                dets.append([])
+
+    else:
+        try:
+            import torch
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        except ImportError:
+            device = 'cpu'
+        DET = S3FD(device=device)
+        for fidx, fname in enumerate(flist):
+            image = cv2.imread(fname)
+            dets.append([])
+            if image is None:
+                continue
+            imageNumpy = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            bboxes = DET.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
+            for bbox in bboxes:
+                dets[-1].append({'frame': fidx, 'bbox': (bbox[:-1]).tolist(), 'conf': bbox[-1]})
+
     savePath = os.path.join(args.pyworkPath, 'faces.pckl')
     with open(savePath, 'wb') as fil:
         pickle.dump(dets, fil)
     return dets
+
+
+
 
 def bb_intersection_over_union(boxA, boxB):
     xA = max(boxA[0], boxB[0])
@@ -137,7 +199,7 @@ def track_shot(args, sceneFaces):
     - Interpolation crashes by enforcing len(track) >= 2 before interp1d.
     - Duplicate/flickering detections through exclusive per-frame assignment.
     """
-    iouThres = 0.5
+    iouThres = 0.1
     active_tracks = []
     completed_tracks = []
 
@@ -365,7 +427,7 @@ def main():
     parser.add_argument('--nDataLoaderThread', type=int, default=10)
     parser.add_argument('--facedetScale', type=float, default=0.25)
     parser.add_argument('--minTrack', type=int, default=10)
-    parser.add_argument('--numFailedDet', type=int, default=10)
+    parser.add_argument('--numFailedDet', type=int, default=100)
     parser.add_argument('--minFaceSize', type=int, default=1)
     parser.add_argument('--cropScale', type=float, default=0.40)
     args = parser.parse_args()
