@@ -214,7 +214,7 @@ class UniversalCursorTracker:
         return None
 
 
-def process_video(video_path, output_path, frame_skip=1, max_frames=None, min_confidence=0.65):
+def process_video(video_path, output_path, frame_skip=1, max_frames=None, min_confidence=0.65, max_hold_frames=10):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"ERROR: Cannot open {video_path}")
@@ -250,6 +250,7 @@ def process_video(video_path, output_path, frame_skip=1, max_frames=None, min_co
     }
 
     detected = 0
+    hold_counter = 0
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     for idx in tqdm(range(0, limit), desc="Tracking Universal Cursor"):
@@ -262,7 +263,8 @@ def process_video(video_path, output_path, frame_skip=1, max_frames=None, min_co
             if det:
                 results["frames"][str(idx)] = det
                 detected += 1
-            elif tracker.last_pos is not None and tracker.hits > 0:
+                hold_counter = 0
+            elif tracker.last_pos is not None and hold_counter < max_hold_frames:
                 lx, ly = tracker.last_pos
                 tw, th = 24, 36
                 results["frames"][str(idx)] = {
@@ -271,8 +273,10 @@ def process_video(video_path, output_path, frame_skip=1, max_frames=None, min_co
                     "w": tw,
                     "h": th,
                     "confidence": 0.50,
-                    "template": "held_position"
+                    "template": "held_position",
+                    "is_estimated": True
                 }
+                hold_counter += 1
 
     cap.release()
 
@@ -296,6 +300,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip", type=int, default=1, help="Process every Nth frame")
     parser.add_argument("--max_frames", type=int, default=None)
     parser.add_argument("--min_confidence", type=float, default=0.65)
+    parser.add_argument("--max_hold_frames", type=int, default=10, help="Max frames to hold cursor position when lost")
 
     args = parser.parse_args()
-    process_video(args.video, args.output, frame_skip=args.skip, max_frames=args.max_frames, min_confidence=args.min_confidence)
+    process_video(args.video, args.output, frame_skip=args.skip, max_frames=args.max_frames, min_confidence=args.min_confidence, max_hold_frames=args.max_hold_frames)

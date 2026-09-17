@@ -166,7 +166,7 @@ node {
       }
       scene_camera_motion_analyzer_options: {
         motion_stabilization_threshold_percent: 0.8
-        salient_point_bound: 0.499
+        salient_point_bound: 0.2
       }
       padding_parameters: {
         blur_cv_size: 200
@@ -175,7 +175,7 @@ node {
       camera_motion_options: {
         kinematic_options: {
           update_rate_seconds: 1.2
-          max_velocity: 18.0
+          max_velocity: 10.0
           min_motion_to_reframe: 2.0
           filtering_time_window_us: 1000000
         }
