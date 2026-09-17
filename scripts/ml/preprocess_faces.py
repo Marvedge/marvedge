@@ -5,12 +5,12 @@ from scipy.io import wavfile
 from scipy.interpolate import interp1d
 
 try:
-    from scenedetect.video_manager import VideoManager
-    from scenedetect.scene_manager import SceneManager
-    from scenedetect.stats_manager import StatsManager
+    from scenedetect import detect as scene_detect_fn
     from scenedetect.detectors import ContentDetector
+    HAS_SCENEDETECT = True
 except ImportError:
-    VideoManager = SceneManager = StatsManager = ContentDetector = None
+    HAS_SCENEDETECT = False
+    scene_detect_fn = ContentDetector = None
 
 try:
     from model.faceDetector.s3fd import S3FD
@@ -22,21 +22,24 @@ warnings.filterwarnings("ignore")
 TARGET_FPS = 25
 
 def scene_detect(args):
-    videoManager = VideoManager([args.videoFilePath])
-    statsManager = StatsManager()
-    sceneManager = SceneManager(statsManager)
-    sceneManager.add_detector(ContentDetector())
-    baseTimecode = videoManager.get_base_timecode()
-    videoManager.set_downscale_factor()
-    videoManager.start()
-    sceneManager.detect_scenes(frame_source = videoManager)
-    sceneList = sceneManager.get_scene_list(baseTimecode)
     savePath = os.path.join(args.pyworkPath, 'scene.pckl')
-    if sceneList == []:
-        sceneList = [(videoManager.get_base_timecode(),videoManager.get_current_timecode())]
+    if not HAS_SCENEDETECT:
+        sys.stderr.write('[WARNING] scenedetect not available — treating video as single scene.\n')
+        sceneList = []
+        with open(savePath, 'wb') as fil:
+            pickle.dump(sceneList, fil)
+        return sceneList
+
+    sceneList = scene_detect_fn(
+        args.videoFilePath,
+        ContentDetector(threshold=27.0),
+        start_in_scene=True,
+    )
+    if not sceneList:
+        sceneList = []
     with open(savePath, 'wb') as fil:
         pickle.dump(sceneList, fil)
-        sys.stderr.write('%s - scenes detected %d\n'%(args.videoFilePath, len(sceneList)))
+        sys.stderr.write('%s - scenes detected %d\n' % (args.videoFilePath, len(sceneList)))
     return sceneList
 
 def inference_video(args):
@@ -89,7 +92,7 @@ def track_shot(args, sceneFaces):
     - Interpolation crashes by enforcing len(track) >= 2 before interp1d.
     - Duplicate/flickering detections through exclusive per-frame assignment.
     """
-    iouThres = 0.5
+    iouThres = 0.1
     active_tracks = []
     completed_tracks = []
 
@@ -305,7 +308,7 @@ def main():
     parser.add_argument('--nDataLoaderThread', type=int, default=10, help='Number of workers')
     parser.add_argument('--facedetScale', type=float, default=0.25, help='Scale factor for face detection')
     parser.add_argument('--minTrack', type=int, default=10, help='Number of min frames for each shot')
-    parser.add_argument('--numFailedDet', type=int, default=10, help='Missed detections allowed before tracking stopped')
+    parser.add_argument('--numFailedDet', type=int, default=100, help='Missed detections allowed before tracking stopped')
     parser.add_argument('--minFaceSize', type=int, default=1, help='Minimum face size in pixels')
     parser.add_argument('--cropScale', type=float, default=0.40, help='Scale bounding box')
     args = parser.parse_args()
