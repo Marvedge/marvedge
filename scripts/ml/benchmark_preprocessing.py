@@ -28,12 +28,12 @@ from scipy.io import wavfile
 from scipy.interpolate import interp1d
 
 try:
-    from scenedetect import detect as scene_detect_fn, open_video
+    from scenedetect import detect as scene_detect_fn
     from scenedetect.detectors import ContentDetector
     HAS_SCENEDETECT = True
 except ImportError:
     HAS_SCENEDETECT = False
-    scene_detect_fn = ContentDetector = open_video = None
+    scene_detect_fn = ContentDetector = None
 
 try:
     from model.faceDetector.s3fd import S3FD
