@@ -40,14 +40,26 @@ warnings.filterwarnings("ignore")
 
 TARGET_FPS = 25
 
-# ── Detector priority: MediaPipe > YuNet > None ───────────────────────────────
-HAS_MEDIAPIPE = False
+# ── Detector priority: MediaPipe Tasks API > YuNet > None ───────────────────
+# MediaPipe 0.10+ uses the Tasks API (mp.tasks); older used mp.solutions.
+HAS_MEDIAPIPE_TASKS = False
+HAS_MEDIAPIPE_LEGACY = False
+MEDIAPIPE_MODEL_PATH = None
+
 try:
     import mediapipe as mp
-    HAS_MEDIAPIPE = True
+    # Check new Tasks API (mediapipe >= 0.10)
+    if hasattr(mp, 'tasks'):
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+        HAS_MEDIAPIPE_TASKS = True
+    # Check legacy solutions API (mediapipe < 0.10)
+    elif hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_detection'):
+        HAS_MEDIAPIPE_LEGACY = True
 except ImportError:
     pass
 
+HAS_MEDIAPIPE = HAS_MEDIAPIPE_TASKS or HAS_MEDIAPIPE_LEGACY
 HAS_YUNET = False
 YUNET_MODEL = None
 
@@ -127,69 +139,110 @@ def extract_audio(video_path, audio_path, threads=4):
 # ═════════════════════════════════════════════════════════════════════════════
 # STAGE 2: Strided face detection using MediaPipe (180+ fps on CPU)
 # ═════════════════════════════════════════════════════════════════════════════
+def _download_mediapipe_model():
+    """Download BlazeFace TFLite model for the Tasks API."""
+    global MEDIAPIPE_MODEL_PATH
+    if MEDIAPIPE_MODEL_PATH and os.path.exists(MEDIAPIPE_MODEL_PATH):
+        return MEDIAPIPE_MODEL_PATH
+    import urllib.request
+    model_url = ('https://storage.googleapis.com/mediapipe-models/'
+                 'face_detector/blaze_face_short_range/float16/1/'
+                 'blaze_face_short_range.tflite')
+    model_path = '/tmp/blaze_face_short_range.tflite'
+    if not os.path.exists(model_path):
+        sys.stderr.write('  [V3] Downloading BlazeFace TFLite model...\n')
+        urllib.request.urlretrieve(model_url, model_path)
+    MEDIAPIPE_MODEL_PATH = model_path
+    return model_path
+
+
 def detect_faces_mediapipe(video_path, stride, scale, video_info):
     """
     Read every stride-th frame directly from MP4 using OpenCV,
     detect faces with MediaPipe BlazeFace at reduced resolution.
+    Supports both MediaPipe Tasks API (>=0.10) and legacy solutions API (<0.10).
     Returns sparse_dets: dict[frame_idx] -> list of {bbox, conf}.
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        sys.stderr.write("  [ERROR] Cannot open video\n")
-        return {}, video_info["total_frames"]
+        sys.stderr.write('  [ERROR] Cannot open video\n')
+        return {}, video_info['total_frames']
 
-    total = video_info["total_frames"]
-    native_w = video_info["width"]
-    native_h = video_info["height"]
-    src_fps = video_info["fps"]
+    total    = video_info['total_frames']
+    native_w = video_info['width']
+    native_h = video_info['height']
+    det_w    = int(native_w * scale)
+    det_h    = int(native_h * scale)
+    n_sample = max(1, total // stride)
 
-    det_w = int(native_w * scale)
-    det_h = int(native_h * scale)
-
-    n_sample = total // stride
-    sys.stderr.write(f"  [V3] MediaPipe BlazeFace | stride={stride} | {det_w}×{det_h}\n")
-    sys.stderr.write(f"  [V3] Sampling {n_sample} of {total} frames (skipping {stride-1} of every {stride})\n")
+    api_label = 'Tasks API' if HAS_MEDIAPIPE_TASKS else 'Legacy solutions API'
+    sys.stderr.write(f'  [V3] MediaPipe BlazeFace ({api_label}) | stride={stride} | {det_w}×{det_h}\n')
+    sys.stderr.write(f'  [V3] Sampling {n_sample} of {total} frames\n')
 
     sparse_dets = {}
 
-    with mp.solutions.face_detection.FaceDetection(
-        model_selection=1,           # full-range model (works 0-5m distance)
-        min_detection_confidence=0.5
-    ) as detector:
+    # ── New Tasks API (mediapipe >= 0.10) ────────────────────────────────────
+    if HAS_MEDIAPIPE_TASKS:
+        model_path = _download_mediapipe_model()
+        base_opts  = mp_python.BaseOptions(model_asset_path=model_path)
+        options    = mp_vision.FaceDetectorOptions(
+            base_options=base_opts,
+            min_detection_confidence=0.5
+        )
+        detector = mp_vision.FaceDetector.create_from_options(options)
 
-        for fidx in tqdm.tqdm(range(0, total, stride), desc="  Face detection", total=n_sample):
+        for fidx in tqdm.tqdm(range(0, total, stride), desc='  Face detection', total=n_sample):
             cap.set(cv2.CAP_PROP_POS_FRAMES, fidx)
             ret, frame = cap.read()
             if not ret or frame is None:
                 continue
 
-            # Downscale for detection speed
-            if scale < 1.0:
-                small = cv2.resize(frame, (det_w, det_h), interpolation=cv2.INTER_LINEAR)
-            else:
-                small = frame
-
-            # MediaPipe expects RGB
-            rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-            results = detector.process(rgb)
+            small = cv2.resize(frame, (det_w, det_h), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else frame
+            rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+            mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = detector.detect(mp_img)
 
             frame_dets = []
-            if results.detections:
-                for det in results.detections:
-                    bb = det.location_data.relative_bounding_box
-                    # Convert relative coords to absolute at NATIVE resolution
-                    x1 = int(bb.xmin * native_w)
-                    y1 = int(bb.ymin * native_h)
-                    x2 = int((bb.xmin + bb.width) * native_w)
-                    y2 = int((bb.ymin + bb.height) * native_h)
-                    conf = round(det.score[0], 3)
-                    frame_dets.append({
-                        'frame': fidx,
-                        'bbox': [x1, y1, x2, y2],
-                        'conf': conf
-                    })
+            for det in (result.detections or []):
+                bb   = det.bounding_box
+                # bbox is in det-resolution coords — scale back to native
+                x1   = int(bb.origin_x / scale)
+                y1   = int(bb.origin_y / scale)
+                x2   = int((bb.origin_x + bb.width)  / scale)
+                y2   = int((bb.origin_y + bb.height) / scale)
+                conf = round(det.categories[0].score, 3) if det.categories else 0.9
+                frame_dets.append({'frame': fidx, 'bbox': [x1, y1, x2, y2], 'conf': conf})
 
             sparse_dets[fidx] = frame_dets
+
+        detector.close()
+
+    # ── Legacy solutions API (mediapipe < 0.10) ─────────────────────────────
+    else:
+        with mp.solutions.face_detection.FaceDetection(
+            model_selection=1, min_detection_confidence=0.5
+        ) as detector:
+            for fidx in tqdm.tqdm(range(0, total, stride), desc='  Face detection', total=n_sample):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, fidx)
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    continue
+
+                small = cv2.resize(frame, (det_w, det_h), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else frame
+                rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                res   = detector.process(rgb)
+
+                frame_dets = []
+                for det in (res.detections or []):
+                    bb = det.location_data.relative_bounding_box
+                    x1 = int(bb.xmin * native_w)
+                    y1 = int(bb.ymin * native_h)
+                    x2 = int((bb.xmin + bb.width)  * native_w)
+                    y2 = int((bb.ymin + bb.height) * native_h)
+                    conf = round(det.score[0], 3)
+                    frame_dets.append({'frame': fidx, 'bbox': [x1, y1, x2, y2], 'conf': conf})
+
+                sparse_dets[fidx] = frame_dets
 
     cap.release()
     return sparse_dets, total
