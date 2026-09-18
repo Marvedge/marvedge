@@ -55,9 +55,23 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   return NextResponse.json({ success: true, ctas });
 }
 
+// FIX: block javascript/data urls in CTA
+function isHttpsUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const createCtaSchema = z.object({
   label: z.string().trim().min(1, "label is required"),
-  url: z.string().trim().min(1, "url is required"),
+  url: z
+    .string()
+    .trim()
+    .min(1, "url is required")
+    .refine(isHttpsUrl, { message: "URL must be https" }),
   placement: z.string().optional(),
   order: z.number().int().optional(),
 });

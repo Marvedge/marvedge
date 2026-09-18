@@ -1,0 +1,11 @@
+services:
+  ml-worker:
+    build: .
+    image: marvedge-ml-worker:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Mount a local directory to persist processed outputs across restarts
+    # volumes:
+    #   - ./output:/tmp/gradio_out_*

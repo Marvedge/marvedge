@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
@@ -22,6 +25,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
+    // keep inbox spam and guessing cheap: 5 sends per 15 minutes
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded
+      ? forwarded.split(",")[0].trim()
+      : req.headers.get("x-real-ip")?.trim() || "unknown";
+    if (await isRateLimited(`request-reset:${ip}:${email.toLowerCase()}`, 5, 900)) {
+      return NextResponse.json(
+        { error: "Too many attempts, please try again later" },
+        { status: 429 }
+      );
+    }
+
     // Check for Resend API key early
     if (!process.env.RESEND_API_KEY) {
       console.error("Missing RESEND_API_KEY");
@@ -29,15 +44,20 @@ export async function POST(req: Request) {
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
+    // reply the same whether or not the account exists, so the
+    // response never confirms which emails are registered
     if (!user) {
-      return NextResponse.json({ error: "No user found with this email" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Password reset link sent to your email." },
+        { status: 200 }
+      );
     }
 
     // Optional: block users without passwords (OAuth accounts)
     if (!user.password) {
       return NextResponse.json(
-        { error: "This account does not support password reset" },
-        { status: 400 }
+        { message: "Password reset link sent to your email." },
+        { status: 200 }
       );
     }
 
