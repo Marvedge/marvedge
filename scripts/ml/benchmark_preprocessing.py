@@ -280,11 +280,35 @@ def track_shot(args, sceneFaces):
         mean_w = numpy.mean(bboxesI[:, 2] - bboxesI[:, 0])
         mean_h = numpy.mean(bboxesI[:, 3] - bboxesI[:, 1])
         if max(mean_w, mean_h) > args.minFaceSize:
-            tracks.append({'frame': frameI, 'bbox': bboxesI})
+            tracks.append({'frame': frameI, 'bbox': bboxesI, 'is_fallback': False, 'fallback_reason': None})
 
     # Sort tracks chronologically by start frame
     tracks.sort(key=lambda x: x['frame'][0])
     return tracks
+
+
+def center_crop_fallback(args, scene_start_frame, scene_end_frame):
+    """Emit a synthetic center-crop track when no faces are detected in a scene."""
+    n_frames = scene_end_frame - scene_start_frame
+    if n_frames < args.minTrack:
+        return None
+    flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
+    flist.sort()
+    H, W = 720, 1280
+    if flist:
+        probe = cv2.imread(flist[min(scene_start_frame, len(flist) - 1)])
+        if probe is not None:
+            H, W = probe.shape[:2]
+    pad = 0.33
+    x1, y1 = int(W*(0.5-pad/2)), int(H*(0.5-pad/2))
+    x2, y2 = int(W*(0.5+pad/2)), int(H*(0.5+pad/2))
+    frames = numpy.arange(scene_start_frame, scene_end_frame)
+    bboxes = numpy.tile(numpy.array([x1,y1,x2,y2], dtype=float), (len(frames),1))
+    sys.stderr.write(
+        f'  [FALLBACK] No face in frames {scene_start_frame}–{scene_end_frame}. '
+        f'Center-crop emitted ({x1},{y1},{x2},{y2}).\n'
+    )
+    return {'frame':frames,'bbox':bboxes,'is_fallback':True,'fallback_reason':'no_face_detected'}
 
 def crop_video(args, track, cropFile, flist=None):
     if flist is None:
@@ -447,6 +471,7 @@ def main():
         "total_frames": 0,
         "fps_throughput": 0,
         "tracks_found": 0,
+        "fallback_tracks_found": 0,
     }
 
     if HAS_CUDA:
@@ -529,13 +554,23 @@ def main():
     def do_tracking():
         tracks = []
         for shot in scene:
-            if shot[1].frame_num - shot[0].frame_num >= args.minTrack:
-                tracks.extend(track_shot(args, faces[shot[0].frame_num:shot[1].frame_num]))
+            shot_start = shot[0].frame_num
+            shot_end   = shot[1].frame_num
+            if shot_end - shot_start >= args.minTrack:
+                shot_tracks = track_shot(args, faces[shot_start:shot_end])
+                if shot_tracks:
+                    tracks.extend(shot_tracks)
+                else:
+                    fb = center_crop_fallback(args, shot_start, shot_end)
+                    if fb is not None:
+                        tracks.append(fb)
         return tracks
 
     allTracks = timed("IoU face tracking", do_tracking, report)
+    n_fallback = sum(1 for t in allTracks if t.get('is_fallback', False))
     report["tracks_found"] = len(allTracks)
-    sys.stderr.write("  → %d tracks found\n\n" % len(allTracks))
+    report["fallback_tracks_found"] = n_fallback
+    sys.stderr.write("  → %d tracks found (%d fallback)\n\n" % (len(allTracks), n_fallback))
 
     # ── Stage 5: Face cropping + audio slice ──────────────────────────────────
     def do_cropping():
