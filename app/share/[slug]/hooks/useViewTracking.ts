@@ -47,13 +47,15 @@ export function useViewTracking(demoId?: string, videoId?: string) {
           body: JSON.stringify({
             viewId,
             duration: watchedDurationRef.current,
+            demoId,
+            exportedVideoId: videoId,
           }),
         }).catch(console.error);
       }
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [viewId]);
+  }, [viewId, demoId, videoId]);
 
   return videoRef;
 }
