@@ -223,14 +223,31 @@ describe("Revised Crop coordinate JSON contract validation suite", () => {
       expect(expression).toContain("if(lt(t,2.0000),500.0000,");
     });
 
-    it("generates complete FFmpeg crop filter string", () => {
+    it("generates complete FFmpeg crop filter string with single-quoted expressions", () => {
       const filter = buildFfmpegCropFilter(validCropTargetPayload.crop_targets);
       expect(filter).toBeDefined();
       expect(filter).toContain("crop=608:1080:");
       expect(filter).toContain(":exact=1");
       expect(filter).toContain("min(max(");
       expect(filter).toContain("iw-608");
-      expect(filter).toContain("ih-1080");
+      // Must quote x and y expressions to be syntactically valid in FFmpeg filterchains
+      expect(filter?.startsWith("crop=608:1080:'min(max(")).toBe(true);
+      expect(filter).toContain("0),iw-608)':'min(max(");
+      expect(filter?.endsWith("0),ih-1080)':exact=1")).toBe(true);
+    });
+
+    it("simplifies stationary crop targets down to boundaries", () => {
+      const stationaryTargets = Array.from({ length: 100 }, (_, i) => ({
+        timestamp_sec: i * 0.04,
+        frame: i,
+        crop: { x: 100, y: 50, width: 608, height: 1080 },
+      }));
+      const filter = buildFfmpegCropFilter(stationaryTargets);
+      expect(filter).toBeDefined();
+      // Should not contain 100 nested if statements
+      expect(filter).not.toContain("if(lt(t,3.0000)");
+      // Stationary simplifies to start and end
+      expect(filter).toContain("100.0000");
     });
   });
 

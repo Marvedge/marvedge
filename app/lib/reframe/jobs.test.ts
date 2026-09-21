@@ -14,7 +14,7 @@ function createFakeDb(initialJob: {
 
   const db: ReframeDbClient = {
     videoJob: {
-      findUnique: vi.fn(async () => current),
+      findUnique: vi.fn(async () => (current ? { jobData: null, ...current } : null)),
       update: vi.fn(async ({ data }) => {
         if (!current) throw new Error("Job not found");
         current = { ...current, ...data };

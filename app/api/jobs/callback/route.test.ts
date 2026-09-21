@@ -162,12 +162,64 @@ describe("POST /api/jobs/callback", () => {
         data: {
           status: "COMPLETED",
           progress: 100,
+          exportedUrl: undefined,
           jobData: {
             kind: "REFRAME",
             targetAspectRatio: "9:16",
             cropTargets: validCropTargets,
           },
           error: null,
+        },
+      });
+    });
+
+    it("persists exportedUrl and updates Demo on completed reframe callback", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "reframe-job-1",
+        demoId: "demo-reframe-1",
+        jobData: {
+          kind: "REFRAME",
+          targetAspectRatio: "9:16",
+        },
+      } as never);
+
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
+      vi.mocked(prisma.demo.update).mockResolvedValue({} as never);
+
+      const req = makePostRequest({
+        jobId: "reframe-job-1",
+        status: "COMPLETED",
+        cropTargets: validCropTargets,
+        exportedUrl: "https://res.cloudinary.com/demo/video/upload/reframed.mp4",
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "reframe-job-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          exportedUrl: "https://res.cloudinary.com/demo/video/upload/reframed.mp4",
+          jobData: {
+            kind: "REFRAME",
+            targetAspectRatio: "9:16",
+            cropTargets: validCropTargets,
+          },
+          error: null,
+        },
+      });
+
+      expect(prisma.demo.update).toHaveBeenCalledWith({
+        where: { id: "demo-reframe-1" },
+        data: {
+          exportedUrl: "https://res.cloudinary.com/demo/video/upload/reframed.mp4",
         },
       });
     });

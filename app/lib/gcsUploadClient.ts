@@ -31,6 +31,7 @@ export async function uploadBlobToGcs({
 }): Promise<{
   url: string;
   publicUrl?: string;
+  signedReadUrl?: string;
   object?: string;
   bucket?: string;
 }> {
@@ -70,7 +71,8 @@ export async function uploadBlobToGcs({
 
   return {
     url: body.url,
-    publicUrl: body.publicUrl || body.signedReadUrl,
+    publicUrl: body.signedReadUrl || body.publicUrl,
+    signedReadUrl: body.signedReadUrl,
     object: body.object,
     bucket: body.bucket,
   };

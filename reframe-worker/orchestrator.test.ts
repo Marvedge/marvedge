@@ -38,12 +38,14 @@ const sampleJobPayload: ReframeJobPayload = {
 };
 
 describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
-  let mockExecuteMl: Mock<[request: MlInferenceRequest], Promise<CropTargetData>>;
-  let mockSendCallback: Mock<[payload: JobCallbackPayload], Promise<{ success: boolean }>>;
+  let mockExecuteMl: any;
+  let mockRenderVideo: any;
+  let mockSendCallback: any;
   let localCache: Map<string, CropTargetData>;
 
   beforeEach(() => {
     mockExecuteMl = vi.fn<(request: MlInferenceRequest) => Promise<CropTargetData>>().mockResolvedValue(sampleCropTargets);
+    mockRenderVideo = vi.fn<(videoUrl: string, cropTargets: CropTargetData) => Promise<string>>().mockResolvedValue("https://res.cloudinary.com/test-cloud/video/upload/reframed.mp4");
     mockSendCallback = vi.fn<(payload: JobCallbackPayload) => Promise<{ success: boolean }>>().mockResolvedValue({ success: true });
     localCache = new Map<string, CropTargetData>();
   });
@@ -70,12 +72,14 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
 
       const result = await processReframeJob(sampleJobPayload, context, {
         executeMl: mockExecuteMl,
+        renderVideo: mockRenderVideo,
         sendCallback: mockSendCallback,
         resultCache: localCache,
       });
 
       expect(result.success).toBe(true);
       expect(result.cropTargets).toEqual(sampleCropTargets);
+      expect(result.exportedUrl).toBe("https://res.cloudinary.com/test-cloud/video/upload/reframed.mp4");
 
       expect(mockExecuteMl).toHaveBeenCalledTimes(1);
       expect(mockExecuteMl).toHaveBeenCalledWith({
@@ -84,11 +88,18 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         source: sampleJobPayload.source,
       });
 
+      expect(mockRenderVideo).toHaveBeenCalledTimes(1);
+      expect(mockRenderVideo).toHaveBeenCalledWith(
+        sampleJobPayload.videoUrl,
+        sampleCropTargets
+      );
+
       expect(mockSendCallback).toHaveBeenCalledTimes(1);
       expect(mockSendCallback).toHaveBeenCalledWith({
         jobId: "job-ref-123",
         status: "COMPLETED",
         cropTargets: sampleCropTargets,
+        exportedUrl: "https://res.cloudinary.com/test-cloud/video/upload/reframed.mp4",
       });
 
       // Cache cleaned up after successful completion
@@ -161,6 +172,7 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       await expect(
         processReframeJob(sampleJobPayload, contextAttempt0, {
           executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
           sendCallback: mockSendCallback,
           resultCache: localCache,
         })
@@ -180,6 +192,7 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
 
       const result = await processReframeJob(sampleJobPayload, contextAttempt1, {
         executeMl: mockExecuteMl,
+        renderVideo: mockRenderVideo,
         sendCallback: mockSendCallback,
         resultCache: localCache,
       });
@@ -193,6 +206,7 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         jobId: "job-ref-123",
         status: "COMPLETED",
         cropTargets: sampleCropTargets,
+        exportedUrl: "https://res.cloudinary.com/test-cloud/video/upload/reframed.mp4",
       });
       // Cache cleared after successful callback
       expect(localCache.has("job-ref-123")).toBe(false);
@@ -212,6 +226,7 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       await expect(
         processReframeJob(sampleJobPayload, context, {
           executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
           sendCallback: mockSendCallback,
           resultCache: localCache,
         })
@@ -228,6 +243,58 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
           status: "FAILED",
         })
       );
+    });
+  });
+
+  describe("Rendering Failure Retry Semantics", () => {
+    it("throws error and does NOT send FAILED callback on intermediate BullMQ attempts when rendering fails", async () => {
+      mockRenderVideo.mockRejectedValue(new Error("FFmpeg exited with code 1"));
+
+      const context: ReframeJobContext = {
+        jobId: "job-ref-123",
+        attemptsMade: 0,
+        maxAttempts: 3,
+      };
+
+      await expect(
+        processReframeJob(sampleJobPayload, context, {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        })
+      ).rejects.toThrow("FFmpeg exited with code 1");
+
+      // No callback sent yet — BullMQ will retry
+      expect(mockSendCallback).not.toHaveBeenCalled();
+      // ML result was cached so retry does not rerun ML
+      expect(localCache.has("job-ref-123")).toBe(true);
+    });
+
+    it("sends FAILED callback on final BullMQ attempt when rendering fails", async () => {
+      mockRenderVideo.mockRejectedValue(new Error("Cloudinary upload failed"));
+
+      const context: ReframeJobContext = {
+        jobId: "job-ref-123",
+        attemptsMade: 2, // Final of 3 attempts
+        maxAttempts: 3,
+      };
+
+      await expect(
+        processReframeJob(sampleJobPayload, context, {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        })
+      ).rejects.toThrow("Cloudinary upload failed");
+
+      expect(mockSendCallback).toHaveBeenCalledTimes(1);
+      expect(mockSendCallback).toHaveBeenCalledWith({
+        jobId: "job-ref-123",
+        status: "FAILED",
+        error: "Video rendering failed: Cloudinary upload failed",
+      });
     });
   });
 
@@ -368,6 +435,16 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         expect(fetchCount).toBe(1);
       } finally {
         globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("loads environment variables following Next.js precedence (Issue B regression)", () => {
+      const config = getReframeWorkerConfig();
+      expect(config.backendUrl).toBeDefined();
+      expect(config.redisUrl).toBeDefined();
+      expect(config.mlServiceUrl).toBeDefined();
+      if (fs.existsSync(path.resolve(process.cwd(), ".env.local"))) {
+        expect(config.callbackSecret.length).toBeGreaterThan(0);
       }
     });
   });

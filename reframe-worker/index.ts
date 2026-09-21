@@ -12,23 +12,11 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
-import { getReframeWorkerConfig } from "./config";
+import { getReframeWorkerConfig, loadReframeWorkerEnv } from "./config";
 import { processReframeJob, type ReframeJobContext } from "./orchestrator";
 
-// Load environment variables from standard root or local locations
-(() => {
-  const candidates = [
-    path.resolve(process.cwd(), ".env"),
-    path.resolve(process.cwd(), "../.env"),
-    path.resolve(__dirname, ".env"),
-    path.resolve(__dirname, "../.env"),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      dotenv.config({ path: p, override: false });
-    }
-  }
-})();
+// Load environment variables (.env.local, .env) following Next.js precedence
+loadReframeWorkerEnv();
 
 const config = getReframeWorkerConfig();
 
@@ -36,6 +24,7 @@ console.log("📐 Starting lightweight Reframe Worker (Task-00023)...");
 console.log(`📡 Backend URL: ${config.backendUrl}`);
 console.log(`🤖 ML Service URL: ${config.mlServiceUrl}`);
 console.log(`🔑 Callback Secret configured: ${config.callbackSecret ? "yes" : "no"}`);
+console.log(`☁️  Cloudinary configured: ${process.env.CLOUDINARY_API_KEY ? "yes" : "no"}`);
 console.log(`⚙️  Concurrency: ${config.workerConcurrency}`);
 
 const redisConnection = new Redis(config.redisUrl, {

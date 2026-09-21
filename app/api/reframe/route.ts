@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { isSafeUrl } from "@/app/lib/safeUrl";
 import {
   ApiError,
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
           kind: "REFRAME",
           targetAspectRatio,
           ...(source ? { source } : {}),
-        },
+        } as unknown as Prisma.InputJsonValue,
       },
     });
 

@@ -179,6 +179,7 @@ export async function POST(req: NextRequest) {
           data: {
             status: "COMPLETED",
             progress: 100,
+            exportedUrl: exportedUrl || undefined,
             jobData: {
               ...existingJobData,
               kind: "REFRAME",
@@ -196,6 +197,14 @@ export async function POST(req: NextRequest) {
             success: true,
             ignored: true,
             message: `Job ${jobId} is already in a terminal state`,
+          });
+        }
+
+        // Also update Demo.exportedUrl if linked and exportedUrl exists
+        if (job.demoId && exportedUrl) {
+          await prisma.demo.update({
+            where: { id: job.demoId },
+            data: { exportedUrl },
           });
         }
 
