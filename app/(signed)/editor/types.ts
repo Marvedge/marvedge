@@ -14,4 +14,11 @@ export type TextOverlayItem = {
   parentH?: number;
 };
 
-export type SubtitleCue = { start: number; end: number; text: string };
+export type SubtitleWord = { word: string; start: number; end: number };
+
+export type SubtitleCue = {
+  start: number;
+  end: number;
+  text: string;
+  words?: SubtitleWord[];
+};
