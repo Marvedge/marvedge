@@ -1,4 +1,5 @@
 import sys, time, os, tqdm, argparse, glob, subprocess, warnings, cv2, pickle, numpy, json
+from types import SimpleNamespace
 from scipy import signal
 from shutil import rmtree
 from scipy.io import wavfile
@@ -25,11 +26,22 @@ def scene_detect(args):
     savePath = os.path.join(args.pyworkPath, 'scene.pckl')
     if not HAS_SCENEDETECT:
         sys.stderr.write('[WARNING] scenedetect not available — treating video as single scene.\n')
-        sceneList = []
+
+    # Fall back to the entire extracted video as one scene.
+        flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
+        flist.sort()
+        frame_count = len(flist)
+
+        sceneList = [
+            (
+                SimpleNamespace(frame_num=0),
+                SimpleNamespace(frame_num=frame_count),
+            )
+        ]
+
         with open(savePath, 'wb') as fil:
             pickle.dump(sceneList, fil)
         return sceneList
-
     sceneList = scene_detect_fn(
         args.videoFilePath,
         ContentDetector(threshold=27.0),
