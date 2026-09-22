@@ -5,12 +5,12 @@ from scipy.io import wavfile
 from scipy.interpolate import interp1d
 
 try:
-    from scenedetect import detect as scene_detect_fn
+    from scenedetect.video_manager import VideoManager
+    from scenedetect.scene_manager import SceneManager
+    from scenedetect.stats_manager import StatsManager
     from scenedetect.detectors import ContentDetector
-    HAS_SCENEDETECT = True
 except ImportError:
-    HAS_SCENEDETECT = False
-    scene_detect_fn = ContentDetector = None
+    VideoManager = SceneManager = StatsManager = ContentDetector = None
 
 try:
     from model.faceDetector.s3fd import S3FD
@@ -22,24 +22,21 @@ warnings.filterwarnings("ignore")
 TARGET_FPS = 25
 
 def scene_detect(args):
+    videoManager = VideoManager([args.videoFilePath])
+    statsManager = StatsManager()
+    sceneManager = SceneManager(statsManager)
+    sceneManager.add_detector(ContentDetector())
+    baseTimecode = videoManager.get_base_timecode()
+    videoManager.set_downscale_factor()
+    videoManager.start()
+    sceneManager.detect_scenes(frame_source = videoManager)
+    sceneList = sceneManager.get_scene_list(baseTimecode)
     savePath = os.path.join(args.pyworkPath, 'scene.pckl')
-    if not HAS_SCENEDETECT:
-        sys.stderr.write('[WARNING] scenedetect not available — treating video as single scene.\n')
-        sceneList = []
-        with open(savePath, 'wb') as fil:
-            pickle.dump(sceneList, fil)
-        return sceneList
-
-    sceneList = scene_detect_fn(
-        args.videoFilePath,
-        ContentDetector(threshold=27.0),
-        start_in_scene=True,
-    )
-    if not sceneList:
-        sceneList = []
+    if sceneList == []:
+        sceneList = [(videoManager.get_base_timecode(),videoManager.get_current_timecode())]
     with open(savePath, 'wb') as fil:
         pickle.dump(sceneList, fil)
-        sys.stderr.write('%s - scenes detected %d\n' % (args.videoFilePath, len(sceneList)))
+        sys.stderr.write('%s - scenes detected %d\n'%(args.videoFilePath, len(sceneList)))
     return sceneList
 
 def inference_video(args):
@@ -92,7 +89,7 @@ def track_shot(args, sceneFaces):
     - Interpolation crashes by enforcing len(track) >= 2 before interp1d.
     - Duplicate/flickering detections through exclusive per-frame assignment.
     """
-    iouThres = 0.1
+    iouThres = 0.5
     active_tracks = []
     completed_tracks = []
 
@@ -102,7 +99,6 @@ def track_shot(args, sceneFaces):
         if len(ffaces) > 0:
             base_frame = ffaces[0]['frame'] - f_idx
             break
-
     for f_idx, frameFaces in enumerate(sceneFaces):
         curr_frame = (base_frame + f_idx) if base_frame is not None else f_idx
 
@@ -181,56 +177,27 @@ def track_shot(args, sceneFaces):
 
 
 def center_crop_fallback(args, scene_start_frame, scene_end_frame):
-    """
-    Produce a synthetic center-crop track for a scene where no faces were detected.
-
-    The crop covers the center 33% of the frame in each dimension, giving a
-    stable, geometry-derived framing that downstream ASD models can process.
-    The track is tagged with is_fallback=True and fallback_reason so consumers
-    can distinguish it from a real face-detected track.
-
-    Args:
-        args: pipeline args namespace (needs pyframesPath, minTrack)
-        scene_start_frame (int): inclusive start frame index of the degenerate scene
-        scene_end_frame   (int): exclusive end frame index of the degenerate scene
-
-    Returns:
-        dict with keys 'frame', 'bbox', 'is_fallback', 'fallback_reason',
-        or None if the scene is shorter than minTrack.
-    """
+    """Emit a synthetic center-crop track when no faces are detected in a scene."""
     n_frames = scene_end_frame - scene_start_frame
     if n_frames < args.minTrack:
         return None
-
-    # Infer frame resolution from the first available extracted frame.
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
-    H, W = 720, 1280  # safe default
+    H, W = 720, 1280
     if flist:
         probe = cv2.imread(flist[min(scene_start_frame, len(flist) - 1)])
         if probe is not None:
             H, W = probe.shape[:2]
-
-    # Center 33% bounding box
     pad = 0.33
-    x1 = int(W * (0.5 - pad / 2))
-    y1 = int(H * (0.5 - pad / 2))
-    x2 = int(W * (0.5 + pad / 2))
-    y2 = int(H * (0.5 + pad / 2))
-
+    x1, y1 = int(W*(0.5-pad/2)), int(H*(0.5-pad/2))
+    x2, y2 = int(W*(0.5+pad/2)), int(H*(0.5+pad/2))
     frames = numpy.arange(scene_start_frame, scene_end_frame)
-    bboxes = numpy.tile(numpy.array([x1, y1, x2, y2], dtype=float), (len(frames), 1))
-
+    bboxes = numpy.tile(numpy.array([x1,y1,x2,y2], dtype=float), (len(frames),1))
     sys.stderr.write(
-        f'[FALLBACK] No face detected in frames {scene_start_frame}–{scene_end_frame}. '
-        f'Emitting center-crop track ({x1},{y1},{x2},{y2}).\n'
+        f'[FALLBACK] No face in frames {scene_start_frame}–{scene_end_frame}. '
+        f'Center-crop track emitted ({x1},{y1},{x2},{y2}).\n'
     )
-    return {
-        'frame': frames,
-        'bbox': bboxes,
-        'is_fallback': True,
-        'fallback_reason': 'no_face_detected',
-    }
+    return {'frame':frames,'bbox':bboxes,'is_fallback':True,'fallback_reason':'no_face_detected'}
 
 def crop_video(args, track, cropFile, flist=None):
     if flist is None:
@@ -291,6 +258,7 @@ def crop_video(args, track, cropFile, flist=None):
     audioStart = (track['frame'][0]) / TARGET_FPS
     audioEnd = (track['frame'][-1] + 1) / TARGET_FPS
     vOut.release()
+
     cmd_audio = [
         "ffmpeg", "-y",
         "-i", args.audioFilePath,
@@ -322,22 +290,23 @@ def crop_video(args, track, cropFile, flist=None):
     temp_avi = cropFile + 't.avi'
     if os.path.exists(temp_avi):
         os.remove(temp_avi)
+
     return {
         'track': track,
         'proc_track': dets,
         'is_fallback': track.get('is_fallback', False),
         'fallback_reason': track.get('fallback_reason', None),
     }
+    return {'track': track, 'proc_track': dets}
+
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}
     for ii, track in enumerate(vidTracks):
-        # Convert NumPy arrays to Python lists for JSON serialization
         frames = track['track']['frame'].tolist()
         bboxes = track['track']['bbox'].tolist()
         is_fallback     = track.get('is_fallback', False)
         fallback_reason = track.get('fallback_reason', None)
-
         metadata["tracks"].append({
             "track_id": f"{ii:05d}",
             "start_frame": int(frames[0]),
@@ -349,13 +318,10 @@ def generate_metadata(vidTracks, args):
             "is_fallback": is_fallback,
             "fallback_reason": fallback_reason,
             "bbox_history": [
-                {
-                    "frame": int(f),
-                    "bbox": [float(b) for b in bbox]
-                } for f, bbox in zip(frames, bboxes)
+                {"frame": int(f), "bbox": [float(b) for b in bbox]}
+                for f, bbox in zip(frames, bboxes)
             ]
         })
-
     meta_path = os.path.join(args.savePath, 'metadata.json')
     with open(meta_path, 'w') as f:
         json.dump(metadata, f, indent=4)
@@ -370,7 +336,7 @@ def main():
     parser.add_argument('--nDataLoaderThread', type=int, default=10, help='Number of workers')
     parser.add_argument('--facedetScale', type=float, default=0.25, help='Scale factor for face detection')
     parser.add_argument('--minTrack', type=int, default=10, help='Number of min frames for each shot')
-    parser.add_argument('--numFailedDet', type=int, default=100, help='Missed detections allowed before tracking stopped')
+    parser.add_argument('--numFailedDet', type=int, default=10, help='Missed detections allowed before tracking stopped')
     parser.add_argument('--minFaceSize', type=int, default=1, help='Minimum face size in pixels')
     parser.add_argument('--cropScale', type=float, default=0.40, help='Scale bounding box')
     args = parser.parse_args()
@@ -444,7 +410,6 @@ def main():
             if shot_tracks:
                 allTracks.extend(shot_tracks)
             else:
-                # Graceful fallback: no face detected in this scene — emit center-crop
                 fb = center_crop_fallback(args, shot_start, shot_end)
                 if fb is not None:
                     allTracks.append(fb)
