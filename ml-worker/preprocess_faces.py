@@ -99,7 +99,6 @@ def track_shot(args, sceneFaces):
         if len(ffaces) > 0:
             base_frame = ffaces[0]['frame'] - f_idx
             break
-
     for f_idx, frameFaces in enumerate(sceneFaces):
         curr_frame = (base_frame + f_idx) if base_frame is not None else f_idx
 
@@ -259,6 +258,7 @@ def crop_video(args, track, cropFile, flist=None):
     audioStart = (track['frame'][0]) / TARGET_FPS
     audioEnd = (track['frame'][-1] + 1) / TARGET_FPS
     vOut.release()
+
     cmd_audio = [
         "ffmpeg", "-y",
         "-i", args.audioFilePath,
@@ -290,12 +290,17 @@ def crop_video(args, track, cropFile, flist=None):
     temp_avi = cropFile + 't.avi'
     if os.path.exists(temp_avi):
         os.remove(temp_avi)
+
     return {
         'track': track,
         'proc_track': dets,
         'is_fallback': track.get('is_fallback', False),
         'fallback_reason': track.get('fallback_reason', None),
     }
+=======
+    return {'track': track, 'proc_track': dets}
+>>>>>>> origin/master
+>>>>>>> master
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}
