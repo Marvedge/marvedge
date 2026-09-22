@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { validateVideoUpload } from "@/app/lib/subtitles";
 import { useBlobStore } from "@/app/store/blobStore";
 import { useRecorderStore } from "@/app/store/recorderStore";
+import { uploadEditorVideoFile } from "@/app/(signed)/editor/hooks/useEditorVideoUpload";
 import RecorderSettingsDialog from "@/app/components/RecorderSettingsDialog";
 import RecorderMainPanel from "@/app/components/RecorderMainPanel";
 
@@ -53,33 +54,18 @@ export default function InitialRecorderView({
     }))
   );
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Container and size limits (PRD §6.1). `accept` only filters the picker —
-      // it is trivially bypassed with drag-and-drop or "All files" — so the
-      // check that matters happens here, before a 3 GB object URL is created and
-      // the whole editor is loaded around a file that cannot be exported.
-      const check = validateVideoUpload({
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
-      });
-      if (!check.ok) {
-        toast.error(check.error);
-        // Clear the input so picking the SAME file again still fires a change
-        // event — otherwise a user who fixes nothing and retries sees nothing
-        // happen at all.
-        e.target.value = "";
-        return;
-      }
-      const fileUrl = URL.createObjectURL(file);
-      setUploadedFileUrl(fileUrl);
-      setUploadedFileType(file.type);
-      setBlob(file);
       setUploadMessage("✅ Uploaded successfully!");
-      toast.success("File uploaded successfully!");
       setTimeout(() => setUploadMessage(""), 3000);
+      await uploadEditorVideoFile(file, {
+        setUploadedFileUrl,
+        setUploadedFileType,
+        setBlob,
+        setTitle,
+      });
+      e.target.value = "";
     } else {
       toast.error("No file selected or upload failed.");
     }

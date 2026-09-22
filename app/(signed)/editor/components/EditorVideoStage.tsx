@@ -7,6 +7,7 @@ import SubtitleOverlay from "./SubtitleOverlay";
 import TextOverlayLayer from "./TextOverlayLayer";
 import VideoPreviewPlayer from "./VideoPreviewPlayer";
 import ZoomFocusOverlay from "./ZoomFocusOverlay";
+import { useEditorVideoUpload } from "../hooks/useEditorVideoUpload";
 import type { EditorState, SubtitlesApi, TextOverlaysApi, ZoomEditorApi } from "../apiTypes";
 
 type EditorMode = "main" | "trim" | "zoom" | "text";
@@ -70,6 +71,8 @@ export default function EditorVideoStage({
     }))
   );
 
+  const { uploadVideoFile, isUploading } = useEditorVideoUpload();
+
   const { isDraggingZoomTarget, handleZoomTargetMouseDown, preview } = zoom;
   const {
     shouldApplyZoomPreview,
@@ -116,6 +119,8 @@ export default function EditorVideoStage({
           setDuration={setDuration}
           setPlaying={setPlaying}
           duration={duration}
+          onUploadVideo={uploadVideoFile}
+          isUploading={isUploading}
         />
       </div>
 
