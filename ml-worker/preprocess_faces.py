@@ -199,7 +199,6 @@ def center_crop_fallback(args, scene_start_frame, scene_end_frame):
     )
     return {'frame':frames,'bbox':bboxes,'is_fallback':True,'fallback_reason':'no_face_detected'}
 
-
 def crop_video(args, track, cropFile, flist=None):
     if flist is None:
         flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) 
@@ -259,22 +258,7 @@ def crop_video(args, track, cropFile, flist=None):
     audioStart = (track['frame'][0]) / TARGET_FPS
     audioEnd = (track['frame'][-1] + 1) / TARGET_FPS
     vOut.release()
-<<<<<<< HEAD
-    command = ("ffmpeg -y -i \"%s\" -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads %d -ss %.3f -to %.3f \"%s\" -loglevel panic" % \
-              (args.audioFilePath, args.nDataLoaderThread, audioStart, audioEnd, audioTmp)) 
-    subprocess.call(command, shell=True, stdout=None)
-    _, audio = wavfile.read(audioTmp)
-    command = ("ffmpeg -y -i \"%st.avi\" -i \"%s\" -threads %d -c:v copy -c:a copy \"%s.avi\" -loglevel panic" % \
-              (cropFile, audioTmp, args.nDataLoaderThread, cropFile))
-    subprocess.call(command, shell=True, stdout=None)
-    os.remove(cropFile + 't.avi')
-    return {
-        'track': track,
-        'proc_track': dets,
-        'is_fallback': track.get('is_fallback', False),
-        'fallback_reason': track.get('fallback_reason', None),
-    }
-=======
+
     cmd_audio = [
         "ffmpeg", "-y",
         "-i", args.audioFilePath,
@@ -306,8 +290,17 @@ def crop_video(args, track, cropFile, flist=None):
     temp_avi = cropFile + 't.avi'
     if os.path.exists(temp_avi):
         os.remove(temp_avi)
+
+    return {
+        'track': track,
+        'proc_track': dets,
+        'is_fallback': track.get('is_fallback', False),
+        'fallback_reason': track.get('fallback_reason', None),
+    }
+=======
     return {'track': track, 'proc_track': dets}
 >>>>>>> origin/master
+>>>>>>> master
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}
