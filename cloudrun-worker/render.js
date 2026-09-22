@@ -6,9 +6,30 @@ const os = require("node:os");
 const http = require("node:http");
 const https = require("node:https");
 const ffmpeg = require("fluent-ffmpeg");
+const FFMPEG_BIN =
+  process.env.FFMPEG_PATH ||
+  (() => {
+    try {
+      return require("ffmpeg-static");
+    } catch {
+      return "/usr/bin/ffmpeg";
+    }
+  })() ||
+  "/usr/bin/ffmpeg";
 
-ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
-ffmpeg.setFfprobePath("/usr/bin/ffprobe");
+const FFPROBE_BIN =
+  process.env.FFPROBE_PATH ||
+  (() => {
+    try {
+      return require("ffprobe-static").path;
+    } catch {
+      return "/usr/bin/ffprobe";
+    }
+  })() ||
+  "/usr/bin/ffprobe";
+
+ffmpeg.setFfmpegPath(FFMPEG_BIN);
+ffmpeg.setFfprobePath(FFPROBE_BIN);
 
 const EPS = 0.001;
 
@@ -355,7 +376,11 @@ function remapSubtitleCuesToTrimmedTimeline(rawCues, keepSegments, removeSegment
 }
 
 function ffmpegEscapeFilterValue(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+  let str = String(value).replace(/\\/g, "/");
+  if (/^[a-zA-Z]:/.test(str)) {
+    str = str[0] + "\\:" + str.slice(2);
+  }
+  return str;
 }
 
 function resolveFontForDrawtext(fontFamily) {
@@ -525,6 +550,20 @@ const SUBTITLE_DEFAULT_OUTLINE_RATIO = 1 / 16;
 const SUBTITLE_LEGACY_BACK_COLOUR = "&H64000000";
 const SUBTITLE_LEGACY_SECONDARY_COLOUR = "&H000000FF";
 const SUBTITLE_MARGIN_H_PX = 60;
+const SUBTITLE_MARGIN_H_MIN_PX = 16;
+const SUBTITLE_MARGIN_H_RATIO = 0.05;
+
+function computeSubtitleMarginHPx(frameWidth) {
+  const w = Number(frameWidth);
+  if (!Number.isFinite(w) || w <= 0) {
+    return SUBTITLE_MARGIN_H_PX;
+  }
+  return Math.max(
+    SUBTITLE_MARGIN_H_MIN_PX,
+    Math.min(SUBTITLE_MARGIN_H_PX, Math.round(w * SUBTITLE_MARGIN_H_RATIO))
+  );
+}
+
 // PRD size range, as a percentage of frame height at a 1080p reference.
 const SUBTITLE_FONT_PCT_MIN = (12 / 1080) * 100;
 const SUBTITLE_FONT_PCT_MAX = (72 / 1080) * 100;
@@ -556,12 +595,25 @@ function subtitleAssColour(hex, opacity) {
   return `&H${subtitleHexPair(alpha)}${subtitleHexPair(b)}${subtitleHexPair(g)}${subtitleHexPair(r)}`;
 }
 
+const SUBTITLE_BOX_PADDING_BASE_RATIO = 0.15;
+const SUBTITLE_BOX_PADDING_MIN_PX = 2;
+
+function computeSubtitleBoxPaddingPx(fontPx, outlineWidth = 0) {
+  const widthRatio = Number.isFinite(Number(outlineWidth)) ? Math.max(0, Number(outlineWidth)) : 0;
+  return Math.max(
+    SUBTITLE_BOX_PADDING_MIN_PX,
+    Math.round(fontPx * (SUBTITLE_BOX_PADDING_BASE_RATIO + widthRatio))
+  );
+}
+
 // The one place a style becomes pixels. The font clamp is master's [20, 58],
 // scaled by the size the user asked for relative to the default — so the default
 // clamps exactly as master does, while a deliberately large choice is not capped
 // away. See the long note on subtitleMetrics() in style.ts.
-function subtitleMetrics(style, h) {
+function subtitleMetrics(style, h, w) {
   const height = Math.max(1, Number(h) || 0);
+  const width =
+    Number.isFinite(Number(w)) && Number(w) > 0 ? Number(w) : Math.round((height * 16) / 9);
   const pct = subtitleClamp(
     style && style.fontSizePct,
     SUBTITLE_FONT_PCT_MIN,
@@ -581,12 +633,14 @@ function subtitleMetrics(style, h) {
     SUBTITLE_DEFAULT_OUTLINE_RATIO
   );
   const shadowDepth = subtitleClamp(style && style.shadowDepth, 0, 0.25, 0);
+  const hasBox = typeof (style && style.backgroundColor) === "string" && style.backgroundColor.length > 0;
   return {
     fontPx,
     marginVPx,
-    marginHPx: SUBTITLE_MARGIN_H_PX,
+    marginHPx: computeSubtitleMarginHPx(width),
     outlinePx: Math.round(fontPx * outlineWidth),
     shadowPx: Math.round(fontPx * shadowDepth),
+    boxPaddingPx: hasBox ? computeSubtitleBoxPaddingPx(fontPx, outlineWidth) : 0,
   };
 }
 
@@ -594,7 +648,7 @@ function subtitleMetrics(style, h) {
 // BorderStyle 1, BackColour is the (unused, Shadow: 0) shadow colour.
 function subtitleAssStyleLine(style, w, h) {
   const s = style || {};
-  const m = subtitleMetrics(s, h);
+  const m = subtitleMetrics(s, h, w);
   const font = SUBTITLE_FONT_NAMES[String(s.fontFamily || "arial").toLowerCase()] || "Arial";
   const hasBox = typeof s.backgroundColor === "string" && s.backgroundColor.length > 0;
   const backColour = hasBox
@@ -603,6 +657,7 @@ function subtitleAssStyleLine(style, w, h) {
         s.backgroundOpacity === undefined ? 0.6 : s.backgroundOpacity
       )
     : SUBTITLE_LEGACY_BACK_COLOUR;
+  const outlinePx = hasBox ? m.boxPaddingPx : m.outlinePx;
   return [
     "Style: Default",
     font,
@@ -620,7 +675,7 @@ function subtitleAssStyleLine(style, w, h) {
     0,
     0,
     hasBox ? 3 : 1,
-    m.outlinePx,
+    outlinePx,
     m.shadowPx,
     SUBTITLE_ASS_ALIGNMENT[s.alignment] || 2,
     m.marginHPx,
@@ -643,7 +698,7 @@ function subtitleAssOverrideTags(style, w, h) {
     return "{\\t(0,150,\\fscx110\\fscy110)\\t(150,300,\\fscx100\\fscy100)}";
   }
   if (animation === "slide") {
-    const m = subtitleMetrics(style, h);
+    const m = subtitleMetrics(style, h, w);
     const x = Math.round(w / 2);
     const alignment = style && style.alignment;
     const y =

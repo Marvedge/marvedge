@@ -82,6 +82,36 @@ const HLS_FPS = Number(process.env.HLS_FPS || 30);
 
 const execFileAsync = promisify(execFile);
 
+if (!process.env.DEEPGRAM_API_KEY && typeof process.loadEnvFile === "function") {
+  for (const envFile of [path.resolve(__dirname, "../.env.local"), path.resolve(__dirname, "../.env")]) {
+    try {
+      process.loadEnvFile(envFile);
+    } catch {}
+  }
+}
+
+const FFMPEG_BIN =
+  process.env.FFMPEG_PATH ||
+  (() => {
+    try {
+      return require("ffmpeg-static");
+    } catch {
+      return "/usr/bin/ffmpeg";
+    }
+  })() ||
+  "/usr/bin/ffmpeg";
+
+const FFPROBE_BIN =
+  process.env.FFPROBE_PATH ||
+  (() => {
+    try {
+      return require("ffprobe-static").path;
+    } catch {
+      return "/usr/bin/ffprobe";
+    }
+  })() ||
+  "/usr/bin/ffprobe";
+
 function must(name, value) {
   if (!value) {
     throw new Error(`Missing required env var: ${name}`);
@@ -201,7 +231,7 @@ function ffmpegErrorDetail(err) {
 
 async function extractAudioWav16kMono(inputPath, wavPath) {
   try {
-    await execFileAsync("/usr/bin/ffmpeg", [
+    await execFileAsync(FFMPEG_BIN, [
       "-y",
       "-i",
       inputPath,
@@ -548,7 +578,7 @@ async function synthesizeAuraChunk(text, voiceId, outputPath) {
 
 /** Probe an audio file's duration (seconds) via ffprobe. */
 async function probeDurationSeconds(filePath) {
-  const { stdout } = await execFileAsync("/usr/bin/ffprobe", [
+  const { stdout } = await execFileAsync(FFPROBE_BIN, [
     "-v",
     "error",
     "-show_entries",
@@ -572,7 +602,7 @@ async function concatMp3(inputPaths, outputPath, workDir, tag) {
     .map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
     .join("\n");
   await fs.writeFile(listPath, listContent);
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-f",
     "concat",
@@ -734,7 +764,7 @@ async function buildAlignedVideoSegment({ sourcePath, start, videoDur, freeze, o
   if (freeze > 0.001) {
     filters.push(`tpad=stop_mode=clone:stop_duration=${round3(freeze)}`);
   }
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-ss",
     String(round3(start)),
@@ -770,7 +800,7 @@ async function buildAlignedVideoSegment({ sourcePath, start, videoDur, freeze, o
  */
 async function buildAlignedAudioSegment({ voicePath, audioStart, audioDur, totalDur, outputPath }) {
   if (voicePath && audioDur > 0.001) {
-    await execFileAsync("/usr/bin/ffmpeg", [
+    await execFileAsync(FFMPEG_BIN, [
       "-y",
       "-ss",
       String(round3(audioStart)),
@@ -786,7 +816,7 @@ async function buildAlignedAudioSegment({ voicePath, audioStart, audioDur, total
     ]);
     return;
   }
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-f",
     "lavfi",
@@ -811,7 +841,7 @@ async function concatByDemuxer(inputPaths, outputPath, workDir, tag) {
     .map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
     .join("\n");
   await fs.writeFile(listPath, listContent);
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-f",
     "concat",
@@ -912,7 +942,7 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
     await concatByDemuxer(audioSegments, audioPath, workDir, "audio");
 
     const alignedPath = path.join(workDir, "aligned.mp4");
-    await execFileAsync("/usr/bin/ffmpeg", [
+    await execFileAsync(FFMPEG_BIN, [
       "-y",
       "-i",
       videoPath,
@@ -981,7 +1011,7 @@ function evenDimension(value) {
 
 /** Probe the first video stream's pixel dimensions via ffprobe. */
 async function probeVideoDimensions(filePath) {
-  const { stdout } = await execFileAsync("/usr/bin/ffprobe", [
+  const { stdout } = await execFileAsync(FFPROBE_BIN, [
     "-v",
     "error",
     "-select_streams",
@@ -1096,7 +1126,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
 
     const compositedPath = path.join(workDir, "composited.mp4");
     await execFileAsync(
-      "/usr/bin/ffmpeg",
+      FFMPEG_BIN,
       [
         "-y",
         "-i",
@@ -1294,7 +1324,7 @@ function hashFile(filePath) {
  */
 async function probeHasAudio(filePath) {
   try {
-    const { stdout } = await execFileAsync("/usr/bin/ffprobe", [
+    const { stdout } = await execFileAsync(FFPROBE_BIN, [
       "-v",
       "error",
       "-select_streams",
@@ -1562,7 +1592,7 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     );
 
     const encodeStartedAt = Date.now();
-    await execFileAsync("/usr/bin/ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 });
+    await execFileAsync(FFMPEG_BIN, args, { maxBuffer: 32 * 1024 * 1024 });
     const encodeMs = Date.now() - encodeStartedAt;
 
     const duration = round3(await probeDurationSeconds(sourcePath));

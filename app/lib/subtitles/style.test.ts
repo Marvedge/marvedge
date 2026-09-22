@@ -2,9 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SUBTITLE_STYLE,
+  SUBTITLE_BOX_PADDING_BASE_RATIO,
+  SUBTITLE_BOX_PADDING_MIN_PX,
+  SUBTITLE_CSS_FONT_FAMILIES,
+  SUBTITLE_FONTS,
+  SUBTITLE_FONT_NAMES,
   SUBTITLE_FONT_PCT_MAX,
   SUBTITLE_FONT_PCT_MIN,
   assColourToHex,
+  computeBoxPaddingPx,
+  computeMarginHPx,
   exportFrameHeight,
   fontPctToSliderPx,
   hexToAssColour,
@@ -79,8 +86,8 @@ describe("ASS colour encoding", () => {
 });
 
 describe("DEFAULT_SUBTITLE_STYLE reproduces master's burn-in", () => {
-  it("emits master's Style: line character for character at every export height", () => {
-    for (const h of EXPORT_HEIGHTS) {
+  it("emits master's Style: line character for character at landscape export heights", () => {
+    for (const h of [720, 1080, 1440, 1920, 960, 1280, 800]) {
       expect(toAssStyleLine(DEFAULT_SUBTITLE_STYLE, Math.round((h * 16) / 9), h)).toBe(
         masterStyleLine(h)
       );
@@ -313,5 +320,258 @@ describe("exportFrameHeight", () => {
       expect(exportFrameHeight(ratio, "1080p") % 2).toBe(0);
       expect(exportFrameHeight(ratio, "720p") % 2).toBe(0);
     }
+  });
+});
+
+describe("responsive horizontal margins", () => {
+  it("calculates horizontal margin at 404x720 narrow portrait target", () => {
+    expect(computeMarginHPx(404)).toBe(20);
+    expect(subtitleMetrics(DEFAULT_SUBTITLE_STYLE, 720, 404).marginHPx).toBe(20);
+    const ass = toAssStyleLine(DEFAULT_SUBTITLE_STYLE, 404, 720);
+    expect(ass).toContain(",20,20,");
+  });
+
+  it("calculates horizontal margin at 1080x1920 portrait target", () => {
+    expect(computeMarginHPx(1080)).toBe(54);
+    expect(subtitleMetrics(DEFAULT_SUBTITLE_STYLE, 1920, 1080).marginHPx).toBe(54);
+    const ass = toAssStyleLine(DEFAULT_SUBTITLE_STYLE, 1080, 1920);
+    expect(ass).toContain(",54,54,");
+  });
+
+  it("calculates horizontal margin at 1280x720 landscape target", () => {
+    expect(computeMarginHPx(1280)).toBe(60);
+    expect(subtitleMetrics(DEFAULT_SUBTITLE_STYLE, 720, 1280).marginHPx).toBe(60);
+    const ass = toAssStyleLine(DEFAULT_SUBTITLE_STYLE, 1280, 720);
+    expect(ass).toContain(",60,60,");
+  });
+
+  it("calculates horizontal margin at 1920x1080 landscape target", () => {
+    expect(computeMarginHPx(1920)).toBe(60);
+    expect(subtitleMetrics(DEFAULT_SUBTITLE_STYLE, 1080, 1920).marginHPx).toBe(60);
+    const ass = toAssStyleLine(DEFAULT_SUBTITLE_STYLE, 1920, 1080);
+    expect(ass).toContain(",60,60,");
+  });
+});
+
+describe("font family mapping and preview CSS stack", () => {
+  it("maps font keys to ASS font names and Next.js CSS font variables", () => {
+    expect(SUBTITLE_FONT_NAMES.arial).toBe("Arial");
+    expect(SUBTITLE_FONT_NAMES.roboto).toBe("Roboto");
+    expect(SUBTITLE_FONT_NAMES.poppins).toBe("Poppins");
+    expect(SUBTITLE_FONT_NAMES.inter).toBe("Inter");
+
+    expect(SUBTITLE_CSS_FONT_FAMILIES.arial).toBe("Arial, sans-serif");
+    expect(SUBTITLE_CSS_FONT_FAMILIES.roboto).toBe("var(--font-roboto), Roboto, sans-serif");
+    expect(SUBTITLE_CSS_FONT_FAMILIES.poppins).toBe("var(--font-poppins), Poppins, sans-serif");
+    expect(SUBTITLE_CSS_FONT_FAMILIES.inter).toBe("var(--font-inter), Inter, sans-serif");
+  });
+
+  it("emits Next.js CSS font variable stacks in toCssStyle", () => {
+    expect(toCssStyle({ fontFamily: "inter" }, 1080).text.fontFamily).toBe(
+      "var(--font-inter), Inter, sans-serif"
+    );
+    expect(toCssStyle({ fontFamily: "poppins" }, 1080).text.fontFamily).toBe(
+      "var(--font-poppins), Poppins, sans-serif"
+    );
+    expect(toCssStyle({ fontFamily: "roboto" }, 1080).text.fontFamily).toBe(
+      "var(--font-roboto), Roboto, sans-serif"
+    );
+    expect(toCssStyle({ fontFamily: "arial" }, 1080).text.fontFamily).toBe("Arial, sans-serif");
+  });
+});
+
+describe("frame-aware positioning on portrait and cropped frames", () => {
+  it("computes correct top, middle, bottom alignment positions on 404x720", () => {
+    const top = toCssStyle({ alignment: "top" }, 720, 720, { frameWidth: 404 });
+    const mid = toCssStyle({ alignment: "middle" }, 720, 720, { frameWidth: 404 });
+    const bot = toCssStyle({ alignment: "bottom" }, 720, 720, { frameWidth: 404 });
+
+    expect(top.container.top).toBe("43px");
+    expect(top.container.left).toBe("20px");
+    expect(top.container.right).toBe("20px");
+
+    expect(mid.container.top).toBe("50%");
+    expect(mid.container.left).toBe("20px");
+    expect(mid.container.right).toBe("20px");
+
+    expect(bot.container.bottom).toBe("43px");
+    expect(bot.container.left).toBe("20px");
+    expect(bot.container.right).toBe("20px");
+  });
+
+  it("computes correct top, middle, bottom alignment positions on 1080x1920", () => {
+    const top = toCssStyle({ alignment: "top" }, 1920, 1920, { frameWidth: 1080 });
+    const bot = toCssStyle({ alignment: "bottom" }, 1920, 1920, { frameWidth: 1080 });
+
+    expect(top.container.top).toBe("96px");
+    expect(top.container.left).toBe("54px");
+    expect(bot.container.bottom).toBe("96px");
+    expect(bot.container.left).toBe("54px");
+  });
+});
+
+describe("background box and outline parity", () => {
+  it("suppresses WebkitTextStroke in preview when a background box is present", () => {
+    const withBoxAndOutline = toCssStyle(
+      {
+        backgroundColor: "#000000",
+        backgroundOpacity: 0.6,
+        outlineWidth: 0.1,
+        outlineColor: "#FF0000",
+      },
+      1080,
+      1080
+    );
+    expect(withBoxAndOutline.text.backgroundColor).toBe("rgba(0, 0, 0, 0.6)");
+    expect(withBoxAndOutline.text.WebkitTextStrokeWidth).toBeUndefined();
+    expect(withBoxAndOutline.text.padding).toBeDefined();
+  });
+
+  it("renders WebkitTextStroke in preview when no background box is present", () => {
+    const withoutBox = toCssStyle({ outlineWidth: 0.1, outlineColor: "#FF0000" }, 1080, 1080);
+    expect(withoutBox.text.backgroundColor).toBeUndefined();
+    expect(withoutBox.text.WebkitTextStrokeWidth).toBeDefined();
+  });
+
+  it("preserves default no-box behavior as BorderStyle 1 without box padding", () => {
+    const metrics = subtitleMetrics(DEFAULT_SUBTITLE_STYLE, 1080);
+    expect(metrics.boxPaddingPx).toBe(0);
+    const ass = toAssStyleLine(DEFAULT_SUBTITLE_STYLE, 1920, 1080);
+    const parts = ass.split(",");
+    expect(parts[15]).toBe("1"); // BorderStyle: 1 (outline + drop shadow)
+    expect(parts[16]).toBe(String(metrics.outlinePx)); // Outline field is glyph stroke
+    const css = toCssStyle(DEFAULT_SUBTITLE_STYLE, 1080, 1080);
+    expect(css.text.backgroundColor).toBeUndefined();
+    expect(css.text.padding).toBeUndefined();
+    expect(css.text.WebkitTextStrokeWidth).toBe(`${metrics.outlinePx}px`);
+  });
+
+  it("proves exact box-padding parity between CSS preview and ASS BorderStyle 3 export across frame sizes, font sizes, colors, and outline widths", () => {
+    const testCases: {
+      w: number;
+      h: number;
+      style: SubtitleStyle;
+    }[] = [
+      // 404x720 narrow portrait target
+      {
+        w: 404,
+        h: 720,
+        style: {
+          backgroundColor: "#000000",
+          backgroundOpacity: 0.6,
+          fontSizePct: 5.0,
+          outlineWidth: 0,
+        },
+      },
+      {
+        w: 404,
+        h: 720,
+        style: {
+          backgroundColor: "#8A76FC",
+          backgroundOpacity: 0.85,
+          fontSizePct: 3.5,
+          outlineWidth: 0.1,
+        },
+      },
+      // 1080x1920 standard portrait target
+      {
+        w: 1080,
+        h: 1920,
+        style: {
+          backgroundColor: "#000000",
+          backgroundOpacity: 0.7,
+          fontSizePct: 5.0,
+          outlineWidth: 0.05,
+        },
+      },
+      {
+        w: 1080,
+        h: 1920,
+        style: {
+          backgroundColor: "#1F2937",
+          backgroundOpacity: 0.5,
+          fontSizePct: 6.67,
+          outlineWidth: 0.25,
+        },
+      },
+      // 1280x720 landscape target
+      {
+        w: 1280,
+        h: 720,
+        style: {
+          backgroundColor: "#000000",
+          backgroundOpacity: 0.6,
+          fontSizePct: 4.0,
+          outlineWidth: 0,
+        },
+      },
+      // 1920x1080 full HD landscape target
+      {
+        w: 1920,
+        h: 1080,
+        style: {
+          backgroundColor: "#111827",
+          backgroundOpacity: 0.9,
+          fontSizePct: 5.0,
+          outlineWidth: 0.05,
+        },
+      },
+      {
+        w: 1920,
+        h: 1080,
+        style: {
+          backgroundColor: "#DC2626",
+          backgroundOpacity: 0.8,
+          fontSizePct: 2.0,
+          outlineWidth: 0.15,
+        },
+      },
+    ];
+
+    for (const { w, h, style } of testCases) {
+      const metrics = subtitleMetrics(style, h, w);
+      const expectedPadding = computeBoxPaddingPx(metrics.fontPx, style.outlineWidth);
+
+      // Verify metrics object holds the exact derived value
+      expect(metrics.boxPaddingPx).toBe(expectedPadding);
+
+      // Verify ASS export line
+      const assLine = toAssStyleLine(style, w, h);
+      const parts = assLine.split(",");
+      const borderStyle = Number(parts[15]);
+      const assOutline = Number(parts[16]);
+
+      expect(borderStyle, `BorderStyle at ${w}x${h}`).toBe(3);
+      expect(assOutline, `ASS Outline at ${w}x${h}`).toBe(expectedPadding);
+
+      // Verify CSS preview at frame scale (renderedHeight = h)
+      const css = toCssStyle(style, h, h, { frameWidth: w });
+      expect(css.text.padding, `CSS padding at ${w}x${h}`).toBe(`${expectedPadding}px`);
+      expect(css.text.WebkitTextStrokeWidth, `CSS stroke suppressed at ${w}x${h}`).toBeUndefined();
+      expect(
+        css.text.backgroundColor,
+        `CSS background color at ${w}x${h}`
+      ).toBe(hexToRgba(style.backgroundColor!, style.backgroundOpacity ?? 0.6));
+
+      // Direct parity assertion between CSS padding string and ASS Outline integer
+      expect(css.text.padding).toBe(`${assOutline}px`);
+    }
+  });
+
+  it("scales CSS box padding proportionally when rendered in preview miniature", () => {
+    const style: SubtitleStyle = {
+      backgroundColor: "#000000",
+      backgroundOpacity: 0.6,
+      outlineWidth: 0.05,
+    };
+    const frameHeight = 1080;
+    const previewHeight = 540; // 50% miniature scale
+    const m = subtitleMetrics(style, frameHeight);
+    const fullPadding = m.boxPaddingPx;
+
+    const cssPreview = toCssStyle(style, frameHeight, previewHeight);
+    const expectedPreviewPaddingPx = fullPadding * (previewHeight / frameHeight);
+
+    expect(cssPreview.text.padding).toBe(`${expectedPreviewPaddingPx}px`);
   });
 });

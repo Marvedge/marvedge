@@ -52,10 +52,10 @@ export function useEditorSyncEffects({
     if (!params) {
       return;
     }
-    if (recordedVideoUrl && !params.get("video")) {
+    if (!videoUrl && recordedVideoUrl && !params.get("video")) {
       setVideoUrl(recordedVideoUrl);
     }
-  }, [recordedVideoUrl, params, setVideoUrl]);
+  }, [videoUrl, recordedVideoUrl, params, setVideoUrl]);
 
   useEffect(() => {
     if (videoUrl && !savedDemoId) {
