@@ -45,7 +45,7 @@
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.6",
     "nprogress": "^0.2.0",
-    "openai": "^6.46.0",
+    "openai": "^6.49.0",
     "postcss": "^8.5.15",
     "qrcode-generator": "^2.0.4",
     "razorpay": "^2.9.6",
