@@ -53,8 +53,38 @@ const LEGACY_MARGIN_V_RATIO = 0.06;
 const LEGACY_MARGIN_V_PX_MIN = 20;
 const LEGACY_MARGIN_V_PX_MAX = 96;
 
-/** Side margins. Hardcoded px in master, and not a user knob here either. */
-const LEGACY_MARGIN_H_PX = 60;
+/** Side margins. Hardcoded px in master for landscape frames (>= 1200px width). */
+export const LEGACY_MARGIN_H_PX = 60;
+
+/** Minimum side margin in px to prevent captions from touching the frame edge on narrow clips. */
+export const SUBTITLE_MARGIN_H_MIN_PX = 16;
+
+/** Horizontal margin ratio as a fraction of frame width for responsive scaling. */
+export const SUBTITLE_MARGIN_H_RATIO = 0.05;
+
+/**
+ * Computes horizontal margin based on frame width.
+ *
+ * Responsive to frame width so narrow portrait clips (e.g. 404x720) do not lose
+ * excessive width to side gutters (~30% previously), while preserving standard
+ * ~60px gutters on landscape displays.
+ *
+ * Validation targets:
+ * - 404x720:   Math.round(404 * 0.05) = 20px (usable text width: 364px, ~90%)
+ * - 1080x1920: Math.round(1080 * 0.05) = 54px (usable text width: 972px, 90%)
+ * - 1280x720:  capped at 60px (usable text width: 1160px)
+ * - 1920x1080: capped at 60px (usable text width: 1800px)
+ */
+export function computeMarginHPx(frameWidth?: number): number {
+  const w = Number(frameWidth);
+  if (!Number.isFinite(w) || w <= 0) {
+    return LEGACY_MARGIN_H_PX;
+  }
+  return Math.max(
+    SUBTITLE_MARGIN_H_MIN_PX,
+    Math.min(LEGACY_MARGIN_H_PX, Math.round(w * SUBTITLE_MARGIN_H_RATIO))
+  );
+}
 
 /** Outline thickness as a fraction of the font size (master: `fontSize / 16`). */
 const LEGACY_OUTLINE_RATIO = 1 / 16;
@@ -92,6 +122,17 @@ export const SUBTITLE_FONT_NAMES: Record<SubtitleFont, string> = {
   roboto: "Roboto",
   poppins: "Poppins",
   inter: "Inter",
+};
+
+/**
+ * Font key → CSS font-family stack for live browser preview.
+ * References the Next.js font variables defined in app/layout.tsx with sensible family fallbacks.
+ */
+export const SUBTITLE_CSS_FONT_FAMILIES: Record<SubtitleFont, string> = {
+  arial: "Arial, sans-serif",
+  roboto: "var(--font-roboto), Roboto, sans-serif",
+  poppins: "var(--font-poppins), Poppins, sans-serif",
+  inter: "var(--font-inter), Inter, sans-serif",
 };
 
 /** Labels for the font picker. */
@@ -347,6 +388,38 @@ export interface SubtitleMetrics {
   outlinePx: number;
   /** Shadow offset in px. */
   shadowPx: number;
+  /** Box padding in px for highlighted captions (0 if no background box). */
+  boxPaddingPx: number;
+}
+
+/** Base padding ratio relative to fontPx for background boxes (15% of font height). */
+export const SUBTITLE_BOX_PADDING_BASE_RATIO = 0.15;
+/** Minimum box padding in px so captions never touch or clip the background box. */
+export const SUBTITLE_BOX_PADDING_MIN_PX = 2;
+
+/**
+ * Calculates box padding in pixels for highlighted (background box) subtitles.
+ *
+ * In ASS/libass, BorderStyle: 3 draws an opaque background box behind the text
+ * and repurposes the `Outline` field as the box padding in pixels. It does NOT
+ * draw a glyph stroke around the characters.
+ *
+ * To ensure visual parity between CSS preview and ASS export:
+ * 1. Both CSS text padding and ASS Outline use this exact derived value.
+ * 2. When a background box is present, CSS glyph stroke (-webkit-text-stroke)
+ *    is suppressed, preventing a mismatch where preview shows an outline
+ *    that libass does not render.
+ * 3. Box padding is uniform in horizontal and vertical dimensions.
+ * 4. The box padding is proportional to font size: a base padding of 15% of fontPx
+ *    (minimum 2px), plus the user-configured outlineWidth ratio if provided,
+ *    ensuring the box never hugs or clips the text glyphs.
+ */
+export function computeBoxPaddingPx(fontPx: number, outlineWidth = 0): number {
+  const widthRatio = Number.isFinite(Number(outlineWidth)) ? Math.max(0, Number(outlineWidth)) : 0;
+  return Math.max(
+    SUBTITLE_BOX_PADDING_MIN_PX,
+    Math.round(fontPx * (SUBTITLE_BOX_PADDING_BASE_RATIO + widthRatio))
+  );
 }
 
 /**
@@ -364,10 +437,15 @@ export interface SubtitleMetrics {
  */
 export function subtitleMetrics(
   style: SubtitleStyle | undefined,
-  frameHeight: number
+  frameHeight: number,
+  frameWidth?: number
 ): SubtitleMetrics {
   const s = withDefaults(style);
   const h = Math.max(1, Number(frameHeight) || 0);
+  const w =
+    Number.isFinite(Number(frameWidth)) && Number(frameWidth) > 0
+      ? Number(frameWidth)
+      : Math.round((h * 16) / 9);
 
   const pct = clampNumber(
     s.fontSizePct,
@@ -388,13 +466,15 @@ export function subtitleMetrics(
 
   const outlineWidth = clampNumber(s.outlineWidth, 0, 0.25, DEFAULT_SUBTITLE_STYLE.outlineWidth);
   const shadowDepth = clampNumber(s.shadowDepth, 0, 0.25, DEFAULT_SUBTITLE_STYLE.shadowDepth);
+  const hasBox = typeof s.backgroundColor === "string" && s.backgroundColor.length > 0;
 
   return {
     fontPx,
     marginVPx,
-    marginHPx: LEGACY_MARGIN_H_PX,
+    marginHPx: computeMarginHPx(w),
     outlinePx: Math.round(fontPx * outlineWidth),
     shadowPx: Math.round(fontPx * shadowDepth),
+    boxPaddingPx: hasBox ? computeBoxPaddingPx(fontPx, outlineWidth) : 0,
   };
 }
 
@@ -431,6 +511,10 @@ export interface SubtitleCssOptions {
    * the user turns. See `isRtlLanguage` in ./languages.
    */
   rtl?: boolean;
+  /**
+   * Export frame width in px. Used to calculate responsive horizontal margins.
+   */
+  frameWidth?: number;
 }
 
 export function toCssStyle(
@@ -440,7 +524,9 @@ export function toCssStyle(
   options?: SubtitleCssOptions
 ): SubtitleCssStyle {
   const s = withDefaults(style);
-  const m = subtitleMetrics(style, frameHeight);
+  const h = Math.max(1, Number(frameHeight) || 0);
+  const frameWidth = options?.frameWidth ?? Math.round((h * 16) / 9);
+  const m = subtitleMetrics(style, frameHeight, frameWidth);
   const scale =
     Number.isFinite(renderedHeight) && (renderedHeight as number) > 0
       ? (renderedHeight as number) / Math.max(1, Number(frameHeight) || 1)
@@ -464,8 +550,10 @@ export function toCssStyle(
         : { bottom: `${marginV}px`, alignItems: "flex-end" }),
   };
 
+  const hasBox = typeof s.backgroundColor === "string" && s.backgroundColor.length > 0;
   const outlinePx = px(m.outlinePx);
   const shadowPx = px(m.shadowPx);
+  const boxPaddingPx = px(m.boxPaddingPx);
 
   const text: CSSProperties = {
     // `direction` reorders the line; `unicodeBidi: isolate` keeps a Latin
@@ -473,13 +561,14 @@ export function toCssStyle(
     // run with it. The burn-in's equivalent is in the worker — see the RTL note
     // on RTL_RENDERING_VERIFIED in ./languages for why neither is offered yet.
     ...(options?.rtl ? { direction: "rtl" as const, unicodeBidi: "isolate" as const } : {}),
-    fontFamily: `${SUBTITLE_FONT_NAMES[(s.fontFamily as SubtitleFont) ?? "arial"] ?? "Arial"}, sans-serif`,
+    fontFamily:
+      SUBTITLE_CSS_FONT_FAMILIES[(s.fontFamily as SubtitleFont) ?? "arial"] ?? "Arial, sans-serif",
     fontSize: `${px(m.fontPx)}px`,
     lineHeight: 1.25,
     color: s.color,
     textAlign: "center",
     whiteSpace: "pre-wrap",
-    ...(outlinePx > 0
+    ...(!hasBox && outlinePx > 0
       ? {
           WebkitTextStrokeWidth: `${outlinePx}px`,
           WebkitTextStrokeColor: s.outlineColor,
@@ -491,12 +580,10 @@ export function toCssStyle(
           textShadow: `${shadowPx}px ${shadowPx}px ${shadowPx}px ${hexToRgba(s.outlineColor ?? "#000000", 1)}`,
         }
       : {}),
-    ...(s.backgroundColor
+    ...(hasBox
       ? {
-          backgroundColor: hexToRgba(s.backgroundColor, s.backgroundOpacity ?? 0.6),
-          // BorderStyle 3 pads the box around the text; libass uses roughly a
-          // quarter of the font height, so the preview does too.
-          padding: `${px(m.fontPx) * 0.15}px ${px(m.fontPx) * 0.3}px`,
+          backgroundColor: hexToRgba(s.backgroundColor as string, s.backgroundOpacity ?? 0.6),
+          padding: `${boxPaddingPx}px`,
         }
       : {}),
   };
@@ -556,7 +643,7 @@ export function toCssAnimation(style: SubtitleStyle | undefined): string | undef
  */
 export function toAssStyleLine(style: SubtitleStyle | undefined, w: number, h: number): string {
   const s = withDefaults(style);
-  const m = subtitleMetrics(style, h);
+  const m = subtitleMetrics(style, h, w);
   const font = SUBTITLE_FONT_NAMES[(s.fontFamily as SubtitleFont) ?? "arial"] ?? "Arial";
 
   const hasBox = typeof s.backgroundColor === "string" && s.backgroundColor.length > 0;
@@ -564,6 +651,11 @@ export function toAssStyleLine(style: SubtitleStyle | undefined, w: number, h: n
   const backColour = hasBox
     ? hexToAssColour(s.backgroundColor as string, s.backgroundOpacity ?? 0.6)
     : LEGACY_BACK_COLOUR;
+
+  // In ASS BorderStyle 3 (box), libass uses the Outline field as box padding.
+  // We align with the preview's boxPaddingPx so the box has appropriate padding
+  // and honors user outline adjustments without disappearing or collapsing to 0.
+  const outlinePx = hasBox ? m.boxPaddingPx : m.outlinePx;
 
   return [
     "Style: Default",
@@ -582,7 +674,7 @@ export function toAssStyleLine(style: SubtitleStyle | undefined, w: number, h: n
     0, // Spacing
     0, // Angle
     borderStyle,
-    m.outlinePx,
+    outlinePx,
     m.shadowPx,
     ASS_ALIGNMENT[(s.alignment as SubtitleAlignment) ?? "bottom"] ?? 2,
     m.marginHPx,
@@ -613,7 +705,7 @@ export function toAssOverrideTags(style: SubtitleStyle | undefined, w: number, h
     case "pop":
       return "{\\t(0,150,\\fscx110\\fscy110)\\t(150,300,\\fscx100\\fscy100)}";
     case "slide": {
-      const m = subtitleMetrics(style, h);
+      const m = subtitleMetrics(style, h, w);
       const x = Math.round(w / 2);
       const y =
         s.alignment === "top"

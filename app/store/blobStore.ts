@@ -23,7 +23,9 @@ interface BlobStore {
   title: string;
   description: string;
   draftId: string | null;
+  canonicalVideoUrl: string | null;
   setBlob: (blob: Blob | null) => void;
+  setCanonicalVideoUrl: (url: string | null) => void;
   setSourceDuration: (seconds: number) => void;
   setTitle: (title: string) => void;
   setDescription: (description: string) => void;
@@ -33,7 +35,7 @@ interface BlobStore {
 
 export const useBlobStore = create<BlobStore>((set, get) => {
   const buildMeta = (draftId: string): VideoDraftMeta => {
-    const { blob, title, description, sourceDuration } = get();
+    const { blob, title, description, sourceDuration, canonicalVideoUrl } = get();
     return {
       draftId,
       type: blob?.type ?? "",
@@ -42,6 +44,7 @@ export const useBlobStore = create<BlobStore>((set, get) => {
       description,
       sourceDuration,
       savedAt: Date.now(),
+      canonicalVideoUrl: canonicalVideoUrl ?? null,
     };
   };
 
@@ -60,15 +63,20 @@ export const useBlobStore = create<BlobStore>((set, get) => {
     title: "",
     description: "",
     draftId: null,
+    canonicalVideoUrl: null,
+    setCanonicalVideoUrl: (canonicalVideoUrl) => {
+      set({ canonicalVideoUrl });
+      persistMetaIfDraft();
+    },
     setBlob: (blob) => {
       if (blob) {
         // A new video is a new draft; any previously restored editing state no
         // longer applies and is invalidated by the fresh draftId.
         const draftId = generateDraftId();
-        set({ blob, draftId });
+        set({ blob, draftId, canonicalVideoUrl: null });
         void saveVideoDraft(blob, buildMeta(draftId)).catch(() => {});
       } else {
-        set({ blob: null, draftId: null });
+        set({ blob: null, draftId: null, canonicalVideoUrl: null });
         void clearVideoDraft().catch(() => {});
       }
     },
@@ -85,7 +93,7 @@ export const useBlobStore = create<BlobStore>((set, get) => {
       persistMetaIfDraft();
     },
     reset: () => {
-      set({ blob: null, sourceDuration: 0, title: "", description: "", draftId: null });
+      set({ blob: null, sourceDuration: 0, title: "", description: "", draftId: null, canonicalVideoUrl: null });
       void clearVideoDraft().catch(() => {});
     },
     // Rehydrates the in-memory blob from IndexedDB after a refresh. No-op if a
@@ -105,6 +113,7 @@ export const useBlobStore = create<BlobStore>((set, get) => {
             sourceDuration: draft.meta?.sourceDuration ?? 0,
             title: draft.meta?.title ?? "",
             description: draft.meta?.description ?? "",
+            canonicalVideoUrl: draft.meta?.canonicalVideoUrl ?? null,
           });
         })
         .catch(() => {});
