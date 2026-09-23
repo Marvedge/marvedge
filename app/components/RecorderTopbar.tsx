@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
 import { useUserStore } from "@/app/store/userStore";
@@ -12,23 +13,42 @@ type RecorderTopbarProps = {
 function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
   const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
 
   // Just read from store - don't fetch
   const profileImage = useUserStore((state) => state.profileImage);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const username =
     session?.user?.name?.split(" ")[0] || session?.user?.email?.split("@")?.[0] || "User";
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedInside =
+        (dropdownRef.current?.contains(target) ?? false) ||
+        (menuRef.current?.contains(target) ?? false);
+      if (!clickedInside) {
         setShowDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const toggleDropdown = () => {
+    if (!showDropdown) {
+      const rect = dropdownRef.current?.getBoundingClientRect();
+      if (rect) {
+        setMenuPosition({
+          top: Math.round(rect.bottom + 8),
+          right: Math.max(8, Math.round(window.innerWidth - rect.right)),
+        });
+      }
+    }
+    setShowDropdown((v) => !v);
+  };
 
   return (
     <div className="topbar w-full flex items-center justify-between px-4 sm:px-8 py-2 sm:py-4 bg-white border-b border-[#ede7fa] shadow-sm">
@@ -69,27 +89,34 @@ function RecorderTopbar({ onBack, userInitials }: RecorderTopbarProps) {
             profileImage={profileImage}
             userInitials={userInitials}
             size={48}
-            onClick={() => setShowDropdown((v) => !v)}
+            onClick={toggleDropdown}
             className="w-10 h-10 md:w-12 md:h-12 border-4 border-white"
           />
-          {showDropdown && (
-            <div className="absolute right-0 mt-2 w-56 md:w-64 bg-white rounded-lg shadow-lg p-3 md:p-4 z-50 border border-gray-200 animate-fade-in">
-              <div className="mb-2 text-base md:text-lg font-bold text-[#6356D7]">
-                {session?.user?.name || "User"}
-              </div>
-              <div className="mb-1 text-gray-700 text-xs md:text-sm font-semibold">
-                {session?.user?.email}
-              </div>
-              <button
-                onClick={() => signOut({ redirect: false }).then(() => window.location.assign("/"))}
-                className="mt-3 md:mt-4 w-full px-3 md:px-4 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm md:text-base"
-              >
-                Sign out
-              </button>
-            </div>
-          )}
         </div>
       </div>
+      {showDropdown &&
+        menuPosition &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{ top: menuPosition.top, right: menuPosition.right }}
+            className="fixed z-50 w-56 md:w-64 bg-white rounded-lg shadow-lg p-3 md:p-4 border border-gray-200 animate-fade-in"
+          >
+            <div className="mb-2 text-base md:text-lg font-bold text-[#6356D7]">
+              {session?.user?.name || "User"}
+            </div>
+            <div className="mb-1 text-gray-700 text-xs md:text-sm font-semibold">
+              {session?.user?.email}
+            </div>
+            <button
+              onClick={() => signOut({ redirect: false }).then(() => window.location.assign("/"))}
+              className="mt-3 md:mt-4 w-full px-3 md:px-4 py-2 bg-[#6356D7] text-white rounded hover:bg-[#7E5FFF] font-semibold transition-all text-sm md:text-base"
+            >
+              Sign out
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

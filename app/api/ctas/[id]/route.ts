@@ -4,11 +4,24 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { z } from "zod";
 
+// FIX: block javascript/data urls in CTA
+function isHttpsUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // Partial update: every field is optional, but at least one must be provided.
 const updateCtaSchema = z
   .object({
     label: z.string().min(1, "Label is required"),
-    url: z.string().url("A valid URL is required"),
+    url: z
+      .string()
+      .url("A valid URL is required")
+      .refine(isHttpsUrl, { message: "URL must be https" }),
     placement: z.string().nullable(),
     order: z.number().int(),
   })
