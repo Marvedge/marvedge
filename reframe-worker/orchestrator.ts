@@ -16,8 +16,15 @@
 //
 // Contains ZERO Prisma / Postgres imports.
 
-import type { CropTargetData } from "../app/types/editor/crop-target";
+import {
+  type CropTargetData,
+  validateCropTargetData,
+} from "../app/types/editor/crop-target";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
+import {
+  validateReframeJobPayload,
+  ReframePayloadValidationError,
+} from "../app/lib/reframe/validation";
 import {
   callMlInference,
   postJobCallbackWithRetry,
@@ -27,6 +34,8 @@ import {
 } from "./client";
 import { getReframeWorkerConfig, type ReframeWorkerConfig } from "./config";
 import { renderReframedVideo } from "./render";
+
+export { ReframePayloadValidationError };
 
 export interface ReframeJobContext {
   jobId: string;
@@ -58,10 +67,16 @@ export function isFinalBullMqAttempt(context: ReframeJobContext): boolean {
  * Core orchestration logic for processing a single reframe job.
  */
 export async function processReframeJob(
-  payload: ReframeJobPayload,
+  rawPayload: unknown,
   context: ReframeJobContext,
   deps: ReframeOrchestratorDeps = {}
 ): Promise<{ success: boolean; cropTargets: CropTargetData; exportedUrl?: string }> {
+  // ── Step 0: Validate Queued Job Payload (Task-00056) ───────────────────
+  // A queued job cannot be trusted merely because it came from BullMQ.
+  // Fails immediately before ML inference, rendering, upload, or callbacks.
+  // Throws ReframePayloadValidationError (UnrecoverableError) so BullMQ does not retry.
+  const payload = validateReframeJobPayload(rawPayload);
+
   const config = deps.config ?? getReframeWorkerConfig();
   const cache = deps.resultCache ?? globalResultCache;
 
@@ -109,6 +124,7 @@ export async function processReframeJob(
         targetAspectRatio: payload.targetAspectRatio,
         source: payload.source,
       });
+      validateCropTargetData(cropTargets);
 
       // Cache the result in memory in case callback delivery fails
       cache.set(payload.jobId, cropTargets);

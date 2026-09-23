@@ -26,6 +26,7 @@ client = TestClient(app)
 # ---------------------------------------------------------------------------
 
 def test_health_all_healthy(monkeypatch):
+    """Test A: Both healthy -> HTTP 200, status ok, both ready."""
     async def mock_check(client, name, url):
         return "healthy"
 
@@ -37,9 +38,50 @@ def test_health_all_healthy(monkeypatch):
     assert data["status"] == "ok"
     assert data["services"]["autoflip"] == "healthy"
     assert data["services"]["talknet"] == "healthy"
+    assert data["ready"]["reframe"] is True
+    assert data["ready"]["talknet"] is True
 
 
-def test_health_autoflip_unhealthy(monkeypatch):
+def test_health_autoflip_healthy_talknet_unhealthy(monkeypatch):
+    """Test B: AutoFlip healthy + TalkNet unhealthy -> HTTP 200, status degraded, reframe ready, talknet not ready."""
+    async def mock_check(client, name, url):
+        if name == "talknet":
+            return "unhealthy (timeout)"
+        return "healthy"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["services"]["autoflip"] == "healthy"
+    assert data["services"]["talknet"] == "unhealthy (timeout)"
+    assert data["ready"]["reframe"] is True
+    assert data["ready"]["talknet"] is False
+
+
+def test_health_autoflip_healthy_talknet_degraded(monkeypatch):
+    """Test C: AutoFlip healthy + TalkNet degraded -> HTTP 200, status degraded, reframe ready, talknet not ready."""
+    async def mock_check(client, name, url):
+        if name == "talknet":
+            return "degraded"
+        return "healthy"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["services"]["autoflip"] == "healthy"
+    assert data["services"]["talknet"] == "degraded"
+    assert data["ready"]["reframe"] is True
+    assert data["ready"]["talknet"] is False
+
+
+def test_health_autoflip_unhealthy_talknet_healthy(monkeypatch):
+    """Test D: AutoFlip unhealthy + TalkNet healthy -> HTTP 503, status degraded, reframe false, talknet true."""
     async def mock_check(client, name, url):
         if name == "autoflip":
             return "unhealthy (connection error)"
@@ -53,25 +95,12 @@ def test_health_autoflip_unhealthy(monkeypatch):
     assert data["status"] == "degraded"
     assert data["services"]["autoflip"] == "unhealthy (connection error)"
     assert data["services"]["talknet"] == "healthy"
+    assert data["ready"]["reframe"] is False
+    assert data["ready"]["talknet"] is True
 
 
-def test_health_talknet_unhealthy(monkeypatch):
-    async def mock_check(client, name, url):
-        if name == "talknet":
-            return "unhealthy (timeout)"
-        return "healthy"
-
-    monkeypatch.setattr("server.check_service_health", mock_check)
-
-    resp = client.get("/health")
-    assert resp.status_code == 503
-    data = resp.json()
-    assert data["status"] == "degraded"
-    assert data["services"]["autoflip"] == "healthy"
-    assert data["services"]["talknet"] == "unhealthy (timeout)"
-
-
-def test_health_both_down(monkeypatch):
+def test_health_both_unhealthy(monkeypatch):
+    """Test E: Both unhealthy -> HTTP 503, both readiness flags false."""
     async def mock_check(client, name, url):
         return "unhealthy (connection error)"
 
@@ -83,22 +112,8 @@ def test_health_both_down(monkeypatch):
     assert data["status"] == "degraded"
     assert data["services"]["autoflip"] == "unhealthy (connection error)"
     assert data["services"]["talknet"] == "unhealthy (connection error)"
-
-
-def test_health_talknet_degraded(monkeypatch):
-    async def mock_check(client, name, url):
-        if name == "talknet":
-            return "degraded"
-        return "healthy"
-
-    monkeypatch.setattr("server.check_service_health", mock_check)
-
-    resp = client.get("/health")
-    assert resp.status_code == 503
-    data = resp.json()
-    assert data["status"] == "degraded"
-    assert data["services"]["autoflip"] == "healthy"
-    assert data["services"]["talknet"] == "degraded"
+    assert data["ready"]["reframe"] is False
+    assert data["ready"]["talknet"] is False
 
 
 @pytest.mark.asyncio
@@ -129,13 +144,121 @@ async def test_check_service_health_status_semantics():
         res = await check_service_health(cl, "talknet", "http://test:8000")
         assert res == "unhealthy (unhealthy)"
 
-    # downstream 200 + missing/malformed status -> healthy (preserve safe fallback)
+    # downstream 200 + {"status": "error"} -> unhealthy (error)
+    async def handler_error(request):
+        return httpx.Response(200, json={"status": "error"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_error)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (error)"
+
+    # Test F: Downstream health payload missing "status" -> unhealthy (invalid response)
     async def handler_missing(request):
         return httpx.Response(200, json={"other": "value"})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler_missing)) as cl:
         res = await check_service_health(cl, "talknet", "http://test:8000")
-        assert res == "healthy"
+        assert res == "unhealthy (invalid response)"
+
+    # Test G: Downstream health payload contains unknown status -> unhealthy (invalid response)
+    async def handler_unknown(request):
+        return httpx.Response(200, json={"status": "ready"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_unknown)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Test H: Downstream health response is malformed JSON -> unhealthy (invalid response)
+    async def handler_malformed(request):
+        return httpx.Response(200, content=b"{not valid json")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_malformed)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Test I: Downstream health response is valid JSON but not an object -> unhealthy (invalid response)
+    async def handler_non_object(request):
+        return httpx.Response(200, json=["status", "ok"])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_non_object)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Non-200 HTTP response -> preserve unhealthy (status N)
+    async def handler_500(request):
+        return httpx.Response(500, json={"status": "internal server error"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_500)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (status 500)"
+
+    # Timeout -> preserve unhealthy (timeout)
+    async def handler_timeout(request):
+        raise httpx.TimeoutException("Downstream timeout")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_timeout)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (timeout)"
+
+    # Connection error -> preserve unhealthy (connection error)
+    async def handler_conn_err(request):
+        raise httpx.ConnectError("Connection refused")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_conn_err)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (connection error)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_payload_missing_status():
+    """Test F: Downstream health payload missing 'status' -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, json={"foo": "bar"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_payload_unknown_status():
+    """Test G: Downstream health payload contains unknown status -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, json={"status": "unknown_state"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_malformed_json():
+    """Test H: Downstream health response is malformed JSON -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, content=b"<not-json>")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_non_object_json():
+    """Test I: Downstream health response is valid JSON but not an object -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, json=["status", "ok"])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
 
 
 # ---------------------------------------------------------------------------
