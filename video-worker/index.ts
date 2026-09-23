@@ -11,6 +11,7 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 import axios from "axios";
+import { runClipScoringJob } from "../app/lib/clips/jobs";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 // Load env from common locations (video-worker/.env and parent app .env).
@@ -806,6 +807,14 @@ function computeTargetSizeForRatio(
 const worker = new Worker(
   "video-processing",
   async (job: Job) => {
+    if (job.name === "clip-scoring") {
+      return await runClipScoringJob(job.data, prisma, {
+        updateProgress: async (progress: number) => {
+          await job.updateProgress(progress);
+        },
+      });
+    }
+
     const jobStartTs = Date.now();
     const {
       jobId,
@@ -1581,3 +1590,9 @@ audioWorker.on("failed", (job, err) => {
 });
 
 console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
+
+// ── Reframe Worker (Task-00023 Architecture) ──────────────────────────────────
+// Note: Video reframing is decoupled from this monolithic worker. It runs in a
+// dedicated lightweight worker process (reframe-worker/index.ts; npm run worker:reframe)
+// with zero Prisma/Postgres imports, communicating with pure ML inference over HTTP
+// and reporting results via authenticated backend callback.

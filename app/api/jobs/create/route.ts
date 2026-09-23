@@ -220,6 +220,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing or invalid duration" }, { status: 400 });
     }
 
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          session.user.id ? { id: session.user.id as string } : undefined,
+          session.user.email ? { email: session.user.email } : undefined,
+        ].filter(Boolean) as Array<{ id?: string; email?: string }>,
+      },
+      select: { id: true, plan: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userId = user.id;
+
     // the job may float free, but a demoId must be the caller's own demo
     if (typeof demoId === "string" && demoId) {
       const demo = await prisma.demo.findUnique({
@@ -240,22 +256,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Background URL is not allowed" }, { status: 400 });
       }
     }
-
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          session.user.id ? { id: session.user.id as string } : undefined,
-          session.user.email ? { email: session.user.email } : undefined,
-        ].filter(Boolean) as Array<{ id?: string; email?: string }>,
-      },
-      select: { id: true, plan: true },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const userId = user.id;
 
     const exportAllowed = await isExportAllowed(userId, session.user.email, user.plan);
     if (!exportAllowed) {

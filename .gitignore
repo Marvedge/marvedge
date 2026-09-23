@@ -50,4 +50,15 @@ task.md
 video-worker/node_modules
 video-worker/.env
 video-worker/dist
+cloudrun-worker/node_modules
+
+# Python & ML artifacts
+__pycache__/
+*.py[cod]
+$py.class
+.pytest_cache/
+*.pth
+*.model
+*.pt
+*.bin
 cursor_templates/
