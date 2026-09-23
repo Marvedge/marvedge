@@ -209,6 +209,40 @@ def parse_and_validate_json_output(output_json_path: str) -> Dict[str, Any]:
             "Output JSON missing 'crop_targets' array"
         )
 
+    # Defensive contract validation: verify timestamps are non-negative, monotonic,
+    # and do not exceed source duration (preventing corrupted payloads from returning HTTP 200).
+    source = data.get("source")
+    duration_sec = None
+    if isinstance(source, dict):
+        raw_dur = source.get("duration_sec")
+        if isinstance(raw_dur, (int, float)) and raw_dur > 0:
+            duration_sec = float(raw_dur)
+
+    max_allowed_ts = (duration_sec + 0.5) if duration_sec is not None else None
+    prev_ts = -1.0
+    for idx, target in enumerate(data["crop_targets"]):
+        if not isinstance(target, dict):
+            raise ExecutionError(f"crop_targets[{idx}] must be an object")
+        ts = target.get("timestamp_sec")
+        if ts is None or not isinstance(ts, (int, float)):
+            raise ExecutionError(
+                f"crop_targets[{idx}].timestamp_sec is missing or non-numeric"
+            )
+        ts_float = float(ts)
+        if ts_float < 0.0:
+            raise ExecutionError(
+                f"crop_targets[{idx}].timestamp_sec ({ts_float}) is negative"
+            )
+        if max_allowed_ts is not None and ts_float > max_allowed_ts:
+            raise ExecutionError(
+                f"crop_targets[{idx}].timestamp_sec ({ts_float}) exceeds source duration ({duration_sec})"
+            )
+        if idx > 0 and ts_float <= prev_ts:
+            raise ExecutionError(
+                f"crop_targets[{idx}].timestamp_sec ({ts_float}) is not strictly increasing (prev: {prev_ts})"
+            )
+        prev_ts = ts_float
+
     return data
 
 

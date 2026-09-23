@@ -207,6 +207,50 @@ class TestJsonParsing:
         with pytest.raises(ExecutionError, match="malformed JSON"):
             parse_and_validate_json_output(json_path)
 
+    def test_rejects_overflowed_timestamp(self, tmp_path):
+        json_path = os.path.join(tmp_path, "overflow.json")
+        overflow_payload = {
+            "schema_version": 1,
+            "source": {
+                "width": 720,
+                "height": 480,
+                "fps": 29.97,
+                "duration_sec": 15.45,
+            },
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 18446744073709.52,
+                    "frame": 0,
+                    "crop": {"x": 225.0, "y": 0.0, "width": 270.0, "height": 480.0},
+                    "source": "autoflip",
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(overflow_payload, f)
+
+        with pytest.raises(ExecutionError, match="exceeds source duration"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_negative_timestamp(self, tmp_path):
+        json_path = os.path.join(tmp_path, "negative.json")
+        negative_payload = {
+            "schema_version": 1,
+            "source": {"width": 720, "height": 480, "duration_sec": 15.45},
+            "crop_targets": [
+                {
+                    "timestamp_sec": -0.033,
+                    "crop": {"x": 0.0, "y": 0.0, "width": 270.0, "height": 480.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(negative_payload, f)
+
+        with pytest.raises(ExecutionError, match="is negative"):
+            parse_and_validate_json_output(json_path)
+
 
 class TestCleanupAndEndToEnd:
     @patch("service.download_video")

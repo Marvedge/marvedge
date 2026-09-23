@@ -285,6 +285,39 @@ describe("Revised Crop coordinate JSON contract validation suite", () => {
       };
       expect(() => validateCropTargetData(autoflipOutput)).not.toThrow();
     });
+
+    it("rejects overflowed timestamp payload from run_autoflip_to_json", () => {
+      const overflowOutput = {
+        schema_version: 1,
+        source: {
+          width: 720,
+          height: 480,
+          fps: 29.97,
+          duration_sec: 15.45,
+        },
+        output: {
+          aspect_ratio: "9:16",
+        },
+        timeline: {
+          timebase: "seconds",
+          sampling: "keyframes_interpolated",
+        },
+        crop_targets: [
+          {
+            timestamp_sec: 18446744073709.52,
+            frame: 0,
+            crop: { x: 225.0, y: 0.0, width: 270.0, height: 480.0 },
+            source: "autoflip",
+          },
+        ],
+      };
+      expect(() => validateCropTargetData(overflowOutput)).toThrow(
+        CropTargetValidationError
+      );
+      expect(() => validateCropTargetData(overflowOutput)).toThrow(
+        /exceeds duration/
+      );
+    });
   });
 });
 
