@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import fs from "fs";
 import path from "path";
+process.env.CALLBACK_SECRET = "test-secret";
 import type { CropTargetData } from "../app/types/editor/crop-target";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
 import {

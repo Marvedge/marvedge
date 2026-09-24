@@ -25,6 +25,9 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
   const backendUrl = rawBackendUrl.replace(/\/+$/, "");
 
   const callbackSecret = process.env.CALLBACK_SECRET?.trim() || "";
+  if (!callbackSecret) {
+    throw new Error("CALLBACK_SECRET is required for the Reframe Worker");
+  }
 
   const rawMlUrl =
     process.env.REFRAME_ML_SERVICE_URL?.trim() || "http://localhost:8000";
