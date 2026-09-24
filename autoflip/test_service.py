@@ -6,6 +6,7 @@ and directory cleanup using mocked execution boundaries.
 
 import json
 import os
+import socket
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -58,7 +59,6 @@ class TestValidation:
     def test_valid_requests(self):
         validate_reframe_request("https://example.com/video.mp4", "9:16")
         validate_reframe_request("http://example.com/video.mp4", "1:1")
-        validate_reframe_request("file:///tmp/local.mp4", "4:5")
 
     def test_missing_or_empty_video_url(self):
         with pytest.raises(ValidationError, match="videoUrl is required"):
@@ -68,8 +68,11 @@ class TestValidation:
             validate_reframe_request(None, "9:16")
 
     def test_invalid_video_url_scheme(self):
-        with pytest.raises(ValidationError, match="valid HTTP, HTTPS, or file URL"):
+        with pytest.raises(ValidationError, match="valid HTTP or HTTPS URL"):
             validate_reframe_request("ftp://example.com/video.mp4", "9:16")
+
+        with pytest.raises(ValidationError, match="must use HTTP or HTTPS"):
+            validate_reframe_request("file:///tmp/local.mp4", "9:16")
 
     def test_missing_or_invalid_aspect_ratio(self):
         with pytest.raises(ValidationError, match="targetAspectRatio is required"):
@@ -89,6 +92,9 @@ class TestVideoDownload:
         mock_resp.iter_content.return_value = [b"mock_video_bytes"]
         mock_resp.raise_for_status = MagicMock()
         mock_resp.__enter__.return_value = mock_resp
+        mock_resp.is_redirect = False
+        mock_resp.is_permanent_redirect = False
+        mock_resp.headers = {}
         mock_get.return_value = mock_resp
 
         dest = os.path.join(tmp_path, "out.mp4")
@@ -117,6 +123,70 @@ class TestVideoDownload:
 
         with pytest.raises(DownloadError, match="timed out"):
             download_video("https://example.com/slow.mp4", dest, timeout_sec=2)
+    def test_download_rejects_private_ip(self, tmp_path):
+        dest = os.path.join(tmp_path, "out.mp4")
+
+        with pytest.raises(
+            ValidationError,
+            match="private or internal network address",
+        ):
+            download_video("http://127.0.0.1/video.mp4", dest)
+
+    def test_download_rejects_localhost(self, tmp_path):
+        dest = os.path.join(tmp_path, "out.mp4")
+
+        with pytest.raises(
+            ValidationError,
+            match="private or internal network address",
+        ):
+            download_video("http://localhost/video.mp4", dest)
+
+    def test_download_rejects_file_url(self, tmp_path):
+        dest = os.path.join(tmp_path, "out.mp4")
+
+        with pytest.raises(ValidationError, match="must use HTTP or HTTPS"):
+            download_video("file:///tmp/video.mp4", dest)
+
+    @patch("requests.get")
+    def test_download_rejects_redirect_to_private_ip(self, mock_get, tmp_path):
+        mock_resp = MagicMock()
+        mock_resp.is_redirect = True
+        mock_resp.is_permanent_redirect = False
+        mock_resp.headers = {
+            "Location": "http://127.0.0.1/internal-video.mp4"
+        }
+        mock_resp.__enter__.return_value = mock_resp
+        mock_get.return_value = mock_resp
+
+        dest = os.path.join(tmp_path, "out.mp4")
+
+        with pytest.raises(
+            ValidationError,
+            match="private or internal network address",
+        ):
+            download_video("https://example.com/video.mp4", dest)
+
+    @patch("service.socket.getaddrinfo")
+    def test_download_rejects_hostname_resolving_to_private_ip(
+        self, mock_getaddrinfo, tmp_path
+    ):
+        mock_getaddrinfo.return_value = [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("10.0.0.5", 80),
+            )
+        ]
+
+        dest = os.path.join(tmp_path, "out.mp4")
+
+        with pytest.raises(
+            ValidationError,
+            match="private or internal network address",
+        ):
+            download_video("https://example.com/video.mp4", dest)
 
 
 class TestAutoFlipExecution:
