@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { hash, compare } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -40,10 +41,12 @@ export async function POST(req: Request) {
       );
     }
 
+    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+
     const resetRequest = await prisma.passwordReset.findFirst({
       where: {
         email,
-        otp: resetToken,
+        otp: resetTokenHash,
       },
     });
 
