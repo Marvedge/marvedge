@@ -5,6 +5,9 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcrypt";
 
+const DUMMY_PASSWORD_HASH = "$2b$12$i4krTZOz2MpeU7SRmliVOuVWic5MtVADHyf2L4yhRVylEt3tX2T1C";
+const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -49,19 +52,15 @@ const handler = NextAuth({
             where: { email: credentials.email },
           });
 
-          if (!user || !user.password) {
-            console.log("❌ No user found in DB:", credentials.email);
-            throw new Error("No user found with this email");
+          // Always perform a bcrypt comparison so missing accounts and incorrect
+          // passwords have comparable response times.
+          const passwordHash = user?.password || DUMMY_PASSWORD_HASH;
+          const valid = await bcrypt.compare(credentials.password, passwordHash);
+
+          if (!user || !user.password || !valid) {
+            throw new Error(INVALID_CREDENTIALS_ERROR);
           }
 
-          // Verify password
-          const valid = await bcrypt.compare(credentials.password, user.password);
-          if (!valid) {
-            console.log("❌ Invalid password for user:", credentials.email);
-            throw new Error("Invalid password");
-          }
-
-          console.log("✅ User authorized:", user.email);
           return user;
         } catch (err: unknown) {
           if (err instanceof Error) {
@@ -71,6 +70,10 @@ const handler = NextAuth({
             ) {
               console.error("💥 Database connection error:", err);
               throw new Error("Database connection failed. Try again later.");
+            }
+
+            if (err.message === INVALID_CREDENTIALS_ERROR) {
+              throw err;
             }
 
             console.error("💥 Credentials error:", err);
