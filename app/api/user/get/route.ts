@@ -32,12 +32,6 @@ export async function GET() {
     return NextResponse.json({ user }, { status: 200 });
   } catch (error) {
     console.error("Error fetching user:", error);
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

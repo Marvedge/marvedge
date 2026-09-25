@@ -20,12 +20,16 @@ export async function POST(req: Request) {
       );
     }
 
-     if (typeof password !== "string" || password.length < 6) {
+    if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+    }
+
+    if (typeof password !== "string" || password.length < 8) {
       return NextResponse.json(
-        { error: "Password must be at least 6 characters" },
+        { error: "Password must be at least 8 characters" },
         { status: 400 }
       );
-    } 
+    }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
