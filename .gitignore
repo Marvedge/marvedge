@@ -51,3 +51,5 @@ video-worker/node_modules
 video-worker/.env
 video-worker/dist
 cursor_templates/
+playwright-report/
+test-results/
