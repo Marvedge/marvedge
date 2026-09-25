@@ -174,6 +174,8 @@ ENV CXX=clang++-15
 # ---------------------------------------------------------
 # Build AutoFlip
 # ---------------------------------------------------------
+COPY autoflip_graph.pbtxt /mediapipe/mediapipe/examples/desktop/autoflip/autoflip_graph.pbtxt
+
 RUN bazel build -c opt \
     --define MEDIAPIPE_DISABLE_GPU=1 \
     --define=xnn_enable_avxvnniint8=false \

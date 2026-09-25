@@ -146,6 +146,19 @@ async function getSignedHttpUrlForGsUri(uri) {
 }
 
 async function downloadFromUrl({ url, destinationPath }) {
+  // never let a job point us at internal addresses
+  let parsed;
+  try {
+    parsed = new URL(String(url));
+  } catch {
+    throw new Error("Invalid source URL");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Refusing to fetch non-http(s) URL");
+  }
+  if (isBlockedWorkerHost(parsed.hostname)) {
+    throw new Error("Refusing to fetch blocked host");
+  }
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download source video: ${response.status}`);
@@ -942,6 +955,339 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
 
     console.log(
       `[avs-sync] steps=${videoSegments.length} frozen=${frozen} padded=${padded} ` +
+        `duration=${duration}s total_ms=${Date.now() - startedAt}`,
+    );
+
+    return { alignedVideoUrl, duration };
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// --- AVS dubbed-audio pacing (Task-00052) -----------------------------------
+//
+// The dubbed-audio use case differs fundamentally from the TTS voiceover path:
+//
+//  TTS path   → audio is internally generated per step; freeze-frame + silence
+//               padding are invisible because the voice pauses naturally.
+//
+//  Dub path   → audio is a pre-recorded human dub (continuous track, aligned
+//               by the caller to step boundaries via dubTimings). Freezing a
+//               frame while a real voice speaks is jarring; silence mid-speech
+//               is broken UX. We therefore time-stretch FIRST and only fall
+//               back to freeze/pad when the stretch ratio would exceed quality
+//               limits.
+//
+// Strategy per step:
+//   ratio = T_dub / T_video  (dubbed step duration / source video duration)
+//
+//   ratio in [MIN_STRETCH, MAX_STRETCH]  →  setpts video stretch (or atempo audio)
+//   ratio > MAX_STRETCH (dub much longer) →  max-stretch + minimal freeze residual
+//   ratio < MIN_STRETCH (video much longer) → max-stretch audio + truncate/pad silence
+//
+// Constants (overridable via env):
+const AVS_DUB_PREFIX = process.env.AVS_DUB_PREFIX || "avs-dub/";
+const AVS_DUB_STRETCH_MIN = Number(process.env.AVS_DUB_STRETCH_MIN || 0.8);  // fastest video / slowest audio allowed
+const AVS_DUB_STRETCH_MAX = Number(process.env.AVS_DUB_STRETCH_MAX || 1.25); // slowest video / fastest audio allowed
+
+/**
+ * Validate + sort dubTimings entries, dropping malformed ones.
+ * dubTimings mirrors stepTimings: { stepId, start, end } into the dub track.
+ */
+function normalizeDubTimings(dubTimings) {
+  return (Array.isArray(dubTimings) ? dubTimings : [])
+    .map((t) => ({
+      stepId: String((t && t.stepId) || "").trim(),
+      start: Number(t && t.start),
+      end: Number(t && t.end),
+    }))
+    .filter(
+      (t) =>
+        t.stepId &&
+        Number.isFinite(t.start) &&
+        Number.isFinite(t.end) &&
+        t.end > t.start,
+    );
+}
+
+/**
+ * Build one dubbed video segment.
+ *
+ * When ratio != 1.0 we use setpts=PTS/ratio (a value >1 slows the video, <1
+ * speeds it up). If the dubbed audio is also longer than the max-stretched
+ * video we append a freeze-frame tail (tpad) for the residual. fps + format
+ * normalization is always applied so segments concat with -c copy.
+ *
+ *   ratio   = clamp(T_dub / T_video, MIN, MAX)
+ *   stretch = ratio          (< 1 → faster; > 1 → slower)
+ *   freeze  = max(0, T_dub - T_video * MAX_STRETCH)   [only when ratio > MAX]
+ */
+async function buildDubVideoSegment({
+  sourcePath,
+  start,
+  videoDur,
+  stretchedVideoDur,
+  freeze,
+  outputPath,
+}) {
+  // PTS multiplier: setpts = PTS / ratio means ratio > 1 slows video down.
+  const ptsRatio = round3(stretchedVideoDur / videoDur);
+  const filters = [
+    `fps=${AVS_SYNC_FPS}`,
+    `setpts=${round3(ptsRatio)}*PTS`,
+    "format=yuv420p",
+    "setsar=1",
+  ];
+  if (freeze > 0.001) {
+    filters.push(`tpad=stop_mode=clone:stop_duration=${round3(freeze)}`);
+  }
+  await execFileAsync("/usr/bin/ffmpeg", [
+    "-y",
+    "-ss",
+    String(round3(start)),
+    "-t",
+    String(round3(videoDur)),
+    "-i",
+    sourcePath,
+    "-an",
+    "-vf",
+    filters.join(","),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "20",
+    "-pix_fmt",
+    "yuv420p",
+    "-r",
+    String(AVS_SYNC_FPS),
+    "-video_track_timescale",
+    "15360",
+    outputPath,
+  ]);
+}
+
+/**
+ * Build one dubbed audio segment with tempo adjustment.
+ *
+ * atempo is clamped to [0.5, 2.0] by FFmpeg; our outer clamp [MIN, MAX]
+ * is tighter (0.8–1.25) so a single atempo filter always suffices.
+ *
+ * When the stretch ratio falls outside [MIN, MAX]:
+ *   - ratio > MAX  →  audio plays at MAX speed; trailing silence fills residual
+ *   - ratio < MIN  →  audio plays at MIN speed; excess is truncated at totalDur
+ *
+ *   ratio   = clamp(T_dub / T_video, MIN, MAX)
+ *   atempo  = T_dub / (T_video * ratio)   ≈ 1.0 when ratio==T_dub/T_video
+ */
+async function buildDubAudioSegment({
+  dubPath,
+  audioStart,
+  audioDur,
+  totalDur,
+  outputPath,
+}) {
+  if (dubPath && audioDur > 0.001) {
+    // atempo = audioDur / totalDur means we speed/slow the audio to fill totalDur.
+    // Clamped to [0.8, 1.25] by the caller; single filter node always valid.
+    const atempo = round3(audioDur / totalDur);
+    const clampedAtempo = Math.min(1.0 / AVS_DUB_STRETCH_MIN, Math.max(1.0 / AVS_DUB_STRETCH_MAX, atempo));
+    await execFileAsync("/usr/bin/ffmpeg", [
+      "-y",
+      "-ss",
+      String(round3(audioStart)),
+      "-t",
+      String(round3(audioDur)),
+      "-i",
+      dubPath,
+      "-af",
+      [
+        `atempo=${round3(clampedAtempo)}`,
+        `aformat=sample_rates=48000:channel_layouts=stereo`,
+        `apad=whole_dur=${round3(totalDur)}`,
+      ].join(","),
+      "-c:a",
+      "pcm_s16le",
+      outputPath,
+    ]);
+    return;
+  }
+  // No dub audio for this step → pure silence segment.
+  await execFileAsync("/usr/bin/ffmpeg", [
+    "-y",
+    "-f",
+    "lavfi",
+    "-t",
+    String(round3(totalDur)),
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=48000",
+    "-c:a",
+    "pcm_s16le",
+    outputPath,
+  ]);
+}
+
+/**
+ * Time-align a pre-recorded dubbed audio track to the source video per step.
+ *
+ * API contract (mirrors processSyncJob):
+ *   videoUrl   – source video (any format FFmpeg reads)
+ *   dubUrl     – the continuous dubbed audio track (MP3/WAV/AAC)
+ *   steps      – [{id, startTime, endTime}] — video step boundaries
+ *   dubTimings – [{stepId, start, end}]    — where each step sits in dubUrl
+ *
+ * FALLBACK: if dubUrl or dubTimings are absent the original source is returned
+ * unchanged (same graceful-degradation contract as processSyncJob).
+ *
+ * Returns { alignedVideoUrl, duration }.
+ */
+async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
+  if (!videoUrl) throw new Error("videoUrl is required");
+
+  const stepList = normalizeSyncSteps(steps);
+  const timingMap = buildTimingMap(dubTimings); // reuse existing helper
+
+  // Graceful fallback: nothing to align → return source untouched.
+  if (!dubUrl || stepList.length === 0 || timingMap.size === 0) {
+    return { alignedVideoUrl: videoUrl, duration: 0 };
+  }
+
+  const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
+  const startedAt = Date.now();
+  const workDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "marvedge-avs-dub-"),
+  );
+
+  try {
+    const sourcePath = path.join(workDir, "source.mp4");
+    await downloadToPath(videoUrl, sourcePath);
+    const dubPath = path.join(workDir, "dub.mp3");
+    await downloadToPath(dubUrl, dubPath);
+
+    const videoSegments = [];
+    const audioSegments = [];
+    let stretched = 0;
+    let frozenResidual = 0;
+    let silencePadded = 0;
+
+    for (let i = 0; i < stepList.length; i++) {
+      const step = stepList[i];
+      const tVideo = round3(step.endTime - step.startTime);
+      if (tVideo <= 0) continue;
+
+      const timing = timingMap.get(step.id);
+      const tDub = timing ? round3(timing.end - timing.start) : 0;
+
+      // --- compute pacing strategy ---
+      let stretchedVideoDur;
+      let freeze = 0;
+      let totalDur;
+
+      if (tDub <= 0) {
+        // No dub audio for this step: keep video as-is, generate silence.
+        stretchedVideoDur = tVideo;
+        totalDur = tVideo;
+        silencePadded++;
+      } else {
+        const ratio = tDub / tVideo; // > 1 means dub is longer (slow video); < 1 means dub is shorter (speed video)
+        const clampedRatio = Math.min(
+          AVS_DUB_STRETCH_MAX,
+          Math.max(AVS_DUB_STRETCH_MIN, ratio),
+        );
+        stretchedVideoDur = round3(tVideo * clampedRatio);
+
+        if (ratio > AVS_DUB_STRETCH_MAX) {
+          // Dub is much longer than video can be stretched: freeze the residual.
+          freeze = round3(tDub - stretchedVideoDur);
+          frozenResidual++;
+        } else if (ratio < AVS_DUB_STRETCH_MIN) {
+          // Video is much longer than dub: audio atempo already clamped;
+          // the apad in buildDubAudioSegment pads the silence tail.
+          silencePadded++;
+        } else {
+          stretched++;
+        }
+
+        totalDur = round3(stretchedVideoDur + freeze);
+      }
+
+      const vSeg = path.join(workDir, `vseg-${i}.mp4`);
+      await buildDubVideoSegment({
+        sourcePath,
+        start: step.startTime,
+        videoDur: tVideo,
+        stretchedVideoDur,
+        freeze,
+        outputPath: vSeg,
+      });
+      videoSegments.push(vSeg);
+
+      const aSeg = path.join(workDir, `aseg-${i}.wav`);
+      await buildDubAudioSegment({
+        dubPath,
+        audioStart: timing ? timing.start : 0,
+        audioDur: tDub,
+        totalDur,
+        outputPath: aSeg,
+      });
+      audioSegments.push(aSeg);
+    }
+
+    if (videoSegments.length === 0) {
+      throw new Error("No alignable dub steps were produced");
+    }
+
+    const videoPath = path.join(workDir, "dub-video.mp4");
+    await concatByDemuxer(videoSegments, videoPath, workDir, "dub-video");
+    const audioPath = path.join(workDir, "dub-audio.wav");
+    await concatByDemuxer(audioSegments, audioPath, workDir, "dub-audio");
+
+    const alignedPath = path.join(workDir, "dub-aligned.mp4");
+    await execFileAsync("/usr/bin/ffmpeg", [
+      "-y",
+      "-i",
+      videoPath,
+      "-i",
+      audioPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "160k",
+      "-ar",
+      "48000",
+      "-ac",
+      "2",
+      "-movflags",
+      "+faststart",
+      alignedPath,
+    ]);
+
+    const duration = round3(await probeDurationSeconds(alignedPath));
+
+    const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
+    await uploadProcessedChunkToGcs({
+      bucketName: processedBucket,
+      objectName,
+      sourcePath: alignedPath,
+    });
+    const fileRef = storage.bucket(processedBucket).file(objectName);
+    try {
+      await fileRef.makePublic();
+    } catch (_e) {
+      /* Ignore if UBLA is enforced — signed URL still works. */
+    }
+    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+
+    console.log(
+      `[avs-dub] steps=${videoSegments.length} stretched=${stretched} ` +
+        `frozen_residual=${frozenResidual} silence_padded=${silencePadded} ` +
         `duration=${duration}s total_ms=${Date.now() - startedAt}`,
     );
 
@@ -1790,6 +2136,81 @@ app.get("/healthz", (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
+// shared secret so strangers cannot trigger pricey video jobs.
+// while the secret is missing we only warn, so local runs keep working.
+// once WORKER_SECRET is set on Cloud Run, requests without it get a 401.
+const WORKER_SECRET = process.env.WORKER_SECRET || "";
+
+function isBlockedWorkerHost(hostname) {
+  const host = String(hostname || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.+$/, "");
+  if (!host || host === "localhost") {
+    return true;
+  }
+  const bare = host.replace(/^\[|\]$/g, "");
+  if (bare.includes(":")) {
+    if (bare === "::1") {
+      return true;
+    }
+    const first = bare.split(":")[0] === "" ? "0" : bare.split(":")[0];
+    const value = parseInt(first, 16);
+    if (Number.isFinite(value)) {
+      if (value >= 0xfc00 && value <= 0xfdff) {
+        return true;
+      }
+      if (value >= 0xfe80 && value <= 0xfebf) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const octets = bare.split(".").map((part) => {
+    if (/^0x[0-9a-f]+$/i.test(part)) {
+      return parseInt(part, 16);
+    }
+    if (/^0[0-7]+$/.test(part)) {
+      return parseInt(part, 8);
+    }
+    if (/^\d+$/.test(part)) {
+      return parseInt(part, 10);
+    }
+    return NaN;
+  });
+  if (octets.length !== 4 || octets.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) {
+    return !bare.includes(".");
+  }
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    a === 0
+  );
+}
+
+function requireWorkerAuth(req, res, next) {
+  if (!WORKER_SECRET) {
+    console.warn("[worker] WORKER_SECRET not set, auth skipped");
+    return next();
+  }
+  const token = String(req.headers.authorization || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  if (!token || token !== WORKER_SECRET) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+  return next();
+}
+
+app.use(
+  ["/process", "/subtitles", "/avs-voiceover", "/avs-sync", "/avs-dub", "/wtm-composite", "/package-hls", "/merge"],
+  requireWorkerAuth
+);
+
 app.post("/process", async (req, res) => {
   const {
     chunkId,
@@ -1891,6 +2312,29 @@ app.post("/avs-sync", async (req, res) => {
     });
   } catch (err) {
     console.error("[worker] avs-sync failed:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "unknown_error",
+    });
+  }
+});
+
+app.post("/avs-dub", async (req, res) => {
+  const { videoUrl, dubUrl, steps, dubTimings } = req.body || {};
+  if (!videoUrl) {
+    return res.status(400).json({ ok: false, error: "videoUrl is required" });
+  }
+  try {
+    const result = await processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings });
+    return res.status(200).json({
+      ok: true,
+      result: {
+        recipeId: "avs-dub",
+        ...result,
+      },
+    });
+  } catch (err) {
+    console.error("[worker] avs-dub failed:", err);
     return res.status(500).json({
       ok: false,
       error: err?.message || "unknown_error",
