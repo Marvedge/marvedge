@@ -276,7 +276,7 @@ def process_video(video_path, output_path, frame_skip=1, max_frames=None, min_co
 
     cap.release()
 
-    total_processed = limit // frame_skip
+    total_processed = len(range(0, limit, frame_skip))
     results["detected_frames"] = detected
     results["detection_rate"] = f"{detected}/{total_processed} ({100 * detected / max(1, total_processed):.1f}%)"
 
