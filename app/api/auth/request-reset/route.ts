@@ -62,13 +62,14 @@ export async function POST(req: Request) {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Save token in existing PasswordReset.otp field to avoid schema migration.
+    // Store only the token hash so a database read cannot expose a usable reset token.
     await prisma.passwordReset.create({
       data: {
         email,
-        otp: token,
+        otp: tokenHash,
         expiresAt,
       },
     });

@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -39,10 +40,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Password is too long" }, { status: 400 });
   }
 
+  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+
   const resetRequest = await prisma.passwordReset.findFirst({
     where: {
       email,
-      otp,
+      otp: otpHash,
       expiresAt: { gt: new Date() },
     },
   });
