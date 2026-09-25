@@ -24,8 +24,10 @@ function clientIp(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
-  // slow down bots hammering this public endpoint
-  if (await isRateLimited(`contact:${clientIp(req)}`, 3, 60)) {
+  // Slow down bots hammering this public endpoint. Closed mode: when Redis is
+  // down, reject rather than let spam fill the database and burn email quota.
+  // Other routes keep the default open mode so playback never breaks.
+  if (await isRateLimited(`contact:${clientIp(req)}`, 3, 60, true)) {
     return NextResponse.json(
       { error: "Too many requests, please try again shortly" },
       { status: 429 }
