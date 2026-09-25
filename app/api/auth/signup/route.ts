@@ -3,8 +3,14 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 
 export async function POST(req: Request) {
+  let body;
   try {
-    const body = await req.json();
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  try {
     const { name, email, password } = body || {};
 
     if (!name || !email || !password) {
@@ -47,12 +53,6 @@ export async function POST(req: Request) {
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error("Signup error:", error);
-    return NextResponse.json(
-      {
-        error: "Failed to create user",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
 }
