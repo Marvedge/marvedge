@@ -1581,3 +1581,51 @@ audioWorker.on("failed", (job, err) => {
 });
 
 console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
+
+// ── Dubbing Worker (AVS Dubbing — Task-00059) ──────────────────────────────────
+// Processes pre-recorded dubbed audio time-alignment via Cloud Run /avs-dub and
+// reports completion/failure via authenticated HTTP callback to Next.js.
+import { processDubbingJob } from "../app/lib/avs/dubbingProcessor";
+
+const dubbingConcurrency = Math.max(
+  1,
+  parseInt(process.env.DUBBING_WORKER_CONCURRENCY || "1", 10) || 1
+);
+
+// Cloud Run /avs-dub timeout is 15 minutes (900_000 ms).
+// Configure BullMQ lockDuration and stalledInterval so healthy long-running
+// dubbing jobs are not falsely flagged as stalled.
+const dubbingLockDuration = Math.max(
+  120_000,
+  parseInt(process.env.DUBBING_LOCK_DURATION_MS || "300000", 10) || 300_000
+);
+const dubbingStalledInterval = Math.max(
+  30_000,
+  parseInt(process.env.DUBBING_STALLED_INTERVAL_MS || "300000", 10) || 300_000
+);
+
+export const dubbingWorker = new Worker(
+  "dubbing-processing",
+  async (job: Job) => {
+    await processDubbingJob(job.data, {
+      updateProgress: async (pct: number) => {
+        await job.updateProgress(pct);
+      },
+    });
+  },
+  {
+    connection: new Redis(redisUrl, { maxRetriesPerRequest: null }) as any,
+    concurrency: dubbingConcurrency,
+    lockDuration: dubbingLockDuration,
+    stalledInterval: dubbingStalledInterval,
+    maxStalledCount: 1,
+  }
+);
+
+dubbingWorker.on("failed", (job, err) => {
+  console.log(`Dubbing job ${job?.name} ${job?.id} failed: ${err.message}`);
+});
+
+console.log(
+  `🎙️ Dubbing Worker ready (concurrency=${dubbingConcurrency}, lockDuration=${dubbingLockDuration}ms)...`
+);
