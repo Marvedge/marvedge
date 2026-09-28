@@ -8,7 +8,10 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { email, otp, token, password, confirmPassword } = await req.json();
+    const { email: rawEmail, otp, token, password, confirmPassword } = await req.json();
+    // Trim spaces so lookup, update, and cleanup use the same address the
+    // other reset routes use. Case is left alone so existing accounts keep working.
+    const email = typeof rawEmail === "string" ? rawEmail.trim() : rawEmail;
     const resetToken = token || otp;
 
     if (!email || !resetToken || !password || !confirmPassword) {

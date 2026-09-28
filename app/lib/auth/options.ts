@@ -51,9 +51,13 @@ export const authOptions: NextAuthOptions = {
             throw new Error(INVALID_CREDENTIALS_ERROR);
           }
 
+          // Trim spaces so logins match accounts saved without spaces. Case is
+          // left alone on purpose so existing mixed-case accounts keep working.
+          const cleanEmail = credentials.email.trim();
+
           // Attempt to fetch user from DB
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+            where: { email: cleanEmail },
           });
 
           // Always perform a bcrypt comparison so missing accounts and incorrect

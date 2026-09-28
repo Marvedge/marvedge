@@ -35,7 +35,8 @@ export const useSignIn = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const email = emailRef.current?.value ?? "";
+    // Trim spaces so logins match accounts saved without spaces, same as signup. Password is never trimmed.
+    const email = (emailRef.current?.value ?? "").trim();
     const password = passwordRef.current?.value ?? "";
     setIsLoading(true);
 
