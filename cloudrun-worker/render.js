@@ -560,10 +560,16 @@ function subtitleAssColour(hex, opacity) {
 // scaled by the size the user asked for relative to the default — so the default
 // clamps exactly as master does, while a deliberately large choice is not capped
 // away. See the long note on subtitleMetrics() in style.ts.
-function subtitleMetrics(style, h) {
+//
+// Task-00061: cueFontSizePct is an optional per-cue override. When set, it
+// replaces style.fontSizePct for font-size calculations only — the same logic
+// as the third arg added to subtitleMetrics() in style.ts. The caller
+// (writeAssSubtitles) passes cue.fontSizePct here to produce the px value
+// that drives the inline {\fs<n>} ASS override tag.
+function subtitleMetrics(style, h, cueFontSizePct) {
   const height = Math.max(1, Number(h) || 0);
   const pct = subtitleClamp(
-    style && style.fontSizePct,
+    cueFontSizePct != null ? cueFontSizePct : (style && style.fontSizePct),
     SUBTITLE_FONT_PCT_MIN,
     SUBTITLE_FONT_PCT_MAX,
     SUBTITLE_DEFAULT_FONT_PCT
@@ -732,7 +738,20 @@ function writeAssSubtitles(tempDir, cues, w, h, style, language) {
     const end = formatAssTime(c.end);
     const escaped = escapeAssText(c.text);
     const t = rtl ? applyRtlBidi(escaped) : escaped;
-    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${tags}${t}`;
+
+    // Task-00061: per-cue font-size override for translated tracks.
+    // When localizeTranslatedCues() detected that this cue's translation is
+    // significantly longer than the source, it stored a smaller fontSizePct on
+    // the cue object. We convert that to pixels here and emit a {\fs<n>} ASS
+    // override tag that libass applies to this Dialogue line only, leaving the
+    // track-level Style: Default unchanged so un-overridden cues are unaffected.
+    let cueTags = tags;
+    if (typeof c.fontSizePct === "number" && c.fontSizePct > 0) {
+      const cueMetrics = subtitleMetrics(style, h, c.fontSizePct);
+      cueTags = `{\\fs${cueMetrics.fontPx}}${tags}`;
+    }
+
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${cueTags}${t}`;
   });
 
   const assPath = path.join(tempDir, "subtitles.ass");
