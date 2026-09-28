@@ -24,6 +24,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
     }
 
+    // Trim once and reuse below: the check above must judge the same address
+    // the lookup and save use. Case is left alone on purpose so existing
+    // mixed-case accounts keep working.
+    const cleanEmail = email.trim();
+
     if (typeof password !== "string" || password.length < 8) {
       return NextResponse.json(
         { error: "Password must be at least 8 characters" },
@@ -31,7 +36,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existingUser) {
       return NextResponse.json({ error: "User already exists" }, { status: 400 });
     }
@@ -41,7 +46,7 @@ export async function POST(req: Request) {
     const user = await prisma.user.create({
       data: {
         name,
-        email,
+        email: cleanEmail,
         password: hashedPassword,
       },
     });
