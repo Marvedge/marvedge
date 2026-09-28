@@ -17,6 +17,10 @@ import axios from "axios";
 // Note: environment variables are read once at process start; restart the worker after editing .env.
 (() => {
   const candidates = [
+    path.resolve(process.cwd(), ".env.local"),
+    path.resolve(process.cwd(), "../.env.local"),
+    path.resolve(__dirname, ".env.local"),
+    path.resolve(__dirname, "../.env.local"),
     path.resolve(process.cwd(), ".env"),
     path.resolve(process.cwd(), "../.env"),
     path.resolve(__dirname, ".env"),
@@ -1628,4 +1632,7 @@ dubbingWorker.on("failed", (job, err) => {
 
 console.log(
   `🎙️ Dubbing Worker ready (concurrency=${dubbingConcurrency}, lockDuration=${dubbingLockDuration}ms)...`
+);
+console.log(
+  `🎙️ Dub service target: ${process.env.AVS_DUB_SERVICE_URL || "(defaulting to GCP_VIDEO_WORKER_URL)"}`
 );

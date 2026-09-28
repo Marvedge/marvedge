@@ -68,6 +68,11 @@ export async function defaultUploadToCloudinary(
   const isLoopbackUrl =
     videoUrlOrPath.startsWith("http://localhost") ||
     videoUrlOrPath.startsWith("http://127.0.0.1") ||
+    videoUrlOrPath.includes("/artifacts/") ||
+    Boolean(
+      process.env.AVS_DUB_SERVICE_URL &&
+        videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
+    ) ||
     Boolean(
       process.env.GCP_VIDEO_WORKER_URL &&
         videoUrlOrPath.startsWith(process.env.GCP_VIDEO_WORKER_URL)
@@ -114,6 +119,7 @@ export interface DubbingProcessorDeps {
   postCallback?: (payload: DubbingCallbackPayload) => Promise<void>;
   updateProgress?: (percent: number) => Promise<void> | void;
   uploadToCloudinary?: UploadToCloudinaryFn;
+  serviceUrl?: string;
 }
 
 /**
@@ -202,7 +208,10 @@ export async function processDubbingJob(
   payload: DubbingJobPayload,
   deps: DubbingProcessorDeps = {}
 ): Promise<void> {
-  const invokeDubSync = deps.invokeDubSync ?? invokeGcpDubSync;
+  const invokeDubSync =
+    deps.invokeDubSync ??
+    ((p: GcpDubSyncPayload) =>
+      invokeGcpDubSync(p, deps.serviceUrl ? { serviceUrl: deps.serviceUrl } : undefined));
   const postCallback = deps.postCallback ?? postJobCallbackWithRetry;
   const updateProgress = deps.updateProgress ?? (() => {});
   const uploadToCloudinary = deps.uploadToCloudinary ?? defaultUploadToCloudinary;
@@ -282,6 +291,11 @@ export async function processDubbingJob(
       const isLocalArtifact =
         alignedVideoUrl.startsWith("http://localhost") ||
         alignedVideoUrl.startsWith("http://127.0.0.1") ||
+        alignedVideoUrl.includes("/artifacts/") ||
+        Boolean(
+          process.env.AVS_DUB_SERVICE_URL &&
+            alignedVideoUrl.startsWith(process.env.AVS_DUB_SERVICE_URL)
+        ) ||
         Boolean(
           process.env.GCP_VIDEO_WORKER_URL &&
             alignedVideoUrl.startsWith(process.env.GCP_VIDEO_WORKER_URL)

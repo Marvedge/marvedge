@@ -424,4 +424,74 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       }
     });
   });
+
+  describe("G. Local override vs production routing via processDubbingJob", () => {
+    it("routes to AVS_DUB_SERVICE_URL when configured", async () => {
+      const originalFetch = globalThis.fetch;
+      const originalEnv = { ...process.env };
+      process.env.AVS_DUB_SERVICE_URL = "http://cloudrun-worker:8080";
+      process.env.GCP_VIDEO_WORKER_URL = "https://prod-gcp-worker.run.app";
+
+      let calledUrl = "";
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+        calledUrl = url;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            result: {
+              recipeId: "avs-dub",
+              alignedVideoUrl: "https://storage.googleapis.com/test/aligned.mp4",
+              duration: 10,
+            },
+          }),
+        };
+      });
+
+      const postCallback = vi.fn().mockResolvedValue(undefined);
+
+      try {
+        await processDubbingJob(basePayload, { postCallback });
+        expect(calledUrl).toBe("http://cloudrun-worker:8080/avs-dub");
+      } finally {
+        globalThis.fetch = originalFetch;
+        process.env = originalEnv;
+      }
+    });
+
+    it("falls back to GCP_VIDEO_WORKER_URL when AVS_DUB_SERVICE_URL is absent", async () => {
+      const originalFetch = globalThis.fetch;
+      const originalEnv = { ...process.env };
+      delete process.env.AVS_DUB_SERVICE_URL;
+      process.env.GCP_VIDEO_WORKER_URL = "https://prod-gcp-worker.run.app";
+
+      let calledUrl = "";
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+        calledUrl = url;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            result: {
+              recipeId: "avs-dub",
+              alignedVideoUrl: "https://storage.googleapis.com/test/aligned.mp4",
+              duration: 10,
+            },
+          }),
+        };
+      });
+
+      const postCallback = vi.fn().mockResolvedValue(undefined);
+
+      try {
+        await processDubbingJob(basePayload, { postCallback });
+        expect(calledUrl).toBe("https://prod-gcp-worker.run.app/avs-dub");
+      } finally {
+        globalThis.fetch = originalFetch;
+        process.env = originalEnv;
+      }
+    });
+  });
 });
