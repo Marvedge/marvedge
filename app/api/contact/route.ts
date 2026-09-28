@@ -91,9 +91,14 @@ export async function POST(req: NextRequest) {
             `Product URL: ${productUrl || "Not provided"}`,
           ].join("\n");
 
+    // Trim spaces so saved details have no surrounding spaces. Case is left
+    // alone on purpose.
+    const cleanName = String(name).trim();
+    const cleanEmail = String(email).trim();
+
     // escape everything the user typed before it goes into the html email
-    const safeName = escapeHtml(String(name));
-    const safeEmail = escapeHtml(String(email));
+    const safeName = escapeHtml(cleanName);
+    const safeEmail = escapeHtml(cleanEmail);
     const safeCompany = escapeHtml(
       typeof company === "string" && company.trim().length > 0 ? company : "Not provided"
     );
@@ -104,8 +109,8 @@ export async function POST(req: NextRequest) {
 
     await prisma.contactMessage.create({
       data: {
-        name,
-        email,
+        name: cleanName,
+        email: cleanEmail,
         message: normalizedMessage,
       },
     });
