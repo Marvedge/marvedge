@@ -43,10 +43,10 @@ export function useEditorSyncEffects({
   const resolvedDuration = Math.max(0, duration || 0);
 
   useEffect(() => {
-    if (!videoUrl && blob) {
+    if (!videoUrl && blob && !params?.get("video")) {
       setVideoUrl(URL.createObjectURL(blob));
     }
-  }, [videoUrl, blob, setVideoUrl]);
+  }, [videoUrl, blob, params, setVideoUrl]);
 
   useEffect(() => {
     if (!params) {
