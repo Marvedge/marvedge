@@ -1,3 +1,4 @@
+import { createRequire } from "module";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -12,7 +13,19 @@ import {
 } from "./ass";
 import { DEFAULT_SUBTITLE_STYLE, toAssOverrideTags, toAssStyleLine } from "./style";
 import type { SubtitleCue, SubtitleStyle } from "./types";
-import { cuesFromWhisperWords } from "./whisper";
+import { cuesFromWhisperWords, normalizeWhisperResponse } from "./whisper";
+
+const require_ = createRequire(import.meta.url);
+const worker = require_(path.join(process.cwd(), "cloudrun-worker", "render.js")) as {
+  writeAssSubtitles: (
+    tempDir: string,
+    cues: SubtitleCue[],
+    w: number,
+    h: number,
+    style?: unknown,
+    language?: unknown
+  ) => string;
+};
 
 describe("Canonical ASS Generator & Serializer (Task-00038)", () => {
   describe("formatAssTime", () => {
@@ -120,12 +133,16 @@ describe("Canonical ASS Generator & Serializer (Task-00038)", () => {
       expect(ass).toContain(`Dialogue: 0,0:00:00.50,0:00:02.00,Default,,0,0,0,,{\\fad(200,200)}Hello from Task-00038.`);
     });
 
-    it("applies RTL bidi markers when language is Arabic", () => {
+    it("applies RTL bidi markers when language is Arabic or a regional Arabic variant", () => {
       const arabicCues: SubtitleCue[] = [{ start: 0, end: 2, text: "مرحبا بك" }];
-      const ass = generateAssContent(arabicCues, 1920, 1080, undefined, "ar");
+      const assAr = generateAssContent(arabicCues, 1920, 1080, undefined, "ar");
+      const assArEg = generateAssContent(arabicCues, 1920, 1080, undefined, "ar-EG");
+      const assArSa = generateAssContent(arabicCues, 1920, 1080, undefined, "ar-SA");
 
       const expectedText = applyRtlBidi("مرحبا بك");
-      expect(ass).toContain(`Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,${expectedText}`);
+      expect(assAr).toContain(`Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,${expectedText}`);
+      expect(assArEg).toContain(`Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,${expectedText}`);
+      expect(assArSa).toContain(`Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,${expectedText}`);
     });
 
     it("filters out empty or whitespace-only cues", () => {
@@ -157,43 +174,169 @@ describe("Canonical ASS Generator & Serializer (Task-00038)", () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    it("automatically creates parent directories recursively if destination does not exist", () => {
+      const tempBase = fs.mkdtempSync(path.join(os.tmpdir(), "marvedge-ass-mkdir-"));
+      const nestedDir = path.join(tempBase, "nested", "sub", "dir");
+      try {
+        const cues: SubtitleCue[] = [{ start: 0, end: 1, text: "Directory test." }];
+        const filePath = writeAssFile(nestedDir, cues, 1920, 1080);
+        expect(fs.existsSync(filePath)).toBe(true);
+        const content = fs.readFileSync(filePath, "utf8");
+        expect(content).toContain("Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Directory test.");
+      } finally {
+        fs.rmSync(tempBase, { recursive: true, force: true });
+      }
+    });
   });
 
-  describe("End-to-End Pipeline: Whisper Word Timestamps -> SubtitleCue -> ASS File", () => {
-    it("takes a Whisper word-level fixture, produces normalized cues, and writes a valid ASS file", () => {
-      const whisperWords = [
-        { word: "This", start: 0.1, end: 0.3 },
-        { word: "is", start: 0.35, end: 0.5 },
-        { word: "a", start: 0.52, end: 0.6 },
-        { word: "test", start: 0.65, end: 0.9 },
-        { word: "of", start: 0.95, end: 1.1 },
-        { word: "Whisper", start: 1.15, end: 1.6 },
-        { word: "transcription.", start: 1.65, end: 2.3 },
-      ];
+  describe("Parity with cloudrun-worker writeAssSubtitles", () => {
+    const parityCues: SubtitleCue[] = [
+      { start: 0, end: 1.5, text: "Hello" },
+      { start: 1.5, end: 3.25, text: "there\nfriend" },
+    ];
 
-      // 1. Cluster Whisper words into SubtitleCue[]
-      const cues = cuesFromWhisperWords(whisperWords);
-      expect(cues).toHaveLength(1);
-      expect(cues[0].text).toBe("This is a test of Whisper transcription.");
-      expect(cues[0].words).toEqual(whisperWords);
+    it("produces byte-identical ASS documents to cloudrun-worker for unstyled exports", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ass-parity-unstyled-"));
+      try {
+        for (const [w, h] of [[1920, 1080], [1080, 1920], [1280, 720]]) {
+          const workerPath = worker.writeAssSubtitles(tempDir, parityCues, w, h);
+          const workerContent = fs.readFileSync(workerPath, "utf8");
+          const libContent = generateAssContent(parityCues, w, h);
+          expect(libContent, `${w}x${h} unstyled`).toBe(workerContent);
+        }
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
 
-      // 2. Generate ASS content with 9:16 portrait dimensions
-      const assContent = generateAssContent(cues, 1080, 1920, DEFAULT_SUBTITLE_STYLE);
+    it("produces byte-identical ASS documents to cloudrun-worker for custom styles and animations", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ass-parity-styled-"));
+      try {
+        const styles: SubtitleStyle[] = [
+          DEFAULT_SUBTITLE_STYLE,
+          { fontFamily: "roboto", color: "#8A76FC", alignment: "top", animation: "fade" },
+          { fontFamily: "poppins", color: "#FFFF00", alignment: "bottom", animation: "pop" },
+          { fontFamily: "inter", color: "#FFFFFF", alignment: "middle", animation: "slide" },
+        ];
 
+        for (const style of styles) {
+          const workerPath = worker.writeAssSubtitles(tempDir, parityCues, 1920, 1080, style);
+          const workerContent = fs.readFileSync(workerPath, "utf8");
+          const libContent = generateAssContent(parityCues, 1920, 1080, style);
+          expect(libContent, JSON.stringify(style)).toBe(workerContent);
+        }
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("produces byte-identical ASS documents to cloudrun-worker for RTL languages", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ass-parity-rtl-"));
+      try {
+        const arabicCues: SubtitleCue[] = [{ start: 0, end: 2, text: "مرحبا بك" }];
+        const workerPath = worker.writeAssSubtitles(tempDir, arabicCues, 1920, 1080, null, "ar");
+        const workerContent = fs.readFileSync(workerPath, "utf8");
+        const libContent = generateAssContent(arabicCues, 1920, 1080, undefined, "ar");
+        expect(libContent).toBe(workerContent);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("End-to-End Pipeline: Whisper Response -> Word Normalization -> SubtitleCue[] -> ASS Generation -> ASS File -> FFmpeg Path", () => {
+    it("takes a raw Whisper verbose_json API response, clusters into SubtitleCue[] with words, writes ASS file, and generates valid FFmpeg path", () => {
+      const rawWhisperVerboseJson = {
+        task: "transcribe",
+        language: "english",
+        duration: 4.5,
+        text: "This is a real end-to-end transcription test. Next sentence follows after pause.",
+        words: [
+          { word: "This", start: 0.1, end: 0.3 },
+          { word: "is", start: 0.35, end: 0.5 },
+          { word: "a", start: 0.52, end: 0.6 },
+          { word: "real", start: 0.65, end: 0.9 },
+          { word: "end-to-end", start: 0.95, end: 1.5 },
+          { word: "transcription", start: 1.55, end: 2.2 },
+          { word: "test.", start: 2.25, end: 2.8 },
+          // 1.2s pause (2.8 -> 4.0) triggers cue boundary
+          { word: "Next", start: 4.0, end: 4.2 },
+          { word: "sentence", start: 4.25, end: 4.6 },
+          { word: "follows", start: 4.65, end: 5.0 },
+          { word: "after", start: 5.05, end: 5.3 },
+          { word: "pause.", start: 5.35, end: 5.8 },
+        ],
+        segments: [
+          { id: 0, start: 0.1, end: 2.8, text: "This is a real end-to-end transcription test." },
+          { id: 1, start: 4.0, end: 5.8, text: "Next sentence follows after pause." },
+        ],
+      };
+
+      // 1. Normalize full response and cluster into SubtitleCue[]
+      const { transcript, cues } = normalizeWhisperResponse(rawWhisperVerboseJson);
+
+      expect(transcript.language).toBe("english");
+      expect(transcript.words).toHaveLength(12);
+      expect(cues).toHaveLength(2);
+
+      // Cue 1 verification
+      expect(cues[0].text).toBe("This is a real end-to-end transcription test.");
+      expect(cues[0].start).toBe(0.1);
+      expect(cues[0].end).toBe(2.8);
+      expect(cues[0].words).toHaveLength(7);
+
+      // Cue 2 verification
+      expect(cues[1].text).toBe("Next sentence follows after pause.");
+      expect(cues[1].start).toBe(4.0);
+      expect(cues[1].end).toBe(5.8);
+      expect(cues[1].words).toHaveLength(5);
+
+      // 2. Generate ASS content with custom style and animation
+      const customStyle: SubtitleStyle = {
+        fontFamily: "inter",
+        color: "#00FF00",
+        alignment: "bottom",
+        animation: "fade",
+      };
+      const assContent = generateAssContent(cues, 1080, 1920, customStyle);
+
+      // Script Info
+      expect(assContent).toContain("[Script Info]");
       expect(assContent).toContain("PlayResX: 1080");
       expect(assContent).toContain("PlayResY: 1920");
-      expect(assContent).toContain("Dialogue: 0,0:00:00.10,0:00:02.30,Default,,0,0,0,,This is a test of Whisper transcription.");
 
-      // 3. Write file and verify disk artifact
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "whisper-pipeline-test-"));
+      // V4+ Styles
+      expect(assContent).toContain("[V4+ Styles]");
+      expect(assContent).toContain(toAssStyleLine(customStyle, 1080, 1920));
+
+      // Events
+      expect(assContent).toContain("[Events]");
+      expect(assContent).toContain(
+        "Dialogue: 0,0:00:00.10,0:00:02.80,Default,,0,0,0,,{\\fad(200,200)}This is a real end-to-end transcription test."
+      );
+      expect(assContent).toContain(
+        "Dialogue: 0,0:00:04.00,0:00:05.80,Default,,0,0,0,,{\\fad(200,200)}Next sentence follows after pause."
+      );
+
+      // 3. Write ASS file to disk in a temporary directory
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "whisper-ass-e2e-"));
       try {
-        const filePath = writeAssFile(tempDir, cues, 1080, 1920, DEFAULT_SUBTITLE_STYLE);
+        const filePath = writeAssFile(tempDir, cues, 1080, 1920, customStyle);
         expect(fs.existsSync(filePath)).toBe(true);
 
-        // Verify escaped path for FFmpeg: no raw unescaped colons
-        const escaped = escapeFfmpegFilterPath(filePath);
-        expect(escaped).toMatch(/^[A-Za-z]\\{2}:/); // Windows drive letter escaped C\\:
-        expect(escaped).not.toMatch(/[^\\]:/); // no unescaped colons
+        const readBack = fs.readFileSync(filePath, "utf8");
+        expect(readBack).toBe(assContent);
+
+        // 4. Escape file path for FFmpeg filtergraph usage
+        const filterPath = escapeFfmpegFilterPath(filePath);
+        expect(filterPath).toBeDefined();
+        // Path should not have unescaped backslashes
+        expect(filterPath).not.toContain("\\subtitles.ass");
+        // Windows drive letters must have escaped colons: C\\:
+        if (filePath.includes(":")) {
+          expect(filterPath).toContain("\\\\:");
+        }
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }

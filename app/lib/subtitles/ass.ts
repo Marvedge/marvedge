@@ -147,6 +147,9 @@ export function writeAssFile(
   language?: string | null,
   filename = "subtitles.ass"
 ): string {
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
   const content = generateAssContent(cues, width, height, style, language);
   const filePath = path.join(destDir, filename);
   fs.writeFileSync(filePath, content, "utf8");
