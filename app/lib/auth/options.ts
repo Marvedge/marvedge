@@ -7,6 +7,7 @@ import bcrypt from "bcrypt";
 
 const DUMMY_PASSWORD_HASH = "$2b$12$i4krTZOz2MpeU7SRmliVOuVWic5MtVADHyf2L4yhRVylEt3tX2T1C";
 const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
+const AUTH_SERVICE_ERROR = "Unable to sign in. Please try again later.";
 
 declare module "next-auth" {
   interface Session {
@@ -47,7 +48,7 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         try {
           if (!credentials?.email || !credentials?.password) {
-            throw new Error("Email and password are required");
+            throw new Error(INVALID_CREDENTIALS_ERROR);
           }
 
           // Attempt to fetch user from DB
@@ -66,25 +67,14 @@ export const authOptions: NextAuthOptions = {
 
           return user;
         } catch (err: unknown) {
-          if (err instanceof Error) {
-            if (
-              err.message.includes("Can't reach database server") ||
-              err.message.includes("ECONNREFUSED")
-            ) {
-              console.error("💥 Database connection error:", err);
-              throw new Error("Database connection failed. Try again later.");
-            }
-
-            if (err.message === INVALID_CREDENTIALS_ERROR) {
-              throw err;
-            }
-
-            console.error("💥 Credentials error:", err);
+          if (err instanceof Error && err.message === INVALID_CREDENTIALS_ERROR) {
             throw err;
-          } else {
-            console.error("💥 Unknown error:", err);
-            throw new Error("An unknown error occurred");
           }
+
+          // Keep diagnostic details in server logs, but never return Prisma,
+          // database, environment, or implementation details to the browser.
+          console.error("Credentials authentication failed:", err);
+          throw new Error(AUTH_SERVICE_ERROR);
         }
       },
     }),
