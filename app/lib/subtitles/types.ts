@@ -16,6 +16,13 @@ import type { SubtitleCue } from "@/app/(signed)/editor/types";
  * (`editing.subtitles`), the export recipe and the worker all already speak this
  * exact shape; a second, subtly different declaration is how the two halves of a
  * feature drift apart.
+ *
+ * `fontSizePct` is an OPTIONAL per-cue override (Task-00061). Present only on
+ * translated cues whose text is long enough to need a smaller font; absent on
+ * every other cue so the default style applies unchanged. The worker reads it to
+ * emit a `{\fs<n>}` ASS override tag; the CSS preview reads it via
+ * `subtitleMetrics`. Omitting it on a new cue is not a breaking change — the
+ * field did not exist in any persisted draft, so its absence there is expected.
  */
 export type { SubtitleCue };
 

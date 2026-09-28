@@ -23,6 +23,7 @@
 // turns a silent, invisible corruption into a visible, retryable error.
 
 import type { SubtitleCue } from "./types";
+import { localizeTranslatedCues } from "./resizing";
 
 /**
  * Cues per OpenAI request.
@@ -156,15 +157,40 @@ export function parseTranslationBatch(content: string, expectedCount: number): s
 }
 
 /**
+ * Options for `applyTranslations` — both are opt-in to preserve
+ * backward compatibility: existing callers that pass no options get
+ * the original behaviour (timings copied, text replaced, nothing else).
+ */
+export interface LocalizeOptions {
+  /**
+   * Run `localizeTranslatedCues` to auto-scale fonts and retime dense cues.
+   * Pass the track-level `fontSizePct` as `baseFontSizePct` when enabling.
+   */
+  localize?: boolean;
+  /** Font-size percentage used as the base for per-cue scaling. */
+  baseFontSizePct?: number;
+  /** Video length ceiling for last-cue retiming. */
+  videoDurationSeconds?: number;
+}
+
+/**
  * Rebuild a cue list with translated text and the ORIGINAL timings.
  *
  * `translations` must be positionally aligned with `cues` — which is what
  * `parseTranslationBatch` guarantees per batch. The length check is a last
  * backstop against a caller concatenating batches wrongly.
+ *
+ * When `options.localize` is true, the result is additionally processed by
+ * `localizeTranslatedCues`, which:
+ *   - retimes cues whose character density exceeds the readability threshold
+ *     (borrows from silence gaps, never overlaps adjacent cues), and
+ *   - attaches a per-cue `fontSizePct` override when the translated text is
+ *     significantly longer than the source.
  */
 export function applyTranslations(
   cues: readonly SubtitleCue[],
-  translations: readonly string[]
+  translations: readonly string[],
+  options: LocalizeOptions = {}
 ): SubtitleCue[] {
   if (cues.length !== translations.length) {
     throw new TranslationAlignmentError(
@@ -172,13 +198,24 @@ export function applyTranslations(
         "Refusing to save a misaligned track."
     );
   }
-  return cues.map((cue, i) => ({
+  const raw = cues.map((cue, i) => ({
     // Timings are copied, never derived and never round-tripped through the
     // model. A translated track is the source track with different words.
     start: cue.start,
     end: cue.end,
     text: translations[i],
   }));
+
+  if (options.localize) {
+    return localizeTranslatedCues(
+      cues,
+      raw,
+      options.baseFontSizePct ?? 5, // DEFAULT_SUBTITLE_STYLE.fontSizePct
+      options.videoDurationSeconds
+    );
+  }
+
+  return raw;
 }
 
 /** System prompt. Kept here so the rules and the validation live side by side. */
