@@ -361,16 +361,22 @@ export interface SubtitleMetrics {
  * scaled by the size they chose relative to the default: the default is
  * clamped exactly as master clamps it, and a larger request gets a
  * proportionally larger ceiling.
+ *
+ * `cueFontSizePct` (Task-00061): when a translated cue carries a per-cue font
+ * override (`SubtitleCue.fontSizePct`), pass it here. It replaces the style's
+ * `fontSizePct` for that cue only; every other metric is unaffected.
  */
 export function subtitleMetrics(
   style: SubtitleStyle | undefined,
-  frameHeight: number
+  frameHeight: number,
+  cueFontSizePct?: number
 ): SubtitleMetrics {
   const s = withDefaults(style);
   const h = Math.max(1, Number(frameHeight) || 0);
 
+  // Use the per-cue override when present, otherwise the track-level style.
   const pct = clampNumber(
-    s.fontSizePct,
+    cueFontSizePct ?? s.fontSizePct,
     SUBTITLE_FONT_PCT_MIN,
     SUBTITLE_FONT_PCT_MAX,
     DEFAULT_SUBTITLE_STYLE.fontSizePct
@@ -428,9 +434,17 @@ export interface SubtitleCssOptions {
   /**
    * Lay the text out right-to-left (SUB PR 5). Comes from the ACTIVE TRACK's
    * language, not from the style — RTL is a property of the script, not a knob
-   * the user turns. See `isRtlLanguage` in ./languages.
+   * the user turns. See `isRtlLanguage` in ./languages for why neither is offered yet.
    */
   rtl?: boolean;
+  /**
+   * Per-cue font-size override (Task-00061).
+   *
+   * Pass `cue.fontSizePct` here when rendering a translated cue. When set,
+   * `subtitleMetrics` uses this value instead of the style's `fontSizePct`,
+   * so the preview reflects the same size the ASS burn-in will use.
+   */
+  cueFontSizePct?: number;
 }
 
 export function toCssStyle(
@@ -440,7 +454,7 @@ export function toCssStyle(
   options?: SubtitleCssOptions
 ): SubtitleCssStyle {
   const s = withDefaults(style);
-  const m = subtitleMetrics(style, frameHeight);
+  const m = subtitleMetrics(style, frameHeight, options?.cueFontSizePct);
   const scale =
     Number.isFinite(renderedHeight) && (renderedHeight as number) > 0
       ? (renderedHeight as number) / Math.max(1, Number(frameHeight) || 1)
