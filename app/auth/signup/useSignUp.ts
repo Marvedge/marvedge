@@ -9,7 +9,7 @@ const signUpSchema = z
     name: z.string().min(1, "Please enter your name"),
     email: z.string().min(1, "Please enter your email").email("Invalid email address"),
 
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {

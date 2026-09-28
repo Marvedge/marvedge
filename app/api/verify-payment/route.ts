@@ -40,8 +40,15 @@ export async function POST(req: Request) {
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
+    if (!process.env.RAZORPAY_KEY_SECRET || !process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+      return NextResponse.json(
+        { success: false, message: "Payments are not configured" },
+        { status: 503 }
+      );
+    }
+
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(body.toString())
       .digest("hex");
 

@@ -16,6 +16,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
+    if (!process.env.RAZORPAY_KEY_SECRET || !process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+      return NextResponse.json({ error: "Payments are not configured" }, { status: 503 });
+    }
+
     const { amount } = PLANS[plan];
 
     const razorpay = new Razorpay({
