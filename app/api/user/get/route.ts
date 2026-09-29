@@ -11,7 +11,8 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
+    // Try exact match first, then case insensitive match so mixed case sessions still find the user.
+    let user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: {
         name: true,
@@ -24,6 +25,22 @@ export async function GET() {
         updatedAt: true,
       },
     });
+
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: { email: { equals: session.user.email, mode: "insensitive" } },
+        select: {
+          name: true,
+          email: true,
+          image: true,
+          bio: true,
+          location: true,
+          website: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    }
 
     if (!user) {
       return NextResponse.json({ user: null }, { status: 200 });
