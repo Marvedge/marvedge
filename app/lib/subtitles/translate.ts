@@ -156,11 +156,32 @@ export function parseTranslationBatch(content: string, expectedCount: number): s
 }
 
 /**
+ * Minimum on-screen duration enforced for cues in a *translated* track, in
+ * seconds.
+ *
+ * The localization engine (Task-00061) shortens some cues when the translated
+ * text is shorter than the source — fast single-word utterances can drop below
+ * 200 ms, producing a flicker that is imperceptible in the source language but
+ * very visible in Tamil and German where cue timing is already tight. 300 ms is
+ * the threshold below which human perception reliably registers flicker.
+ *
+ * This is intentionally higher than `MIN_CUE_SECONDS` (200 ms), which is a
+ * structural floor for user-editable cues. The structural floor is just enough
+ * to prevent zero-width cues; 300 ms is the readability floor for translated
+ * content that is never manually reviewed.
+ */
+export const MIN_TRANSLATED_CUE_SECONDS = 0.3;
+
+/**
  * Rebuild a cue list with translated text and the ORIGINAL timings.
  *
  * `translations` must be positionally aligned with `cues` — which is what
  * `parseTranslationBatch` guarantees per batch. The length check is a last
  * backstop against a caller concatenating batches wrongly.
+ *
+ * Enforces `MIN_TRANSLATED_CUE_SECONDS` on each output cue so that cues that
+ * are very short in the source language do not flicker on screen in the
+ * translated track.
  */
 export function applyTranslations(
   cues: readonly SubtitleCue[],
@@ -172,13 +193,16 @@ export function applyTranslations(
         "Refusing to save a misaligned track."
     );
   }
-  return cues.map((cue, i) => ({
+  return cues.map((cue, i) => {
     // Timings are copied, never derived and never round-tripped through the
     // model. A translated track is the source track with different words.
-    start: cue.start,
-    end: cue.end,
-    text: translations[i],
-  }));
+    const start = cue.start;
+    // Task-00079: clamp the cue to a minimum duration to prevent flicker in
+    // translated tracks. We stretch end forward, never start backward, so the
+    // cue stays aligned with the audio it describes.
+    const end = Math.max(cue.end, start + MIN_TRANSLATED_CUE_SECONDS);
+    return { start, end, text: translations[i] };
+  });
 }
 
 /** System prompt. Kept here so the rules and the validation live side by side. */
