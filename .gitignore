@@ -60,3 +60,7 @@ $py.class
 *.model
 *.pt
 *.bin
+
+cursor_templates/
+playwright-report/
+test-results/
