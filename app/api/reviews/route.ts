@@ -16,6 +16,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing rating or content" }, { status: 400 });
     }
 
+    const MAX_CONTENT_LENGTH = 1000;
+
+if (typeof rating !== "number" || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+  return NextResponse.json(
+    { error: "Rating must be a whole number between 1 and 5" },
+    { status: 400 }
+  );
+}
+
+if (typeof content !== "string" || content.trim().length === 0) {
+  return NextResponse.json({ error: "Review content is required" }, { status: 400 });
+}
+
+if (content.length > MAX_CONTENT_LENGTH) {
+  return NextResponse.json(
+    { error: `Review must be under ${MAX_CONTENT_LENGTH} characters` },
+    { status: 400 }
+  );
+}
+
+
     const existingReview = await prisma.review.findFirst({
       where: { userId: session.user.id },
     });

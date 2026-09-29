@@ -94,13 +94,17 @@ export default function ReviewModal({ isOpen, onClose }: { isOpen: boolean; onCl
           </div>
 
           <div className="space-y-2">
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="What do you think about Marvedge?"
-              className="review-textarea w-full h-32 p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6356d7] focus:border-transparent resize-none text-gray-700"
-            />
-          </div>
+  <textarea
+    value={content}
+    onChange={(e) => setContent(e.target.value)}
+    placeholder="What do you think about Marvedge?"
+    maxLength={1000}
+    className="review-textarea w-full h-32 p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6356d7] focus:border-transparent resize-none text-gray-700"
+  />
+  <span className="text-xs text-gray-400 block text-right">
+    {content.length}/1000
+  </span>
+</div>
 
           <button
             type="submit"
