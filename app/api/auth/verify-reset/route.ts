@@ -44,12 +44,18 @@ export async function POST(req: Request) {
       );
     }
 
+    // Reject absurd input before hashing so huge bodies cannot burn CPU.
+    if (typeof resetToken !== "string" || resetToken.length < 4 || resetToken.length > 256) {
+      return NextResponse.json({ error: "Invalid or expired reset link." }, { status: 400 });
+    }
+
     const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
 
     const resetRequest = await prisma.passwordReset.findFirst({
       where: {
         email,
         otp: resetTokenHash,
+        expiresAt: { gt: new Date() },
       },
     });
 
@@ -69,7 +75,7 @@ export async function POST(req: Request) {
     });
 
     if (!user || !user.password) {
-      return NextResponse.json({ error: "User not found." }, { status: 404 });
+      return NextResponse.json({ error: "Invalid or expired reset link." }, { status: 400 });
     }
 
     const isSamePassword = await compare(password, user.password);

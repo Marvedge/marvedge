@@ -53,12 +53,22 @@ export const authOptions: NextAuthOptions = {
 
           // Trim spaces so logins match accounts saved without spaces. Case is
           // left alone on purpose so existing mixed-case accounts keep working.
+          // Note: login throttle lives on the signin route because authorize
+          // has no request IP to key a limit on safely.
           const cleanEmail = credentials.email.trim();
 
           // Attempt to fetch user from DB
-          const user = await prisma.user.findUnique({
+          // Try exact match first so mixed case rows keep working, then try
+          // a case blind match for logins typed in a different case.
+          const exactUser = await prisma.user.findUnique({
             where: { email: cleanEmail },
           });
+          let user = exactUser;
+          if (!user) {
+            user = await prisma.user.findFirst({
+              where: { email: { equals: cleanEmail, mode: "insensitive" } },
+            });
+          }
 
           // Always perform a bcrypt comparison so missing accounts and incorrect
           // passwords have comparable response times.

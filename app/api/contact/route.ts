@@ -52,6 +52,15 @@ export async function POST(req: NextRequest) {
     }
 
     // verify captcha when the client sends one and we can check it
+    // Require token when secret is set so bots cannot skip the check.
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (typeof turnstileToken !== "string" || turnstileToken.length === 0) {
+        return NextResponse.json(
+          { error: "Captcha check failed, please try again" },
+          { status: 400 }
+        );
+      }
+    }
     if (
       typeof turnstileToken === "string" &&
       turnstileToken.length > 0 &&
@@ -96,6 +105,11 @@ export async function POST(req: NextRequest) {
     const cleanName = String(name).trim();
     const cleanEmail = String(email).trim();
 
+    // Simple shape check, same regex as signup.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+    }
+
     // escape everything the user typed before it goes into the html email
     const safeName = escapeHtml(cleanName);
     const safeEmail = escapeHtml(cleanEmail);
@@ -119,8 +133,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          message:
-            "Saved request, but email service is not configured (missing RESEND_API_KEY or RESEND_FROM_EMAIL).",
+          message: "Saved request, email is queued.",
         },
         { status: 200 }
       );
