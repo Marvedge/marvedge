@@ -32,6 +32,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // Reject absurd input before hashing so huge bodies cannot burn CPU.
+  if (otp.length < 4 || otp.length > 10) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
+
   // keep weak and absurd inputs out before touching crypto
   if (newPassword.length < 8) {
     return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
@@ -51,6 +56,12 @@ export async function POST(req: Request) {
   });
 
   if (!resetRequest) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
+
+  // Check the account still exists before update so a stale code cannot throw.
+  const account = await prisma.user.findUnique({ where: { email } });
+  if (!account) {
     return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
   }
 
