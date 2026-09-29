@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "worker:reframe": "tsx reframe-worker/index.ts"
+    "worker:reframe": "tsx reframe-worker/index.ts",
+    "subtitles:demo-karaoke": "tsx scripts/demoKaraokeSubtitles.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
