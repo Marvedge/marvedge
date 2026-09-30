@@ -4,6 +4,10 @@
 // and the internal ML API gateway (REFRAME_ML_SERVICE_URL).
 // Contains ZERO Prisma / Postgres imports.
 
+import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
+
 export interface ReframeWorkerConfig {
   redisUrl: string;
   backendUrl: string;
@@ -15,7 +19,42 @@ export interface ReframeWorkerConfig {
   callbackRetryDelayMs: number;
 }
 
+/**
+ * Loads environment variables following Next.js precedence:
+ * .env.local takes priority over .env.
+ */
+export function loadReframeWorkerEnv(): void {
+  const rootDirs = [
+    process.cwd(),
+    path.resolve(process.cwd(), ".."),
+    __dirname,
+    path.resolve(__dirname, ".."),
+  ];
+
+  const envType = process.env.NODE_ENV || "development";
+  const envFileNames = [
+    `.env.${envType}.local`,
+    `.env.local`,
+    `.env.${envType}`,
+    `.env`,
+  ];
+
+  for (const dir of rootDirs) {
+    for (const fileName of envFileNames) {
+      const fullPath = path.resolve(dir, fileName);
+      if (fs.existsSync(fullPath)) {
+        dotenv.config({ path: fullPath, override: false });
+      }
+    }
+  }
+}
+
+// Ensure env is loaded as soon as config module is imported
+loadReframeWorkerEnv();
+
 export function getReframeWorkerConfig(): ReframeWorkerConfig {
+  loadReframeWorkerEnv();
+
   const redisUrl = process.env.REDIS_URL?.trim() || "redis://localhost:6379";
 
   const rawBackendUrl =
@@ -25,6 +64,12 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
   const backendUrl = rawBackendUrl.replace(/\/+$/, "");
 
   const callbackSecret = process.env.CALLBACK_SECRET?.trim() || "";
+
+  if (!callbackSecret && process.env.NODE_ENV !== "test") {
+    console.warn(
+      "[reframe-worker] Warning: CALLBACK_SECRET is not configured. Backend callbacks to /api/jobs/callback will fail with 401 Unauthorized."
+    );
+  }
 
   const rawMlUrl =
     process.env.REFRAME_ML_SERVICE_URL?.trim() || "http://localhost:8000";

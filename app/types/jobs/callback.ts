@@ -16,6 +16,7 @@ export type ReframeCompletedCallbackPayload = {
   jobId: string;
   status: "COMPLETED";
   cropTargets: CropTargetData;
+  exportedUrl?: string;
 };
 
 export type ReframeFailedCallbackPayload = {

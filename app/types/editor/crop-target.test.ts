@@ -1,3 +1,19 @@
+    it("simplifies stationary crop targets down to boundaries", () => {
+      const stationaryTargets = Array.from({ length: 100 }, (_, i) => ({
+        timestamp_sec: i * 0.04,
+        frame: i,
+        crop: { x: 100, y: 50, width: 608, height: 1080 },
+      }));
+      const filter = buildFfmpegCropFilter(stationaryTargets);
+      expect(filter).toBeDefined();
+      // Should not contain 100 nested if statements
+      expect(filter).not.toContain("if(lt(t,3.0000)");
+      // Stationary simplifies to start and end
+      expect(filter).toContain("100.0000");
+    });
+
+  });
+
   describe("run_autoflip_to_json contract conformance", () => {
     it("validates mock output payload from run_autoflip_to_json", () => {
       const autoflipOutput: CropTargetData = {

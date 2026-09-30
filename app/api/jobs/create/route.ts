@@ -267,8 +267,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing or invalid duration" }, { status: 400 });
     }
 
-    // Resolve the caller before any ownership check below: the demo check
-    // compares against userId, so the user row must be loaded first.
     const user = await prisma.user.findFirst({
       where: {
         OR: [

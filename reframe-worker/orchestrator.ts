@@ -26,6 +26,7 @@ import {
   type MlInferenceRequest,
 } from "./client";
 import { getReframeWorkerConfig, type ReframeWorkerConfig } from "./config";
+import { renderReframedVideo } from "./render";
 
 export interface ReframeJobContext {
   jobId: string;
@@ -36,6 +37,7 @@ export interface ReframeJobContext {
 export interface ReframeOrchestratorDeps {
   config?: ReframeWorkerConfig;
   executeMl?: (request: MlInferenceRequest) => Promise<CropTargetData>;
+  renderVideo?: (videoUrl: string, cropTargets: CropTargetData) => Promise<string>;
   sendCallback?: (payload: JobCallbackPayload) => Promise<{ success: boolean }>;
   resultCache?: Map<string, CropTargetData>;
 }
@@ -59,7 +61,7 @@ export async function processReframeJob(
   payload: ReframeJobPayload,
   context: ReframeJobContext,
   deps: ReframeOrchestratorDeps = {}
-): Promise<{ success: boolean; cropTargets: CropTargetData }> {
+): Promise<{ success: boolean; cropTargets: CropTargetData; exportedUrl?: string }> {
   const config = deps.config ?? getReframeWorkerConfig();
   const cache = deps.resultCache ?? globalResultCache;
 
@@ -69,6 +71,11 @@ export async function processReframeJob(
       callMlInference(config.mlServiceUrl, req, {
         timeoutMs: config.mlTimeoutMs,
       }));
+
+  const renderVideo =
+    deps.renderVideo ??
+    ((videoUrl: string, cropData: CropTargetData) =>
+      renderReframedVideo(videoUrl, cropData));
 
   const sendCallback =
     deps.sendCallback ??
@@ -136,7 +143,47 @@ export async function processReframeJob(
     }
   }
 
-  // ── Step 2: Deliver Authenticated Callback to Backend ─────────────────
+  // ── Step 2: Render Reframed MP4 ─────────────────────────────────────────
+  let exportedUrl: string | undefined;
+  try {
+    console.log(
+      `[reframe-worker] Rendering reframed video for job ${payload.jobId}...`
+    );
+    exportedUrl = await renderVideo(payload.videoUrl, cropTargets);
+    console.log(
+      `[reframe-worker] Reframed video rendered and uploaded: ${exportedUrl}`
+    );
+  } catch (renderError) {
+    const errMsg =
+      renderError instanceof Error ? renderError.message : String(renderError);
+
+    if (!finalAttempt) {
+      console.warn(
+        `[reframe-worker] Rendering failed on attempt ${context.attemptsMade + 1}/${context.maxAttempts} for job ${payload.jobId}. Retrying via BullMQ... Error: ${errMsg}`
+      );
+      throw renderError;
+    }
+
+    // Final attempt: notify backend of permanent failure
+    console.error(
+      `[reframe-worker] Rendering exhausted all ${context.maxAttempts} attempts for job ${payload.jobId}. Sending FAILED callback... Error: ${errMsg}`
+    );
+    try {
+      await sendCallback({
+        jobId: payload.jobId,
+        status: "FAILED",
+        error: `Video rendering failed: ${errMsg}`,
+      });
+    } catch (cbErr) {
+      console.error(
+        `[reframe-worker] Failed to send FAILED callback for job ${payload.jobId}:`,
+        cbErr
+      );
+    }
+    throw renderError;
+  }
+
+  // ── Step 3: Deliver Authenticated Callback to Backend ─────────────────
   try {
     console.log(
       `[reframe-worker] Delivering COMPLETED callback for job ${payload.jobId}...`
@@ -145,6 +192,7 @@ export async function processReframeJob(
       jobId: payload.jobId,
       status: "COMPLETED",
       cropTargets,
+      exportedUrl,
     });
 
     // Callback succeeded; clean up cache
@@ -152,7 +200,7 @@ export async function processReframeJob(
     console.log(
       `[reframe-worker] Job ${payload.jobId} processed and callback confirmed successfully.`
     );
-    return { success: true, cropTargets };
+    return { success: true, cropTargets, exportedUrl };
   } catch (cbError) {
     // If the backend definitively rejected the payload (e.g. 400 validation error from validateCropTargetData)
     if (cbError instanceof CallbackHttpError && cbError.isClientError) {
