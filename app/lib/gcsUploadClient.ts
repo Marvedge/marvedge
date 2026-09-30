@@ -31,6 +31,7 @@ export async function uploadBlobToGcs({
 }): Promise<{
   url: string;
   publicUrl?: string;
+  signedReadUrl?: string;
   object?: string;
   bucket?: string;
 }> {
@@ -68,9 +69,28 @@ export async function uploadBlobToGcs({
     throw new Error(`Direct GCS upload failed (${putResponse.status})`);
   }
 
+  // 3) Ask the backend to confirm the bytes that landed fit the cap. The
+  // declared size in step 1 is what the client SAID it would send; this is
+  // the control that measures what actually arrived and removes oversize
+  // objects. Honest uploads pass through untouched.
+  const verifyResponse = await fetch("/api/gcs/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "verify", object: body.object }),
+  });
+
+  const verifyBody = (await verifyResponse.json().catch(() => ({}))) as GcsUploadResponse;
+
+  if (!verifyResponse.ok || !verifyBody.ok) {
+    throw new Error(
+      verifyBody.error || `GCS upload verification failed (${verifyResponse.status})`
+    );
+  }
+
   return {
     url: body.url,
-    publicUrl: body.publicUrl || body.signedReadUrl,
+    publicUrl: body.signedReadUrl || body.publicUrl,
+    signedReadUrl: body.signedReadUrl,
     object: body.object,
     bucket: body.bucket,
   };

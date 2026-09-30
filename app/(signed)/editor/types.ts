@@ -14,6 +14,8 @@ export type TextOverlayItem = {
   parentH?: number;
 };
 
+export type SubtitleWord = { word: string; start: number; end: number };
+
 export type SubtitleCue = {
   start: number;
   end: number;
@@ -27,4 +29,5 @@ export type SubtitleCue = {
    * back to the track-level `subtitleStyle.fontSizePct` when it is undefined.
    */
   fontSizePct?: number;
+  words?: SubtitleWord[];
 };
