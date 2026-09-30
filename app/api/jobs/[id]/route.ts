@@ -71,6 +71,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
           alignedVideoUrl: rec.alignedVideoUrl ?? null,
           duration: rec.duration ?? null,
         };
+        // AVS_DUB surfaces the same aligned shape as AVS_SYNC.
+      } else if (rec.kind === "AVS_DUB") {
+        aligned = {
+          alignedVideoUrl: rec.alignedVideoUrl ?? null,
+          duration: rec.duration ?? null,
+        };
       }
     }
 

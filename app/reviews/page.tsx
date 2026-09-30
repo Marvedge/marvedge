@@ -103,8 +103,11 @@ export default function ReviewsPage() {
                       </div>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 leading-none">
+                  <div className="min-w-0">
+                    <h3
+                      className="font-semibold text-gray-900 leading-none truncate"
+                      title={review.user?.name || "Anonymous User"}
+                    >
                       {review.user?.name || "Anonymous User"}
                     </h3>
                     {review.user?.bio && (

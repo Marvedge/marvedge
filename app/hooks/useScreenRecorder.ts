@@ -89,7 +89,7 @@ const postCaptureMessage = (
   if (typeof window === "undefined") {
     return;
   }
-  window.postMessage({ source: "marvedge-web", action, ...extra }, "*");
+  window.postMessage({ source: "marvedge-web", action, ...extra }, window.location.origin);
 };
 
 // Every recording-store binding the recorder needs, gathered in one place.
