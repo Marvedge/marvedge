@@ -18,7 +18,9 @@ export async function GET(req: NextRequest) {
     }
     const id = req.nextUrl.searchParams.get("id");
     if (id) {
-      const demo = await prisma.demo.findUnique({
+      // findFirst: { id, userId } is not a unique selector, so findUnique
+      // would throw here. id is globally unique, so this matches at most one row.
+      const demo = await prisma.demo.findFirst({
         where: { id, userId: user.id },
       });
       return demo

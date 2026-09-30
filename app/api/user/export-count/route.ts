@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
-      return NextResponse.json({ count: 0 }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
@@ -34,6 +34,6 @@ export async function GET() {
     return NextResponse.json({ count: exportCount, plan: user.plan });
   } catch (error) {
     console.error("Error fetching export count", error);
-    return NextResponse.json({ count: 0 }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch export count" }, { status: 500 });
   }
 }
