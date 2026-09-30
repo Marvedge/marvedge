@@ -83,6 +83,24 @@ describe("reframe-worker/render", () => {
     }
   });
 
+  it("uses deterministic job-based public_id for Cloudinary upload to prevent duplicate assets on retry", async () => {
+    await renderReframedVideo(
+      "https://storage.googleapis.com/test-bucket/source.mp4",
+      validCropTargets,
+      { jobId: "job-fixed-456" },
+      {
+        downloadVideo: mockDownloadVideo,
+        runFfmpeg: mockRunFfmpeg,
+        uploadToCloudinary: mockUploadToCloudinary,
+      }
+    );
+
+    expect(mockUploadToCloudinary).toHaveBeenCalledWith(
+      expect.stringContaining("output.mp4"),
+      { publicId: "reframed_job-fixed-456" }
+    );
+  });
+
   it("throws clear error when videoUrl is missing", async () => {
     await expect(
       renderReframedVideo("", validCropTargets, {}, {})
