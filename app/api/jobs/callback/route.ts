@@ -30,11 +30,16 @@ export async function POST(req: NextRequest) {
     // ── Fetch existing job ────────────────────────────────────────────
     const job = await prisma.videoJob.findUnique({
       where: { id: jobId },
-      select: { id: true, demoId: true },
+      select: { id: true, demoId: true, status: true },
     });
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // Late duplicate ignored when job already reached a terminal state.
+    if (job.status === "COMPLETED" || job.status === "CANCELLED") {
+      return NextResponse.json({ success: true, ignored: true });
     }
 
     // ── Update VideoJob ───────────────────────────────────────────────
