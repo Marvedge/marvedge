@@ -121,6 +121,25 @@ export {
   type TranslationSegment,
 } from "./translate";
 
+export {
+  applyRtlBidi,
+  escapeAssText,
+  escapeFfmpegFilterPath,
+  formatAssTime,
+  generateAssContent,
+  writeAssFile,
+} from "./ass";
+
+export {
+  cuesFromWhisperSegments,
+  cuesFromWhisperWords,
+  normalizeWhisperResponse,
+  normalizeWhisperWords,
+  transcribeAudioWithWhisper,
+  type WhisperTranscriptionOptions,
+  type WordClusteringOptions,
+} from "./whisper";
+
 export type {
   SttCoverage,
   SttModel,
@@ -132,4 +151,9 @@ export type {
   SubtitleTrack,
   SubtitleTrackSource,
   SubtitleTrackStatus,
+  SubtitleWord,
+  WhisperSegment,
+  WhisperTranscript,
+  WhisperVerboseJsonResponse,
+  WhisperWord,
 } from "./types";
