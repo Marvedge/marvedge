@@ -10,10 +10,12 @@
     "test": "vitest run",
     "worker:reframe": "tsx reframe-worker/index.ts",
     "subtitles:demo-karaoke": "tsx scripts/demoKaraokeSubtitles.ts",
-    "demo:captioned-cropped": "tsx scripts/demoCaptionedCroppedClip.ts"
+    "demo:captioned-cropped": "tsx scripts/demoCaptionedCroppedClip.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.9.0",
+    "@auth/prisma-adapter": "^2.11.3",
     "@aws-sdk/client-dynamodb": "^3.911.0",
     "@aws-sdk/client-lambda": "^3.911.0",
     "@aws-sdk/client-s3": "^3.1108.0",
@@ -43,8 +45,8 @@
     "html2canvas": "^1.4.1",
     "ioredis": "^5.10.0",
     "lucide-react": "^0.518.0",
-    "next": "^15.0.5",
-    "next-auth": "^4.24.11",
+    "next": "^15.5.26",
+    "next-auth": "^4.24.15",
     "next-themes": "^0.4.6",
     "nprogress": "^0.2.0",
     "openai": "^6.46.0",
@@ -66,6 +68,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.63.0",
     "@types/bcrypt": "^5.0.2",
     "@types/bcryptjs": "^3.0.0",
     "@types/ffmpeg": "^1.0.7",
@@ -87,8 +90,11 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "tar": "^7.5.16",
+    "tar": "^7.5.22",
     "postcss": "^8.5.15",
     "uuid": "^11.1.1"
+  },
+  "prisma": {
+    "seed": "node scripts/seed-reviews.mjs"
   }
 }

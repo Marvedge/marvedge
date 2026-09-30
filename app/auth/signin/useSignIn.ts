@@ -9,6 +9,13 @@ const signInSchema = z.object({
   password: z.string().min(1, "Please enter your password"),
 });
 
+const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
+const AUTH_SERVICE_ERROR = "Unable to sign in. Please try again later.";
+
+function safeSignInError(error: string | null | undefined): string {
+  return error === INVALID_CREDENTIALS_ERROR ? INVALID_CREDENTIALS_ERROR : AUTH_SERVICE_ERROR;
+}
+
 export const useSignIn = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,16 +34,16 @@ export const useSignIn = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    const email = emailRef.current?.value ?? "";
+    if (isLoading) {
+      return;
+    }
+    // Trim email so login matches signup, leave password raw.
+    const email = (emailRef.current?.value ?? "").trim();
     const password = passwordRef.current?.value ?? "";
-    // console.log(email, password, "first");
     setIsLoading(true);
 
     try {
-      // ✅ Validate input
       signInSchema.parse({ email, password });
-      // console.log(email, password);
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -46,21 +53,19 @@ export const useSignIn = () => {
     }
 
     try {
-      // ✅ Sign in with credentials
       const res = await signIn("credentials", {
         email,
         password,
         redirect: false,
       });
-      // console.log(email, password);
-      console.log("Sign-in response:", res);
 
       if (res?.ok) {
         toast.success("Signed in successfully!");
-        await update(); // refresh session
+        await update();
 
         const params = new URLSearchParams(window.location.search);
         let callbackUrl = params.get("callbackUrl") ?? "/dashboard";
+
         if (!callbackUrl.startsWith("/")) {
           try {
             const url = new URL(callbackUrl);
@@ -70,14 +75,13 @@ export const useSignIn = () => {
             callbackUrl = "/dashboard";
           }
         }
-        router.push(callbackUrl); // ✅ redirect to where the user came from
+
+        router.push(callbackUrl);
       } else {
-        toast.error(res?.error || "Invalid credentials.");
+        toast.error(safeSignInError(res?.error));
       }
-    } catch (err) {
-      console.log("error from the new catch block");
-      console.error("Sign-in error:", err);
-      toast.error("Something went wrong. Please try again.");
+    } catch {
+      toast.error(AUTH_SERVICE_ERROR);
     } finally {
       setIsLoading(false);
     }

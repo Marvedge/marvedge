@@ -71,6 +71,46 @@ export interface AlignedSource {
   duration: number;
 }
 
+// --- Dubbed-audio pacing (Task-00052) ----------------------------------------
+
+/**
+ * Where a step's dubbed audio sits inside the continuous dub track.
+ * Structurally identical to StepTiming so both can be handled by the same
+ * normalization helpers, but semantically distinct: these timings describe an
+ * externally recorded human dub rather than internally generated TTS.
+ */
+export interface DubTiming {
+  stepId: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * A pre-recorded dubbed audio track with per-step boundary markers.
+ * The track is a single continuous file; dubTimings tells the worker which
+ * slice of that file corresponds to each step so it can time-stretch/align
+ * each segment independently.
+ */
+export interface DubTrack {
+  /** GCS/HTTPS URL of the continuous dubbed audio file (MP3/WAV/AAC). */
+  dubUrl: string;
+  /** Total duration of the dubbed track in seconds. */
+  duration: number;
+  /** Language/locale code of the dubbed audio (e.g. "hi-IN", "fr-FR"). */
+  language?: string;
+  /** Per-step slice markers into the dub track. */
+  dubTimings: DubTiming[];
+}
+
+/**
+ * Output of the dub pacing pre-pass: a single aligned MP4 with the dubbed
+ * audio muxed in and each step time-stretched to match the dub's pacing.
+ */
+export interface DubAlignedSource {
+  videoUrl: string;
+  duration: number;
+}
+
 /** The complete AVS state stored under Demo.editing.avs. */
 export interface AvsState {
   steps: Step[];
@@ -81,4 +121,8 @@ export interface AvsState {
   captions?: CaptionCue[];
   /** Freeze-frame/silence aligned source with the voiceover muxed in (AVS-2.4). */
   aligned?: AlignedSource;
+  /** Pre-recorded dubbed audio track with per-step timing markers (Task-00052). */
+  dub?: DubTrack;
+  /** Time-stretch aligned source with the dubbed audio muxed in (Task-00052). */
+  dubAligned?: DubAlignedSource;
 }

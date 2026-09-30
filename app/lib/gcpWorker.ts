@@ -18,6 +18,9 @@ export type GcpWorkerPayload = {
   audioUrl?: string;
   steps?: Array<{ id: string; index?: number; startTime: number; endTime: number }>;
   stepTimings?: Array<{ stepId: string; start: number; end: number }>;
+  // AVS dubbed-audio pacing (`/avs-dub`).
+  dubUrl?: string;
+  dubTimings?: Array<{ stepId: string; start: number; end: number }>;
   // WTM webcam-bubble compositing (`/wtm-composite`).
   webcamUrl?: string;
   position?: string;
@@ -46,6 +49,8 @@ export type GcpWorkerResponse = {
     stepTimings?: Array<{ stepId: string; start: number; end: number }>;
     // AVS time-alignment (`/avs-sync`).
     alignedVideoUrl?: string;
+    // AVS dubbed-audio pacing (`/avs-dub`).
+    dubAlignedVideoUrl?: string;
     // WTM webcam-bubble compositing (`/wtm-composite`).
     compositedVideoUrl?: string;
     // HLS packaging (`/package-hls`).
@@ -387,4 +392,62 @@ export async function invokeGcpPackageHls(
     renditions: Array.isArray(result?.renditions) ? result.renditions : [],
     skipped: result?.skipped === true,
   };
+}
+
+// --- AVS dubbed-audio pacing (Task-00052) ------------------------------------
+
+export type GcpDubSyncPayload = {
+  videoUrl: string;
+  dubUrl: string;
+  steps: Array<{ id: string; index?: number; startTime: number; endTime: number }>;
+  dubTimings: Array<{ stepId: string; start: number; end: number }>;
+};
+
+export type GcpDubSyncResult = {
+  /** GCS public URL of the time-stretch aligned MP4 with the dub muxed in. */
+  alignedVideoUrl: string;
+  duration: number;
+};
+
+// Dub pacing encodes every step independently (setpts + atempo) then concats,
+// which is comparable to /avs-sync in compute. Same 15-minute budget.
+const AVS_DUB_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Trigger the Cloud Run worker's `/avs-dub` endpoint: per-step time-stretch
+ * of the source video and dubbed audio so that each step's pacing matches the
+ * recorded dub. Produces ONE aligned MP4 that the normal export then processes.
+ *
+ * Strategy (mirrored from the worker):
+ *   ratio in [0.8, 1.25]   → setpts video stretch + atempo audio stretch
+ *   ratio > 1.25 (long dub) → max-stretch + minimal freeze-frame residual
+ *   ratio < 0.80 (short dub) → max-stretch audio + silence tail
+ *
+ * FALLBACK: no dubUrl/dubTimings → worker returns the source unchanged.
+ */
+export async function invokeGcpDubSync(
+  payload: GcpDubSyncPayload
+): Promise<GcpDubSyncResult> {
+  const body = await invokeGcpWorker(
+    {
+      recipeId: "avs-dub",
+      videoUrl: payload.videoUrl,
+      dubUrl: payload.dubUrl,
+      steps: payload.steps,
+      dubTimings: payload.dubTimings,
+    },
+    "/avs-dub",
+    { timeoutMs: AVS_DUB_TIMEOUT_MS }
+  );
+
+  const result = body.result;
+  // The worker returns alignedVideoUrl (same field name as /avs-sync) for
+  // symmetry, so callers can treat both aligned sources uniformly.
+  const alignedVideoUrl =
+    typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
+  if (!alignedVideoUrl) {
+    throw new Error("Dub-sync worker returned no aligned video URL");
+  }
+  const duration = typeof result?.duration === "number" ? result.duration : 0;
+  return { alignedVideoUrl, duration };
 }

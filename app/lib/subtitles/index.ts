@@ -109,6 +109,7 @@ export {
 export { isSubtitleTranslateAllowed } from "./access";
 
 export {
+  MIN_TRANSLATED_CUE_SECONDS,
   TRANSLATION_BATCH_SIZE,
   TRANSLATION_SYSTEM_PROMPT,
   TranslationAlignmentError,
