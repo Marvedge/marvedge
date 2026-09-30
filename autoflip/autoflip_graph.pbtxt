@@ -88,7 +88,9 @@ node {
   output_stream: "REGIONS:object_regions"
   options {
     [mediapipe.autoflip.LocalizationToRegionCalculatorOptions.ext] {
-      output_all_signals: true
+      # Avoid adding a duplicate low-priority OBJECT region for every
+      # semantic detection; those regions can distort downstream crop fitting.
+      output_all_signals: false
     }
   }
 }
@@ -104,20 +106,20 @@ node {
     [mediapipe.autoflip.SignalFusingCalculatorOptions.ext] {
       signal_settings {
         type { standard: FACE_CORE_LANDMARKS }
-        min_score: 0.95
-        max_score: 1.0
+        min_score: 0.85
+        max_score: 0.9
         is_required: false
       }
       signal_settings {
         type { standard: FACE_ALL_LANDMARKS }
-        min_score: 0.9
-        max_score: 0.95
+        min_score: 0.8
+        max_score: 0.85
         is_required: false
       }
       signal_settings {
         type { standard: FACE_FULL }
-        min_score: 0.9
-        max_score: 0.95
+        min_score: 0.8
+        max_score: 0.85
         is_required: false
       }
       signal_settings {
@@ -140,8 +142,8 @@ node {
       }
       signal_settings {
         type: { standard: OBJECT }
-        min_score: 0.6
-        max_score: 0.7
+        min_score: 0.1
+        max_score: 0.2
         is_required: false
       }
     }
@@ -165,8 +167,8 @@ node {
         score_aggregation_type: CONSTANT
       }
       scene_camera_motion_analyzer_options: {
-        motion_stabilization_threshold_percent: 0.8
-        salient_point_bound: 0.2
+        motion_stabilization_threshold_percent: 0.5
+        salient_point_bound: 0.499
       }
       padding_parameters: {
         blur_cv_size: 200

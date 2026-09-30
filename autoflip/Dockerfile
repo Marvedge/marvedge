@@ -250,4 +250,3 @@ COPY autoflip/service.py autoflip/server.py autoflip/test_service.py /app/
 
 EXPOSE 8000
 ENTRYPOINT ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
-
