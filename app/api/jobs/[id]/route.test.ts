@@ -258,4 +258,59 @@ describe("GET /api/jobs/[id]", () => {
     expect(json.fallbackStage).toBe("DUBBING");
     expect(json.fallbackReason).toBe("GCP worker failed after multiple retries");
   });
+
+  describe("Lifecycle Polling State (Immediate Post-Creation)", () => {
+    it("returns HTTP 200 with waiting state and null aligned fields for newly created PENDING AVS_DUB job", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "job-dub-pending",
+        userId: "u-1",
+        status: "PENDING",
+        progress: 0,
+        exportedUrl: null,
+        error: null,
+        jobData: { kind: "AVS_DUB" },
+      } as never);
+
+      const [req, ctx] = makeGetRequest("job-dub-pending");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.state).toBe("waiting");
+      expect(json.status).toBe("waiting");
+      expect(json.progress).toBe(0);
+      expect(json.exportedUrl).toBeNull();
+      expect(json.error).toBeNull();
+      expect(json.jobData).toEqual({ kind: "AVS_DUB" });
+      expect(json.aligned).toEqual({
+        alignedVideoUrl: null,
+        duration: null,
+      });
+    });
+
+    it("returns HTTP 200 with active state for PROCESSING AVS_DUB job", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "job-dub-processing",
+        userId: "u-1",
+        status: "PROCESSING",
+        progress: 20,
+        exportedUrl: null,
+        error: null,
+        jobData: { kind: "AVS_DUB" },
+      } as never);
+
+      const [req, ctx] = makeGetRequest("job-dub-processing");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.state).toBe("active");
+      expect(json.status).toBe("active");
+      expect(json.progress).toBe(20);
+    });
+  });
 });
