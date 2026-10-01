@@ -1,14 +1,14 @@
-// Whisper transcription client and word-level timestamp normalizer (Task-00038).
+// Whisper transcription client and word-level timestamp normalizer (Task-00038, Task-00067).
 //
 // Responsibilities:
-// 1. Calls OpenAI Whisper API with verbose_json and word-level timestamps.
+// 1. Calls Groq Whisper API (whisper-large-v3) with verbose_json and word-level timestamps.
 // 2. Normalizes Whisper word tokens into the repository's standard SubtitleCue format.
-// 3. Preserves exact word-level timing on each SubtitleCue (cue.words) for Task-00041
-//    and future interactive/karaoke features.
+// 3. Preserves exact word-level timing on each SubtitleCue (cue.words) for Task-00041, Task-00066,
+//    and interactive/karaoke features.
 // 4. Clusters words into flicker-free, readable phrase-level subtitle cues using
 //    the same proven timing heuristics as Deepgram (gap > 0.8s, dur > 4.2s, len > 56).
 
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 import type {
   SubtitleCue,
   SubtitleWord,
@@ -29,6 +29,7 @@ export interface WordClusteringOptions {
 
 export interface WhisperTranscriptionOptions {
   apiKey?: string;
+  model?: string;
   language?: string;
   prompt?: string;
   temperature?: number;
@@ -204,7 +205,8 @@ export function normalizeWhisperResponse(
 }
 
 /**
- * Transcribes an audio file or stream using OpenAI's Whisper API with word-level timestamps.
+ * Transcribes an audio file or stream using Groq's Whisper API with word-level timestamps.
+ * Defaults to model "whisper-large-v3" and requires GROQ_API_KEY.
  * Returns both the complete transcript (with words and segments) and clustered SubtitleCue array.
  */
 export async function transcribeAudioWithWhisper(
@@ -214,16 +216,16 @@ export async function transcribeAudioWithWhisper(
   transcript: WhisperTranscript;
   cues: SubtitleCue[];
 }> {
-  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+  const apiKey = options.apiKey || process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY for Whisper transcription");
+    throw new Error("Missing GROQ_API_KEY for Whisper transcription");
   }
 
-  const openai = new OpenAI({ apiKey });
+  const groq = new Groq({ apiKey });
 
-  const params: OpenAI.Audio.Transcriptions.TranscriptionCreateParams = {
+  const params: Groq.Audio.Transcriptions.TranscriptionCreateParams = {
     file: audioFile,
-    model: "whisper-1",
+    model: options.model || "whisper-large-v3",
     response_format: "verbose_json",
     timestamp_granularities: ["word", "segment"],
     ...(options.language ? { language: options.language } : {}),
@@ -231,7 +233,7 @@ export async function transcribeAudioWithWhisper(
     ...(typeof options.temperature === "number" ? { temperature: options.temperature } : {}),
   };
 
-  const response = await openai.audio.transcriptions.create(params);
+  const response = await groq.audio.transcriptions.create(params);
 
   return normalizeWhisperResponse(response, options.clustering);
 }

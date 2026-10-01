@@ -11,7 +11,8 @@
     "worker:reframe": "tsx reframe-worker/index.ts",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
-    "test:avs": "node cloudrun-worker/avs_dub.test.js"
+    "test:avs": "node cloudrun-worker/avs_dub.test.js",
+    "subtitles:demo-karaoke": "tsx scripts/demoKaraokeSubtitles.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -41,6 +42,7 @@
     "fix-webm-duration": "^1.0.6",
     "fluent-ffmpeg": "^2.1.3",
     "framer-motion": "^12.43.0",
+    "groq-sdk": "^1.6.0",
     "hls.js": "^1.7.1",
     "html2canvas": "^1.4.1",
     "ioredis": "^5.10.0",

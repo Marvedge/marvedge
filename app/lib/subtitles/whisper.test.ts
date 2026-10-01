@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   cuesFromWhisperSegments,
   cuesFromWhisperWords,
   normalizeWhisperResponse,
   normalizeWhisperWords,
+  transcribeAudioWithWhisper,
 } from "./whisper";
 import type { WhisperSegment, WhisperWord } from "./types";
+import { arabicWhisperResponse } from "./fixtures/whisperSample";
 
 describe("Whisper word timestamp normalization & clustering (Task-00038)", () => {
   describe("normalizeWhisperWords", () => {
@@ -197,6 +199,137 @@ describe("Whisper word timestamp normalization & clustering (Task-00038)", () =>
     it("throws an error for non-object inputs", () => {
       expect(() => normalizeWhisperResponse(null)).toThrow();
       expect(() => normalizeWhisperResponse("not an object")).toThrow();
+    });
+  });
+
+  describe("Groq Whisper transcription & normalization (Task-00067)", () => {
+    it("normalizes Groq whisper-large-v3 verbose_json with word and segment timestamps", () => {
+      const groqResponse = {
+        task: "transcribe",
+        language: "english",
+        duration: 5.0,
+        text: "Groq Whisper delivers ultra-fast transcription.",
+        words: [
+          { word: "Groq", start: 0.1, end: 0.4 },
+          { word: "Whisper", start: 0.45, end: 0.9 },
+          { word: "delivers", start: 0.95, end: 1.4 },
+          { word: "ultra-fast", start: 1.45, end: 2.1 },
+          { word: "transcription.", start: 2.15, end: 3.0 },
+        ],
+        segments: [
+          {
+            id: 0,
+            start: 0.1,
+            end: 3.0,
+            text: "Groq Whisper delivers ultra-fast transcription.",
+          },
+        ],
+      };
+
+      const { transcript, cues } = normalizeWhisperResponse(groqResponse);
+      expect(transcript.language).toBe("english");
+      expect(transcript.duration).toBe(5.0);
+      expect(transcript.words).toHaveLength(5);
+      expect(transcript.segments).toHaveLength(1);
+      expect(cues).toHaveLength(1);
+      expect(cues[0].text).toBe("Groq Whisper delivers ultra-fast transcription.");
+      expect(cues[0].words).toHaveLength(5);
+      expect(cues[0].start).toBe(0.1);
+      expect(cues[0].end).toBe(3.0);
+    });
+
+    it("handles missing word timestamps fallback from Groq", () => {
+      const groqSegmentOnly = {
+        task: "transcribe",
+        language: "english",
+        duration: 3.5,
+        text: "Segment only fallback output.",
+        segments: [
+          {
+            id: 0,
+            start: 0.2,
+            end: 3.2,
+            text: "Segment only fallback output.",
+          },
+        ],
+        words: [],
+      };
+
+      const { transcript, cues } = normalizeWhisperResponse(groqSegmentOnly);
+      expect(transcript.words).toHaveLength(0);
+      expect(cues).toHaveLength(1);
+      expect(cues[0].words).toBeUndefined();
+      expect(cues[0].text).toBe("Segment only fallback output.");
+      expect(cues[0].start).toBe(0.2);
+      expect(cues[0].end).toBe(3.2);
+    });
+
+    it("handles Arabic/RTL Groq response with word timestamps", () => {
+      const { transcript, cues } = normalizeWhisperResponse(arabicWhisperResponse);
+      expect(transcript.language).toBe("arabic");
+      expect(transcript.words.length).toBeGreaterThan(0);
+      expect(cues.length).toBeGreaterThan(0);
+      expect(cues[0].words).toBeDefined();
+      expect(cues[0].words![0].word).toBe("مرحبا");
+    });
+
+    it("handles malformed/missing API response gracefully", () => {
+      expect(() => normalizeWhisperResponse(null)).toThrow("Invalid Whisper response: expected an object");
+      expect(() => normalizeWhisperResponse(undefined)).toThrow("Invalid Whisper response: expected an object");
+      expect(() => normalizeWhisperResponse(12345)).toThrow("Invalid Whisper response: expected an object");
+    });
+
+    describe("transcribeAudioWithWhisper", () => {
+      it("throws a clear actionable error when GROQ_API_KEY is missing", async () => {
+        const origKey = process.env.GROQ_API_KEY;
+        delete process.env.GROQ_API_KEY;
+        try {
+          await expect(transcribeAudioWithWhisper({} as any)).rejects.toThrow(
+            "Missing GROQ_API_KEY for Whisper transcription"
+          );
+        } finally {
+          if (origKey !== undefined) process.env.GROQ_API_KEY = origKey;
+        }
+      });
+
+      it("invokes Groq API with whisper-large-v3, verbose_json, and timestamp granularities", async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+          task: "transcribe",
+          language: "english",
+          duration: 2.0,
+          text: "Mocked transcription response",
+          words: [
+            { word: "Mocked", start: 0.0, end: 0.5 },
+            { word: "transcription", start: 0.55, end: 1.2 },
+            { word: "response", start: 1.25, end: 1.9 },
+          ],
+          segments: [
+            { id: 0, start: 0.0, end: 1.9, text: "Mocked transcription response" },
+          ],
+        });
+
+        const GroqModule = await import("groq-sdk");
+        const GroqClass = GroqModule.default;
+
+        // Mock post method on prototype which handles transcriptions.create
+        const spy = vi.spyOn(GroqClass.prototype as any, "post").mockImplementation(async (path: string, options: any) => {
+          return mockCreate(options?.body);
+        });
+
+        try {
+          const dummyAudio = Buffer.from("dummy-audio");
+          const result = await transcribeAudioWithWhisper(dummyAudio, {
+            apiKey: "gsk_test_mock_key",
+          });
+
+          expect(mockCreate).toHaveBeenCalled();
+          expect(result.transcript.text).toBe("Mocked transcription response");
+          expect(result.cues).toHaveLength(1);
+          expect(result.cues[0].words).toHaveLength(3);
+        } finally {
+          spy.mockRestore();
+        }
+      });
     });
   });
 });
