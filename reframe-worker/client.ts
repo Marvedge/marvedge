@@ -25,6 +25,20 @@ export interface MlInferenceEnvelope {
   [key: string]: unknown;
 }
 
+export class MlInferenceHttpError extends Error {
+  readonly status: number;
+  readonly isClientError: boolean;
+  readonly isServerError: boolean;
+
+  constructor(status: number, message: string) {
+    super(`ML inference HTTP ${status}: ${message}`);
+    this.name = "MlInferenceHttpError";
+    this.status = status;
+    this.isClientError = status >= 400 && status < 500;
+    this.isServerError = status >= 500 && status < 600;
+  }
+}
+
 import type { JobCallbackPayload } from "../app/types/jobs/callback";
 import {
   CallbackHttpError,
@@ -32,12 +46,7 @@ import {
   postJobCallbackWithRetry,
 } from "../app/lib/jobs/callbackClient";
 
-export {
-  type JobCallbackPayload,
-  CallbackHttpError,
-  postJobCallback,
-  postJobCallbackWithRetry,
-};
+export { type JobCallbackPayload, CallbackHttpError, postJobCallback, postJobCallbackWithRetry };
 
 /**
  * Invokes the pure, stateless ML inference service over HTTP POST /reframe.
@@ -73,9 +82,7 @@ export async function callMlInference(
       } catch {
         errDetail = await response.text().catch(() => "");
       }
-      throw new Error(
-        `ML inference HTTP ${response.status}${errDetail ? `: ${errDetail}` : ""}`
-      );
+      throw new MlInferenceHttpError(response.status, errDetail || response.statusText);
     }
 
     const data = (await response.json()) as MlInferenceEnvelope;
@@ -84,9 +91,7 @@ export async function callMlInference(
     }
 
     if (data.ok === false) {
-      throw new Error(
-        `ML inference error: ${data.error || "Service reported failure"}`
-      );
+      throw new Error(`ML inference error: ${data.error || "Service reported failure"}`);
     }
 
     // Direct CropTargetData root envelope support (Task-00016 schema)
@@ -116,9 +121,7 @@ export async function callMlInference(
       return data.cropTargets as CropTargetData;
     }
 
-    throw new Error(
-      "ML inference response envelope missing 'crop_targets' object"
-    );
+    throw new Error("ML inference response envelope missing 'crop_targets' object");
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`ML inference timed out after ${timeoutMs}ms`);
@@ -128,4 +131,3 @@ export async function callMlInference(
     clearTimeout(timer);
   }
 }
-
