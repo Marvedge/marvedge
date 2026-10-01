@@ -861,8 +861,13 @@ function writeAssSubtitles(tempDir, cues, w, h, style, language) {
 }
 
 function parseChunkIndex(chunkId) {
+  // Unknown ids have no chunk suffix so return -1 and let caller use local timeline.
   const m = String(chunkId || "").match(/_chunk_(\d+)(?:\.\w+)?$/);
-  return m ? Number.parseInt(m[1], 10) || 0 : 0;
+  if (!m) {
+    return -1;
+  }
+  const n = Number.parseInt(m[1], 10);
+  return Number.isNaN(n) ? -1 : n;
 }
 
 function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
@@ -1031,9 +1036,16 @@ async function renderChunkFromRecipe({
     timelineDuration = duration;
   } else {
     const chunkIndex = parseChunkIndex(chunkId);
-    chunkAbsStart = chunkIndex * chunkDurationSecs;
-    chunkAbsEnd = chunkAbsStart + (probe.videoDuration || chunkDurationSecs);
-    timelineDuration = probe.videoDuration;
+    if (chunkIndex < 0) {
+      // No chunk suffix and no explicit window so use local timeline.
+      chunkAbsStart = 0;
+      chunkAbsEnd = probe.videoDuration;
+      timelineDuration = probe.videoDuration;
+    } else {
+      chunkAbsStart = chunkIndex * chunkDurationSecs;
+      chunkAbsEnd = chunkAbsStart + (probe.videoDuration || chunkDurationSecs);
+      timelineDuration = probe.videoDuration;
+    }
   }
 
   const slicedSegments = overlapSliceAbsolute(
