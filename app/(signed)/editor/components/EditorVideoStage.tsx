@@ -57,6 +57,8 @@ export default function EditorVideoStage({
     setCurrentTime,
     setDuration,
     setPlaying,
+    avs,
+    previewDubSource,
   } = useEditorStore(
     useShallow((s) => ({
       videoUrl: s.videoUrl,
@@ -68,9 +70,16 @@ export default function EditorVideoStage({
       setCurrentTime: s.setCurrentTime,
       setDuration: s.setDuration,
       setPlaying: s.setPlaying,
+      avs: s.avs,
+      previewDubSource: s.previewDubSource,
     }))
   );
 
+  // A completed dub swaps the preview source (freshly-aligned MP4 plays here)
+  // via the additive `avs.dubAligned` + `previewDubSource` toggle, while the
+  // original `videoUrl` keeps driving every other part of the editor.
+  const previewVideoUrl =
+    previewDubSource && avs?.dubAligned?.videoUrl ? avs.dubAligned.videoUrl : videoUrl;
   const { uploadVideoFile, isUploading } = useEditorVideoUpload();
 
   const { isDraggingZoomTarget, handleZoomTargetMouseDown, preview } = zoom;
@@ -105,7 +114,7 @@ export default function EditorVideoStage({
         }}
       >
         <VideoPreviewPlayer
-          videoUrl={videoUrl}
+          videoUrl={previewVideoUrl}
           playerRef={playerRef}
           playing={playing}
           volume={volume}
