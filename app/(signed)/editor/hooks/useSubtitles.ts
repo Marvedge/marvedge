@@ -114,6 +114,31 @@ async function pollSubtitleJob(jobId: string, isCancelled: () => boolean): Promi
   return { status: "failed", error: "Subtitle generation timed out" };
 }
 
+/**
+ * Resolves the source URL to pass to /api/subtitles/create.
+ *
+ * Invariant (Task-00044):
+ * - HTTPS videoUrl (including Cloudinary HTTPS URLs): passed directly to /api/subtitles/create;
+ *   uploadBlobToGcs() is NEVER called.
+ * - blob: URLs: preserve existing production GCS fallback.
+ */
+export async function resolveSubtitleSourceUrl(videoUrl: string): Promise<string> {
+  if (videoUrl.startsWith("blob:")) {
+    const resp = await fetch(videoUrl);
+    if (!resp.ok) {
+      throw new Error("Failed to read recorded video blob");
+    }
+    const blob = await resp.blob();
+    const upload = await uploadBlobToGcs({
+      blob,
+      filename: "subtitle_source.webm",
+      kind: "subtitle-source",
+    });
+    return upload.url;
+  }
+  return videoUrl;
+}
+
 export function useSubtitles({ editorState }: UseSubtitlesProps) {
   const { params, videoUrl, currentTime, savedDemoId, duration } = editorState;
   const {
@@ -238,21 +263,10 @@ export function useSubtitles({ editorState }: UseSubtitlesProps) {
     cancelledRef.current = false;
     jobIdRef.current = null;
     try {
-      let subtitleSourceUrl = videoUrl;
       if (videoUrl.startsWith("blob:")) {
         toast.loading("Uploading audio source...", { id: toastId });
-        const resp = await fetch(videoUrl);
-        if (!resp.ok) {
-          throw new Error("Failed to read recorded video blob");
-        }
-        const blob = await resp.blob();
-        const upload = await uploadBlobToGcs({
-          blob,
-          filename: "subtitle_source.webm",
-          kind: "subtitle-source",
-        });
-        subtitleSourceUrl = upload.url;
       }
+      const subtitleSourceUrl = await resolveSubtitleSourceUrl(videoUrl);
 
       // SUB PR 5: the chosen generation language, replacing a hardcoded
       // "multi". The store's default IS "multi", so a user who never opens the

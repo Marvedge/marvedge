@@ -111,6 +111,16 @@ export interface DubAlignedSource {
   duration: number;
 }
 
+/**
+ * An in-flight dubbing job, recorded so a reload can re-attach to the job the
+ * backend is still processing (the client resumes polling instead of losing
+ * it). Persisted alongside the rest of the AVS state under Demo.editing.avs.
+ */
+export interface DubJob {
+  jobId: string;
+  startedAt: number;
+}
+
 /** The complete AVS state stored under Demo.editing.avs. */
 export interface AvsState {
   steps: Step[];
@@ -125,4 +135,6 @@ export interface AvsState {
   dub?: DubTrack;
   /** Time-stretch aligned source with the dubbed audio muxed in (Task-00052). */
   dubAligned?: DubAlignedSource;
+  /** In-flight dubbing job, so a reload can re-attach and keep polling. */
+  dubJob?: DubJob;
 }
