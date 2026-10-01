@@ -127,7 +127,6 @@ export {
   escapeFfmpegFilterPath,
   formatAssTime,
   generateAssContent,
-  writeAssFile,
 } from "./ass";
 
 export {
