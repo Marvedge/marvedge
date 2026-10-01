@@ -174,7 +174,12 @@ console.log("\n[avs-dub] per-step pacing decisions\n");
 }
 
 // ---------------------------------------------------------------------------
-// Summary
-// ---------------------------------------------------------------------------
 console.log(`\n[avs-dub] ${passed + failed} tests — ${passed} passed, ${failed} failed\n`);
-process.exit(failed > 0 ? 1 : 0);
+
+if (failed > 0) {
+  throw new Error(`[avs-dub] ${failed} test(s) failed`);
+}
+
+if (!process.env.VITEST) {
+  process.exit(0);
+}

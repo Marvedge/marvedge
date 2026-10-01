@@ -100,12 +100,19 @@ describe("GET /api/jobs/[id]", () => {
     const json = await res.json();
     expect(json).toEqual({
       success: true,
+      id: "job-reframe-1",
       state: "completed",
+      status: "completed",
       progress: 100,
       exportedUrl: null,
       error: null,
       subtitles: null,
       cropTargets: sampleCropTargets,
+      jobData: {
+        kind: "REFRAME",
+        targetAspectRatio: "9:16",
+        cropTargets: sampleCropTargets,
+      },
     });
   });
 
@@ -131,5 +138,179 @@ describe("GET /api/jobs/[id]", () => {
     const json = await res.json();
     expect(json.subtitles).toEqual([{ text: "Hello" }]);
     expect(json.cropTargets).toBeUndefined();
+    // Task-82: status and jobData must always be present.
+    expect(json.status).toBe("completed");
+    expect(json.jobData).toMatchObject({ kind: "SUBTITLES" });
+  });
+
+  it("surfaces fallback metadata when present on jobData", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-reframe-fallback",
+      userId: "u-1",
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl: "https://example.com/reframed.mp4",
+      error: null,
+      jobData: {
+        kind: "REFRAME",
+        targetAspectRatio: "9:16",
+        cropTargets: {
+          schema_version: 1,
+          source: { width: 1920, height: 1080 },
+          output: { aspect_ratio: "9:16" },
+          crop_targets: [{ timestamp_sec: 0, crop: { x: 656, y: 0, width: 608, height: 1080 } }],
+        },
+        fallback: true,
+        fallbackStage: "REFRAME",
+        fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
+        attemptsMade: 1,
+      },
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-reframe-fallback");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Task-82: status and jobData must be present in every successful response.
+    expect(json.id).toBe("job-reframe-fallback");
+    expect(json.state).toBe("completed");
+    expect(json.status).toBe("completed");
+    expect(json.jobData).toMatchObject({
+      kind: "REFRAME",
+      fallback: true,
+      fallbackStage: "REFRAME",
+      fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
+      attemptsMade: 1,
+    });
+    // Individual unpacked fields are preserved for backward compatibility.
+    expect(json.fallback).toBe(true);
+    expect(json.fallbackStage).toBe("REFRAME");
+    expect(json.fallbackReason).toBe("AUTOFLIP_EMPTY_CROP_TARGETS");
+    expect(json.attemptsMade).toBe(1);
+  });
+
+  it("surfaces alignedVideoUrl and duration for successful AVS_DUB jobs", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-dub-success",
+      userId: "u-1",
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned.mp4",
+      error: null,
+      jobData: {
+        kind: "AVS_DUB",
+        alignedVideoUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned.mp4",
+        duration: 12.5,
+        fallback: false,
+      },
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-dub-success");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.state).toBe("completed");
+    expect(json.status).toBe("completed");
+    expect(json.aligned).toEqual({
+      alignedVideoUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned.mp4",
+      duration: 12.5,
+    });
+    expect(json.exportedUrl).toBe("https://storage.googleapis.com/bucket/avs-dub/aligned.mp4");
+    expect(json.fallback).toBe(false);
+  });
+
+  it("surfaces graceful degradation fallback metadata for degraded AVS_DUB jobs", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-dub-degraded",
+      userId: "u-1",
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+      error: null,
+      jobData: {
+        kind: "AVS_DUB",
+        alignedVideoUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+        duration: 10,
+        fallback: true,
+        fallbackStage: "DUBBING",
+        fallbackReason: "GCP worker failed after multiple retries",
+      },
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-dub-degraded");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.state).toBe("completed");
+    expect(json.status).toBe("completed");
+    expect(json.aligned).toEqual({
+      alignedVideoUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+      duration: 10,
+    });
+    expect(json.exportedUrl).toBe("https://storage.googleapis.com/bucket/reframed_captioned.mp4");
+    expect(json.fallback).toBe(true);
+    expect(json.fallbackStage).toBe("DUBBING");
+    expect(json.fallbackReason).toBe("GCP worker failed after multiple retries");
+  });
+
+  describe("Lifecycle Polling State (Immediate Post-Creation)", () => {
+    it("returns HTTP 200 with waiting state and null aligned fields for newly created PENDING AVS_DUB job", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "job-dub-pending",
+        userId: "u-1",
+        status: "PENDING",
+        progress: 0,
+        exportedUrl: null,
+        error: null,
+        jobData: { kind: "AVS_DUB" },
+      } as never);
+
+      const [req, ctx] = makeGetRequest("job-dub-pending");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.state).toBe("waiting");
+      expect(json.status).toBe("waiting");
+      expect(json.progress).toBe(0);
+      expect(json.exportedUrl).toBeNull();
+      expect(json.error).toBeNull();
+      expect(json.jobData).toEqual({ kind: "AVS_DUB" });
+      expect(json.aligned).toEqual({
+        alignedVideoUrl: null,
+        duration: null,
+      });
+    });
+
+    it("returns HTTP 200 with active state for PROCESSING AVS_DUB job", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "job-dub-processing",
+        userId: "u-1",
+        status: "PROCESSING",
+        progress: 20,
+        exportedUrl: null,
+        error: null,
+        jobData: { kind: "AVS_DUB" },
+      } as never);
+
+      const [req, ctx] = makeGetRequest("job-dub-processing");
+      const res = await GET(req, ctx);
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.state).toBe("active");
+      expect(json.status).toBe("active");
+      expect(json.progress).toBe(20);
+    });
   });
 });
