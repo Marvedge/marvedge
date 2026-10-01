@@ -1,5 +1,5 @@
 import path from "node:path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 /**
  * Vitest previously ran on pure defaults, because every suite lived in
@@ -18,5 +18,8 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "."),
     },
+  },
+  test: {
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
 });
