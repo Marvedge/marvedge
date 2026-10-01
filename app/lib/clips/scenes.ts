@@ -18,6 +18,8 @@ export interface SceneDetectionOptions {
   totalDuration?: number;
   /** Custom ffmpeg binary path override (defaults to ffmpeg-static). */
   ffmpegPath?: string;
+  /** Optional execFile implementation for dependency injection in tests. */
+  execFile?: typeof execFile;
 }
 
 /**
@@ -118,8 +120,10 @@ export async function detectSceneCuts(
     "-",
   ];
 
+  const runExecFile = options.execFile ?? execFile;
+
   return new Promise((resolve) => {
-    execFile(
+    runExecFile(
       ffmpegBin,
       args,
       { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
