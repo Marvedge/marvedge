@@ -20,7 +20,6 @@ except ImportError:
 warnings.filterwarnings("ignore")
 
 TARGET_FPS = 25
-
 def scene_detect(args):
     videoManager = VideoManager([args.videoFilePath])
     statsManager = StatsManager()
@@ -45,7 +44,6 @@ def inference_video(args):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
     except ImportError:
         device = 'cpu'
-        
     DET = S3FD(device=device)
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
@@ -93,22 +91,20 @@ def inference_video(args):
             scaled_img = scaled_img[[2, 1, 0], :, :]
             processed_tensors.append(torch.from_numpy(scaled_img))
             
-        all_tensors = torch.stack(processed_tensors) # Shape: (ChunkSize, 3, H, W)
+        all_tensors = torch.stack(processed_tensors)
         
         with torch.no_grad():
             for b_start in range(0, len(all_tensors), batch_size):
                 batch_tensors = all_tensors[b_start : b_start + batch_size].to(device)
                 
-                # Forward pass
                 y = DET.net(batch_tensors)
                 detections = y.data
                 
-                # Unpack batch results
                 for b_idx in range(detections.size(0)):
                     bboxes = np.empty(shape=(0, 5))
-                    for i in range(detections.size(1)): # Classes
+                    for i in range(detections.size(1)):
                         j = 0
-                        while detections[b_idx, i, j, 0] > 0.9: # conf_th
+                        while detections[b_idx, i, j, 0] > 0.9:
                             score = detections[b_idx, i, j, 0].item()
                             pt = (detections[b_idx, i, j, 1:] * scale_t).cpu().numpy()
                             bbox = (pt[0], pt[1], pt[2], pt[3], score)
@@ -166,16 +162,15 @@ def track_shot(args, sceneFaces):
     active_tracks = []
     completed_tracks = []
 
-    # Determine baseline frame index if sceneFaces has non-empty frames
     base_frame = None
     for f_idx, ffaces in enumerate(sceneFaces):
         if len(ffaces) > 0:
             base_frame = ffaces[0]['frame'] - f_idx
             break
+
     for f_idx, frameFaces in enumerate(sceneFaces):
         curr_frame = (base_frame + f_idx) if base_frame is not None else f_idx
 
-        # Retire active tracks that have exceeded numFailedDet
         still_active = []
         for trk in active_tracks:
             if curr_frame - trk[-1]['frame'] > args.numFailedDet:
@@ -187,7 +182,6 @@ def track_shot(args, sceneFaces):
         if len(frameFaces) == 0:
             continue
 
-        # Greedy bipartite matching between active tracks and current frame faces
         matches = []
         for t_idx, trk in enumerate(active_tracks):
             last_bbox = trk[-1]['bbox']
@@ -196,7 +190,6 @@ def track_shot(args, sceneFaces):
                 if iou > iouThres:
                     matches.append((iou, t_idx, d_idx))
 
-        # Sort candidate matches by highest IoU first
         matches.sort(key=lambda x: x[0], reverse=True)
 
         assigned_tracks = set()
@@ -208,12 +201,10 @@ def track_shot(args, sceneFaces):
                 assigned_tracks.add(t_idx)
                 assigned_dets.add(d_idx)
 
-        # Unmatched faces in this frame initiate new candidate tracks
         for d_idx, face in enumerate(frameFaces):
             if d_idx not in assigned_dets:
                 active_tracks.append([face])
 
-    # Collect all remaining active tracks
     completed_tracks.extend(active_tracks)
 
     tracks = []
@@ -224,7 +215,6 @@ def track_shot(args, sceneFaces):
         frameNum = numpy.array([f['frame'] for f in raw_track])
         bboxes = numpy.array([numpy.array(f['bbox']) for f in raw_track])
 
-        # Ensure frame numbers are strictly monotonically increasing (deduplicate if needed)
         if len(numpy.unique(frameNum)) != len(frameNum):
             unique_frames, unique_indices = numpy.unique(frameNum, return_index=True)
             frameNum = unique_frames
@@ -234,17 +224,24 @@ def track_shot(args, sceneFaces):
 
         frameI = numpy.arange(frameNum[0], frameNum[-1] + 1)
         bboxesI = []
+
         for ij in range(0, 4):
             interpfn = interp1d(frameNum, bboxes[:, ij])
             bboxesI.append(interpfn(frameI))
+
         bboxesI = numpy.stack(bboxesI, axis=1)
 
         mean_w = numpy.mean(bboxesI[:, 2] - bboxesI[:, 0])
         mean_h = numpy.mean(bboxesI[:, 3] - bboxesI[:, 1])
-        if max(mean_w, mean_h) > args.minFaceSize:
-            tracks.append({'frame': frameI, 'bbox': bboxesI, 'is_fallback': False, 'fallback_reason': None})
 
-    # Sort tracks chronologically by start frame
+        if max(mean_w, mean_h) > args.minFaceSize:
+            tracks.append({
+                'frame': frameI,
+                'bbox': bboxesI,
+                'is_fallback': False,
+                'fallback_reason': None
+            })
+
     tracks.sort(key=lambda x: x['frame'][0])
     return tracks
 
@@ -274,29 +271,38 @@ def center_crop_fallback(args, scene_start_frame, scene_end_frame):
 
 def crop_video(args, track, cropFile, flist=None):
     if flist is None:
-        flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) 
+        flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
         flist.sort()
-    vOut = cv2.VideoWriter(cropFile + 't.avi', cv2.VideoWriter_fourcc(*'XVID'), TARGET_FPS, (224, 224))
+
+    vOut = cv2.VideoWriter(
+        cropFile + 't.avi',
+        cv2.VideoWriter_fourcc(*'XVID'),
+        TARGET_FPS,
+        (224, 224)
+    )
+
     dets = {'x': [], 'y': [], 's': []}
-    for det in track['bbox']: 
-        dets['s'].append(max((det[3] - det[1]), (det[2] - det[0])) / 2) 
-        dets['y'].append((det[1] + det[3]) / 2) 
-        dets['x'].append((det[0] + det[2]) / 2) 
-    
+
+    for det in track['bbox']:
+        dets['s'].append(max((det[3] - det[1]), (det[2] - det[0])) / 2)
+        dets['y'].append((det[1] + det[3]) / 2)
+        dets['x'].append((det[0] + det[2]) / 2)
+
     # Kernel size for medfilt must be odd and <= len(dets)
     k_size = min(13, len(dets['s']))
     if k_size % 2 == 0:
         k_size -= 1
+
     if k_size >= 3:
-        dets['s'] = signal.medfilt(dets['s'], kernel_size=k_size)  
+        dets['s'] = signal.medfilt(dets['s'], kernel_size=k_size)
         dets['x'] = signal.medfilt(dets['x'], kernel_size=k_size)
         dets['y'] = signal.medfilt(dets['y'], kernel_size=k_size)
 
     for fidx, frame in enumerate(track['frame']):
         cs = args.cropScale
-        bs = dets['s'][fidx]   
-        bsi = int(bs * (1 + 2 * cs))   
-        
+        bs = dets['s'][fidx]
+        bsi = int(bs * (1 + 2 * cs))
+
         # Frame bounds and read guard
         if frame < 0 or frame >= len(flist):
             face = numpy.zeros((224, 224, 3), dtype=numpy.uint8)
@@ -309,10 +315,15 @@ def crop_video(args, track, cropFile, flist=None):
             vOut.write(face)
             continue
 
-        frame_pad = numpy.pad(image, ((bsi, bsi), (bsi, bsi), (0, 0)), 'constant', constant_values=(110, 110))
-        my = dets['y'][fidx] + bsi  
-        mx = dets['x'][fidx] + bsi  
-        
+        frame_pad = numpy.pad(
+            image,
+            ((bsi, bsi), (bsi, bsi), (0, 0)),
+            'constant',
+            constant_values=(110, 110)
+        )
+
+        my = dets['y'][fidx] + bsi
+        mx = dets['x'][fidx] + bsi
         H, W = frame_pad.shape[:2]
         y1 = max(0, int(my-bs))
         y2 = max(0, min(H, int(my+bs*(1+2*cs))))
@@ -363,7 +374,6 @@ def crop_video(args, track, cropFile, flist=None):
     temp_avi = cropFile + 't.avi'
     if os.path.exists(temp_avi):
         os.remove(temp_avi)
-
     return {
         'track': track,
         'proc_track': dets,
