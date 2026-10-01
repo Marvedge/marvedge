@@ -68,7 +68,8 @@ export const useSignIn = () => {
 
         if (!callbackUrl.startsWith("/")) {
           try {
-            const url = new URL(callbackUrl);
+            //const url = new URL(callbackUrl);
+            const url = new URL(callbackUrl, window.location.origin);
             callbackUrl =
               url.origin === window.location.origin ? url.pathname + url.search : "/dashboard";
           } catch {
