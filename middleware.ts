@@ -12,6 +12,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   const url = req.nextUrl.clone();
 
   // 1. Exclude system paths and APIs
+  // API routes skip middleware auth, each route checks auth itself.
   if (
     url.pathname.startsWith("/_next") ||
     url.pathname.startsWith("/api") ||
@@ -32,8 +33,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
     hostname === devDomain ||
     hostname.endsWith(".vercel.app"); // production + preview deployments
   const isSubdomain =
-    !isMainDomain &&
-    (hostname.endsWith(`.${rootDomain}`) || hostname.endsWith(`.${devDomain}`));
+    !isMainDomain && (hostname.endsWith(`.${rootDomain}`) || hostname.endsWith(`.${devDomain}`));
 
   if (!isMainDomain) {
     const domainKey = isSubdomain ? hostname.split(".")[0] : hostname.split(":")[0];
@@ -54,6 +54,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   }
 
   // 3. Main domain auth checks
+  // Protected pages: /dashboard, /demos, /settings. Keep list narrow so public pages stay open.
   if (
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/demos") ||

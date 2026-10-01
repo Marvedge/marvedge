@@ -706,7 +706,7 @@ async function resolveExportBackground({
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function createMp4Downloader(jobId: string, sidebarTitle: string) {
+export function createMp4Downloader(jobId: string, sidebarTitle: string) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return async (_url: string) => {
     const safeName = (sidebarTitle || "Exported_Demo")
@@ -746,13 +746,13 @@ function createMp4Downloader(jobId: string, sidebarTitle: string) {
   };
 }
 
-interface PollExportJobParams {
+export interface PollExportJobParams {
   jobId: string;
   setProgress: (p: number) => void;
   toastId: string | number;
 }
 
-async function pollExportJob({
+export async function pollExportJob({
   jobId,
   setProgress,
   toastId,

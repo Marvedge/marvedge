@@ -240,8 +240,50 @@ export function interpolateCropTarget(
 }
 
 /**
+ * Reduces redundant crop targets by removing intermediate points where coordinates
+ * are stationary or colinear with linear interpolation within tolerancePx.
+ * Always preserves the first target, the last target, and significant motion changes.
+ */
+export function simplifyCropTargets<
+  T extends {
+    timestamp_sec: number;
+    crop: { x: number; y: number; width?: number; height?: number };
+  }
+>(targets: T[], tolerancePx = 0.5): T[] {
+  if (targets.length <= 2) {
+    return [...targets];
+  }
+
+  const result: T[] = [targets[0]];
+
+  for (let i = 1; i < targets.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = targets[i];
+    const next = targets[i + 1];
+
+    const dtTotal = next.timestamp_sec - prev.timestamp_sec;
+    if (dtTotal <= 1e-6) continue;
+
+    const alpha = (curr.timestamp_sec - prev.timestamp_sec) / dtTotal;
+    const interpX = prev.crop.x + (next.crop.x - prev.crop.x) * alpha;
+    const interpY = prev.crop.y + (next.crop.y - prev.crop.y) * alpha;
+
+    const diffX = Math.abs(curr.crop.x - interpX);
+    const diffY = Math.abs(curr.crop.y - interpY);
+
+    if (diffX > tolerancePx || diffY > tolerancePx) {
+      result.push(curr);
+    }
+  }
+
+  result.push(targets[targets.length - 1]);
+  return result;
+}
+
+/**
  * Builds an FFmpeg evaluation expression for a given axis ('x' or 'y')
  * suitable for use inside FFmpeg's `crop` filter.
+ * Uses a balanced binary tree to avoid exceeding FFmpeg's recursive expression evaluation limit.
  */
 export function buildCropExpression(
   targets: Array<{ timestamp_sec: number; crop: { x: number; y: number } }>,
@@ -250,43 +292,62 @@ export function buildCropExpression(
   if (targets.length === 0) {
     return "0";
   }
-  const value = (crop: { x: number; y: number }) => Number(crop[axis]).toFixed(4);
+  const val = (crop: { x: number; y: number }) => Number(crop[axis]).toFixed(4);
   if (targets.length === 1) {
-    return value(targets[0].crop);
+    return val(targets[0].crop);
   }
-  let expression = value(targets[targets.length - 1].crop);
-  for (let i = targets.length - 2; i >= 0; i--) {
+
+  function segment(i: number): string {
     const start = targets[i].timestamp_sec.toFixed(4);
-    const end = targets[i + 1].timestamp_sec.toFixed(4);
-    const current = value(targets[i].crop);
-    const next = value(targets[i + 1].crop);
+    const current = val(targets[i].crop);
+    const next = val(targets[i + 1].crop);
     const delta = (Number(next) - Number(current)).toFixed(4);
     const duration = Math.max(
       EPS,
       targets[i + 1].timestamp_sec - targets[i].timestamp_sec
     ).toFixed(4);
-    const interpolated = `${current}+(${delta})*(t-${start})/${duration}`;
-    expression = `if(lt(t,${end}),${interpolated},${expression})`;
+    return `${current}+(${delta})*(t-${start})/${duration}`;
   }
+
+  function buildTree(left: number, right: number): string {
+    if (left === right) {
+      const end = targets[left + 1].timestamp_sec.toFixed(4);
+      const seg = segment(left);
+      const fallback = val(targets[left + 1].crop);
+      return `if(lt(t,${end}),${seg},${fallback})`;
+    }
+    const mid = Math.floor((left + right) / 2);
+    const midTime = targets[mid + 1].timestamp_sec.toFixed(4);
+    const leftBranch = buildTree(left, mid);
+    const rightBranch = buildTree(mid + 1, right);
+    return `if(lt(t,${midTime}),${leftBranch},${rightBranch})`;
+  }
+
+  let expression = buildTree(0, targets.length - 2);
+
   if (targets[0].timestamp_sec > 0) {
     const firstStart = targets[0].timestamp_sec.toFixed(4);
-    const firstVal = value(targets[0].crop);
+    const firstVal = val(targets[0].crop);
     expression = `if(lt(t,${firstStart}),${firstVal},${expression})`;
   }
+
   return expression;
 }
 
 /**
  * Builds the FFmpeg crop filter string for a set of crop targets.
  * Uses target[0] dimensions as reference crop window and interpolates position.
+ * Expressions are quoted ('x' and 'y') to prevent FFmpeg filterchain parser from
+ * treating mathematical commas as filter delimiters.
  */
 export function buildFfmpegCropFilter(targets: CropTarget[]): string | null {
   if (targets.length === 0) {
     return null;
   }
+  const simplified = simplifyCropTargets(targets);
   const cropWidth = Math.max(1, Math.round(targets[0].crop.width));
   const cropHeight = Math.max(1, Math.round(targets[0].crop.height));
-  const cropX = `min(max(${buildCropExpression(targets, "x")},0),iw-${cropWidth})`;
-  const cropY = `min(max(${buildCropExpression(targets, "y")},0),ih-${cropHeight})`;
-  return `crop=${cropWidth}:${cropHeight}:${cropX}:${cropY}:exact=1`;
+  const cropX = `min(max(${buildCropExpression(simplified, "x")},0),iw-${cropWidth})`;
+  const cropY = `min(max(${buildCropExpression(simplified, "y")},0),ih-${cropHeight})`;
+  return `crop=${cropWidth}:${cropHeight}:'${cropX}':'${cropY}':exact=1`;
 }

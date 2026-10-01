@@ -24,7 +24,7 @@ const UserAvatar = ({
 
   return (
     <button
-      className={`rounded-full text-white flex items-center justify-center font-bold shadow cursor-pointer border-2 border-white hover:scale-105 transition-all overflow-hidden shrink-0 ${className}`}
+      className={`rounded-full text-white flex items-center justify-center font-bold shadow cursor-pointer border-2 border-white dark:border-none hover:scale-105 transition-all overflow-hidden shrink-0 ${className}`}
       onClick={onClick}
       style={{
         width: containerSize,

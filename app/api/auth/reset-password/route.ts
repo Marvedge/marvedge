@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // Reject absurd input before hashing so huge bodies cannot burn CPU.
+  if (otp.length < 4 || otp.length > 10) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
+
   // keep weak and absurd inputs out before touching crypto
   if (newPassword.length < 8) {
     return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
@@ -39,15 +45,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Password is too long" }, { status: 400 });
   }
 
+  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+
   const resetRequest = await prisma.passwordReset.findFirst({
     where: {
       email,
-      otp,
+      otp: otpHash,
       expiresAt: { gt: new Date() },
     },
   });
 
   if (!resetRequest) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
+
+  // Check the account still exists before update so a stale code cannot throw.
+  const account = await prisma.user.findUnique({ where: { email } });
+  if (!account) {
     return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
   }
 

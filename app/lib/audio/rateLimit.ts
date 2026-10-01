@@ -53,13 +53,18 @@ export async function isAudioRateLimited(userId: string, scope: RateLimitScope):
 export async function isRateLimited(
   key: string,
   limit: number,
-  windowSeconds: number
+  windowSeconds: number,
+  // Opt-in closed mode for routes where spam costs real money or data
+  // (contact form writes rows and sends email). Default stays open so player
+  // telemetry and other availability-sensitive routes never break when Redis
+  // is down — pass true only where blocking is safer than letting through.
+  failClosed = false
 ): Promise<boolean> {
   try {
     const count = await withTimeout(connection.incr(key), RATE_LIMIT_COMMAND_TIMEOUT_MS);
     if (count === null) {
-      // Timed out — treat Redis as unavailable and allow.
-      return false;
+      // Timed out — treat Redis as unavailable.
+      return failClosed;
     }
     if (count === 1) {
       await withTimeout(connection.expire(key, windowSeconds), RATE_LIMIT_COMMAND_TIMEOUT_MS);
@@ -67,9 +72,9 @@ export async function isRateLimited(
     return count > limit;
   } catch (error) {
     console.warn(
-      "[rate-limit] Redis unavailable, failing open:",
+      `[rate-limit] Redis unavailable, failing ${failClosed ? "closed" : "open"}:`,
       error instanceof Error ? error.message : error
     );
-    return false;
+    return failClosed;
   }
 }

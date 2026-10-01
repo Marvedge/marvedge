@@ -216,6 +216,8 @@ EOF
 # ---------------------------------------------------------
 # Build AutoFlip (both video renderer and headless JSON runner)
 # ---------------------------------------------------------
+COPY autoflip_graph.pbtxt /mediapipe/mediapipe/examples/desktop/autoflip/autoflip_graph.pbtxt
+
 RUN bazel build -c opt \
     --define MEDIAPIPE_DISABLE_GPU=1 \
     --define=xnn_enable_avxvnniint8=false \
@@ -248,4 +250,3 @@ COPY autoflip/service.py autoflip/server.py autoflip/test_service.py /app/
 
 EXPOSE 8000
 ENTRYPOINT ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
-
