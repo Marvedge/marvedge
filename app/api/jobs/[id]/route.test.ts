@@ -190,4 +190,72 @@ describe("GET /api/jobs/[id]", () => {
     expect(json.fallbackReason).toBe("AUTOFLIP_EMPTY_CROP_TARGETS");
     expect(json.attemptsMade).toBe(1);
   });
+
+  it("surfaces alignedVideoUrl and duration for successful AVS_DUB jobs", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-dub-success",
+      userId: "u-1",
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned.mp4",
+      error: null,
+      jobData: {
+        kind: "AVS_DUB",
+        alignedVideoUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned.mp4",
+        duration: 12.5,
+        fallback: false,
+      },
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-dub-success");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.state).toBe("completed");
+    expect(json.status).toBe("completed");
+    expect(json.aligned).toEqual({
+      alignedVideoUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned.mp4",
+      duration: 12.5,
+    });
+    expect(json.exportedUrl).toBe("https://storage.googleapis.com/bucket/avs-dub/aligned.mp4");
+    expect(json.fallback).toBe(false);
+  });
+
+  it("surfaces graceful degradation fallback metadata for degraded AVS_DUB jobs", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-dub-degraded",
+      userId: "u-1",
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+      error: null,
+      jobData: {
+        kind: "AVS_DUB",
+        alignedVideoUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+        duration: 10,
+        fallback: true,
+        fallbackStage: "DUBBING",
+        fallbackReason: "GCP worker failed after multiple retries",
+      },
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-dub-degraded");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.state).toBe("completed");
+    expect(json.status).toBe("completed");
+    expect(json.aligned).toEqual({
+      alignedVideoUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+      duration: 10,
+    });
+    expect(json.exportedUrl).toBe("https://storage.googleapis.com/bucket/reframed_captioned.mp4");
+    expect(json.fallback).toBe(true);
+    expect(json.fallbackStage).toBe("DUBBING");
+    expect(json.fallbackReason).toBe("GCP worker failed after multiple retries");
+  });
 });
