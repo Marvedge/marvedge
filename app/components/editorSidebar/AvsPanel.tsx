@@ -5,6 +5,7 @@ import ScriptEditor from "./avs/ScriptEditor";
 import VoiceoverEditor from "./avs/VoiceoverEditor";
 import CaptionsEditor from "./avs/CaptionsEditor";
 import AvsPipeline from "./avs/AvsPipeline";
+import DubbingPanel from "./avs/DubbingPanel";
 import { useStepEditing } from "./avs/useStepEditing";
 import { useScriptEditing } from "./avs/useScriptEditing";
 import { useVoiceoverGeneration } from "./avs/useVoiceoverGeneration";
@@ -145,6 +146,8 @@ const AvsPanel: React.FC = () => {
       <div className="border-t border-[#ede7fa] pt-6">
         <CaptionsEditor {...captions} />
       </div>
+
+      <DubbingPanel />
     </div>
   );
 };

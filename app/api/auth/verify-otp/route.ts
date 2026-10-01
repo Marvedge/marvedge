@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -25,10 +26,17 @@ export async function POST(req: Request) {
     );
   }
 
+  // Reject absurd input before hashing so huge bodies cannot burn CPU.
+  if (otp.length < 4 || otp.length > 10) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
+
+  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+
   const valid = await prisma.passwordReset.findFirst({
     where: {
       email,
-      otp,
+      otp: otpHash,
       expiresAt: { gt: new Date() }, // not expired
     },
   });
@@ -36,6 +44,9 @@ export async function POST(req: Request) {
   if (!valid) {
     return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
   }
+
+  // Remove the row after use so the same code cannot be replayed.
+  await prisma.passwordReset.delete({ where: { id: valid.id } });
 
   return NextResponse.json({ message: "OTP verified" });
 }

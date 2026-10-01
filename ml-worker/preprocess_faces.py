@@ -45,20 +45,93 @@ def inference_video(args):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
     except ImportError:
         device = 'cpu'
+        
     DET = S3FD(device=device)
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
+    
     dets = []
-    for fidx, fname in enumerate(flist):
-        image = cv2.imread(fname)
-        dets.append([])
-        if image is None:
+    
+    import numpy as np
+    from model.faceDetector.s3fd.box_utils import nms_
+    img_mean = np.array([104., 117., 123.])[:, np.newaxis, np.newaxis].astype('float32')
+    
+    # Process the video in large memory-safe chunks (to avoid loading 10s of thousands of images into RAM)
+    chunk_size = args.chunkSize
+    batch_size = args.batchSize
+    
+    for chunk_start in range(0, len(flist), chunk_size):
+        chunk_files = flist[chunk_start : chunk_start + chunk_size]
+        
+        # Load all images in the chunk
+        chunk_images = []
+        for fname in chunk_files:
+            image = cv2.imread(fname)
+            if image is not None:
+                chunk_images.append(image)
+                
+        if not chunk_images:
+            for _ in chunk_files:
+                dets.append([])
             continue
-        imageNumpy = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        bboxes = DET.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
-        for bbox in bboxes:
-          dets[-1].append({'frame':fidx, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]}) 
-        sys.stderr.write('%s-%05d; %d dets\r' % (args.videoFilePath, fidx, len(dets[-1])))
+            
+        # We assume all frames are the same size for a given video
+        h, w = chunk_images[0].shape[0], chunk_images[0].shape[1]
+        scale_t = torch.Tensor([w, h, w, h]).to(device) if device == 'cuda' else torch.Tensor([w, h, w, h])
+        
+        # S3FD preprocessing
+        processed_tensors = []
+        for img in chunk_images:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            s = args.facedetScale
+            scaled_img = cv2.resize(img_rgb, dsize=(0, 0), fx=s, fy=s, interpolation=cv2.INTER_LINEAR)
+            scaled_img = np.swapaxes(scaled_img, 1, 2)
+            scaled_img = np.swapaxes(scaled_img, 1, 0)
+            scaled_img = scaled_img[[2, 1, 0], :, :]
+            scaled_img = scaled_img.astype('float32')
+            scaled_img -= img_mean
+            scaled_img = scaled_img[[2, 1, 0], :, :]
+            processed_tensors.append(torch.from_numpy(scaled_img))
+            
+        all_tensors = torch.stack(processed_tensors) # Shape: (ChunkSize, 3, H, W)
+        
+        with torch.no_grad():
+            for b_start in range(0, len(all_tensors), batch_size):
+                batch_tensors = all_tensors[b_start : b_start + batch_size].to(device)
+                
+                # Forward pass
+                y = DET.net(batch_tensors)
+                detections = y.data
+                
+                # Unpack batch results
+                for b_idx in range(detections.size(0)):
+                    bboxes = np.empty(shape=(0, 5))
+                    for i in range(detections.size(1)): # Classes
+                        j = 0
+                        while detections[b_idx, i, j, 0] > 0.9: # conf_th
+                            score = detections[b_idx, i, j, 0].item()
+                            pt = (detections[b_idx, i, j, 1:] * scale_t).cpu().numpy()
+                            bbox = (pt[0], pt[1], pt[2], pt[3], score)
+                            bboxes = np.vstack((bboxes, bbox))
+                            j += 1
+                            
+                    if len(bboxes) > 0:
+                        keep = nms_(bboxes, 0.1)
+                        bboxes = bboxes[keep]
+                        
+                    frame_idx = chunk_start + b_start + b_idx
+                    frame_dets = []
+                    for bbox in bboxes:
+                        frame_dets.append({
+                            'frame': frame_idx, 
+                            'bbox': (bbox[:-1]).tolist(), 
+                            'conf': bbox[-1]
+                        })
+                    dets.append(frame_dets)
+                    
+        sys.stderr.write(f'{args.videoFilePath} - Processed chunk {chunk_start}/{len(flist)} frames\r')
+
+    sys.stderr.write('\n')
     savePath = os.path.join(args.pyworkPath,'faces.pckl')
     with open(savePath, 'wb') as fil:
         pickle.dump(dets, fil)
@@ -199,7 +272,6 @@ def center_crop_fallback(args, scene_start_frame, scene_end_frame):
     )
     return {'frame':frames,'bbox':bboxes,'is_fallback':True,'fallback_reason':'no_face_detected'}
 
-
 def crop_video(args, track, cropFile, flist=None):
     if flist is None:
         flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) 
@@ -259,6 +331,7 @@ def crop_video(args, track, cropFile, flist=None):
     audioStart = (track['frame'][0]) / TARGET_FPS
     audioEnd = (track['frame'][-1] + 1) / TARGET_FPS
     vOut.release()
+
     cmd_audio = [
         "ffmpeg", "-y",
         "-i", args.audioFilePath,
@@ -337,6 +410,8 @@ def main():
     parser.add_argument('--numFailedDet', type=int, default=10, help='Missed detections allowed before tracking stopped')
     parser.add_argument('--minFaceSize', type=int, default=1, help='Minimum face size in pixels')
     parser.add_argument('--cropScale', type=float, default=0.40, help='Scale bounding box')
+    parser.add_argument('--chunkSize', type=int, default=1000, help='Number of frames to load into RAM at once')
+    parser.add_argument('--batchSize', type=int, default=32, help='Batch size for S3FD PyTorch inference on GPU')
     args = parser.parse_args()
 
     # Initialization 

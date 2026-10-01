@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return respond();
   }
-  if (rawBody.length === 0 || rawBody.length > MAX_BODY_BYTES) {
+  if (rawBody.length === 0 || Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
     return respond();
   }
 

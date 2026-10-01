@@ -498,7 +498,7 @@ def run_unit_tests():
             for f in range(25)
         ]
         try:
-            tracks_degen = track_shot(args, scene_degenerate)
+            _ = track_shot(args, scene_degenerate)
             # Tracks with zero-area bbox will be filtered by minFaceSize; that is correct.
             check("Degenerate-bbox scene does not crash track_shot", True)
         except Exception as e:
