@@ -13,10 +13,14 @@ export const maxDuration = 300;
 
 /** Read + sanitize the `steps` body field into {id,startTime,endTime} entries. */
 function parseSteps(value: unknown): Step[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   const steps: Step[] = [];
   for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
     const rec = entry as Record<string, unknown>;
     const id = typeof rec.id === "string" ? rec.id : "";
     const startTime = typeof rec.startTime === "number" ? rec.startTime : NaN;
@@ -31,10 +35,14 @@ function parseSteps(value: unknown): Step[] {
 
 /** Read + sanitize the `dubTimings` body field. */
 function parseDubTimings(value: unknown): DubTiming[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   const timings: DubTiming[] = [];
   for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
     const rec = entry as Record<string, unknown>;
     const stepId = typeof rec.stepId === "string" ? rec.stepId : "";
     const start = typeof rec.start === "number" ? rec.start : NaN;
@@ -48,9 +56,7 @@ function parseDubTimings(value: unknown): DubTiming[] {
 
 /** Normalize a gs:// URL to a public https URL. */
 function toHttpUrl(url: string): string {
-  return url.startsWith("gs://")
-    ? url.replace("gs://", "https://storage.googleapis.com/")
-    : url;
+  return url.startsWith("gs://") ? url.replace("gs://", "https://storage.googleapis.com/") : url;
 }
 
 /**
@@ -77,10 +83,7 @@ async function runDubAlignment(
     let alignedVideoUrl = input.videoUrl;
     let duration = input.sourceDuration;
 
-    const canAlign =
-      Boolean(input.dubUrl) &&
-      input.steps.length > 0 &&
-      input.dubTimings.length > 0;
+    const canAlign = Boolean(input.dubUrl) && input.steps.length > 0 && input.dubTimings.length > 0;
 
     if (canAlign) {
       const result = await invokeGcpDubSync({
