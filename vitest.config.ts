@@ -20,6 +20,13 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      // Playwright E2E specs — run via `npm run test:e2e`, not Vitest.
+      "e2e/**",
+      // Cloud Run worker tests use a standalone Node harness (no describe/it/expect)
+      // and cannot satisfy Vitest's test-suite requirement. Run via `node cloudrun-worker/avs_dub.test.js`.
+      "cloudrun-worker/**",
+    ],
   },
 });
