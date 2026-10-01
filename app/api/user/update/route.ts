@@ -13,7 +13,54 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { firstName, lastName, bio, location, website, image } = body;
 
-  console.log("Update User Request - Image:", image);
+  // FIX: enforce sane length limits server-side — none existed before,
+  // which allowed a 50,000+ character name/bio to be saved with no error.
+  const LIMITS = { firstName: 50, lastName: 50, bio: 500, location: 100, website: 200 };
+
+  if (typeof firstName !== "string" || firstName.length > LIMITS.firstName) {
+    return NextResponse.json(
+      { error: `First name must be under ${LIMITS.firstName} characters` },
+      { status: 400 }
+    );
+  }
+  if (typeof lastName !== "string" || lastName.length > LIMITS.lastName) {
+    return NextResponse.json(
+      { error: `Last name must be under ${LIMITS.lastName} characters` },
+      { status: 400 }
+    );
+  }
+  if (bio !== undefined && bio !== null && (typeof bio !== "string" || bio.length > LIMITS.bio)) {
+    return NextResponse.json(
+      { error: `Bio must be under ${LIMITS.bio} characters` },
+      { status: 400 }
+    );
+  }
+  if (
+    location !== undefined &&
+    location !== null &&
+    (typeof location !== "string" || location.length > LIMITS.location)
+  ) {
+    return NextResponse.json(
+      { error: `Location must be under ${LIMITS.location} characters` },
+      { status: 400 }
+    );
+  }
+  if (website !== undefined && website !== null && website !== "") {
+    if (typeof website !== "string" || website.length > LIMITS.website) {
+      return NextResponse.json(
+        { error: `Website must be under ${LIMITS.website} characters` },
+        { status: 400 }
+      );
+    }
+    try {
+      const parsed = new URL(website);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        throw new Error("invalid protocol");
+      }
+    } catch {
+      return NextResponse.json({ error: "Website must be a valid URL" }, { status: 400 });
+    }
+  }
 
   try {
     const user = await prisma.user.findUnique({
@@ -35,7 +82,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    console.log("Updated User Image:", updatedUser.image);
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error) {
     console.error("[UPDATE_USER_ERROR]", error);

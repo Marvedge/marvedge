@@ -15,6 +15,7 @@
 // so `body` is serialised once and both signed and sent, never re-serialised.
 
 import { SIGNATURE_HEADER, TIMESTAMP_HEADER, signWebhookPayload } from "./signature";
+import { deliveryHostIsPublic } from "./deliveryCheck";
 import type { NormalizedContact } from "./normalize";
 import type { DeliveryOutcome, WebhookCredentials } from "./types";
 
@@ -54,6 +55,12 @@ export async function deliverToWebhook(
   // receiver cannot reproduce from the bytes it actually received.
   const rawBody = JSON.stringify(buildWebhookEnvelope(leadId, contact, now));
   const timestamp = Math.floor(now.getTime() / 1000);
+
+  // the url was fine when the owner saved it, make sure it still is now
+  if (!(await deliveryHostIsPublic(credentials.url))) {
+    console.error("[crm] webhook delivery blocked: unsafe host");
+    return { ok: false, retryable: false, error: "Webhook host failed safety check" };
+  }
 
   let response: Response;
   try {

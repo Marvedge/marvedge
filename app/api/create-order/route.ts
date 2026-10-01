@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       amount: amount * 100, // In cents (e.g. 4900 cents = 49 USD)
       currency: PAYMENT_CURRENCY,
       receipt: `receipt_${plan}_${Date.now()}`,
-      notes: { plan },
+      notes: { plan, email: session.user.email },
     });
     return NextResponse.json(order);
   } catch (error) {

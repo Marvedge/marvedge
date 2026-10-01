@@ -4,6 +4,7 @@ import { invokeGcpWorker } from "@/app/lib/gcpWorker";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { normalizeLanguage, sanitizeSubtitleStyle } from "@/app/lib/subtitles";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 import { isWtmEnabled } from "@/app/lib/wtm/flags";
 import { isWtmAllowed } from "@/app/lib/wtm/access";
 import { resolveWatermarkForPlan as resolveWatermarkForIsPro } from "@/app/lib/wtm/watermark";
@@ -217,6 +218,27 @@ export async function POST(req: NextRequest) {
 
     if (!duration || typeof duration !== "number") {
       return NextResponse.json({ error: "Missing or invalid duration" }, { status: 400 });
+    }
+
+    // the job may float free, but a demoId must be the caller's own demo
+    if (typeof demoId === "string" && demoId) {
+      const demo = await prisma.demo.findUnique({
+        where: { id: demoId },
+        select: { id: true, userId: true },
+      });
+      if (!demo || demo.userId !== userId) {
+        return NextResponse.json({ error: "Demo not found" }, { status: 404 });
+      }
+    }
+
+    // the worker fetches this url, so internal addresses stop here
+    if (!isSafeUrl(videoUrl)) {
+      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+    }
+    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.trim().length > 0) {
+      if (!isSafeUrl(customBackgroundUrl)) {
+        return NextResponse.json({ error: "Background URL is not allowed" }, { status: 400 });
+      }
     }
 
     const user = await prisma.user.findFirst({

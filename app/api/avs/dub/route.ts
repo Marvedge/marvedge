@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
+import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
 import type { Step, DubTiming } from "@/app/types/avs";
 
@@ -146,8 +147,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Open to every signed-in plan for now; the wider AVS pipeline stays
-  // PRO/ENTERPRISE-gated (see /api/avs/sync).
+  // PRO/ENTERPRISE only — same plan gate as /api/avs/sync.
+  if (!isAvsAllowed(user.plan)) {
+    return NextResponse.json(
+      { error: "AVS is available on PRO and ENTERPRISE plans." },
+      { status: 403 }
+    );
+  }
 
   let body: Record<string, unknown>;
   try {

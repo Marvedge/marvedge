@@ -14,6 +14,13 @@ export async function POST(req: Request) {
       );
     }
 
+     if (typeof password !== "string" || password.length < 6) {
+      return NextResponse.json(
+        { error: "Password must be at least 6 characters" },
+        { status: 400 }
+      );
+    } 
+
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return NextResponse.json({ error: "User already exists" }, { status: 400 });

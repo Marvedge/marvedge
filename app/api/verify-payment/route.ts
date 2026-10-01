@@ -6,6 +6,15 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { PAYMENT_CURRENCY, PLANS } from "@/app/lib/plans";
 
+function signaturesMatch(expected: string, actual: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(actual);
+  if (a.length !== b.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(a, b);
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,6 +24,20 @@ export async function POST(req: Request) {
 
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
+    if (
+      typeof razorpay_order_id !== "string" ||
+      typeof razorpay_payment_id !== "string" ||
+      typeof razorpay_signature !== "string" ||
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Missing payment fields" },
+        { status: 400 }
+      );
+    }
+
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
@@ -22,7 +45,7 @@ export async function POST(req: Request) {
       .update(body.toString())
       .digest("hex");
 
-    const isAuthentic = expectedSignature === razorpay_signature;
+    const isAuthentic = signaturesMatch(expectedSignature, razorpay_signature);
 
     if (!isAuthentic) {
       return NextResponse.json(
@@ -53,6 +76,17 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { success: false, message: "Payment does not match the PRO plan" },
         { status: 400 }
+      );
+    }
+
+    // Bind the order to the buyer. Orders created before this fix carry no
+    // email note, so only enforce when the note is present. New orders always
+    // carry it (see create-order), which stops one payment upgrading many accounts.
+    const orderEmail = typeof order.notes?.email === "string" ? order.notes.email : undefined;
+    if (orderEmail && orderEmail.toLowerCase() !== session.user.email.toLowerCase()) {
+      return NextResponse.json(
+        { success: false, message: "Order does not belong to this account" },
+        { status: 403 }
       );
     }
 
