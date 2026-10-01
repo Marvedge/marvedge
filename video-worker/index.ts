@@ -575,7 +575,18 @@ function remapSubtitleCuesToTrimmedTimeline(
     .sort((a, b) => a.start - b.start);
 }
 
+// Count of negative inputs clamped to zero in formatAssTime for observability.
+let formatAssUnderflowCount = 0;
+
 function formatAssTime(seconds: number): string {
+  if (seconds < 0) {
+    formatAssUnderflowCount += 1;
+    if (formatAssUnderflowCount === 1 || formatAssUnderflowCount % 100 === 0) {
+      console.warn(
+        `[subtitles] formatAssTime clamped negative input count=${formatAssUnderflowCount} seconds=${seconds}`
+      );
+    }
+  }
   const s = Math.max(0, seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -996,7 +1007,10 @@ const worker = new Worker(
           });
 
           const s: any = demo?.subtitles;
-          if (s && Array.isArray(s.cues)) {
+          // Accept both wrapper and bare array shapes so trim export keeps subtitles.
+          if (Array.isArray(s)) {
+            rawSubtitleCues = s as SubtitleCue[];
+          } else if (s && Array.isArray(s.cues)) {
             rawSubtitleCues = s.cues as SubtitleCue[];
           }
         } catch {
