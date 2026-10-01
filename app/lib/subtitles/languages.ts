@@ -47,6 +47,7 @@ export const DEFAULT_STT_MODEL: SttModel = "nova-2";
  * garbage is worse than not offering it — the same rule that keeps a language
  * with no STT coverage out of the picker.
  */
+// WARNING: held pending libass check. Keep false until real Arabic render is verified.
 export const RTL_RENDERING_VERIFIED = false;
 
 /**
@@ -121,6 +122,7 @@ export const SUBTITLE_LANGUAGES: readonly SubtitleLanguage[] = [
   },
   // Covered by nova-3 only — see the block comment above. Held out of the
   // pickers by RTL_RENDERING_VERIFIED, not by its STT coverage.
+  // WARNING: Arabic entry held pending libass check.
   {
     code: "ar",
     label: "Arabic",
