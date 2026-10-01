@@ -38,14 +38,16 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpDubSync: vi.fn(),
 }));
 
-// Mock Next.js after() to synchronously invoke the background callback in tests
+// Mock Next.js after() to be controllable with vi.fn() while synchronously invoking by default
+const mockAfter = vi.fn((fn: () => unknown) => {
+  fn();
+});
+
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
   return {
     ...actual,
-    after: (fn: () => unknown) => {
-      fn();
-    },
+    after: (fn: () => unknown) => mockAfter(fn),
   };
 });
 
@@ -325,6 +327,84 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       expect(invokeGcpDubSync).not.toHaveBeenCalled();
       expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("BUG-002 Regression: POST dispatches runDubAlignment via after(), worker fails with fetch failed, job reaches COMPLETED fallback", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "PRO" } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-dub-regression" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+
+      // 1. Prisma updateMany succeeds for both calls (PROCESSING update then COMPLETED fallback)
+      vi.mocked(prisma.videoJob.updateMany)
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 1 });
+
+      // 2. Mock GCP worker failure exactly as Task-85 observed it (network/fetch failure)
+      vi.mocked(invokeGcpDubSync).mockRejectedValue(new Error("fetch failed"));
+
+      // 3. Intercept after() callback so it is NOT executed synchronously during POST
+      let capturedCallback: (() => Promise<unknown>) | null = null;
+      mockAfter.mockImplementationOnce((fn: () => unknown) => {
+        capturedCallback = fn as () => Promise<unknown>;
+      });
+
+      const req = makeDubRequest({
+        videoUrl: "https://storage.googleapis.com/bucket/source.mp4",
+        dubUrl: "https://example.com/dub.mp3",
+        steps: [{ id: "step-1", startTime: 0, endTime: 5 }],
+        dubTimings: [{ stepId: "step-1", start: 0, end: 5.2 }],
+        duration: 10,
+      });
+
+      const res = await POST(req);
+
+      // Assert 1: POST response is 200
+      expect(res.status).toBe(200);
+
+      // Assert 2: jobId is correct
+      const json = await res.json();
+      expect(json).toEqual({ success: true, jobId: "job-dub-regression" });
+
+      // Assert 3: after() registered exactly one callback
+      expect(mockAfter).toHaveBeenCalledTimes(1);
+      expect(capturedCallback).not.toBeNull();
+
+      // Assert 4: callback was NOT executed synchronously as part of POST
+      expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+      expect(invokeGcpDubSync).not.toHaveBeenCalled();
+
+      // Assert 5: manually awaiting the callback completes successfully
+      await expect(capturedCallback!()).resolves.toBeUndefined();
+
+      // Assert 6 & 7 & 8: verify updateMany calls
+      const updateCalls = vi.mocked(prisma.videoJob.updateMany).mock.calls;
+      expect(updateCalls).toHaveLength(2);
+
+      // Assert 6: first updateMany sets status: PROCESSING, progress: 20
+      expect(updateCalls[0][0]).toEqual({
+        where: { id: "job-dub-regression", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        data: { status: "PROCESSING", progress: 20 },
+      });
+
+      // Assert 7 & 8: second updateMany sets status: COMPLETED, progress: 100 with fallback metadata
+      expect(updateCalls[1][0]).toEqual({
+        where: { id: "job-dub-regression", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          exportedUrl: "https://storage.googleapis.com/bucket/source.mp4",
+          jobData: {
+            kind: "AVS_DUB",
+            alignedVideoUrl: "https://storage.googleapis.com/bucket/source.mp4",
+            duration: 10,
+            fallback: true,
+            fallbackStage: "DUBBING",
+            fallbackReason: "fetch failed",
+          },
+          error: null,
+        },
+      });
     });
   });
 });
