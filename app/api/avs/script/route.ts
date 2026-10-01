@@ -53,7 +53,7 @@ async function rewriteLines(
   openai: OpenAI,
   lines: LineInput[],
   tone: ScriptTone
-): Promise<ScriptLine[]> {
+): Promise<{ lines: ScriptLine[]; rewritten: boolean }> {
   // Key segments by index (not stepId) so the model can't mangle ids; we map the
   // rewritten text back onto the original stepIds ourselves.
   const segments = lines.map((line, i) => ({ i, text: line.text }));
@@ -99,11 +99,21 @@ async function rewriteLines(
 
   // Always return a line per input, falling back to the original text if the
   // model omitted or blanked a segment.
-  return lines.map((line, i) => ({ stepId: line.stepId, text: rewritten.get(i) ?? line.text }));
+  // Fallback keeps original text in same order and count so no step is lost.
+  const resultLines = lines.map((line, i) => ({
+    stepId: line.stepId,
+    text: rewritten.get(i) ?? line.text,
+  }));
+  const rewrittenOk = lines.every((_, i) => rewritten.has(i));
+  return { lines: resultLines, rewritten: rewrittenOk };
 }
 
 /** Rewrite a single free-form script blob (the no-steps fallback). */
-async function rewriteRaw(openai: OpenAI, raw: string, tone: ScriptTone): Promise<string> {
+async function rewriteRaw(
+  openai: OpenAI,
+  raw: string,
+  tone: ScriptTone
+): Promise<{ text: string; rewritten: boolean }> {
   const instructions =
     "Rewrite the following demo narration in that tone. Return JSON of the exact form " +
     '{"text":<rewritten text>} and nothing else.';
@@ -125,12 +135,13 @@ async function rewriteRaw(openai: OpenAI, raw: string, tone: ScriptTone): Promis
   try {
     const parsed = JSON.parse(content) as { text?: unknown };
     if (typeof parsed.text === "string" && parsed.text.trim()) {
-      return parsed.text.trim();
+      return { text: parsed.text.trim(), rewritten: true };
     }
   } catch {
     // fall through to the original text
   }
-  return raw;
+  // Fallback returns original raw text so callers keep usable content.
+  return { text: raw, rewritten: false };
 }
 
 export async function POST(req: NextRequest) {
@@ -193,8 +204,8 @@ export async function POST(req: NextRequest) {
       if (lines.length === 0) {
         return NextResponse.json({ error: "No script text to rewrite" }, { status: 400 });
       }
-      const result = await rewriteLines(openai, lines, tone);
-      return NextResponse.json({ lines: result, tone });
+      const { lines: result, rewritten } = await rewriteLines(openai, lines, tone);
+      return NextResponse.json({ lines: result, tone, rewritten });
     }
 
     // Fallback: single free-form blob.
@@ -203,8 +214,8 @@ export async function POST(req: NextRequest) {
       if (!raw) {
         return NextResponse.json({ error: "No script text to rewrite" }, { status: 400 });
       }
-      const result = await rewriteRaw(openai, raw, tone);
-      return NextResponse.json({ raw: result, tone });
+      const { text: result, rewritten } = await rewriteRaw(openai, raw, tone);
+      return NextResponse.json({ raw: result, tone, rewritten });
     }
 
     return NextResponse.json({ error: "Provide `lines` or `raw` to rewrite" }, { status: 400 });
