@@ -11,7 +11,8 @@
     "worker:reframe": "tsx reframe-worker/index.ts",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
-    "test:avs": "node cloudrun-worker/avs_dub.test.js"
+    "test:avs": "node cloudrun-worker/avs_dub.test.js",
+    "subtitles:demo-karaoke": "tsx scripts/demoKaraokeSubtitles.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
