@@ -5,7 +5,10 @@
  * public HTTPS URLs for headless AutoFlip inference without exposing API secrets.
  */
 
-export async function uploadBlobToCloudinary(blob: Blob): Promise<string> {
+export async function uploadBlobToCloudinary(
+  blob: Blob,
+  folder: string = "reframe_sources"
+): Promise<string> {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
   const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
@@ -18,7 +21,7 @@ export async function uploadBlobToCloudinary(blob: Blob): Promise<string> {
   const formData = new FormData();
   formData.append("file", blob);
   formData.append("upload_preset", uploadPreset);
-  formData.append("folder", "reframe_sources");
+  formData.append("folder", folder);
 
   const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
 
