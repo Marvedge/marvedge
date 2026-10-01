@@ -100,13 +100,20 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
     });
 
-    it("returns 403 when user plan is FREE", async () => {
+    // master (origin/master) removed the PRO/ENTERPRISE gate from /api/avs/dub.
+    // The route comment reads: "Open to every signed-in plan for now."
+    // FREE users are therefore accepted: they reach videoJob.create() and get 200.
+    it("accepts FREE-plan user and returns 200 with jobId (plan gate removed in master)", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
       vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "FREE" } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-free-1" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
-      expect(res.status).toBe(403);
-      expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toEqual({ success: true, jobId: "job-free-1" });
+      expect(prisma.videoJob.create).toHaveBeenCalledTimes(1);
     });
 
     it("returns 400 when videoUrl is missing", async () => {
