@@ -274,15 +274,16 @@ async function extractAudioWav16kMono(inputPath, wavPath) {
 function cuesFromDeepgramWords(words) {
   if (!Array.isArray(words) || words.length === 0) return [];
   const cues = [];
-  let cueStart = Number(words[0].start || 0);
-  let cueEnd = Number(words[0].end || cueStart + 0.3);
+  // Use ?? so a real 0 timestamp stays 0 and only nullish falls back.
+  let cueStart = Number(words[0].start ?? 0);
+  let cueEnd = Number(words[0].end ?? cueStart + 0.3);
   let text = String(words[0].punctuated_word || words[0].word || "").trim();
 
   for (let i = 1; i < words.length; i++) {
     const w = words[i];
     const wText = String(w.punctuated_word || w.word || "").trim();
-    const wStart = Number(w.start || cueEnd);
-    const wEnd = Number(w.end || wStart + 0.25);
+    const wStart = Number(w.start ?? cueEnd);
+    const wEnd = Number(w.end ?? wStart + 0.25);
     const gap = wStart - cueEnd;
     const nextTextLen = (text + " " + wText).trim().length;
     const cueDur = cueEnd - cueStart;
@@ -881,6 +882,7 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
   const timingMap = buildTimingMap(stepTimings);
 
   // Fallback: nothing to align → hand back the original source untouched.
+  // No probe value exists in scope here, so keep duration 0 for the untouched source.
   if (!audioUrl || stepList.length === 0 || timingMap.size === 0) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
@@ -1179,6 +1181,7 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
   const timingMap = buildTimingMap(dubTimings); // reuse existing helper
 
   // Graceful fallback: nothing to align → return source untouched.
+  // No probe value exists in scope here, so keep duration 0 for the untouched source.
   if (!dubUrl || stepList.length === 0 || timingMap.size === 0) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
@@ -2078,10 +2081,21 @@ async function processChunkJob({
     }
 
     let inputBytes = 0;
-    try {
-      inputBytes = (await fs.stat(inputPath)).size;
-    } catch {
-      // Ignore stats failures.
+    // inputPath can be a remote URL when logical splitting streams directly.
+    // Skip stat for URL strings and keep inputBytes 0 for logging only.
+    if (
+      typeof inputPath === "string" &&
+      (inputPath.startsWith("http://") ||
+        inputPath.startsWith("https://") ||
+        inputPath.startsWith("gs://"))
+    ) {
+      // Remote URL input has no local bytes to stat, keep 0 and continue.
+    } else {
+      try {
+        inputBytes = (await fs.stat(inputPath)).size;
+      } catch {
+        // Ignore stat failures, inputBytes stays 0 and is only used for logging.
+      }
     }
 
     const renderStartMs = Date.now();
