@@ -4,7 +4,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
-import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
 import type { Step, DubTiming } from "@/app/types/avs";
 
@@ -13,10 +12,14 @@ export const maxDuration = 300;
 
 /** Read + sanitize the `steps` body field into {id,startTime,endTime} entries. */
 function parseSteps(value: unknown): Step[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   const steps: Step[] = [];
   for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
     const rec = entry as Record<string, unknown>;
     const id = typeof rec.id === "string" ? rec.id : "";
     const startTime = typeof rec.startTime === "number" ? rec.startTime : NaN;
@@ -31,10 +34,14 @@ function parseSteps(value: unknown): Step[] {
 
 /** Read + sanitize the `dubTimings` body field. */
 function parseDubTimings(value: unknown): DubTiming[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   const timings: DubTiming[] = [];
   for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
     const rec = entry as Record<string, unknown>;
     const stepId = typeof rec.stepId === "string" ? rec.stepId : "";
     const start = typeof rec.start === "number" ? rec.start : NaN;
@@ -48,9 +55,7 @@ function parseDubTimings(value: unknown): DubTiming[] {
 
 /** Normalize a gs:// URL to a public https URL. */
 function toHttpUrl(url: string): string {
-  return url.startsWith("gs://")
-    ? url.replace("gs://", "https://storage.googleapis.com/")
-    : url;
+  return url.startsWith("gs://") ? url.replace("gs://", "https://storage.googleapis.com/") : url;
 }
 
 /**
@@ -77,10 +82,7 @@ async function runDubAlignment(
     let alignedVideoUrl = input.videoUrl;
     let duration = input.sourceDuration;
 
-    const canAlign =
-      Boolean(input.dubUrl) &&
-      input.steps.length > 0 &&
-      input.dubTimings.length > 0;
+    const canAlign = Boolean(input.dubUrl) && input.steps.length > 0 && input.dubTimings.length > 0;
 
     if (canAlign) {
       const result = await invokeGcpDubSync({
@@ -144,13 +146,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // PRO/ENTERPRISE only — same plan gate as /api/avs/sync.
-  if (!isAvsAllowed(user.plan)) {
-    return NextResponse.json(
-      { error: "AVS is available on PRO and ENTERPRISE plans." },
-      { status: 403 }
-    );
-  }
+  // Open to every signed-in plan for now; the wider AVS pipeline stays
+  // PRO/ENTERPRISE-gated (see /api/avs/sync).
 
   let body: Record<string, unknown>;
   try {
