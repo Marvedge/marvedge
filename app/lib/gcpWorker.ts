@@ -73,10 +73,13 @@ function normalizeWorkerBaseUrl(rawUrl: string) {
     return "";
   }
   url = url.replace(/\/+$/, "");
-  // Accept env values ending with a known endpoint (/process, /subtitles,
-  // /avs-voiceover, /avs-sync, /wtm-composite, /package-hls) so we always POST
-  // against the worker's base URL.
-  url = url.replace(/\/(process|subtitles|avs-voiceover|avs-sync|wtm-composite|package-hls)$/i, "");
+  // Accept env values ending with a known endpoint (process, subtitles,
+  // avs-voiceover, avs-sync, avs-dub, wtm-composite, package-hls, merge)
+  // so we always POST against the worker base URL.
+  url = url.replace(
+    /\/(process|subtitles|avs-voiceover|avs-sync|avs-dub|wtm-composite|package-hls|merge)$/i,
+    ""
+  );
   return url;
 }
 
@@ -425,9 +428,7 @@ const AVS_DUB_TIMEOUT_MS = 15 * 60 * 1000;
  *
  * FALLBACK: no dubUrl/dubTimings → worker returns the source unchanged.
  */
-export async function invokeGcpDubSync(
-  payload: GcpDubSyncPayload
-): Promise<GcpDubSyncResult> {
+export async function invokeGcpDubSync(payload: GcpDubSyncPayload): Promise<GcpDubSyncResult> {
   const body = await invokeGcpWorker(
     {
       recipeId: "avs-dub",
@@ -443,8 +444,7 @@ export async function invokeGcpDubSync(
   const result = body.result;
   // The worker returns alignedVideoUrl (same field name as /avs-sync) for
   // symmetry, so callers can treat both aligned sources uniformly.
-  const alignedVideoUrl =
-    typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
+  const alignedVideoUrl = typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
   if (!alignedVideoUrl) {
     throw new Error("Dub-sync worker returned no aligned video URL");
   }
