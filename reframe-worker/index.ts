@@ -35,7 +35,7 @@ const worker = new Worker<ReframeJobPayload>(
   "reframe-processing",
   async (job: Job<ReframeJobPayload>) => {
     const context: ReframeJobContext = {
-      jobId: job.data.jobId,
+      jobId: typeof job.data?.jobId === "string" ? job.data.jobId : "",
       attemptsMade: job.attemptsMade,
       maxAttempts: job.opts.attempts ?? 1,
     };

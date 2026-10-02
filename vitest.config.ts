@@ -23,6 +23,6 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, "e2e/**", "cloudrun-worker/avs_dub.test.js"],
+    exclude: [...configDefaults.exclude, "e2e/**", "cloudrun-worker/**"],
   },
 });

@@ -53,7 +53,9 @@ export function loadReframeWorkerEnv(): void {
 loadReframeWorkerEnv();
 
 export function getReframeWorkerConfig(): ReframeWorkerConfig {
-  loadReframeWorkerEnv();
+  if (process.env.NODE_ENV !== "test") {
+    loadReframeWorkerEnv();
+  }
 
   const redisUrl = process.env.REDIS_URL?.trim() || "redis://localhost:6379";
 
