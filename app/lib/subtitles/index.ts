@@ -117,6 +117,7 @@ export {
 export { isSubtitleTranslateAllowed } from "./access";
 
 export {
+  MIN_TRANSLATED_CUE_SECONDS,
   TRANSLATION_BATCH_SIZE,
   TRANSLATION_SYSTEM_PROMPT,
   TranslationAlignmentError,
@@ -127,6 +128,25 @@ export {
   toTranslationSegments,
   type TranslationSegment,
 } from "./translate";
+
+export {
+  applyRtlBidi,
+  escapeAssText,
+  escapeFfmpegFilterPath,
+  formatAssTime,
+  generateAssContent,
+  writeAssFile,
+} from "./ass";
+
+export {
+  cuesFromWhisperSegments,
+  cuesFromWhisperWords,
+  normalizeWhisperResponse,
+  normalizeWhisperWords,
+  transcribeAudioWithWhisper,
+  type WhisperTranscriptionOptions,
+  type WordClusteringOptions,
+} from "./whisper";
 
 export type {
   SttCoverage,
@@ -139,4 +159,9 @@ export type {
   SubtitleTrack,
   SubtitleTrackSource,
   SubtitleTrackStatus,
+  SubtitleWord,
+  WhisperSegment,
+  WhisperTranscript,
+  WhisperVerboseJsonResponse,
+  WhisperWord,
 } from "./types";

@@ -41,8 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-
-
 ##dev 
 task.md
 
@@ -50,6 +48,7 @@ task.md
 video-worker/node_modules
 video-worker/.env
 video-worker/dist
+# Cloud Run worker
 cloudrun-worker/node_modules
 
 # Python & ML artifacts
@@ -62,4 +61,6 @@ $py.class
 *.pt
 *.bin
 cursor_templates/
+playwright-report/
+test-results/
 task53-results/

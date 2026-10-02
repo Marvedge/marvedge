@@ -18,6 +18,7 @@ import {
   readCueList,
   toTranslationSegments,
 } from "@/app/lib/subtitles";
+import { DEFAULT_SUBTITLE_STYLE } from "@/app/lib/subtitles/style";
 import type { SubtitleCue } from "@/app/lib/subtitles";
 
 /**
@@ -56,6 +57,10 @@ interface TranslateJobInput {
   cues: SubtitleCue[];
   sourceLanguage: string;
   targetLanguage: string;
+  /** Track-level font size from the demo's subtitleStyle, used as the scaling base. */
+  baseFontSizePct: number;
+  /** Video duration for last-cue retiming ceiling. */
+  videoDurationSeconds?: number;
 }
 
 /**
@@ -69,6 +74,8 @@ async function dispatchTranslateJob({
   cues,
   sourceLanguage,
   targetLanguage,
+  baseFontSizePct,
+  videoDurationSeconds,
 }: TranslateJobInput) {
   try {
     await prisma.videoJob.update({
@@ -120,9 +127,18 @@ async function dispatchTranslateJob({
     }
 
     // Timings are copied from the source cues verbatim; the model never sees or
-    // returns a timestamp. normalizeCues is the same last-mile guarantee the
-    // generation route applies (sorted, non-overlapping) for the render worker.
-    const translatedCues = normalizeCues(applyTranslations(cues, translated));
+    // returns a timestamp. Task-00061: `localize: true` additionally retimes
+    // character-dense cues into silence gaps and attaches per-cue fontSizePct
+    // overrides for cues whose translated text is significantly longer than the
+    // source. normalizeCues is the same last-mile guarantee the generation route
+    // applies (sorted, non-overlapping) for the render worker.
+    const translatedCues = normalizeCues(
+      applyTranslations(cues, translated, {
+        localize: true,
+        baseFontSizePct,
+        videoDurationSeconds,
+      })
+    );
 
     await prisma.subtitleTrack.upsert({
       where: { demoId_language: { demoId, language: targetLanguage } },
@@ -243,7 +259,7 @@ export async function POST(req: NextRequest) {
 
   const demo = await prisma.demo.findUnique({
     where: { id: demoId },
-    select: { id: true, userId: true, subtitles: true },
+    select: { id: true, userId: true, subtitles: true, editing: true },
   });
   if (!demo || demo.userId !== user.id) {
     return NextResponse.json({ error: "Demo not found" }, { status: 404 });
@@ -288,6 +304,12 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Read the demo's subtitle style for the font scaling base. Falls back to
+  // the default (5% of frame height) when the style has not been customised.
+  const editing = demo.editing as Record<string, unknown> | null;
+  const subtitleStyle = editing?.subtitleStyle as { fontSizePct?: number } | undefined;
+  const baseFontSizePct = subtitleStyle?.fontSizePct ?? DEFAULT_SUBTITLE_STYLE.fontSizePct;
+
   after(() =>
     dispatchTranslateJob({
       jobId: jobRecord.id,
@@ -295,6 +317,7 @@ export async function POST(req: NextRequest) {
       cues,
       sourceLanguage,
       targetLanguage,
+      baseFontSizePct,
     })
   );
 

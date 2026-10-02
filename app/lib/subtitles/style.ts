@@ -53,8 +53,38 @@ const LEGACY_MARGIN_V_RATIO = 0.06;
 const LEGACY_MARGIN_V_PX_MIN = 20;
 const LEGACY_MARGIN_V_PX_MAX = 96;
 
-/** Side margins. Hardcoded px in master, and not a user knob here either. */
-const LEGACY_MARGIN_H_PX = 60;
+/** Side margins. Hardcoded px in master for landscape frames (>= 1200px width). */
+export const LEGACY_MARGIN_H_PX = 60;
+
+/** Minimum side margin in px to prevent captions from touching the frame edge on narrow clips. */
+export const SUBTITLE_MARGIN_H_MIN_PX = 16;
+
+/** Horizontal margin ratio as a fraction of frame width for responsive scaling. */
+export const SUBTITLE_MARGIN_H_RATIO = 0.05;
+
+/**
+ * Computes horizontal margin based on frame width.
+ *
+ * Responsive to frame width so narrow portrait clips (e.g. 404x720) do not lose
+ * excessive width to side gutters (~30% previously), while preserving standard
+ * ~60px gutters on landscape displays.
+ *
+ * Validation targets:
+ * - 404x720:   Math.round(404 * 0.05) = 20px (usable text width: 364px, ~90%)
+ * - 1080x1920: Math.round(1080 * 0.05) = 54px (usable text width: 972px, 90%)
+ * - 1280x720:  capped at 60px (usable text width: 1160px)
+ * - 1920x1080: capped at 60px (usable text width: 1800px)
+ */
+export function computeMarginHPx(frameWidth?: number): number {
+  const w = Number(frameWidth);
+  if (!Number.isFinite(w) || w <= 0) {
+    return LEGACY_MARGIN_H_PX;
+  }
+  return Math.max(
+    SUBTITLE_MARGIN_H_MIN_PX,
+    Math.min(LEGACY_MARGIN_H_PX, Math.round(w * SUBTITLE_MARGIN_H_RATIO))
+  );
+}
 
 /** Outline thickness as a fraction of the font size (master: `fontSize / 16`). */
 const LEGACY_OUTLINE_RATIO = 1 / 16;
@@ -392,29 +422,6 @@ export function computeBoxPaddingPx(fontPx: number, outlineWidth = 0): number {
   );
 }
 
-/** Minimum horizontal margin in px for narrow or portrait aspect ratios. */
-export const SUBTITLE_MARGIN_H_MIN_PX = 16;
-/** Ratio of frame width used to compute responsive horizontal margin (5%). */
-export const SUBTITLE_MARGIN_H_RATIO = 0.05;
-
-/**
- * Computes responsive horizontal margin in pixels based on frame width.
- *
- * On landscape 16:9 displays (1920x1080), 5% yields 96px, which clamps to 60px (legacy standard).
- * On narrow portrait screens (e.g. 404x720 or 9:16), 5% scales down proportionally (e.g. 20px),
- * preventing captions from wrapping prematurely or overflowing narrow boundaries.
- */
-export function computeMarginHPx(frameWidth?: number): number {
-  const w = Number(frameWidth);
-  if (!Number.isFinite(w) || w <= 0) {
-    return LEGACY_MARGIN_H_PX;
-  }
-  return Math.max(
-    SUBTITLE_MARGIN_H_MIN_PX,
-    Math.min(LEGACY_MARGIN_H_PX, Math.round(w * SUBTITLE_MARGIN_H_RATIO))
-  );
-}
-
 /**
  * A style resolved to pixels at a given frame height. THE one place a percentage
  * becomes a number of pixels — the CSS and ASS mappings below both go through
@@ -427,11 +434,16 @@ export function computeMarginHPx(frameWidth?: number): number {
  * scaled by the size they chose relative to the default: the default is
  * clamped exactly as master clamps it, and a larger request gets a
  * proportionally larger ceiling.
+ *
+ * `cueFontSizePct` (Task-00061): when a translated cue carries a per-cue font
+ * override (`SubtitleCue.fontSizePct`), pass it here. It replaces the style's
+ * `fontSizePct` for that cue only; every other metric is unaffected.
  */
 export function subtitleMetrics(
   style: SubtitleStyle | undefined,
   frameHeight: number,
-  frameWidth?: number
+  frameWidth?: number,
+  cueFontSizePct?: number
 ): SubtitleMetrics {
   const s = withDefaults(style);
   const h = Math.max(1, Number(frameHeight) || 0);
@@ -440,8 +452,9 @@ export function subtitleMetrics(
       ? Number(frameWidth)
       : Math.round((h * 16) / 9);
 
+  // Use the per-cue override when present, otherwise the track-level style.
   const pct = clampNumber(
-    s.fontSizePct,
+    cueFontSizePct ?? s.fontSizePct,
     SUBTITLE_FONT_PCT_MIN,
     SUBTITLE_FONT_PCT_MAX,
     DEFAULT_SUBTITLE_STYLE.fontSizePct
@@ -501,9 +514,17 @@ export interface SubtitleCssOptions {
   /**
    * Lay the text out right-to-left (SUB PR 5). Comes from the ACTIVE TRACK's
    * language, not from the style — RTL is a property of the script, not a knob
-   * the user turns. See `isRtlLanguage` in ./languages.
+   * the user turns. See `isRtlLanguage` in ./languages for why neither is offered yet.
    */
   rtl?: boolean;
+  /**
+   * Per-cue font-size override (Task-00061).
+   *
+   * Pass `cue.fontSizePct` here when rendering a translated cue. When set,
+   * `subtitleMetrics` uses this value instead of the style's `fontSizePct`,
+   * so the preview reflects the same size the ASS burn-in will use.
+   */
+  cueFontSizePct?: number;
   /**
    * Export frame width in px. Used to calculate responsive horizontal margins.
    */
@@ -519,7 +540,7 @@ export function toCssStyle(
   const s = withDefaults(style);
   const h = Math.max(1, Number(frameHeight) || 0);
   const frameWidth = options?.frameWidth ?? Math.round((h * 16) / 9);
-  const m = subtitleMetrics(style, frameHeight, frameWidth);
+  const m = subtitleMetrics(style, frameHeight, frameWidth, options?.cueFontSizePct);
   const scale =
     Number.isFinite(renderedHeight) && (renderedHeight as number) > 0
       ? (renderedHeight as number) / Math.max(1, Number(frameHeight) || 1)
@@ -645,6 +666,9 @@ export function toAssStyleLine(style: SubtitleStyle | undefined, w: number, h: n
     ? hexToAssColour(s.backgroundColor as string, s.backgroundOpacity ?? 0.6)
     : LEGACY_BACK_COLOUR;
 
+  // In ASS BorderStyle 3 (box), libass uses the Outline field as box padding.
+  // We align with the preview's boxPaddingPx so the box has appropriate padding
+  // and honors user outline adjustments without disappearing or collapsing to 0.
   const outlinePx = hasBox ? m.boxPaddingPx : m.outlinePx;
 
   return [

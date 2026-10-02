@@ -16,7 +16,6 @@ const FFMPEG_BIN =
     }
   })() ||
   "/usr/bin/ffmpeg";
-
 const FFPROBE_BIN =
   process.env.FFPROBE_PATH ||
   (() => {
@@ -610,12 +609,17 @@ function computeSubtitleBoxPaddingPx(fontPx, outlineWidth = 0) {
 // scaled by the size the user asked for relative to the default — so the default
 // clamps exactly as master does, while a deliberately large choice is not capped
 // away. See the long note on subtitleMetrics() in style.ts.
-function subtitleMetrics(style, h, w) {
+// Task-00061: cueFontSizePct is an optional per-cue override. When set, it
+// replaces style.fontSizePct for font-size calculations only — the same logic
+// as the third arg added to subtitleMetrics() in style.ts. The caller
+// (writeAssSubtitles) passes cue.fontSizePct here to produce the px value
+// that drives the inline {\fs<n>} ASS override tag.
+function subtitleMetrics(style, h, w, cueFontSizePct) {
   const height = Math.max(1, Number(h) || 0);
   const width =
     Number.isFinite(Number(w)) && Number(w) > 0 ? Number(w) : Math.round((height * 16) / 9);
   const pct = subtitleClamp(
-    style && style.fontSizePct,
+    cueFontSizePct != null ? cueFontSizePct : (style && style.fontSizePct),
     SUBTITLE_FONT_PCT_MIN,
     SUBTITLE_FONT_PCT_MAX,
     SUBTITLE_DEFAULT_FONT_PCT
@@ -724,6 +728,30 @@ function subtitleAssOverrideTags(style, w, h) {
 // every RTL language out of both pickers until someone confirms a real render.
 const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
+// Indic scripts rendered by libass are visually larger than Latin text at the
+// same pixel size — glyphs are taller and the script's ascenders/descenders
+// together look bolder and more space-filling. A raw \fs override set by the
+// localization engine therefore over-sizes Indic captions relative to what the
+// editor's Latin preview shows. We correct this by multiplying the per-cue
+// font-size percentage by a scale-down factor before converting to pixels, so
+// the rendered visual size matches the Latin reference at all frame heights.
+//
+// Languages covered: Hindi (hi), Tamil (ta), Odia (or), Bengali (bn),
+// Telugu (te), Kannada (kn), Malayalam (ml).
+const INDIC_SCRIPT_LANGUAGES = new Set(["hi", "ta", "or", "bn", "te", "kn", "ml"]);
+
+// 0.85 empirically matches the visual stroke weight of Noto Sans Devanagari
+// against Arial at the same px value on a 1280-px-tall 9:16 frame.
+const SUBTITLE_INDIC_FONT_SCALE = 0.85;
+
+function isIndicSubtitleLanguage(language) {
+  const code = String(language || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
+  return INDIC_SCRIPT_LANGUAGES.has(code);
+}
+
 function isRtlSubtitleLanguage(language) {
   const code = String(language || "")
     .trim()
@@ -758,12 +786,25 @@ function writeAssSubtitles(tempDir, cues, w, h, style, language) {
     styleLine = `Style: Default,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,${outline},0,2,60,60,${marginV},1`;
   }
 
+  // WrapStyle controls libass's line-breaking behaviour.
+  //   0 = smart (tries to balance line lengths),
+  //   1 = end-of-line (wraps at the right margin, top-to-bottom),
+  //   2 = no-wrap (a single long line that bleeds off the frame).
+  //
+  // The legacy/unstyled branch used WrapStyle 2 because original English cues
+  // are short enough that they never exceed the frame width. Translated text
+  // is frequently 20-40% longer — German and Tamil especially — and WrapStyle 2
+  // causes it to spill off the right edge. Switch to WrapStyle 1 whenever a
+  // language code is present, so every translated track wraps cleanly within
+  // the PlayResX boundary without changing anything for non-translated exports.
+  const wrapStyle = language ? 1 : 2;
+
   const header = [
     "[Script Info]",
     "ScriptType: v4.00+",
     `PlayResX: ${w}`,
     `PlayResY: ${h}`,
-    "WrapStyle: 2",
+    `WrapStyle: ${wrapStyle}`,
     "ScaledBorderAndShadow: yes",
     "",
     "[V4+ Styles]",
@@ -781,13 +822,35 @@ function writeAssSubtitles(tempDir, cues, w, h, style, language) {
   // Absent language → untouched text, so every existing demo's Dialogue lines
   // are byte-for-byte what they were.
   const rtl = isRtlSubtitleLanguage(language);
+  const indic = isIndicSubtitleLanguage(language);
 
   const lines = cues.map((c) => {
     const start = formatAssTime(c.start);
     const end = formatAssTime(c.end);
     const escaped = escapeAssText(c.text);
     const t = rtl ? applyRtlBidi(escaped) : escaped;
-    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${tags}${t}`;
+
+    // Task-00061: per-cue font-size override for translated tracks.
+    // Task-00061: per-cue font-size override for translated tracks.
+    // When localizeTranslatedCues() detected that this cue's translation is
+    // significantly longer than the source, it stored a smaller fontSizePct on
+    // the cue object. We convert that to pixels here and emit a {\fs<n>} ASS
+    // override tag that libass applies to this Dialogue line only, leaving the
+    // track-level Style: Default unchanged so un-overridden cues are unaffected.
+    //
+    // Task-00079: for Indic scripts, multiply the stored fontSizePct by
+    // SUBTITLE_INDIC_FONT_SCALE before converting to pixels, correcting the
+    // visual over-sizing of Devanagari/Tamil/Odia glyphs vs. the Latin preview.
+    let cueTags = tags;
+    if (typeof c.fontSizePct === "number" && c.fontSizePct > 0) {
+      const effectivePct = indic
+        ? c.fontSizePct * SUBTITLE_INDIC_FONT_SCALE
+        : c.fontSizePct;
+      const cueMetrics = subtitleMetrics(style, h, w, effectivePct);
+      cueTags = `{\\fs${cueMetrics.fontPx}}${tags}`;
+    }
+
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${cueTags}${t}`;
   });
 
   const assPath = path.join(tempDir, "subtitles.ass");

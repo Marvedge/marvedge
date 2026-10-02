@@ -234,23 +234,41 @@ describe("worker byte-identity with master", () => {
   });
 
   /**
-   * SUB PR 5 added a `language` parameter for right-to-left text. Every existing
-   * caller passes nothing, so the absent case must stay byte-identical — the
-   * assertions above already cover that by calling with five arguments; this
-   * pins the LTR language case too, since a demo that picks English must not
-   * start emitting bidi marks.
+   * An absent language must preserve the legacy byte-identical output. When a
+   * language is supplied, translated tracks use WrapStyle 1, while LTR
+   * Dialogue text must remain unchanged and must not gain bidi marks.
    */
   it("leaves Dialogue text untouched for a left-to-right language", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sub-parity-"));
     try {
       for (const [w, h] of FRAMES) {
         const bare = fs.readFileSync(worker.writeAssSubtitles(dir, CUES, w, h), "utf8");
-        for (const language of [null, undefined, "en", "ja", "multi"]) {
+        const bareDialogue = bare
+          .split(/\r?\n/)
+          .filter((line: string) => line.startsWith("Dialogue:"));
+
+        expect(bare).toContain("WrapStyle: 2");
+
+        for (const language of [null, undefined]) {
           const withLang = fs.readFileSync(
             worker.writeAssSubtitles(dir, CUES, w, h, null, language),
             "utf8"
           );
+
           expect(withLang, `${w}x${h} ${String(language)}`).toBe(bare);
+        }
+
+        for (const language of ["en", "ja", "multi"]) {
+          const withLang = fs.readFileSync(
+            worker.writeAssSubtitles(dir, CUES, w, h, null, language),
+            "utf8"
+          );
+          const withLangDialogue = withLang
+            .split(/\r?\n/)
+            .filter((line: string) => line.startsWith("Dialogue:"));
+
+          expect(withLang, `${w}x${h} ${language}`).toContain("WrapStyle: 1");
+          expect(withLangDialogue, `${w}x${h} ${language}`).toEqual(bareDialogue);
         }
       }
     } finally {
