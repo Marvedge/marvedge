@@ -14,7 +14,9 @@ import uuid
 from typing import Any, Dict
 
 import requests
-
+import ipaddress
+import socket
+from urllib.parse import urljoin, urlparse
 logger = logging.getLogger("reframe-service")
 
 # Default executable and graph locations inside the container
@@ -29,7 +31,52 @@ DEFAULT_PROCESS_TIMEOUT_SEC = int(os.environ.get("AUTOFILP_TIMEOUT_SEC", "150"))
 DEFAULT_DOWNLOAD_TIMEOUT_SEC = int(os.environ.get("DOWNLOAD_TIMEOUT_SEC", "60"))
 
 ASPECT_RATIO_REGEX = re.compile(r"^\d+:\d+$")
+MAX_REDIRECTS = 5
 
+
+def _is_unsafe_ip(address: str) -> bool:
+    """Returns True when an IP belongs to a private or otherwise unsafe range."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return True
+
+    return (
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _validate_remote_url(url: str) -> None:
+    """Validates that an HTTP(S) URL does not target an unsafe destination."""
+    parsed = urlparse(url)
+
+    if parsed.scheme not in {"http", "https"}:
+        raise ValidationError("videoUrl must use HTTP or HTTPS")
+
+    if not parsed.hostname:
+        raise ValidationError("videoUrl must contain a valid hostname")
+
+    try:
+        addresses = socket.getaddrinfo(
+            parsed.hostname,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as e:
+        raise ValidationError(
+            f"videoUrl hostname could not be resolved: {parsed.hostname}"
+        ) from e
+
+    for address in {result[4][0] for result in addresses}:
+        if _is_unsafe_ip(address):
+            raise ValidationError(
+                "videoUrl must not target a private or internal network address"
+            )
 
 class ReframeError(Exception):
     """Base exception for reframe processing errors."""
@@ -66,14 +113,21 @@ def validate_reframe_request(video_url: Any, target_aspect_ratio: Any) -> None:
         raise ValidationError("videoUrl is required and must be a non-empty string")
 
     stripped_url = video_url.strip()
+
+    if stripped_url.startswith("file://"):
+        raise ValidationError(
+            "videoUrl must use HTTP or HTTPS"
+        )
+
     if not (
         stripped_url.startswith("http://")
         or stripped_url.startswith("https://")
-        or stripped_url.startswith("file://")
     ):
         raise ValidationError(
-            "videoUrl must be a valid HTTP, HTTPS, or file URL"
+            "videoUrl must be a valid HTTP or HTTPS URL"
         )
+
+    _validate_remote_url(stripped_url)
 
     if (
         not target_aspect_ratio
@@ -89,37 +143,59 @@ def validate_reframe_request(video_url: Any, target_aspect_ratio: Any) -> None:
             f"targetAspectRatio '{target_aspect_ratio}' is invalid; expected format like '9:16', '1:1', or '4:5'"
         )
 
-
 def download_video(
     url: str,
     dest_path: str,
     timeout_sec: int = DEFAULT_DOWNLOAD_TIMEOUT_SEC,
 ) -> None:
-    """Downloads remote video URL into dest_path via streaming chunks."""
-    if url.startswith("file://"):
-        local_src = url[7:]
-        if not os.path.isfile(local_src):
-            raise DownloadError(f"Local file not found: {local_src}")
-        shutil.copyfile(local_src, dest_path)
-        return
+    """Downloads a validated public HTTP(S) video URL into dest_path."""
+    current_url = url
 
-    try:
-        with requests.get(url, stream=True, timeout=timeout_sec) as resp:
-            resp.raise_for_status()
-            with open(dest_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=65536):
-                    if chunk:
-                        f.write(chunk)
-    except requests.exceptions.Timeout:
-        raise DownloadError(
-            f"Video download timed out after {timeout_sec} seconds"
-        )
-    except requests.exceptions.RequestException as e:
-        raise DownloadError(f"Failed to download video from {url}: {str(e)}")
+    for redirect_count in range(MAX_REDIRECTS + 1):
+        _validate_remote_url(current_url)
+
+        try:
+            with requests.get(
+                current_url,
+                stream=True,
+                timeout=timeout_sec,
+                allow_redirects=False,
+            ) as resp:
+                if resp.is_redirect or resp.is_permanent_redirect:
+                    location = resp.headers.get("Location")
+                    if not location:
+                        raise DownloadError(
+                            "Video download returned a redirect without a Location header"
+                        )
+
+                    if redirect_count >= MAX_REDIRECTS:
+                        raise DownloadError(
+                            f"Video download exceeded the maximum of {MAX_REDIRECTS} redirects"
+                        )
+
+                    current_url = urljoin(current_url, location)
+                    continue
+
+                resp.raise_for_status()
+
+                with open(dest_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+
+                break
+
+        except requests.exceptions.Timeout:
+            raise DownloadError(
+                f"Video download timed out after {timeout_sec} seconds"
+            )
+        except requests.exceptions.RequestException as e:
+            raise DownloadError(
+                f"Failed to download video from {current_url}: {str(e)}"
+            )
 
     if not os.path.exists(dest_path) or os.path.getsize(dest_path) == 0:
         raise DownloadError(f"Downloaded video is empty or missing: {dest_path}")
-
 
 def run_autoflip_subprocess(
     binary_path: str,

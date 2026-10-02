@@ -323,6 +323,133 @@ describe("exportFrameHeight", () => {
   });
 });
 
+/* -------------------------------------------------------------------------- */
+/* Per-cue fontSizePct override (Task-00061)                                  */
+/* -------------------------------------------------------------------------- */
+
+describe("subtitleMetrics — cueFontSizePct override", () => {
+  const FRAME_H = 1080;
+
+  it("uses the cue override when provided instead of the style value", () => {
+    const styleMetrics = subtitleMetrics(DEFAULT_SUBTITLE_STYLE, FRAME_H);
+    const cueMetrics = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      SUBTITLE_FONT_PCT_MIN
+    );
+    // The cue override requests the minimum size — must be smaller than default.
+    expect(cueMetrics.fontPx).toBeLessThan(styleMetrics.fontPx);
+  });
+
+  it("produces the same fontPx whether passed via style or as cueFontSizePct", () => {
+    const pct = 3.5;
+    const viaStyle = subtitleMetrics({ fontSizePct: pct }, FRAME_H);
+    const viaOverride = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      pct
+    );
+    expect(viaOverride.fontPx).toBe(viaStyle.fontPx);
+  });
+
+  it("keeps margin/outline/shadow unchanged by a cue override", () => {
+    const base = subtitleMetrics(DEFAULT_SUBTITLE_STYLE, FRAME_H);
+    const overridden = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      SUBTITLE_FONT_PCT_MIN
+    );
+
+    expect(overridden.marginVPx).toBe(base.marginVPx);
+    expect(overridden.marginHPx).toBe(base.marginHPx);
+  });
+
+  it("clamps the cue override at SUBTITLE_FONT_PCT_MIN", () => {
+    const tinyMetrics = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      0.001
+    );
+    const minMetrics = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      SUBTITLE_FONT_PCT_MIN
+    );
+    expect(tinyMetrics.fontPx).toBe(minMetrics.fontPx);
+  });
+
+  it("clamps the cue override at SUBTITLE_FONT_PCT_MAX", () => {
+    const hugeMetrics = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      9999
+    );
+    const maxMetrics = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      SUBTITLE_FONT_PCT_MAX
+    );
+    expect(hugeMetrics.fontPx).toBe(maxMetrics.fontPx);
+  });
+
+  it("returns smaller fontPx CSS when cueFontSizePct < style fontSizePct", () => {
+    const base = toCssStyle(DEFAULT_SUBTITLE_STYLE, FRAME_H, FRAME_H);
+    const smaller = toCssStyle(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      FRAME_H,
+      {
+        cueFontSizePct: SUBTITLE_FONT_PCT_MIN,
+      }
+    );
+
+    const basePx = parseFloat(base.text.fontSize as string);
+    const smallerPx = parseFloat(smaller.text.fontSize as string);
+
+    expect(smallerPx).toBeLessThan(basePx);
+  });
+
+  it("produces the same CSS fontSize as subtitleMetrics when cueFontSizePct is set", () => {
+    const pct = 3.0;
+    const m = subtitleMetrics(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      undefined,
+      pct
+    );
+    const css = toCssStyle(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      FRAME_H,
+      { cueFontSizePct: pct }
+    );
+
+    expect(css.text.fontSize).toBe(`${m.fontPx}px`);
+  });
+
+  it("toCssStyle without cueFontSizePct is byte-identical to the pre-Task-61 call", () => {
+    const legacy = toCssStyle(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      FRAME_H
+    );
+    const noOverride = toCssStyle(
+      DEFAULT_SUBTITLE_STYLE,
+      FRAME_H,
+      FRAME_H,
+      {}
+    );
+
+    expect(legacy).toEqual(noOverride);
+  });
+});
 describe("responsive horizontal margins", () => {
   it("calculates horizontal margin at 404x720 narrow portrait target", () => {
     expect(computeMarginHPx(404)).toBe(20);

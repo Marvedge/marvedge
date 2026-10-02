@@ -41,8 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-
-
 ##dev 
 task.md
 
@@ -62,3 +60,5 @@ $py.class
 *.pt
 *.bin
 cursor_templates/
+playwright-report/
+test-results/

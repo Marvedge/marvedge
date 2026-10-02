@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
+import { useBlobStore } from "@/app/store/blobStore";
 import type { EditorState } from "../apiTypes";
 
 interface UseEditorSyncEffectsProps {
@@ -12,6 +13,75 @@ interface UseEditorSyncEffectsProps {
   setSegments: (segments: { start: number; end: number }[]) => void;
   zoomSegments: ZoomEffect[];
   setZoomSegments: (segments: ZoomEffect[]) => void;
+}
+
+/**
+ * Detect whether the current editor navigation provided an explicit `video` source.
+ *
+ * Checks both the Zustand store's parsed `params` and `window.location.search` directly
+ * so that precedence is guaranteed even on the initial mount tick before effects populate
+ * the store's `params`.
+ */
+export function hasExplicitVideoParam(
+  params?: URLSearchParams | null,
+  locationSearch?: string
+): boolean {
+  if (params?.get("video")) {
+    return true;
+  }
+
+  if (locationSearch) {
+    try {
+      return Boolean(new URLSearchParams(locationSearch).get("video"));
+    } catch {
+      return false;
+    }
+  }
+
+  if (typeof window !== "undefined" && window.location?.search) {
+    try {
+      return Boolean(new URLSearchParams(window.location.search).get("video"));
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Pure helper to decide whether the editor should initialize videoUrl from a cached local blob.
+ *
+ * Precedence Rule:
+ * Explicit ?video= URL > Cached / local blob
+ *
+ * When an explicit video URL is present in params or window.location, a cached blob must NEVER
+ * overwrite or preempt the video source.
+ */
+export function shouldInitializeFromBlob({
+  currentVideoUrl,
+  hasBlob,
+  params,
+  locationSearch,
+}: {
+  currentVideoUrl: string | null;
+  hasBlob: boolean;
+  params?: URLSearchParams | null;
+  locationSearch?: string;
+}): boolean {
+  if (currentVideoUrl) {
+    return false;
+  }
+
+  if (!hasBlob) {
+    return false;
+  }
+
+  if (hasExplicitVideoParam(params, locationSearch)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function useEditorSyncEffects({
@@ -43,19 +113,52 @@ export function useEditorSyncEffects({
   const resolvedDuration = Math.max(0, duration || 0);
 
   useEffect(() => {
-    if (!videoUrl && blob) {
-      setVideoUrl(URL.createObjectURL(blob));
+    if (
+      shouldInitializeFromBlob({
+        currentVideoUrl: videoUrl,
+        hasBlob: Boolean(blob),
+        params,
+      })
+    ) {
+      const canonical = useBlobStore.getState().canonicalVideoUrl;
+
+      if (
+        canonical &&
+        (canonical.startsWith("http://") || canonical.startsWith("https://"))
+      ) {
+        setVideoUrl(canonical);
+      } else {
+        setVideoUrl(URL.createObjectURL(blob!));
+      }
     }
-  }, [videoUrl, blob, setVideoUrl]);
+  }, [videoUrl, blob, params, setVideoUrl]);
 
   useEffect(() => {
-    if (!params) {
+    // An explicit ?video= URL always has the highest precedence.
+    if (hasExplicitVideoParam(params)) {
       return;
     }
-    if (!videoUrl && recordedVideoUrl && !params.get("video")) {
+
+    // Never overwrite an already-valid remote video URL.
+    if (videoUrl && !videoUrl.startsWith("blob:")) {
+      return;
+    }
+
+    // Never overwrite a canonical remote video URL from the blob store.
+    const canonical = useBlobStore.getState().canonicalVideoUrl;
+
+    if (
+      canonical &&
+      (canonical.startsWith("http://") || canonical.startsWith("https://"))
+    ) {
+      return;
+    }
+
+    // Fall back to the recorded video URL when no stronger source exists.
+    if (recordedVideoUrl) {
       setVideoUrl(recordedVideoUrl);
     }
-  }, [videoUrl, recordedVideoUrl, params, setVideoUrl]);
+  }, [recordedVideoUrl, videoUrl, params, setVideoUrl]);
 
   useEffect(() => {
     if (videoUrl && !savedDemoId) {
@@ -75,12 +178,15 @@ export function useEditorSyncEffects({
     if (currentSegments.length === 0 || segments.length > 0) {
       return;
     }
+
     const numeric = currentSegments
       .map((s) => ({
-        start: typeof s.start === "string" ? parseFloat(s.start) : Number(s.start),
+        start:
+          typeof s.start === "string" ? parseFloat(s.start) : Number(s.start),
         end: typeof s.end === "string" ? parseFloat(s.end) : Number(s.end),
       }))
       .filter((s) => !isNaN(s.start) && !isNaN(s.end));
+
     if (numeric.length > 0) {
       setSegments(numeric);
     }
@@ -96,7 +202,11 @@ export function useEditorSyncEffects({
     if (!Number.isFinite(resolvedDuration) || resolvedDuration <= 0) {
       return;
     }
-    if (timelineEndTime <= 0 || Math.abs(timelineEndTime - resolvedDuration) > 0.5) {
+
+    if (
+      timelineEndTime <= 0 ||
+      Math.abs(timelineEndTime - resolvedDuration) > 0.5
+    ) {
       setTimelineStartTime(0);
       setTimelineEndTime(resolvedDuration);
       setInputStartTime(formatTimeForInput(0));

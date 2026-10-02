@@ -41,6 +41,8 @@ window.addEventListener("message", (event) => {
 });
 
 document.addEventListener("click", (e) => {
+
+  if (!isTrustedPage(window.location.hostname)) return;
   const now = Date.now();
   if (now - lastClickTime < DEBOUNCE_DELAY) {
     console.log("[Marvedge Extension] Ignored rapid click (debounced)");
@@ -74,7 +76,7 @@ document.addEventListener("click", (e) => {
     target_element: targetSelector
   };
 
-  console.log("[Marvedge Extension] Click captured, sending to background:", clickEvent);
+  //console.log("[Marvedge Extension] Click captured, sending to background:", clickEvent);
 
   chrome.runtime.sendMessage({
     type: "CAPTURE_EVENT",
