@@ -6,7 +6,6 @@ const os = require("node:os");
 const http = require("node:http");
 const https = require("node:https");
 const ffmpeg = require("fluent-ffmpeg");
-
 const FFMPEG_BIN =
   process.env.FFMPEG_PATH ||
   (() => {
@@ -17,7 +16,6 @@ const FFMPEG_BIN =
     }
   })() ||
   "/usr/bin/ffmpeg";
-
 const FFPROBE_BIN =
   process.env.FFPROBE_PATH ||
   (() => {
@@ -379,7 +377,7 @@ function remapSubtitleCuesToTrimmedTimeline(rawCues, keepSegments, removeSegment
 function ffmpegEscapeFilterValue(value) {
   let str = String(value).replace(/\\/g, "/");
   if (/^[a-zA-Z]:/.test(str)) {
-    str = str[0] + "\\\\:" + str.slice(2);
+    str = str[0] + "\\:" + str.slice(2);
   }
   return str;
 }

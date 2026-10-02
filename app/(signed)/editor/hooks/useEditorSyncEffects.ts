@@ -122,19 +122,28 @@ export function useEditorSyncEffects({
       }
     }
   }, [videoUrl, blob, params, setVideoUrl]);
-
   useEffect(() => {
+    // An explicit ?video= URL always has the highest precedence.
     if (hasExplicitVideoParam(params)) {
       return;
     }
-    // A cached/recorded blob URL must never overwrite an already-valid HTTPS video URL (e.g. from upload or param)
+
+    // Never overwrite an already-valid remote video URL.
     if (videoUrl && !videoUrl.startsWith("blob:")) {
       return;
     }
+
+    // Never overwrite a canonical remote video URL from the blob store.
     const canonical = useBlobStore.getState().canonicalVideoUrl;
-    if (canonical && (canonical.startsWith("http://") || canonical.startsWith("https://"))) {
+
+    if (
+      canonical &&
+      (canonical.startsWith("http://") || canonical.startsWith("https://"))
+    ) {
       return;
     }
+
+    // Fall back to the recorded video URL when no stronger source exists.
     if (recordedVideoUrl) {
       setVideoUrl(recordedVideoUrl);
     }
