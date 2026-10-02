@@ -25,7 +25,7 @@ async function elevenLabsRequest<T>(
     headers: {
       "xi-api-key": getApiKey(),
       Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body instanceof FormData ? {} : options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },
   });
@@ -44,16 +44,17 @@ export async function createDubbingJob(input: {
   sourceUrl: string;
   targetLanguage: string;
 }): Promise<DubbingJobResult> {
-  const response = await elevenLabsRequest<{
+  const formData = new FormData();
+  formData.append("source_url", input.sourceUrl);
+  formData.append("target_lang", input.targetLanguage);
+
+const response = await elevenLabsRequest<{
     dubbing_id?: string;
     id?: string;
     status?: string;
   }>("/dubbing", {
     method: "POST",
-    body: JSON.stringify({
-      source_url: input.sourceUrl,
-      target_lang: input.targetLanguage,
-    }),
+    body: formData,
   });
 
   const dubbingId = response.dubbing_id ?? response.id;
@@ -100,7 +101,7 @@ export async function waitForDubbingCompletion(
     const normalizedStatus = result.status.toLowerCase();
 
     if (
-      ["completed", "complete", "success", "succeeded"].includes(
+      ["completed", "complete", "success", "succeeded", "dubbed"].includes(
         normalizedStatus
       )
     ) {
