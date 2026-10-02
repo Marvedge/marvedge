@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
+import type ReactPlayer from "react-player";
 import axios from "axios";
 import { toast } from "react-hot-toast";
 
@@ -166,57 +167,102 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
   describe("useSubtitles hook integration with Cloudinary", () => {
     function createMockEditorState(overrides: Partial<EditorState> = {}): EditorState {
       return {
-        videoUrl: "",
-        currentTime: 0,
-        savedDemoId: null,
-        duration: 10,
+        // React refs — use unknown cast because null is not ReactPlayer
+        playerRef: { current: null } as unknown as React.RefObject<ReactPlayer>,
+        canvasRef: { current: null } as React.RefObject<HTMLCanvasElement | null>,
+        videoContainerRef: { current: null } as React.RefObject<HTMLDivElement | null>,
+        // Source
         params: new URLSearchParams(),
+        videoUrl: "",
+        // Playback
+        playing: false,
+        currentTime: 0,
+        duration: 10,
+        volume: 1,
+        // Timeline
+        timelineStartTime: 0,
+        timelineEndTime: 30,
+        inputStartTime: "00:00",
+        inputEndTime: "00:30",
+        // Segments
+        loadedSegments: null,
+        currentSegments: [],
+        // Tool
+        tool: "none" as const,
+        textColor: "#000000",
+        textFont: "16px sans-serif",
+        // Sidebar
+        sidebarTitle: "Test",
+        sidebarDescription: "",
+        isSidebarOpen: false,
+        isDashboardMenuOpen: false,
+        isFullscreen: false,
+        // CTA
+        ctas: [],
+        // Modal / save
+        showSaveDemoModal: false,
+        savingDemo: false,
+        demoSaved: false,
+        savedDemoId: null,
+        // Zoom
+        zoomEffects: [],
+        isZoomPopupOpen: false,
+        // Background
+        selectedBackground: "",
+        backgroundType: "color",
+        customBackground: null,
+        // Aspect ratio / browser frame
+        aspectRatio: "16:9",
+        browserFrameMode: "default",
+        browserFrameDrawShadow: false,
+        browserFrameDrawBorder: false,
+        // AVS / WTM
+        avs: null,
+        previewDubSource: false,
+        wtm: null,
+        // Setters
         setVideoUrl: vi.fn(),
         setCurrentTime: vi.fn(),
         setSavedDemoId: vi.fn(),
         setDuration: vi.fn(),
         setParams: vi.fn(),
-        currentSegments: [],
         setCurrentSegments: vi.fn(),
-        zoomEffects: [],
         setZoomEffects: vi.fn(),
-        selectedBackground: "",
         setSelectedBackground: vi.fn(),
-        backgroundType: "color",
         setBackgroundType: vi.fn(),
-        aspectRatio: "16:9",
         setAspectRatio: vi.fn(),
-        browserFrameMode: "none",
         setBrowserFrameMode: vi.fn(),
-        browserFrameDrawShadow: false,
         setBrowserFrameDrawShadow: vi.fn(),
-        browserFrameDrawBorder: false,
         setBrowserFrameDrawBorder: vi.fn(),
-        sidebarTitle: "Test",
         setSidebarTitle: vi.fn(),
-        sidebarDescription: "",
         setSidebarDescription: vi.fn(),
-        timelineStartTime: 0,
         setTimelineStartTime: vi.fn(),
-        timelineEndTime: 30,
         setTimelineEndTime: vi.fn(),
-        inputStartTime: "00:00",
         setInputStartTime: vi.fn(),
-        inputEndTime: "00:30",
         setInputEndTime: vi.fn(),
-        demoSaved: false,
         setDemoSaved: vi.fn(),
-        isPlaying: false,
         setPlaying: vi.fn(),
-        avs: null,
-        setAvs: vi.fn(),
-        wtm: null,
-        setWtm: vi.fn(),
-        ctas: [],
+        setVolume: vi.fn(),
+        setLoadedSegments: vi.fn(),
+        setTool: vi.fn(),
+        setTextColor: vi.fn(),
+        setTextFont: vi.fn(),
+        setIsSidebarOpen: vi.fn(),
+        setIsDashboardMenuOpen: vi.fn(),
+        setIsFullscreen: vi.fn(),
         setCtas: vi.fn(),
+        setShowSaveDemoModal: vi.fn(),
+        setSavingDemo: vi.fn(),
+        setIsZoomPopupOpen: vi.fn(),
+        setCustomBackground: vi.fn(),
+        setAvs: vi.fn(),
+        setPreviewDubSource: vi.fn(),
+        setWtm: vi.fn(),
+        reset: vi.fn(),
         ...overrides,
-      };
+      } as EditorState;
     }
+
 
     function renderHookHelper(editorState: EditorState) {
       let hookReturn!: ReturnType<typeof useSubtitles>;

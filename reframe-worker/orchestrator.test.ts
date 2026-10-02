@@ -1,6 +1,11 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import fs from "fs";
 import path from "path";
+// Ensure CALLBACK_SECRET is always present for these orchestrator tests.
+// CI does not provide .env.local, so we inject a deterministic test value here.
+// config.test.ts independently tests the missing-secret throw by explicitly
+// deleting process.env.CALLBACK_SECRET inside its own test.
+process.env.CALLBACK_SECRET = process.env.CALLBACK_SECRET || "test-callback-secret";
 import type { CropTargetData } from "../app/types/editor/crop-target";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
 import {

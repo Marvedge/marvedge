@@ -32,7 +32,6 @@ function makeCues(
 ): SubtitleCue[] {
   const step = totalDurationSec / n;
   return Array.from({ length: n }, (_, i) => ({
-    id: `cue-${i}`,
     start: i * step,
     end: i * step + cueDurationSec,
     text: `Cue ${i + 1} — sample localized subtitle text.`,
@@ -123,7 +122,7 @@ describe("Task-00080 | Dry-run regression — ASS serialization round-trip", () 
 
   it("cue text survives the ASS escape round-trip without injecting override tags", () => {
     const cues: SubtitleCue[] = [
-      { id: "c0", start: 0, end: 2, text: "Hello {world} — test" },
+      { start: 0, end: 2, text: "Hello {world} — test" },
     ];
     const content = generateAssContent(cues, 1920, 1080);
     // Curly braces must be replaced with parentheses to prevent tag injection.
