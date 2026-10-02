@@ -1,95 +1,112 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import React from "react";
-import ReactDOMServer from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import {
+  hasExplicitVideoParam,
+  shouldInitializeFromBlob,
+} from "./useEditorSyncEffects";
 
-import { useEditorSyncEffects } from "./useEditorSyncEffects";
-import type { EditorState } from "../apiTypes";
+describe("TASK-00044: Editor Source Precedence (useEditorSyncEffects)", () => {
+  const dynamicCloudinaryUrl = `https://res.cloudinary.com/test-cloud/video/upload/v${Date.now()}/clip.mp4`;
 
-describe("useEditorSyncEffects - URL precedence", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  function createMockEditorState(overrides: Partial<EditorState> = {}): EditorState {
-    return {
-      videoUrl: "",
-      currentTime: 0,
-      savedDemoId: null,
-      duration: 0,
-      params: new URLSearchParams(),
-      setVideoUrl: vi.fn(),
-      setCurrentTime: vi.fn(),
-      setSavedDemoId: vi.fn(),
-      setDuration: vi.fn(),
-      setParams: vi.fn(),
-      currentSegments: [],
-      setCurrentSegments: vi.fn(),
-      zoomEffects: [],
-      setZoomEffects: vi.fn(),
-      selectedBackground: "",
-      setSelectedBackground: vi.fn(),
-      backgroundType: "color",
-      setBackgroundType: vi.fn(),
-      aspectRatio: "16:9",
-      setAspectRatio: vi.fn(),
-      browserFrameMode: "none",
-      setBrowserFrameMode: vi.fn(),
-      browserFrameDrawShadow: false,
-      setBrowserFrameDrawShadow: vi.fn(),
-      browserFrameDrawBorder: false,
-      setBrowserFrameDrawBorder: vi.fn(),
-      sidebarTitle: "Test",
-      setSidebarTitle: vi.fn(),
-      sidebarDescription: "",
-      setSidebarDescription: vi.fn(),
-      timelineStartTime: 0,
-      setTimelineStartTime: vi.fn(),
-      timelineEndTime: 0,
-      setTimelineEndTime: vi.fn(),
-      inputStartTime: "00:00",
-      setInputStartTime: vi.fn(),
-      inputEndTime: "00:00",
-      setInputEndTime: vi.fn(),
-      demoSaved: false,
-      setDemoSaved: vi.fn(),
-      isPlaying: false,
-      setPlaying: vi.fn(),
-      avs: null,
-      setAvs: vi.fn(),
-      wtm: null,
-      setWtm: vi.fn(),
-      ctas: [],
-      setCtas: vi.fn(),
-      ...overrides,
-    };
-  }
-
-  it("does not overwrite videoUrl with blob when params.get('video') has explicit Cloudinary URL", () => {
-    // In React 18 renderToStaticMarkup, effects don't run automatically,
-    // so we can test the effect logic directly or with a custom runner.
-    // Let's test the effect condition logic.
-    const params = new URLSearchParams("video=https://res.cloudinary.com/test-cloud/video/upload/demo.mp4");
-    const setVideoUrl = vi.fn();
-    const editorState = createMockEditorState({
-      videoUrl: "",
-      params,
-      setVideoUrl,
+  describe("hasExplicitVideoParam", () => {
+    it("returns true when params has an explicit video URL", () => {
+      const params = new URLSearchParams(`video=${encodeURIComponent(dynamicCloudinaryUrl)}`);
+      expect(hasExplicitVideoParam(params)).toBe(true);
     });
 
-    const fakeBlob = new Blob(["fake video"], { type: "video/webm" });
+    it("returns true when locationSearch has an explicit video URL", () => {
+      const search = `?video=${encodeURIComponent(dynamicCloudinaryUrl)}`;
+      expect(hasExplicitVideoParam(null, search)).toBe(true);
+    });
 
-    // Simulate the effect condition:
-    const shouldSetBlobUrl = !editorState.videoUrl && fakeBlob && !params?.get("video");
-
-    expect(shouldSetBlobUrl).toBeFalsy();
-    expect(params.get("video")).toBe("https://res.cloudinary.com/test-cloud/video/upload/demo.mp4");
+    it("returns false when neither params nor locationSearch has a video URL", () => {
+      const params = new URLSearchParams("demoId=123&title=test");
+      expect(hasExplicitVideoParam(params, "?demoId=123")).toBe(false);
+      expect(hasExplicitVideoParam(null, "")).toBe(false);
+      expect(hasExplicitVideoParam(null, undefined)).toBe(false);
+    });
   });
 
-  it("sets videoUrl to blob when params.get('video') is absent", () => {
-    const params = new URLSearchParams();
-    const fakeBlob = new Blob(["fake video"], { type: "video/webm" });
+  describe("shouldInitializeFromBlob (Precedence Invariant)", () => {
+    it("EXPLICIT VIDEO URL WINS: rejects cached blob when explicit video URL is present in params", () => {
+      const params = new URLSearchParams(`video=${encodeURIComponent(dynamicCloudinaryUrl)}`);
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: null,
+        hasBlob: true, // cached blob exists in blobStore
+        params,
+      });
 
-    const shouldSetBlobUrl = !"" && fakeBlob && !params?.get("video");
-    expect(shouldSetBlobUrl).toBeTruthy();
+      // Explicit URL must win: do NOT initialize from blob
+      expect(shouldInit).toBe(false);
+    });
+
+    it("EXPLICIT VIDEO URL WINS: rejects cached blob on initial tick when params is null but locationSearch has video", () => {
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: null,
+        hasBlob: true,
+        params: null,
+        locationSearch: `?video=${encodeURIComponent(dynamicCloudinaryUrl)}`,
+      });
+
+      // Even before params state is populated, window query param prevents blob override
+      expect(shouldInit).toBe(false);
+    });
+
+    it("UPLOADED CLOUDINARY URL WINS: rejects cached blob when currentVideoUrl is already a Cloudinary HTTPS URL", () => {
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: dynamicCloudinaryUrl,
+        hasBlob: true,
+        params: null,
+        locationSearch: "",
+      });
+
+      // Uploaded HTTPS URL must win: cached blob cannot overwrite it
+      expect(shouldInit).toBe(false);
+    });
+
+    it("CACHED BLOB WINS: accepts cached blob when NO explicit video URL is provided", () => {
+      const params = new URLSearchParams("demoId=123");
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: null,
+        hasBlob: true,
+        params,
+        locationSearch: "?demoId=123",
+      });
+
+      // Normal recording / upload flow: cached blob initializes videoUrl
+      expect(shouldInit).toBe(true);
+    });
+
+    it("CACHED BLOB WINS: accepts cached blob when params and search are empty (fresh editor after recording)", () => {
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: null,
+        hasBlob: true,
+        params: null,
+        locationSearch: "",
+      });
+
+      expect(shouldInit).toBe(true);
+    });
+
+    it("does not initialize when hasBlob is false", () => {
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: null,
+        hasBlob: false,
+        params: null,
+        locationSearch: "",
+      });
+
+      expect(shouldInit).toBe(false);
+    });
+
+    it("does not initialize when videoUrl is already set to any non-null string", () => {
+      const shouldInit = shouldInitializeFromBlob({
+        currentVideoUrl: dynamicCloudinaryUrl,
+        hasBlob: true,
+        params: null,
+        locationSearch: "",
+      });
+
+      expect(shouldInit).toBe(false);
+    });
   });
 });

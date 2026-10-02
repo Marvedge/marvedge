@@ -20,6 +20,7 @@ vi.mock("react-hot-toast", () => ({
 
 describe("useSubtitles & resolveSubtitleSourceUrl", () => {
   const originalEnv = { ...process.env };
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -28,6 +29,8 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
   });
 
   describe("resolveSubtitleSourceUrl", () => {
@@ -55,7 +58,10 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
       expect(gcsSpy).not.toHaveBeenCalled();
     });
 
-    it("uploads blob to Cloudinary and does NOT call uploadBlobToGcs in local development", async () => {
+    it("uploads blob to Cloudinary when Cloudinary is configured and does NOT call uploadBlobToGcs", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
       const gcsSpy = vi.spyOn(gcsClient, "uploadBlobToGcs");
       const expectedCloudinaryUrl = "https://res.cloudinary.com/test-cloud/video/upload/v1/subtitles_source/test.webm";
       const cloudinarySpy = vi
@@ -70,7 +76,7 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       const blobUrl = "blob:http://localhost:3000/1234-5678";
-      const result = await resolveSubtitleSourceUrl(blobUrl, { isLocalDev: true });
+      const result = await resolveSubtitleSourceUrl(blobUrl);
 
       expect(result).toBe(expectedCloudinaryUrl);
       expect(cloudinarySpy).toHaveBeenCalledTimes(1);
@@ -85,11 +91,11 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
       expect(gcsSpy).not.toHaveBeenCalled();
     });
 
-    it("falls back to uploadBlobToGcs when in production and useGcs is true", async () => {
-      const expectedGcsUrl = "gs://prod-bucket/uploads/subtitle-source/source.webm";
+    it("falls back to uploadBlobToGcs when in production or useGcs is true", async () => {
+      const expectedGcsUrl = "https://storage.googleapis.com/prod-bucket/source.webm";
       const gcsSpy = vi
         .spyOn(gcsClient, "uploadBlobToGcs")
-        .mockResolvedValue({ url: expectedGcsUrl });
+        .mockResolvedValue({ url: expectedGcsUrl, bucket: "prod-bucket", object: "source.webm" });
       const cloudinarySpy = vi.spyOn(cloudinaryClient, "cloudinaryUpload");
 
       const fakeBlob = new Blob(["video data"], { type: "video/webm" });
@@ -103,7 +109,6 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
 
       const blobUrl = "blob:http://localhost:3000/1234-5678";
       const result = await resolveSubtitleSourceUrl(blobUrl, {
-        isLocalDev: false,
         useGcs: true,
       });
 
@@ -111,15 +116,60 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
       expect(gcsSpy).toHaveBeenCalledTimes(1);
       expect(cloudinarySpy).not.toHaveBeenCalled();
     });
+
+    it("PRODUCTION FALLBACK PRESERVED: calls uploadBlobToGcs when videoUrl is a blob URL and Cloudinary is not configured", async () => {
+      delete process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+      delete process.env.CLOUDINARY_CLOUD_NAME;
+      delete process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+      const blobUrl = "blob:http://localhost:3000/mock-recording-blob";
+      const gcsResultUrl = "https://storage.googleapis.com/marvedge-raw-us-fast/subtitle_source.webm";
+
+      const mockBlob = new Blob(["mock-video-bytes"], { type: "video/webm" });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        blob: async () => mockBlob,
+      });
+
+      const gcsSpy = vi.spyOn(gcsClient, "uploadBlobToGcs").mockResolvedValue({
+        url: gcsResultUrl,
+        bucket: "marvedge-raw-us-fast",
+        object: "subtitle_source.webm",
+      });
+
+      const resolved = await resolveSubtitleSourceUrl(blobUrl);
+
+      expect(gcsSpy).toHaveBeenCalledTimes(1);
+      expect(gcsSpy).toHaveBeenCalledWith({
+        blob: mockBlob,
+        filename: "subtitle_source.webm",
+        kind: "subtitle-source",
+      });
+      expect(resolved).toBe(gcsResultUrl);
+    });
+
+    it("throws if reading recorded video blob fails", async () => {
+      const blobUrl = "blob:http://localhost:3000/corrupt-blob";
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      });
+
+      const gcsSpy = vi.spyOn(gcsClient, "uploadBlobToGcs");
+
+      await expect(resolveSubtitleSourceUrl(blobUrl)).rejects.toThrow("Failed to read recorded video blob");
+      expect(gcsSpy).not.toHaveBeenCalled();
+    });
   });
 
-  describe("handleAddSubtitles hook execution", () => {
+  describe("useSubtitles hook integration with Cloudinary", () => {
     function createMockEditorState(overrides: Partial<EditorState> = {}): EditorState {
       return {
-        videoUrl: "blob:http://localhost:3000/test-blob",
+        videoUrl: "",
         currentTime: 0,
-        savedDemoId: "demo-123",
-        duration: 30,
+        savedDemoId: null,
+        duration: 10,
         params: new URLSearchParams(),
         setVideoUrl: vi.fn(),
         setCurrentTime: vi.fn(),
@@ -179,6 +229,9 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
     }
 
     it("uploads blob to Cloudinary and passes resulting HTTPS URL to /api/subtitles/create", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
       const gcsSpy = vi.spyOn(gcsClient, "uploadBlobToGcs");
       const expectedCloudinaryUrl =
         "https://res.cloudinary.com/test-cloud/video/upload/v999/subtitles_source/subtitle_source.webm";
@@ -199,7 +252,7 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
         data: { jobId: "job-abc-123" },
       });
 
-      const getSpy = vi.spyOn(axios, "get").mockResolvedValue({
+      vi.spyOn(axios, "get").mockResolvedValue({
         data: {
           state: "completed",
           subtitles: [{ start: 0, end: 2, text: "Hello Cloudinary" }],
@@ -216,12 +269,9 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
 
       await handleAddSubtitles();
 
-      // Verified: blob -> Cloudinary called
       expect(cloudinarySpy).toHaveBeenCalledTimes(1);
-      // Verified: uploadBlobToGcs is NEVER called
       expect(gcsSpy).not.toHaveBeenCalled();
 
-      // Verified: /api/subtitles/create received the HTTPS Cloudinary URL
       expect(postSpy).toHaveBeenCalledWith(
         "/api/subtitles/create",
         expect.objectContaining({
@@ -258,11 +308,9 @@ describe("useSubtitles & resolveSubtitleSourceUrl", () => {
 
       await handleAddSubtitles();
 
-      // Verified: no upload was performed
       expect(cloudinarySpy).not.toHaveBeenCalled();
       expect(gcsSpy).not.toHaveBeenCalled();
 
-      // Verified: /api/subtitles/create received the preexisting HTTPS URL directly
       expect(postSpy).toHaveBeenCalledWith(
         "/api/subtitles/create",
         expect.objectContaining({

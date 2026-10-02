@@ -1,17 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { validateCropTargetData } from "@/app/types/editor/crop-target";
-import type { Prisma } from "@prisma/client";
 
+/**
+ * Worker webhook endpoint (Cloud Run video worker & reframe worker callbacks).
+ *
+ * Authenticated via Authorization: Bearer <CALLBACK_SECRET>.
+ * Handles completion, progress, and failure for:
+ *   - Video exports (existing behaviour)
+ *   - Reframe saliency jobs (Task-00025)
+ *   - AVS Dubbing jobs (Task-00059)
+ */
 export async function POST(req: NextRequest) {
   try {
-    // ── Auth ──────────────────────────────────────────────────────────
-    const callbackSecret = process.env.CALLBACK_SECRET || "";
+    // ── Authenticate ──────────────────────────────────────────────────
     const authHeader = req.headers.get("authorization") || "";
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const expectedSecret = (process.env.CALLBACK_SECRET || "").trim();
 
-    if (!callbackSecret || token !== callbackSecret) {
-      console.warn("[callback] Unauthorized attempt");
+    if (!expectedSecret || token !== expectedSecret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -51,26 +59,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
     }
 
-    if (
-      !status ||
-      (status !== "COMPLETED" && status !== "FAILED" && status !== "PROCESSING")
-    ) {
+    const validStatuses = ["PROCESSING", "COMPLETED", "FAILED"];
+    if (!status || !validStatuses.includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
     // ── Fetch existing job ────────────────────────────────────────────
     const job = await prisma.videoJob.findUnique({
       where: { id: jobId },
-      select: { id: true, demoId: true, status: true, jobData: true },
+      select: { id: true, demoId: true, jobData: true, status: true },
     });
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // ── Terminal-state protection ─────────────────────────────────────
-    // A duplicate or late callback must never regress a settled job
-    // (COMPLETED or CANCELLED) into another state.
+    // ── Terminal-state protection (Task-00026) ─────────────────────────
     if (job.status === "COMPLETED" || job.status === "CANCELLED") {
       console.log(
         `[callback] Ignored callback for terminal job ${jobId} (current: ${job.status}, incoming: ${status})`
@@ -88,13 +92,6 @@ export async function POST(req: NextRequest) {
         : {};
     const isDubJob = existingJobData.kind === "AVS_DUB";
     const isReframeJob = existingJobData.kind === "REFRAME";
-
-    if (status === "PROCESSING" && !isReframeJob) {
-      return NextResponse.json(
-        { error: "Invalid status: PROCESSING only supported for REFRAME jobs" },
-        { status: 400 }
-      );
-    }
 
     // ── Reframe Job Handling ─────────────────────────────────────────
     if (cropTargets !== undefined || isReframeJob) {
@@ -125,7 +122,9 @@ export async function POST(req: NextRequest) {
           const updateResult = await prisma.videoJob.updateMany({
             where: {
               id: jobId,
-              status: { notIn: ["COMPLETED", "CANCELLED"] },
+              status: {
+                notIn: ["COMPLETED", "CANCELLED"],
+              },
             },
             data: {
               status: "PROCESSING",
@@ -160,16 +159,17 @@ export async function POST(req: NextRequest) {
       }
 
       if (status === "FAILED") {
-        const failureError = error || "Reframe job failed";
         if (typeof prisma.videoJob.updateMany === "function") {
           const updateResult = await prisma.videoJob.updateMany({
             where: {
               id: jobId,
-              status: { notIn: ["COMPLETED", "CANCELLED"] },
+              status: {
+                notIn: ["COMPLETED", "CANCELLED"],
+              },
             },
             data: {
               status: "FAILED",
-              error: failureError,
+              error: error || "Reframe job failed",
             },
           });
 
@@ -188,12 +188,12 @@ export async function POST(req: NextRequest) {
             where: { id: jobId },
             data: {
               status: "FAILED",
-              error: failureError,
+              error: error || "Reframe job failed",
             },
           });
         }
 
-        console.log(`[callback] Reframe Job ${jobId} → FAILED: ${failureError}`);
+        console.log(`[callback] Reframe Job ${jobId} → FAILED: ${error || "Reframe job failed"}`);
         return NextResponse.json({ success: true });
       }
 
@@ -217,7 +217,9 @@ export async function POST(req: NextRequest) {
           const updateResult = await prisma.videoJob.updateMany({
             where: {
               id: jobId,
-              status: { notIn: ["COMPLETED", "CANCELLED"] },
+              status: {
+                notIn: ["COMPLETED", "CANCELLED"],
+              },
             },
             data: {
               status: "COMPLETED",
@@ -312,19 +314,49 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        await prisma.videoJob.update({
-          where: { id: jobId },
-          data: {
-            status: "COMPLETED",
-            progress: 100,
-            jobData: {
-              ...existingJobData,
-              kind: "AVS_DUB",
-              alignedVideoUrl,
-              duration,
+        if (typeof prisma.videoJob.updateMany === "function") {
+          const updateResult = await prisma.videoJob.updateMany({
+            where: {
+              id: jobId,
+              status: { notIn: ["COMPLETED", "CANCELLED"] },
             },
-          },
-        });
+            data: {
+              status: "COMPLETED",
+              progress: 100,
+              jobData: {
+                ...existingJobData,
+                kind: "AVS_DUB",
+                alignedVideoUrl,
+                duration,
+              },
+            },
+          });
+
+          if (updateResult.count === 0) {
+            console.log(
+              `[callback] Ignored AVS_DUB COMPLETED callback; job ${jobId} is already in terminal state.`
+            );
+            return NextResponse.json({
+              success: true,
+              ignored: true,
+              message: `Job ${jobId} is already in a terminal state`,
+            });
+          }
+        } else {
+          await prisma.videoJob.update({
+            where: { id: jobId },
+            data: {
+              status: "COMPLETED",
+              progress: 100,
+              jobData: {
+                ...existingJobData,
+                kind: "AVS_DUB",
+                alignedVideoUrl,
+                duration,
+              },
+            },
+          });
+        }
 
         console.log(`[callback] AVS_DUB job ${jobId} → COMPLETED`);
         return NextResponse.json({ success: true });
@@ -334,20 +366,44 @@ export async function POST(req: NextRequest) {
             ? error
             : "Dub-sync alignment failed";
 
-        await prisma.videoJob.update({
-          where: { id: jobId },
-          data: {
-            status: "FAILED",
-            error: failureError,
-          },
-        });
+        if (typeof prisma.videoJob.updateMany === "function") {
+          const updateResult = await prisma.videoJob.updateMany({
+            where: {
+              id: jobId,
+              status: { notIn: ["COMPLETED", "CANCELLED"] },
+            },
+            data: {
+              status: "FAILED",
+              error: failureError,
+            },
+          });
+
+          if (updateResult.count === 0) {
+            console.log(
+              `[callback] Ignored AVS_DUB FAILED callback; job ${jobId} is already in terminal state.`
+            );
+            return NextResponse.json({
+              success: true,
+              ignored: true,
+              message: `Job ${jobId} is already in a terminal state`,
+            });
+          }
+        } else {
+          await prisma.videoJob.update({
+            where: { id: jobId },
+            data: {
+              status: "FAILED",
+              error: failureError,
+            },
+          });
+        }
 
         console.log(`[callback] AVS_DUB job ${jobId} → FAILED`);
         return NextResponse.json({ success: true });
       }
     }
 
-    // ── Update VideoJob (existing export behaviour) ───────────────────
+    // ── Existing AVS/WTM/Export Handling ─────────────────────────────
     const isCompleted = status === "COMPLETED" && exportedUrl;
 
     if (typeof prisma.videoJob.updateMany === "function") {

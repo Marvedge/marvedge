@@ -141,13 +141,10 @@ export async function resolveSubtitleSourceUrl(
   }
   const blob = await resp.blob();
 
-  const isLocalDev =
-    options?.isLocalDev ?? process.env.NODE_ENV !== "production";
   const preferGcs =
-    options?.useGcs ??
-    (!isLocalDev && process.env.NEXT_PUBLIC_USE_GCS === "true");
+    options?.useGcs ?? (process.env.NEXT_PUBLIC_USE_GCS === "true");
 
-  if (!preferGcs && (isLocalDev || isCloudinaryUploadConfigured())) {
+  if (!preferGcs && isCloudinaryUploadConfigured()) {
     const secureUrl = await cloudinaryUpload(blob, {
       folder: "subtitles_source",
       filename: "subtitle_source.webm",
@@ -288,11 +285,10 @@ export function useSubtitles({ editorState }: UseSubtitlesProps) {
     cancelledRef.current = false;
     jobIdRef.current = null;
     try {
-      let subtitleSourceUrl = videoUrl;
       if (videoUrl.startsWith("blob:")) {
         toast.loading("Uploading audio source...", { id: toastId });
-        subtitleSourceUrl = await resolveSubtitleSourceUrl(videoUrl);
       }
+      const subtitleSourceUrl = await resolveSubtitleSourceUrl(videoUrl);
 
       if (cancelledRef.current) {
         toast("Subtitle generation cancelled", { id: toastId });

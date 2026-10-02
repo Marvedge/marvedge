@@ -83,11 +83,11 @@ export function normalizeWorkerBaseUrl(rawUrl: string) {
     return "";
   }
   url = url.replace(/\/+$/, "");
-  // Accept env values ending with a known endpoint (/process, /subtitles,
-  // /avs-voiceover, /avs-sync, /avs-dub, /wtm-composite, /package-hls) so we always POST
-  // against the worker's base URL.
+  // Accept env values ending with a known endpoint (process, subtitles,
+  // avs-voiceover, avs-sync, avs-dub, wtm-composite, package-hls, merge)
+  // so we always POST against the worker base URL.
   url = url.replace(
-    /\/(process|subtitles|avs-voiceover|avs-sync|avs-dub|wtm-composite|package-hls)$/i,
+    /\/(process|subtitles|avs-voiceover|avs-sync|avs-dub|wtm-composite|package-hls|merge)$/i,
     ""
   );
   url = url.replace(/\/+$/, "");
@@ -462,8 +462,7 @@ export async function invokeGcpDubSync(
   const result = body.result;
   // The worker returns alignedVideoUrl (same field name as /avs-sync) for
   // symmetry, so callers can treat both aligned sources uniformly.
-  const alignedVideoUrl =
-    typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
+  const alignedVideoUrl = typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
   if (!alignedVideoUrl) {
     throw new Error("Dub-sync worker returned no aligned video URL");
   }
