@@ -351,3 +351,147 @@ export function buildFfmpegCropFilter(targets: CropTarget[]): string | null {
   const cropY = `min(max(${buildCropExpression(simplified, "y")},0),ih-${cropHeight})`;
   return `crop=${cropWidth}:${cropHeight}:'${cropX}':'${cropY}':exact=1`;
 }
+
+/**
+ * Parses an aspect ratio string like "9:16", "1:1", or "16:9" into numeric components.
+ */
+export function parseAspectRatio(aspectRatio: string): {
+  width: number;
+  height: number;
+  ratio: number;
+} {
+  if (!aspectRatio || typeof aspectRatio !== "string") {
+    throw new CropTargetValidationError(
+      "targetAspectRatio is required and must be a non-empty string"
+    );
+  }
+  const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio.trim());
+  if (!match) {
+    throw new CropTargetValidationError(
+      `Invalid targetAspectRatio '${aspectRatio}'; expected format like '9:16', '1:1', or '16:9'`
+    );
+  }
+  const w = parseFloat(match[1]);
+  const h = parseFloat(match[2]);
+  if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) {
+    throw new CropTargetValidationError(
+      `Invalid targetAspectRatio '${aspectRatio}': components must be positive numbers`
+    );
+  }
+  return { width: w, height: h, ratio: w / h };
+}
+
+/**
+ * Generates a valid static center crop satisfying targetAspectRatio within source dimensions.
+ * Used as safe fallback when dynamic AutoFlip crop generation fails or produces unusable targets.
+ */
+export function calculateCenterCropTargets(
+  source: { width: number; height: number; fps?: number; duration_sec?: number },
+  targetAspectRatio: string,
+  videoId?: string
+): CropTargetData {
+  if (
+    !source ||
+    !Number.isFinite(source.width) ||
+    source.width <= 0 ||
+    !Number.isFinite(source.height) ||
+    source.height <= 0
+  ) {
+    throw new Error(
+      "Cannot calculate center crop: source dimensions must be positive finite numbers"
+    );
+  }
+
+  const { ratio: targetRatio } = parseAspectRatio(targetAspectRatio);
+  const sourceRatio = source.width / source.height;
+
+  let cropWidth: number;
+  let cropHeight: number;
+
+  if (sourceRatio > targetRatio) {
+    // Source is wider than target: fit to height, crop width
+    cropHeight = source.height;
+    cropWidth = Math.round(cropHeight * targetRatio);
+    if (cropWidth % 2 !== 0 && cropWidth + 1 <= source.width) {
+      cropWidth += 1;
+    } else if (cropWidth % 2 !== 0 && cropWidth > 1) {
+      cropWidth -= 1;
+    }
+    if (cropWidth > source.width) {
+      cropWidth = source.width;
+    }
+  } else {
+    // Source is taller than target (or equal): fit to width, crop height
+    cropWidth = source.width;
+    cropHeight = Math.round(cropWidth / targetRatio);
+    if (cropHeight % 2 !== 0 && cropHeight + 1 <= source.height) {
+      cropHeight += 1;
+    } else if (cropHeight % 2 !== 0 && cropHeight > 1) {
+      cropHeight -= 1;
+    }
+    if (cropHeight > source.height) {
+      cropHeight = source.height;
+    }
+  }
+
+  const cropX = Math.max(
+    0,
+    Math.min(source.width - cropWidth, Math.round((source.width - cropWidth) / 2))
+  );
+  const cropY = Math.max(
+    0,
+    Math.min(source.height - cropHeight, Math.round((source.height - cropHeight) / 2))
+  );
+
+  const cropTargets: CropTarget[] = [
+    {
+      timestamp_sec: 0,
+      crop: {
+        x: cropX,
+        y: cropY,
+        width: cropWidth,
+        height: cropHeight,
+      },
+      confidence: 1.0,
+      source: "center_crop",
+    },
+  ];
+
+  if (source.duration_sec && source.duration_sec > 0.05) {
+    cropTargets.push({
+      timestamp_sec: source.duration_sec,
+      crop: {
+        x: cropX,
+        y: cropY,
+        width: cropWidth,
+        height: cropHeight,
+      },
+      confidence: 1.0,
+      source: "center_crop",
+    });
+  }
+
+  const data: CropTargetData = {
+    schema_version: CROP_TARGET_SCHEMA_VERSION,
+    ...(videoId ? { video_id: videoId } : {}),
+    source: {
+      width: source.width,
+      height: source.height,
+      ...(source.fps ? { fps: source.fps } : {}),
+      ...(source.duration_sec !== undefined ? { duration_sec: source.duration_sec } : {}),
+    },
+    output: {
+      aspect_ratio: targetAspectRatio,
+      width: cropWidth,
+      height: cropHeight,
+    },
+    timeline: {
+      timebase: "seconds",
+      sampling: "keyframes_interpolated",
+    },
+    crop_targets: cropTargets,
+  };
+
+  validateCropTargetData(data);
+  return data;
+}

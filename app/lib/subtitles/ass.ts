@@ -9,8 +9,6 @@
 //    FFmpeg's filtergraph parser on Windows and Linux.
 // 6. Writes .ass files for libass rendering by reframe-worker and export workers.
 
-import fs from "fs";
-import path from "path";
 import { isRtlLanguage } from "./languages";
 import { toAssOverrideTags, toAssStyleLine } from "./style";
 import type { SubtitleCue, SubtitleStyle } from "./types";
@@ -138,17 +136,3 @@ export function generateAssContent(
 /**
  * Synchronously writes an ASS subtitle file to disk and returns its absolute path.
  */
-export function writeAssFile(
-  destDir: string,
-  cues: readonly SubtitleCue[],
-  width: number,
-  height: number,
-  style?: SubtitleStyle,
-  language?: string | null,
-  filename = "subtitles.ass"
-): string {
-  const content = generateAssContent(cues, width, height, style, language);
-  const filePath = path.join(destDir, filename);
-  fs.writeFileSync(filePath, content, "utf8");
-  return filePath;
-}

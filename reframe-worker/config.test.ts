@@ -13,7 +13,7 @@ describe("Reframe Worker Config", () => {
   });
 
   it("throws an error when CALLBACK_SECRET is missing", () => {
-    delete process.env.CALLBACK_SECRET;
+    process.env.CALLBACK_SECRET = "";
 
     expect(() => getReframeWorkerConfig()).toThrow(
       "CALLBACK_SECRET is required for the Reframe Worker"
