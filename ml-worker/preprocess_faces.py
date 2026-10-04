@@ -47,36 +47,36 @@ def inference_video(args):
     DET = S3FD(device=device)
     flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
     flist.sort()
-    
+
     dets = []
-    
+
     import numpy as np
     from model.faceDetector.s3fd.box_utils import nms_
     img_mean = np.array([104., 117., 123.])[:, np.newaxis, np.newaxis].astype('float32')
-    
+
     # Process the video in large memory-safe chunks (to avoid loading 10s of thousands of images into RAM)
     chunk_size = args.chunkSize
     batch_size = args.batchSize
-    
+
     for chunk_start in range(0, len(flist), chunk_size):
         chunk_files = flist[chunk_start : chunk_start + chunk_size]
-        
+
         # Load all images in the chunk
         chunk_images = []
         for fname in chunk_files:
             image = cv2.imread(fname)
             if image is not None:
                 chunk_images.append(image)
-                
+
         if not chunk_images:
             for _ in chunk_files:
                 dets.append([])
             continue
-            
+
         # We assume all frames are the same size for a given video
         h, w = chunk_images[0].shape[0], chunk_images[0].shape[1]
         scale_t = torch.Tensor([w, h, w, h]).to(device) if device == 'cuda' else torch.Tensor([w, h, w, h])
-        
+
         # S3FD preprocessing
         processed_tensors = []
         for img in chunk_images:
@@ -90,16 +90,16 @@ def inference_video(args):
             scaled_img -= img_mean
             scaled_img = scaled_img[[2, 1, 0], :, :]
             processed_tensors.append(torch.from_numpy(scaled_img))
-            
+
         all_tensors = torch.stack(processed_tensors)
-        
+
         with torch.no_grad():
             for b_start in range(0, len(all_tensors), batch_size):
                 batch_tensors = all_tensors[b_start : b_start + batch_size].to(device)
-                
+
                 y = DET.net(batch_tensors)
                 detections = y.data
-                
+
                 for b_idx in range(detections.size(0)):
                     bboxes = np.empty(shape=(0, 5))
                     for i in range(detections.size(1)):
@@ -110,21 +110,21 @@ def inference_video(args):
                             bbox = (pt[0], pt[1], pt[2], pt[3], score)
                             bboxes = np.vstack((bboxes, bbox))
                             j += 1
-                            
+
                     if len(bboxes) > 0:
                         keep = nms_(bboxes, 0.1)
                         bboxes = bboxes[keep]
-                        
+
                     frame_idx = chunk_start + b_start + b_idx
                     frame_dets = []
                     for bbox in bboxes:
                         frame_dets.append({
-                            'frame': frame_idx, 
-                            'bbox': (bbox[:-1]).tolist(), 
+                            'frame': frame_idx,
+                            'bbox': (bbox[:-1]).tolist(),
                             'conf': bbox[-1]
                         })
                     dets.append(frame_dets)
-                    
+
         sys.stderr.write(f'{args.videoFilePath} - Processed chunk {chunk_start}/{len(flist)} frames\r')
 
     sys.stderr.write('\n')
@@ -150,9 +150,9 @@ def bb_intersection_over_union(boxA, boxB):
 def track_shot(args, sceneFaces):
     """
     Multi-target face tracking across frames in a single shot.
-    
+
     Robust against:
-    - Multi-speaker scenarios: non-destructive matching assigns each face 
+    - Multi-speaker scenarios: non-destructive matching assigns each face
       exclusively to its best matching active track via greedy IoU association.
     - Zero/degenerate bounding boxes via hardened bb_intersection_over_union.
     - Interpolation crashes by enforcing len(track) >= 2 before interp1d.
@@ -329,15 +329,15 @@ def crop_video(args, track, cropFile, flist=None):
         y2 = max(0, min(H, int(my+bs*(1+2*cs))))
         x1 = max(0, int(mx-bs*(1+cs)))
         x2 = max(0, min(W, int(mx+bs*(1+cs))))
-        
+
         if y2 <= y1 or x2 <= x1:
             face = numpy.zeros((224, 224, 3), dtype=numpy.uint8)
         else:
             face = frame_pad[y1:y2, x1:x2]
             face = cv2.resize(face, (224, 224))
-            
+
         vOut.write(face)
-        
+
     audioTmp = cropFile + '.wav'
     audioStart = (track['frame'][0]) / TARGET_FPS
     audioEnd = (track['frame'][-1] + 1) / TARGET_FPS
@@ -380,6 +380,7 @@ def crop_video(args, track, cropFile, flist=None):
         'is_fallback': track.get('is_fallback', False),
         'fallback_reason': track.get('fallback_reason', None),
     }
+    return {'track': track, 'proc_track': dets}
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}
@@ -412,7 +413,7 @@ def main():
     parser = argparse.ArgumentParser(description = "TalkNet Preprocessing ONLY (Face Cropping)")
     parser.add_argument('--videoPath', type=str, required=True, help='Path to input video')
     parser.add_argument('--savePath', type=str, required=True, help='Path to output directory for crops/metadata')
-    
+
     # Tuning params
     parser.add_argument('--nDataLoaderThread', type=int, default=10, help='Number of workers')
     parser.add_argument('--facedetScale', type=float, default=0.25, help='Scale factor for face detection')
@@ -424,12 +425,12 @@ def main():
     parser.add_argument('--batchSize', type=int, default=32, help='Batch size for S3FD PyTorch inference on GPU')
     args = parser.parse_args()
 
-    # Initialization 
+    # Initialization
     args.pyaviPath = os.path.join(args.savePath, 'pyavi')
     args.pyframesPath = os.path.join(args.savePath, 'pyframes')
     args.pyworkPath = os.path.join(args.savePath, 'pywork')
     args.pycropPath = os.path.join(args.savePath, 'pycrop')
-    
+
     if os.path.exists(args.savePath):
         rmtree(args.savePath)
     os.makedirs(args.pyaviPath, exist_ok = True)
@@ -450,7 +451,7 @@ def main():
     ]
     subprocess.run(cmd_video, check=True)
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the video and save in %s \r\n" %(args.videoFilePath))
-    
+
     args.audioFilePath = os.path.join(args.pyaviPath, 'audio.wav')
     cmd_audio = [
         "ffmpeg", "-y",
@@ -479,7 +480,7 @@ def main():
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the frames and save in %s \r\n" %(args.pyframesPath))
 
     scene = scene_detect(args)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Scene detection and save in %s \r\n" %(args.pyworkPath))    
+    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Scene detection and save in %s \r\n" %(args.pyworkPath))
 
     faces = inference_video(args)
     sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face detection and save in %s \r\n" %(args.pyworkPath))
@@ -508,13 +509,13 @@ def main():
     flist.sort()
     for ii, track in tqdm.tqdm(enumerate(allTracks), total = len(allTracks)):
         vidTracks.append(crop_video(args, track, os.path.join(args.pycropPath, '%05d'%ii), flist=flist))
-    
+
     savePath = os.path.join(args.pyworkPath, 'tracks.pckl')
     with open(savePath, 'wb') as fil:
         pickle.dump(vidTracks, fil)
-    
+
     generate_metadata(vidTracks, args)
-    
+
     sys.stderr.write("\n=== Preprocessing Complete ===\n")
     sys.stderr.write(f"Outputs saved to: {args.savePath}\n")
 
