@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { uploadEditorVideoFile } from "./useEditorVideoUpload";
+import {
+  _resetActiveVideoUploadPromiseForTest,
+  uploadEditorVideoFile,
+} from "./useEditorVideoUpload";
 import * as cloudinaryUploadModule from "@/app/lib/cloudinaryUpload";
 import { toast } from "sonner";
 
@@ -37,6 +40,7 @@ describe("uploadEditorVideoFile (Explicit User Upload Flow)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetActiveVideoUploadPromiseForTest();
     currentVideoUrl = null;
     currentBlob = null;
     currentTitle = "";
@@ -211,5 +215,61 @@ describe("uploadEditorVideoFile (Explicit User Upload Flow)", () => {
 
     // Active upload promise is cleared once completed
     expect((await import("./useEditorVideoUpload")).getActiveVideoUploadPromise()).toBeNull();
+  });
+
+  it("joins the in-flight upload instead of starting a second one on concurrent calls", async () => {
+    const dynamicSecureUrl = "https://res.cloudinary.com/test-cloud/video/upload/v777/double-click.mp4";
+
+    vi.spyOn(cloudinaryUploadModule, "isEditorCloudinaryUploadEnabled").mockReturnValue(true);
+    vi.spyOn(cloudinaryUploadModule, "isCloudinaryUploadConfigured").mockReturnValue(true);
+
+    let resolveUpload!: (url: string) => void;
+    const gate = new Promise<string>((resolve) => {
+      resolveUpload = resolve;
+    });
+    const uploadSpy = vi
+      .spyOn(cloudinaryUploadModule, "uploadVideoToCloudinary")
+      .mockReturnValue(gate);
+
+    const file = new File(["dummy video"], "double-click.mp4", { type: "video/mp4" });
+
+    // Two rapid calls while the first upload is still in flight
+    const p1 = uploadEditorVideoFile(file, callbacks);
+    const p2 = uploadEditorVideoFile(file, callbacks);
+
+    // Only one network upload and one preview blob for both callers
+    expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+    // Both callers share the in-flight singleton
+    const { getActiveVideoUploadPromise } = await import("./useEditorVideoUpload");
+    expect(getActiveVideoUploadPromise()).not.toBeNull();
+
+    resolveUpload(dynamicSecureUrl);
+    await expect(p1).resolves.toBe(dynamicSecureUrl);
+    await expect(p2).resolves.toBe(dynamicSecureUrl);
+
+    // Singleton cleared after completion
+    expect(getActiveVideoUploadPromise()).toBeNull();
+  });
+
+  it("starts a fresh upload once the previous one has completed", async () => {
+    vi.spyOn(cloudinaryUploadModule, "isEditorCloudinaryUploadEnabled").mockReturnValue(true);
+    vi.spyOn(cloudinaryUploadModule, "isCloudinaryUploadConfigured").mockReturnValue(true);
+    const uploadSpy = vi
+      .spyOn(cloudinaryUploadModule, "uploadVideoToCloudinary")
+      .mockResolvedValueOnce("https://example.com/first.mp4")
+      .mockResolvedValueOnce("https://example.com/second.mp4");
+
+    const first = new File(["one"], "first.mp4", { type: "video/mp4" });
+    const second = new File(["two"], "second.mp4", { type: "video/mp4" });
+
+    await expect(uploadEditorVideoFile(first, callbacks)).resolves.toBe(
+      "https://example.com/first.mp4"
+    );
+    await expect(uploadEditorVideoFile(second, callbacks)).resolves.toBe(
+      "https://example.com/second.mp4"
+    );
+    expect(uploadSpy).toHaveBeenCalledTimes(2);
   });
 });
