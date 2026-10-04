@@ -106,10 +106,17 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "marvedge.com";
   const devDomain = "localhost:3000";
 
+  const isLoopbackHost =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname.startsWith("localhost:") ||
+    hostname.startsWith("127.0.0.1:");
+
   const isMainDomain =
     hostname === rootDomain ||
     hostname === `www.${rootDomain}` ||
     hostname === devDomain ||
+    isLoopbackHost ||
     hostname.endsWith(".vercel.app"); // production + preview deployments
   const isSubdomain =
     !isMainDomain && (hostname.endsWith(`.${rootDomain}`) || hostname.endsWith(`.${devDomain}`));

@@ -4,6 +4,42 @@ import { getAwsJobProgress } from "@/app/lib/awsJobProgress";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 
+// VideoJob ids are cuid() strings. Accept those plus the short `xxx-N` style
+// ids used across unit tests, but reject empty / oversized / path-like values
+// before they ever reach Prisma (previously any string hit the database).
+const MAX_JOB_ID_LENGTH = 200;
+const JOB_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+function isValidJobId(id: unknown): id is string {
+  return (
+    typeof id === "string" &&
+    id.length > 0 &&
+    id.length <= MAX_JOB_ID_LENGTH &&
+    JOB_ID_PATTERN.test(id)
+  );
+}
+
+// Closed mapping from internal DB status to the public `state` token every
+// client poller switches on. Unknown values (e.g. a future worker status)
+// resolve to "unknown" instead of leaking the raw DB string — pollers treat
+// anything they don't recognize as keep-polling, so this is behavior-safe.
+const JOB_STATUS_TO_STATE: Record<string, string> = {
+  PENDING: "waiting",
+  PROCESSING: "active",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  // Written by /api/subtitles/cancel. Mapped explicitly so the client's
+  // poll loop has a terminal state to stop on that is not "failed" — a
+  // cancel the user asked for is not an error to report to them.
+  CANCELLED: "cancelled",
+};
+
+const KNOWN_PUBLIC_STATES = new Set(Object.values(JOB_STATUS_TO_STATE));
+
+function toPublicState(value: unknown): string {
+  return typeof value === "string" && KNOWN_PUBLIC_STATES.has(value) ? value : "unknown";
+}
+
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,6 +50,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     // In Next 15, params must be awaited
     const { id } = await context.params;
+
+    if (!isValidJobId(id)) {
+      return NextResponse.json({ error: "Invalid job id" }, { status: 400 });
+    }
 
     const job = await prisma.videoJob.findUnique({
       where: { id },
@@ -40,19 +80,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const useAwsProgress = !useGcpWorker && process.env.USE_AWS_SPLITTER === "true";
     const awsProgress = useAwsProgress ? await getAwsJobProgress(id) : null;
 
-    const state =
-      awsProgress?.state ??
-      {
-        PENDING: "waiting",
-        PROCESSING: "active",
-        COMPLETED: "completed",
-        FAILED: "failed",
-        // Written by /api/subtitles/cancel. Mapped explicitly so the client's
-        // poll loop has a terminal state to stop on that is not "failed" — a
-        // cancel the user asked for is not an error to report to them.
-        CANCELLED: "cancelled",
-      }[job.status] ??
-      job.status.toLowerCase();
+    const state = toPublicState(awsProgress?.state ?? JOB_STATUS_TO_STATE[job.status]);
 
     const progress = awsProgress?.progress ?? job.progress;
     const exportedUrl = awsProgress?.exportedUrl ?? job.exportedUrl;
@@ -76,12 +104,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       if (rec.kind === "SUBTITLES") {
         subtitles = rec.subtitles ?? null;
       } else if (rec.kind === "AVS_SYNC" || rec.kind === "AVS_DUB") {
-        aligned = {
-          alignedVideoUrl: rec.alignedVideoUrl ?? null,
-          duration: rec.duration ?? null,
-        };
-      } else if (rec.kind === "AVS_DUB") {
-        // AVS_DUB surfaces the same aligned shape as AVS_SYNC.
         aligned = {
           alignedVideoUrl: rec.alignedVideoUrl ?? null,
           duration: rec.duration ?? null,
