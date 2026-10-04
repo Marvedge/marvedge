@@ -78,6 +78,13 @@ export async function uploadEditorVideoFile(
     return localBlobUrl;
   }
 
+  // Dedupe: while a Cloudinary upload is in flight, join it instead of
+  // starting a second one (double-click / recorder+editor race). The first
+  // call owns the singleton; late joiners share its outcome.
+  if (activeVideoUploadPromise) {
+    return activeVideoUploadPromise;
+  }
+
   // Explicit Cloudinary flow:
   // 1. Temporary blob URL for immediate playback preview
   const tempBlobUrl = URL.createObjectURL(file);
