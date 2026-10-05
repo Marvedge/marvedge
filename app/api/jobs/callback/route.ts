@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    if (!body || typeof body !== "object") {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
     }
 
@@ -44,6 +44,10 @@ export async function POST(req: NextRequest) {
       cropTargets,
       alignedVideoUrl,
       duration,
+      fallback,
+      fallbackStage,
+      fallbackReason,
+      attemptsMade,
     } = body as {
       jobId?: string;
       status?: string;
@@ -53,6 +57,10 @@ export async function POST(req: NextRequest) {
       cropTargets?: unknown;
       alignedVideoUrl?: string;
       duration?: number;
+      fallback?: boolean;
+      fallbackStage?: string;
+      fallbackReason?: string;
+      attemptsMade?: number;
     };
 
     if (!jobId || typeof jobId !== "string") {
@@ -96,10 +104,7 @@ export async function POST(req: NextRequest) {
     // ── Reframe Job Handling ─────────────────────────────────────────
     if (cropTargets !== undefined || isReframeJob) {
       if (!isReframeJob) {
-        return NextResponse.json(
-          { error: "Job is not a REFRAME job" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Job is not a REFRAME job" }, { status: 400 });
       }
 
       if (status === "PROCESSING") {
@@ -152,9 +157,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        console.log(
-          `[callback] Reframe Job ${jobId} → PROCESSING (${Math.round(progress)}%)`
-        );
+        console.log(`[callback] Reframe Job ${jobId} → PROCESSING (${Math.round(progress)}%)`);
         return NextResponse.json({ success: true });
       }
 
@@ -208,8 +211,7 @@ export async function POST(req: NextRequest) {
         try {
           validateCropTargetData(cropTargets);
         } catch (valErr) {
-          const message =
-            valErr instanceof Error ? valErr.message : "Invalid cropTargets";
+          const message = valErr instanceof Error ? valErr.message : "Invalid cropTargets";
           return NextResponse.json({ error: message }, { status: 400 });
         }
 
@@ -229,6 +231,10 @@ export async function POST(req: NextRequest) {
                 ...existingJobData,
                 kind: "REFRAME",
                 cropTargets,
+                ...(fallback !== undefined ? { fallback } : {}),
+                ...(fallbackStage ? { fallbackStage } : {}),
+                ...(fallbackReason ? { fallbackReason } : {}),
+                ...(attemptsMade !== undefined ? { attemptsMade } : {}),
               } as unknown as Prisma.InputJsonValue,
               error: null,
             },
@@ -255,6 +261,10 @@ export async function POST(req: NextRequest) {
                 ...existingJobData,
                 kind: "REFRAME",
                 cropTargets,
+                ...(fallback !== undefined ? { fallback } : {}),
+                ...(fallbackStage ? { fallbackStage } : {}),
+                ...(fallbackReason ? { fallbackReason } : {}),
+                ...(attemptsMade !== undefined ? { attemptsMade } : {}),
               } as unknown as Prisma.InputJsonValue,
               error: null,
             },
@@ -328,6 +338,10 @@ export async function POST(req: NextRequest) {
                 kind: "AVS_DUB",
                 alignedVideoUrl,
                 duration,
+                ...(fallback !== undefined ? { fallback } : {}),
+                ...(fallbackStage ? { fallbackStage } : {}),
+                ...(fallbackReason ? { fallbackReason } : {}),
+                ...(attemptsMade !== undefined ? { attemptsMade } : {}),
               },
             },
           });
@@ -353,6 +367,10 @@ export async function POST(req: NextRequest) {
                 kind: "AVS_DUB",
                 alignedVideoUrl,
                 duration,
+                ...(fallback !== undefined ? { fallback } : {}),
+                ...(fallbackStage ? { fallbackStage } : {}),
+                ...(fallbackReason ? { fallbackReason } : {}),
+                ...(attemptsMade !== undefined ? { attemptsMade } : {}),
               },
             },
           });

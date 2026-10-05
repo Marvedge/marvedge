@@ -1,11 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cuesFromWhisperSegments,
   cuesFromWhisperWords,
   normalizeWhisperResponse,
   normalizeWhisperWords,
+  transcribeAudioWithWhisper,
 } from "./whisper";
 import type { WhisperSegment, WhisperWord } from "./types";
+
+const createMock = vi.fn();
+const openAiInstances: Array<{ apiKey: string }> = [];
+
+vi.mock("openai", () => {
+  class MockOpenAI {
+    apiKey: string;
+    audio = {
+      transcriptions: {
+        create: (...args: any[]) => createMock(...args),
+      },
+    };
+    constructor(opts: { apiKey: string }) {
+      this.apiKey = opts.apiKey;
+      openAiInstances.push(opts);
+    }
+  }
+  return { default: MockOpenAI };
+});
 
 describe("Whisper word timestamp normalization & clustering (Task-00038)", () => {
   describe("normalizeWhisperWords", () => {
@@ -197,6 +217,114 @@ describe("Whisper word timestamp normalization & clustering (Task-00038)", () =>
     it("throws an error for non-object inputs", () => {
       expect(() => normalizeWhisperResponse(null)).toThrow();
       expect(() => normalizeWhisperResponse("not an object")).toThrow();
+    });
+  });
+
+  describe("transcribeAudioWithWhisper", () => {
+    const originalEnvKey = process.env.OPENAI_API_KEY;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      openAiInstances.length = 0;
+      process.env.OPENAI_API_KEY = originalEnvKey;
+    });
+
+    afterEach(() => {
+      process.env.OPENAI_API_KEY = originalEnvKey;
+    });
+
+    it("throws an error if OPENAI_API_KEY is not set and no apiKey option is provided", async () => {
+      delete process.env.OPENAI_API_KEY;
+      await expect(transcribeAudioWithWhisper({} as any)).rejects.toThrow(
+        "Missing OPENAI_API_KEY for Whisper transcription"
+      );
+    });
+
+    it("uses process.env.OPENAI_API_KEY when no apiKey option is passed", async () => {
+      process.env.OPENAI_API_KEY = "env-secret-key-123";
+      createMock.mockResolvedValueOnce({
+        text: "Transcribed audio",
+        words: [
+          { word: "Transcribed", start: 0, end: 0.5 },
+          { word: "audio", start: 0.6, end: 1.0 },
+        ],
+      });
+
+      const { transcript, cues } = await transcribeAudioWithWhisper({} as any);
+      expect(openAiInstances).toHaveLength(1);
+      expect(openAiInstances[0].apiKey).toBe("env-secret-key-123");
+      expect(transcript.text).toBe("Transcribed audio");
+      expect(cues).toHaveLength(1);
+      expect(cues[0].words).toHaveLength(2);
+    });
+
+    it("uses options.apiKey override when provided, even if env var exists", async () => {
+      process.env.OPENAI_API_KEY = "env-secret-key-123";
+      createMock.mockResolvedValueOnce({
+        text: "Override key text",
+        words: [],
+      });
+
+      await transcribeAudioWithWhisper({} as any, { apiKey: "custom-override-key-456" });
+      expect(openAiInstances).toHaveLength(1);
+      expect(openAiInstances[0].apiKey).toBe("custom-override-key-456");
+    });
+
+    it("passes model whisper-1, verbose_json, and timestamp granularities to OpenAI", async () => {
+      createMock.mockResolvedValueOnce({
+        text: "Detailed test",
+        words: [
+          { word: "Detailed", start: 0, end: 0.5 },
+          { word: "test", start: 0.55, end: 1.0 },
+        ],
+      });
+      const dummyFile = { name: "sample.mp3" };
+
+      await transcribeAudioWithWhisper(dummyFile, {
+        apiKey: "test-key",
+        language: "es",
+        prompt: "Business presentation",
+        temperature: 0.3,
+      });
+
+      expect(createMock).toHaveBeenCalledTimes(1);
+      expect(createMock).toHaveBeenCalledWith({
+        file: dummyFile,
+        model: "whisper-1",
+        response_format: "verbose_json",
+        timestamp_granularities: ["word", "segment"],
+        language: "es",
+        prompt: "Business presentation",
+        temperature: 0.3,
+      });
+    });
+
+    it("passes custom clustering options through to cue generator", async () => {
+      createMock.mockResolvedValueOnce({
+        text: "One two",
+        words: [
+          { word: "One", start: 0.0, end: 0.5 },
+          { word: "two", start: 0.8, end: 1.2 }, // 0.3s gap
+        ],
+      });
+
+      // Break on gap > 0.2s
+      const result = await transcribeAudioWithWhisper({} as any, {
+        apiKey: "test-key",
+        clustering: { maxGapSeconds: 0.2 },
+      });
+
+      expect(result.cues).toHaveLength(2);
+      expect(result.cues[0].text).toBe("One");
+      expect(result.cues[1].text).toBe("two");
+    });
+
+    it("propagates OpenAI client errors cleanly", async () => {
+      createMock.mockRejectedValueOnce(new Error("OpenAI API 429 Too Many Requests"));
+
+      await expect(
+        transcribeAudioWithWhisper({} as any, { apiKey: "test-key" })
+      ).rejects.toThrow("OpenAI API 429 Too Many Requests");
     });
   });
 });

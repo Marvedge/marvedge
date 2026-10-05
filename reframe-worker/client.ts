@@ -29,6 +29,20 @@ export interface MlInferenceEnvelope {
   [key: string]: unknown;
 }
 
+export class MlInferenceHttpError extends Error {
+  readonly status: number;
+  readonly isClientError: boolean;
+  readonly isServerError: boolean;
+
+  constructor(status: number, message: string) {
+    super(`ML inference HTTP ${status}: ${message}`);
+    this.name = "MlInferenceHttpError";
+    this.status = status;
+    this.isClientError = status >= 400 && status < 500;
+    this.isServerError = status >= 500 && status < 600;
+  }
+}
+
 import type { JobCallbackPayload } from "../app/types/jobs/callback";
 import {
   CallbackHttpError,
@@ -78,9 +92,7 @@ export async function callMlInference(
       } catch {
         errDetail = await response.text().catch(() => "");
       }
-      throw new Error(
-        `ML inference HTTP ${response.status}${errDetail ? `: ${errDetail}` : ""}`
-      );
+      throw new MlInferenceHttpError(response.status, errDetail || response.statusText);
     }
 
     const data = (await response.json()) as MlInferenceEnvelope;
@@ -89,9 +101,7 @@ export async function callMlInference(
     }
 
     if (data.ok === false) {
-      throw new Error(
-        `ML inference error: ${data.error || "Service reported failure"}`
-      );
+      throw new Error(`ML inference error: ${data.error || "Service reported failure"}`);
     }
 
     let extracted: unknown;
@@ -137,4 +147,3 @@ export async function callMlInference(
     clearTimeout(timer);
   }
 }
-

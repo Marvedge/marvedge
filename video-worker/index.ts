@@ -11,6 +11,15 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 import axios from "axios";
+import {
+  createDubbingJob,
+  waitForDubbingCompletion,
+} from "../app/lib/elevenlabs/dubbing";
+import { runClipScoringJob } from "../app/lib/clips/jobs";
+import {
+  postJobCallbackWithRetry,
+  processDubbingJob,
+} from "../app/lib/avs/dubbingProcessor";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 // Load env from common locations (video-worker/.env and parent app .env).
@@ -810,6 +819,14 @@ function computeTargetSizeForRatio(
 const worker = new Worker(
   "video-processing",
   async (job: Job) => {
+    if (job.name === "clip-scoring") {
+      return await runClipScoringJob(job.data, prisma, {
+        updateProgress: async (progress: number) => {
+          await job.updateProgress(progress);
+        },
+      });
+    }
+
     const jobStartTs = Date.now();
     const {
       jobId,
@@ -1585,7 +1602,6 @@ audioWorker.on("failed", (job, err) => {
 });
 
 console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
-
 // ── Reframe Worker (Task-00023 Architecture) ──────────────────────────────────
 // Note: Video reframing is decoupled from this monolithic worker. It runs in a
 // dedicated lightweight worker process (reframe-worker/index.ts; npm run worker:reframe)
@@ -1595,8 +1611,6 @@ console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
 // ── Dubbing Worker (AVS Dubbing — Task-00059) ──────────────────────────────────
 // Processes pre-recorded dubbed audio time-alignment via Cloud Run /avs-dub and
 // reports completion/failure via authenticated HTTP callback to Next.js.
-import { processDubbingJob } from "../app/lib/avs/dubbingProcessor";
-
 const dubbingConcurrency = Math.max(
   1,
   parseInt(process.env.DUBBING_WORKER_CONCURRENCY || "1", 10) || 1
@@ -1617,11 +1631,125 @@ const dubbingStalledInterval = Math.max(
 export const dubbingWorker = new Worker(
   "dubbing-processing",
   async (job: Job) => {
-    await processDubbingJob(job.data, {
-      updateProgress: async (pct: number) => {
-        await job.updateProgress(pct);
-      },
-    });
+    if (job.name === "avs-dub") {
+      try {
+        await processDubbingJob(job.data, {
+          updateProgress: async (pct: number) => {
+            await job.updateProgress(pct);
+          },
+        });
+      } catch (error) {
+        const maxAttempts =
+          typeof job.opts.attempts === "number" && job.opts.attempts > 0
+            ? job.opts.attempts
+            : 1;
+        const fallbackJobId =
+          typeof job.data?.jobId === "string" ? job.data.jobId : "";
+        const fallbackVideoUrl =
+          typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
+
+        if (
+          job.attemptsMade + 1 < maxAttempts ||
+          !fallbackJobId.trim() ||
+          !fallbackVideoUrl.trim()
+        ) {
+          throw error;
+        }
+
+        const reason = error instanceof Error ? error.message : String(error);
+        const fallbackPayload = {
+          jobId: fallbackJobId,
+          status: "COMPLETED" as const,
+          alignedVideoUrl: fallbackVideoUrl,
+          duration:
+            typeof job.data.sourceDuration === "number" &&
+            Number.isFinite(job.data.sourceDuration) &&
+            job.data.sourceDuration >= 0
+              ? job.data.sourceDuration
+              : 0,
+          fallback: true,
+          fallbackStage: "DUBBING",
+          fallbackReason: reason,
+          attemptsMade: job.attemptsMade + 1,
+        };
+
+        try {
+          await postJobCallbackWithRetry(fallbackPayload);
+        } catch (callbackError) {
+          console.error(
+            `[dubbing-worker] Final fallback callback failed for job ${job.id}:`,
+            callbackError
+          );
+          throw new AggregateError(
+            [error, callbackError],
+            `Dubbing failed and source-video fallback callback could not be delivered for job ${job.id}`
+          );
+        }
+
+        await job.updateProgress(100);
+        console.warn(
+          `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
+        );
+      }
+      return;
+    }
+
+    if (job.name !== "dubbing") {
+      throw new Error(`Unsupported dubbing job type: ${job.name}`);
+    }
+
+    const { jobId, sourceUrl, targetLanguage } = job.data;
+    try {
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: { status: "PROCESSING", progress: 10 },
+      });
+      await job.updateProgress(10);
+
+      const dubbingJob = await createDubbingJob({ sourceUrl, targetLanguage });
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          progress: 25,
+          jobData: {
+            kind: "DUBBING",
+            sourceUrl,
+            targetLanguage,
+            dubbingId: dubbingJob.dubbingId,
+            providerStatus: dubbingJob.status,
+          },
+        },
+      });
+      await job.updateProgress(25);
+
+      const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          jobData: {
+            kind: "DUBBING",
+            sourceUrl,
+            targetLanguage,
+            dubbingId: completedJob.dubbingId,
+            providerStatus: completedJob.status,
+            audioEndpoint: `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`,
+          },
+        },
+      });
+      await job.updateProgress(100);
+    } catch (error: any) {
+      console.error(`[Dubbing ${jobId}] failed:`, error);
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "FAILED",
+          error: error?.message || "Dubbing failed",
+        },
+      });
+      throw error;
+    }
   },
   {
     connection: new Redis(redisUrl, { maxRetriesPerRequest: null }) as any,

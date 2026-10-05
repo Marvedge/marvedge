@@ -123,6 +123,10 @@ async function pollSubtitleJob(jobId: string, isCancelled: () => boolean): Promi
  * require GCP/GCS credentials or buckets. Existing HTTPS URLs (Cloudinary or
  * otherwise) bypass upload entirely. Future/production GCP support is preserved
  * via uploadBlobToGcs when in production or when NEXT_PUBLIC_USE_GCS is set.
+ * Invariant (Task-00044 & Task-00047):
+ * - HTTPS videoUrl (including Cloudinary HTTPS URLs from upload or auto-reframe):
+ *   passed directly to /api/subtitles/create; uploadBlobToGcs() is NEVER called.
+ * - blob: URLs: preserve existing production GCS fallback.
  */
 export async function resolveSubtitleSourceUrl(
   videoUrl: string,
@@ -262,8 +266,9 @@ export function useSubtitles({ editorState }: UseSubtitlesProps) {
     }
   }, [postCancel]);
 
-  const handleAddSubtitles = async () => {
-    if (!videoUrl) {
+  const handleAddSubtitles = async (overrideUrl?: string) => {
+    const activeUrl = overrideUrl || videoUrl;
+    if (!activeUrl) {
       toast.error("No video available for subtitles");
       return;
     }
@@ -285,10 +290,10 @@ export function useSubtitles({ editorState }: UseSubtitlesProps) {
     cancelledRef.current = false;
     jobIdRef.current = null;
     try {
-      if (videoUrl.startsWith("blob:")) {
+      if (activeUrl.startsWith("blob:")) {
         toast.loading("Uploading audio source...", { id: toastId });
       }
-      const subtitleSourceUrl = await resolveSubtitleSourceUrl(videoUrl);
+      const subtitleSourceUrl = await resolveSubtitleSourceUrl(activeUrl);
 
       if (cancelledRef.current) {
         toast("Subtitle generation cancelled", { id: toastId });

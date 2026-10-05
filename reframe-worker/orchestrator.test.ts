@@ -12,6 +12,7 @@ import {
   processReframeJob,
   isFinalBullMqAttempt,
   ReframePayloadValidationError,
+  classifyReframeError,
   type ReframeJobContext,
 } from "./orchestrator";
 import { UnrecoverableError } from "bullmq";
@@ -21,6 +22,7 @@ import {
   postJobCallbackWithRetry,
   CallbackHttpError,
   CropTargetValidationError,
+  MlInferenceHttpError,
   type JobCallbackPayload,
   type MlInferenceRequest,
 } from "./client";
@@ -99,7 +101,8 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       expect(mockRenderVideo).toHaveBeenCalledTimes(1);
       expect(mockRenderVideo).toHaveBeenCalledWith(
         sampleJobPayload.videoUrl,
-        sampleCropTargets
+        sampleCropTargets,
+        { jobId: sampleJobPayload.jobId }
       );
 
       expect(mockSendCallback).toHaveBeenCalledTimes(1);
@@ -352,6 +355,308 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         status: "FAILED",
         error: "Video rendering failed: Cloudinary upload failed",
       });
+    });
+  });
+
+  describe("Phase 2 Fallback and Error Classification (Task-00082)", () => {
+    it("triggers static center crop fallback when AutoFlip returns invalid/unusable crop targets", async () => {
+      mockExecuteMl.mockResolvedValueOnce({
+        schema_version: 1,
+        source: { width: 1920, height: 1080, fps: 30, duration_sec: 5 },
+        output: { aspect_ratio: "9:16" },
+        crop_targets: [
+          {
+            timestamp_sec: 0,
+            crop: { x: 0, y: 0, width: 0, height: 0 },
+          },
+        ],
+      });
+
+      const context: ReframeJobContext = {
+        jobId: "job-invalid-targets",
+        attemptsMade: 1,
+        maxAttempts: 3,
+      };
+
+      const result = await processReframeJob(
+        {
+          ...sampleJobPayload,
+          jobId: "job-invalid-targets",
+        },
+        context,
+        {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fallbackMetadata).toEqual({
+        fallback: true,
+        fallbackStage: "REFRAME",
+        fallbackReason: "AUTOFLIP_INVALID_CROP_TARGETS",
+        attemptsMade: 2,
+      });
+
+      expect(mockSendCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: "job-invalid-targets",
+          status: "COMPLETED",
+          fallback: true,
+          fallbackStage: "REFRAME",
+          fallbackReason: "AUTOFLIP_INVALID_CROP_TARGETS",
+          attemptsMade: 2,
+        })
+      );
+    });
+
+    it("fast-fails deterministic validation errors immediately without wasting BullMQ attempts", async () => {
+      const mockDiscardJob = vi.fn().mockResolvedValue(undefined);
+      const context: ReframeJobContext = {
+        jobId: "job-bad-aspect",
+        attemptsMade: 0,
+        maxAttempts: 3,
+        discardJob: mockDiscardJob,
+      };
+
+      await expect(
+        processReframeJob(
+          {
+            ...sampleJobPayload,
+            jobId: "job-bad-aspect",
+            targetAspectRatio: "invalid-aspect",
+          },
+          context,
+          {
+            executeMl: mockExecuteMl,
+            renderVideo: mockRenderVideo,
+            sendCallback: mockSendCallback,
+            resultCache: localCache,
+          }
+        )
+      ).rejects.toThrow("invalid targetAspectRatio");
+
+      // Fast-fail: discard job so BullMQ does not retry
+      expect(mockDiscardJob).toHaveBeenCalledTimes(1);
+
+      // Sent FAILED callback immediately
+      expect(mockSendCallback).toHaveBeenCalledWith({
+        jobId: "job-bad-aspect",
+        status: "FAILED",
+        error: expect.stringContaining("invalid targetAspectRatio"),
+      });
+
+      // Did not attempt ML or render
+      expect(mockExecuteMl).not.toHaveBeenCalled();
+      expect(mockRenderVideo).not.toHaveBeenCalled();
+    });
+
+    it("allows BullMQ retry on intermediate attempt (1/3) for transient ML failure", async () => {
+      const mockDiscardJob = vi.fn();
+      mockExecuteMl.mockRejectedValueOnce(
+        new MlInferenceHttpError(503, "Service Unavailable")
+      );
+
+      const context: ReframeJobContext = {
+        jobId: "job-transient",
+        attemptsMade: 0,
+        maxAttempts: 3,
+        discardJob: mockDiscardJob,
+      };
+
+      await expect(
+        processReframeJob(sampleJobPayload, context, {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        })
+      ).rejects.toThrow("ML inference HTTP 503");
+
+      // Did not discard job, so BullMQ will retry
+      expect(mockDiscardJob).not.toHaveBeenCalled();
+
+      // Did NOT send FAILED callback on intermediate attempt
+      expect(mockSendCallback).not.toHaveBeenCalled();
+    });
+
+    it("falls back to center crop on retry exhaustion (attempt 3/3) after transient ML failures", async () => {
+      mockExecuteMl.mockRejectedValueOnce(
+        new MlInferenceHttpError(504, "Gateway Timeout")
+      );
+
+      const context: ReframeJobContext = {
+        jobId: "job-retry-exhausted",
+        attemptsMade: 2, // 3rd of 3 attempts
+        maxAttempts: 3,
+      };
+
+      const result = await processReframeJob(
+        {
+          ...sampleJobPayload,
+          jobId: "job-retry-exhausted",
+          source: { width: 1920, height: 1080, fps: 30, durationSec: 5 },
+        },
+        context,
+        {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fallbackMetadata).toEqual({
+        fallback: true,
+        fallbackStage: "REFRAME",
+        fallbackReason: "AUTOFLIP_RETRY_EXHAUSTED",
+        attemptsMade: 3,
+      });
+
+      expect(mockSendCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: "job-retry-exhausted",
+          status: "COMPLETED",
+          fallback: true,
+          fallbackStage: "REFRAME",
+          fallbackReason: "AUTOFLIP_RETRY_EXHAUSTED",
+          attemptsMade: 3,
+        })
+      );
+    });
+
+    // ── LIVE BUG REGRESSION (Task-00082 manual validation) ────────────────────
+    // Real BullMQ `job.attemptsMade` semantics:
+    //   attempt 1 (1st execution):  attemptsMade=0  → transient → BullMQ retries
+    //   attempt 2 (2nd execution):  attemptsMade=1  → transient → BullMQ retries
+    //   attempt 3 (3rd execution):  attemptsMade=2  → FINAL     → fallback or FAILED
+    // The `failed` event fires AFTER moveToFailed increments attemptsMade (+1),
+    // so `attemptsMade=3` in the failed log does NOT reflect the in-processor value.
+    //
+    // The live worker submitted job cmuod5w6y0005vypwo3zgs5ed WITHOUT source dimensions.
+    // Every execution: ML → fetch failed (TRANSIENT).
+    // Expected: attempt 3 → FAILED with "retry exhausted; no source dimensions" message.
+    // Observed: the old else-branch ran, logging "ML inference failed" without any
+    //   indication that missing source dimensions caused the fallback to be skipped.
+    it("sends FAILED with actionable message on final transient failure when source dimensions are absent (live regression)", async () => {
+      // Simulate `fetch failed` — exactly what ECONNREFUSED produces via node fetch
+      mockExecuteMl.mockRejectedValueOnce(new Error("fetch failed"));
+
+      const mockDiscardJob = vi.fn();
+      const context: ReframeJobContext = {
+        // Real BullMQ value during the 3rd processor execution of a 3-attempt job
+        jobId: "job-no-source-final",
+        attemptsMade: 2,
+        maxAttempts: 3,
+        discardJob: mockDiscardJob,
+      };
+
+      // Payload WITHOUT source dimensions — matches the live ToolsPanel submission
+      await expect(
+        processReframeJob(
+          {
+            ...sampleJobPayload,
+            jobId: "job-no-source-final",
+            source: null, // ← no source dimensions
+          },
+          context,
+          {
+            executeMl: mockExecuteMl,
+            renderVideo: mockRenderVideo,
+            sendCallback: mockSendCallback,
+            resultCache: localCache,
+          }
+        )
+      ).rejects.toThrow("fetch failed");
+
+      // Must have sent exactly one FAILED callback (not silently discarded)
+      expect(mockSendCallback).toHaveBeenCalledTimes(1);
+      expect(mockSendCallback).toHaveBeenCalledWith({
+        jobId: "job-no-source-final",
+        status: "FAILED",
+        error: expect.stringContaining("no source dimensions for fallback"),
+      });
+
+      // Must NOT have called discard (this is a transient exhaustion, not deterministic)
+      expect(mockDiscardJob).not.toHaveBeenCalled();
+
+      // Must NOT have attempted render (no valid crop targets computed)
+      expect(mockRenderVideo).not.toHaveBeenCalled();
+    });
+
+    it("falls back to center crop on final transient failure when source dimensions ARE present (existing behavior preserved)", async () => {
+      // Uses the same "fetch failed" error as the live failure to prove source
+      // dimensions are the decisive factor — not the error type.
+      mockExecuteMl.mockRejectedValueOnce(new Error("fetch failed"));
+
+      const context: ReframeJobContext = {
+        jobId: "job-with-source-final",
+        attemptsMade: 2, // 3rd of 3 attempts — real BullMQ in-processor value
+        maxAttempts: 3,
+      };
+
+      const result = await processReframeJob(
+        {
+          ...sampleJobPayload,
+          jobId: "job-with-source-final",
+          source: { width: 1920, height: 1080, fps: 30, durationSec: 10 },
+        },
+        context,
+        {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fallbackMetadata).toEqual({
+        fallback: true,
+        fallbackStage: "REFRAME",
+        fallbackReason: "AUTOFLIP_RETRY_EXHAUSTED",
+        attemptsMade: 3,
+      });
+      expect(mockRenderVideo).toHaveBeenCalledTimes(1);
+      expect(mockSendCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: "job-with-source-final",
+          status: "COMPLETED",
+          fallback: true,
+          fallbackStage: "REFRAME",
+          fallbackReason: "AUTOFLIP_RETRY_EXHAUSTED",
+          attemptsMade: 3,
+        })
+      );
+    });
+
+    it("classifies error categories accurately and defaults unknown errors to TRANSIENT", () => {
+      // Transient: timeouts, network failures, HTTP 429/502/503/504
+      expect(classifyReframeError(new Error("AutoFlip container timeout"))).toBe("TRANSIENT");
+      expect(classifyReframeError(new Error("Network error connecting to backend"))).toBe("TRANSIENT");
+      expect(classifyReframeError(new Error("fetch failed"))).toBe("TRANSIENT");
+      expect(classifyReframeError(new MlInferenceHttpError(503, "Service Unavailable"))).toBe("TRANSIENT");
+      expect(classifyReframeError(new MlInferenceHttpError(429, "Too Many Requests"))).toBe("TRANSIENT");
+      const econnError = Object.assign(new Error("connection dropped"), { code: "ECONNRESET" });
+      expect(classifyReframeError(econnError)).toBe("TRANSIENT");
+
+      // Deterministic: invalid payloads, bad aspect ratios, 4xx client errors
+      expect(classifyReframeError(new Error("Invalid targetAspectRatio 'invalid'"))).toBe("DETERMINISTIC");
+      expect(classifyReframeError(new Error("missing videoUrl"))).toBe("DETERMINISTIC");
+      expect(classifyReframeError(new CallbackHttpError(400, "Bad Request"))).toBe("DETERMINISTIC");
+      expect(classifyReframeError(new MlInferenceHttpError(400, "Bad Request"))).toBe("DETERMINISTIC");
+
+      // Terminal: unrecoverable source media/rendering failures
+      expect(classifyReframeError(new Error("FFmpeg rendering failed: unrecoverable bitstream"))).toBe("TERMINAL");
+      expect(classifyReframeError(new Error("Cannot render reframed video"))).toBe("TERMINAL");
+      expect(classifyReframeError(new Error("AutoFlip unrecoverable failure"))).toBe("TERMINAL");
+
+      // Unknown or unclassified errors default to TRANSIENT so BullMQ can retry
+      expect(classifyReframeError(new Error("Something completely unexpected happened"))).toBe("TRANSIENT");
+      expect(classifyReframeError("string error")).toBe("TRANSIENT");
     });
   });
 
@@ -834,7 +1139,9 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       });
 
       expect(mockExecuteMl).toHaveBeenCalledTimes(1);
-      expect(mockRenderVideo).toHaveBeenCalledWith(sampleJobPayload.videoUrl, validTargets);
+      expect(mockRenderVideo).toHaveBeenCalledWith(sampleJobPayload.videoUrl, validTargets, {
+        jobId: sampleJobPayload.jobId,
+      });
       expect(mockSendCallback).toHaveBeenCalledWith({
         jobId: sampleJobPayload.jobId,
         status: "COMPLETED",
@@ -891,27 +1198,57 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       }
     });
 
-    // D. Empty crop_targets: follow existing validator semantics (valid per schema)
-    it("Test D: Empty crop_targets array is valid per existing schema semantics and accepted", async () => {
+    // D. Empty crop_targets is valid by schema, then safely replaced with center crop.
+    it("Test D: Empty crop_targets uses center-crop fallback and reports metadata", async () => {
       const emptyTargets: CropTargetData = {
         schema_version: 1,
-        source: { width: 1920, height: 1080 },
+        source: { width: 1920, height: 1080, fps: 30, duration_sec: 5 },
         output: { aspect_ratio: "9:16" },
         crop_targets: [],
       };
       mockExecuteMl.mockResolvedValue(emptyTargets);
 
-      const result = await processReframeJob(sampleJobPayload, defaultContext, {
+      const fallbackJobId = "job-empty-targets";
+      const result = await processReframeJob(
+        { ...sampleJobPayload, jobId: fallbackJobId },
+        { ...defaultContext, jobId: fallbackJobId },
+        {
         executeMl: mockExecuteMl,
         renderVideo: mockRenderVideo,
         sendCallback: mockSendCallback,
         resultCache: localCache,
-      });
+        }
+      );
 
       expect(result.success).toBe(true);
-      expect(mockRenderVideo).toHaveBeenCalledWith(sampleJobPayload.videoUrl, emptyTargets);
+      expect(result.fallbackMetadata).toEqual({
+        fallback: true,
+        fallbackStage: "REFRAME",
+        fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
+        attemptsMade: 1,
+      });
+      expect(result.cropTargets.crop_targets).toHaveLength(2);
+      expect(result.cropTargets.crop_targets[0].crop).toEqual({
+        x: 656,
+        y: 0,
+        width: 608,
+        height: 1080,
+      });
+      expect(mockRenderVideo).toHaveBeenCalledWith(
+        sampleJobPayload.videoUrl,
+        result.cropTargets,
+        { jobId: fallbackJobId }
+      );
       expect(mockSendCallback).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "COMPLETED", cropTargets: emptyTargets })
+        expect.objectContaining({
+          jobId: fallbackJobId,
+          status: "COMPLETED",
+          cropTargets: result.cropTargets,
+          fallback: true,
+          fallbackStage: "REFRAME",
+          fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
+          attemptsMade: 1,
+        })
       );
     });
 
@@ -1267,7 +1604,11 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       expect(result.success).toBe(true);
       expect(result.cropTargets).toEqual(sampleCropTargets);
       expect(result.exportedUrl).toBe("https://res.cloudinary.com/test-cloud/video/upload/reframed.mp4");
-      expect(mockRenderVideo).toHaveBeenCalledWith(sampleJobPayload.videoUrl, sampleCropTargets);
+      expect(mockRenderVideo).toHaveBeenCalledWith(
+        sampleJobPayload.videoUrl,
+        sampleCropTargets,
+        { jobId: sampleJobPayload.jobId }
+      );
       expect(mockSendCallback).toHaveBeenCalledWith({
         jobId: sampleJobPayload.jobId,
         status: "COMPLETED",
