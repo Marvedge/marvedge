@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "fs";
 import path from "path";
 // Ensure CALLBACK_SECRET is always present for these orchestrator tests.
@@ -1198,8 +1198,8 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       }
     });
 
-    // D. Empty crop_targets is valid by schema, then safely replaced with center crop.
-    it("Test D: Empty crop_targets uses center-crop fallback and reports metadata", async () => {
+    // Empty crop targets are schema-valid but unusable by the render pipeline.
+    it("uses validated center-crop fallback for empty crop targets", async () => {
       const emptyTargets: CropTargetData = {
         schema_version: 1,
         source: { width: 1920, height: 1080, fps: 30, duration_sec: 5 },
@@ -1213,10 +1213,10 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         { ...sampleJobPayload, jobId: fallbackJobId },
         { ...defaultContext, jobId: fallbackJobId },
         {
-        executeMl: mockExecuteMl,
-        renderVideo: mockRenderVideo,
-        sendCallback: mockSendCallback,
-        resultCache: localCache,
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
         }
       );
 

@@ -327,9 +327,9 @@ export async function processReframeJob(
             `AutoFlip returned ${isTargetEmpty ? "0" : "unusable"} crop targets and source dimensions are unknown`
           );
         }
-      } else {
-        validateCropTargetData(cropTargets);
       }
+
+      validateCropTargetData(cropTargets);
 
       // Cache the result in memory in case callback delivery fails
       cache.set(payload.jobId, cropTargets);
@@ -358,7 +358,10 @@ export async function processReframeJob(
         console.warn(
           `[reframe-worker] ML inference retry exhausted for job ${payload.jobId}; falling back to center crop. Error: ${errMsg}`
         );
-        cropTargets = createCenterCropFallback(payload.source, "AUTOFLIP_RETRY_EXHAUSTED");
+        cropTargets = createCenterCropFallback(
+          payload.source,
+          "AUTOFLIP_RETRY_EXHAUSTED"
+        );
         cache.set(payload.jobId, cropTargets);
       } else if (category === "TRANSIENT" && finalAttempt) {
         // Final transient failure but no source dimensions available: cannot compute
