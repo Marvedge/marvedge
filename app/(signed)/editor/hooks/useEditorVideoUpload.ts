@@ -74,7 +74,9 @@ export async function uploadEditorVideoFile(
       setTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
     useBlobStore.getState().setCanonicalVideoUrl(null);
-    toast.success(callbacks?.setUploadedFileUrl ? "File uploaded successfully!" : "Video loaded locally");
+    toast.success(
+      callbacks?.setUploadedFileUrl ? "File uploaded successfully!" : "Video loaded locally"
+    );
     return localBlobUrl;
   }
 
@@ -144,14 +146,18 @@ export async function uploadEditorVideoFile(
       return null;
     } finally {
       callbacks?.setIsUploading?.(false);
-      if (activeVideoUploadPromise === uploadPromise) {
-        activeVideoUploadPromise = null;
-      }
     }
   })();
 
   activeVideoUploadPromise = uploadPromise;
-  return uploadPromise;
+
+  try {
+    return await uploadPromise;
+  } finally {
+    if (activeVideoUploadPromise === uploadPromise) {
+      activeVideoUploadPromise = null;
+    }
+  }
 }
 
 export function useEditorVideoUpload() {

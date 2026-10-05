@@ -9,6 +9,7 @@ import {
   buildFfmpegCropFilter,
   simplifyCropTargets,
   validateCropTargetData,
+    type CropTarget,
   type CropTargetData,
 } from "../app/types/editor/crop-target";
 import {
