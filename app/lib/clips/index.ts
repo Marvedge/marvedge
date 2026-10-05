@@ -1,4 +1,4 @@
-// Public module exports for Transcript + Scene Detection + LLM Clip Scoring (Task-00041 & Task-00050).
+ // Public module exports for Transcript + Scene Detection + LLM Clip Scoring (Task-00041 & Task-00050).
 
 export * from "./types";
 export * from "./scenes";

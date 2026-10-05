@@ -380,6 +380,7 @@ def crop_video(args, track, cropFile, flist=None):
         'is_fallback': track.get('is_fallback', False),
         'fallback_reason': track.get('fallback_reason', None),
     }
+    return {'track': track, 'proc_track': dets}
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}

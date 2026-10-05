@@ -43,12 +43,13 @@ next-env.d.ts
 
 ##dev 
 task.md
+task-67-demo/
+task-70-demo/
 
 /// addding the fix shareable links in the schema 
 video-worker/node_modules
 video-worker/.env
 video-worker/dist
-# Cloud Run worker
 cloudrun-worker/node_modules
 
 # Python & ML artifacts
@@ -63,4 +64,3 @@ $py.class
 cursor_templates/
 playwright-report/
 test-results/
-task53-results/

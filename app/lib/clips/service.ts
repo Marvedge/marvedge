@@ -100,7 +100,11 @@ export function validateClipScoringInput(data: unknown): ValidatedClipScoringInp
 
   let duration: number | undefined = undefined;
   if (record.duration !== undefined) {
-    if (typeof record.duration !== "number" || !Number.isFinite(record.duration) || record.duration <= 0) {
+    if (
+      typeof record.duration !== "number" ||
+      !Number.isFinite(record.duration) ||
+      record.duration <= 0
+    ) {
       throw new ApiError(400, "duration must be a positive number if provided");
     }
     duration = record.duration;
@@ -130,11 +134,16 @@ export function validateClipScoringInput(data: unknown): ValidatedClipScoringInp
       opt.maxDurationSeconds !== undefined &&
       opt.minDurationSeconds > opt.maxDurationSeconds
     ) {
-      throw new ApiError(400, "options.minDurationSeconds cannot exceed options.maxDurationSeconds");
+      throw new ApiError(
+        400,
+        "options.minDurationSeconds cannot exceed options.maxDurationSeconds"
+      );
     }
     if (
       opt.targetClipCount !== undefined &&
-      (typeof opt.targetClipCount !== "number" || opt.targetClipCount <= 0 || !Number.isInteger(opt.targetClipCount))
+      (typeof opt.targetClipCount !== "number" ||
+        opt.targetClipCount <= 0 ||
+        !Number.isInteger(opt.targetClipCount))
     ) {
       throw new ApiError(400, "options.targetClipCount must be a positive integer");
     }
@@ -155,10 +164,18 @@ export function validateClipScoringInput(data: unknown): ValidatedClipScoringInp
     }
 
     options = {
-      ...(opt.minDurationSeconds !== undefined ? { minDurationSeconds: opt.minDurationSeconds as number } : {}),
-      ...(opt.maxDurationSeconds !== undefined ? { maxDurationSeconds: opt.maxDurationSeconds as number } : {}),
-      ...(opt.targetClipCount !== undefined ? { targetClipCount: opt.targetClipCount as number } : {}),
-      ...(opt.platform !== undefined ? { platform: opt.platform as ClipScoringOptions["platform"] } : {}),
+      ...(opt.minDurationSeconds !== undefined
+        ? { minDurationSeconds: opt.minDurationSeconds as number }
+        : {}),
+      ...(opt.maxDurationSeconds !== undefined
+        ? { maxDurationSeconds: opt.maxDurationSeconds as number }
+        : {}),
+      ...(opt.targetClipCount !== undefined
+        ? { targetClipCount: opt.targetClipCount as number }
+        : {}),
+      ...(opt.platform !== undefined
+        ? { platform: opt.platform as ClipScoringOptions["platform"] }
+        : {}),
       ...(opt.apiKey !== undefined ? { apiKey: String(opt.apiKey).trim() } : {}),
       ...(opt.model !== undefined ? { model: String(opt.model).trim() } : {}),
       ...(opt.temperature !== undefined ? { temperature: opt.temperature as number } : {}),
@@ -183,24 +200,34 @@ export interface TranscriptResolverDb {
   demo?: {
     findUnique: (args: {
       where: { id: string };
-      select: { id: string; subtitles: unknown; duration: number | null; videoUrl: string };
-    }) => Promise<{ id: string; subtitles: unknown; duration: number | null; videoUrl: string } | null>;
+      select: {
+        id: true;
+        subtitles: true;
+        duration: true;
+        videoUrl: true;
+      };
+    }) => Promise<{
+      id: string;
+      subtitles: unknown;
+      duration: number | null;
+      videoUrl: string;
+    } | null>;
   };
   subtitleTrack?: {
     findFirst: (args: {
       where: { demoId: string; status: string };
-      select: { cues: unknown };
+      select: { cues: true };
     }) => Promise<{ cues: unknown } | null>;
   };
   videoJob?: {
-    findFirst: (args: {
+    findFirst?: (args: {
       where: {
         status: string;
         OR?: Array<{ demoId?: string; videoUrl?: string }>;
         demoId?: string;
         videoUrl?: string;
       };
-      select: { jobData: unknown };
+      select: { jobData: true };
     }) => Promise<{ jobData: unknown } | null>;
   };
 }
@@ -278,7 +305,7 @@ export async function resolveTranscriptCues(
   }
 
   // 3. VideoJob.jobData.subtitles
-  if (db.videoJob && (demoId || resolvedVideoUrl)) {
+  if (db.videoJob?.findFirst && (demoId || resolvedVideoUrl)) {
     const whereConditions: Array<{ demoId?: string; videoUrl?: string }> = [];
     if (demoId) whereConditions.push({ demoId });
     if (resolvedVideoUrl) whereConditions.push({ videoUrl: resolvedVideoUrl });

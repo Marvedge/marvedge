@@ -10,6 +10,7 @@ import {
   pollExportJob,
   createMp4Downloader,
 } from "@/app/(signed)/editor/utils/videoHandlers";
+import { getVideoDimensions } from "@/app/lib/reframe/dimensions";
 
 interface ToolsPanelProps {
   aspectRatio: string;
@@ -100,11 +101,26 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
         resolvedUrl = data.url;
       }
 
+      // Obtain source video intrinsic dimensions for fallback path
+      const sourceDimensions = await getVideoDimensions(videoUrl);
+      const source =
+        sourceDimensions &&
+        Number.isFinite(sourceDimensions.width) &&
+        sourceDimensions.width > 0 &&
+        Number.isFinite(sourceDimensions.height) &&
+        sourceDimensions.height > 0
+          ? {
+              width: sourceDimensions.width,
+              height: sourceDimensions.height,
+            }
+          : undefined;
+
       toast.loading("Submitting reframe job...", { id: toastId });
       const createRes = await axios.post("/api/reframe", {
         videoUrl: resolvedUrl,
         targetAspectRatio: targetRatio,
         demoId: savedDemoId || undefined,
+        ...(source ? { source } : {}),
       });
 
       const jobId = createRes.data?.jobId;
