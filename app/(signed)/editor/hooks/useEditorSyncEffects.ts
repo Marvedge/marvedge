@@ -132,7 +132,6 @@ export function useEditorSyncEffects({
       }
     }
   }, [videoUrl, blob, params, setVideoUrl]);
-
   useEffect(() => {
     // An explicit ?video= URL always has the highest precedence.
     if (hasExplicitVideoParam(params)) {

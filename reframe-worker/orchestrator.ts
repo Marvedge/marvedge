@@ -25,8 +25,12 @@ import {
   calculateCenterCropTargets,
   CropTargetValidationError,
   type CropTargetData,
+  validateCropTargetData,
 } from "../app/types/editor/crop-target";
-import type { ReframeJobPayload } from "../app/lib/reframe/service";
+import {
+  validateReframeJobPayload,
+  ReframePayloadValidationError,
+} from "../app/lib/reframe/validation";
 import {
   callMlInference,
   postJobCallbackWithRetry,
@@ -38,6 +42,8 @@ import {
 import { getReframeWorkerConfig, type ReframeWorkerConfig } from "./config";
 import { renderReframedVideo, type RenderReframedVideoOptions } from "./render";
 import type { JobFallbackMetadata } from "../app/types/jobs/fallback";
+
+export { ReframePayloadValidationError };
 
 export interface ReframeJobContext {
   jobId: string;
@@ -166,7 +172,7 @@ export function isFinalBullMqAttempt(context: ReframeJobContext): boolean {
  * Core orchestration logic for processing a single reframe job.
  */
 export async function processReframeJob(
-  payload: ReframeJobPayload,
+  rawPayload: unknown,
   context: ReframeJobContext,
   deps: ReframeOrchestratorDeps = {}
 ): Promise<{
@@ -175,6 +181,11 @@ export async function processReframeJob(
   exportedUrl?: string;
   fallbackMetadata?: JobFallbackMetadata;
 }> {
+  // ── Step 0: Validate Queued Job Payload (Task-00056) ───────────────────
+  // A queued job cannot be trusted merely because it came from BullMQ.
+  // Fails immediately before ML inference, rendering, upload, or callbacks.
+  // Throws ReframePayloadValidationError (UnrecoverableError) so BullMQ does not retry.
+  const payload = validateReframeJobPayload(rawPayload);
   const config = deps.config ?? getReframeWorkerConfig();
   const cache = deps.resultCache ?? globalResultCache;
 
@@ -232,6 +243,35 @@ export async function processReframeJob(
   const finalAttempt = isFinalBullMqAttempt(context);
   let cropTargets: CropTargetData;
   let fallbackMetadata: JobFallbackMetadata | undefined;
+  const createCenterCropFallback = (
+    sourceDim: {
+      width: number;
+      height: number;
+      fps?: number;
+      durationSec?: number;
+      duration_sec?: number;
+    },
+    reason: string
+  ): CropTargetData => {
+    const fallbackTargets = calculateCenterCropTargets(
+      {
+        width: sourceDim.width,
+        height: sourceDim.height,
+        fps: sourceDim.fps,
+        duration_sec: sourceDim.duration_sec ?? sourceDim.durationSec,
+      },
+      payload.targetAspectRatio,
+      payload.jobId
+    );
+    validateCropTargetData(fallbackTargets);
+    fallbackMetadata = {
+      fallback: true,
+      fallbackStage: "REFRAME",
+      fallbackReason: reason,
+      attemptsMade: context.attemptsMade + 1,
+    };
+    return fallbackTargets;
+  };
 
   // ── Step 1: Obtain Crop Targets (Cache Check, ML Inference, or Fallback) ─
   if (cache.has(payload.jobId)) {
@@ -252,9 +292,10 @@ export async function processReframeJob(
 
       // Check if returned crop targets are empty or unusable
       const isTargetEmpty =
-        !Array.isArray(cropTargets?.crop_targets) || cropTargets.crop_targets.length === 0;
+        Array.isArray(cropTargets?.crop_targets) && cropTargets.crop_targets.length === 0;
       const hasUnusableTargets =
-        !isTargetEmpty &&
+        Array.isArray(cropTargets?.crop_targets) &&
+        cropTargets.crop_targets.length > 0 &&
         cropTargets.crop_targets.some(
           (t) =>
             !t ||
@@ -280,31 +321,15 @@ export async function processReframeJob(
           console.warn(
             `[reframe-worker] AutoFlip returned ${isTargetEmpty ? "0" : "unusable"} crop targets; falling back to center crop for job ${payload.jobId}`
           );
-          cropTargets = calculateCenterCropTargets(
-            {
-              width: sourceDim.width,
-              height: sourceDim.height,
-              fps: sourceDim.fps,
-              duration_sec:
-                "duration_sec" in sourceDim
-                  ? ((sourceDim as Record<string, unknown>).duration_sec as number | undefined)
-                  : ((sourceDim as Record<string, unknown>).durationSec as number | undefined),
-            },
-            payload.targetAspectRatio,
-            payload.jobId
-          );
-          fallbackMetadata = {
-            fallback: true,
-            fallbackStage: "REFRAME",
-            fallbackReason: reason,
-            attemptsMade: context.attemptsMade + 1,
-          };
+          cropTargets = createCenterCropFallback(sourceDim, reason);
         } else {
           throw new Error(
             `AutoFlip returned ${isTargetEmpty ? "0" : "unusable"} crop targets and source dimensions are unknown`
           );
         }
       }
+
+      validateCropTargetData(cropTargets);
 
       // Cache the result in memory in case callback delivery fails
       cache.set(payload.jobId, cropTargets);
@@ -319,6 +344,12 @@ export async function processReframeJob(
         throw mlError;
       }
 
+      // Preserve the validation boundary's retry behavior, reporting malformed
+      // ML output only when BullMQ reaches its final attempt.
+      if (mlError instanceof CropTargetValidationError && !finalAttempt) {
+        throw mlError;
+      }
+
       // If final attempt of transient failure, try center crop fallback if source dimensions are available
       if (
         category === "TRANSIENT" &&
@@ -329,22 +360,10 @@ export async function processReframeJob(
         console.warn(
           `[reframe-worker] ML inference retry exhausted for job ${payload.jobId}; falling back to center crop. Error: ${errMsg}`
         );
-        cropTargets = calculateCenterCropTargets(
-          {
-            width: payload.source.width,
-            height: payload.source.height,
-            fps: payload.source.fps,
-            duration_sec: payload.source.durationSec,
-          },
-          payload.targetAspectRatio,
-          payload.jobId
+        cropTargets = createCenterCropFallback(
+          payload.source,
+          "AUTOFLIP_RETRY_EXHAUSTED"
         );
-        fallbackMetadata = {
-          fallback: true,
-          fallbackStage: "REFRAME",
-          fallbackReason: "AUTOFLIP_RETRY_EXHAUSTED",
-          attemptsMade: context.attemptsMade + 1,
-        };
         cache.set(payload.jobId, cropTargets);
       } else if (category === "TRANSIENT" && finalAttempt) {
         // Final transient failure but no source dimensions available: cannot compute
