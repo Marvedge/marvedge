@@ -245,7 +245,7 @@ export function generateAssContent(
     "ScriptType: v4.00+",
     `PlayResX: ${w}`,
     `PlayResY: ${h}`,
-    "WrapStyle: 2",
+    `WrapStyle: ${language ? 1 : 2}`,
     "ScaledBorderAndShadow: yes",
     "",
     "[V4+ Styles]",

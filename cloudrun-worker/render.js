@@ -6,16 +6,6 @@ const os = require("node:os");
 const http = require("node:http");
 const https = require("node:https");
 const ffmpeg = require("fluent-ffmpeg");
-const FFMPEG_BIN =
-  process.env.FFMPEG_PATH ||
-  (() => {
-    try {
-      return require("ffmpeg-static");
-    } catch {
-      return "/usr/bin/ffmpeg";
-    }
-  })() ||
-  "/usr/bin/ffmpeg";
 
 const FFMPEG_BIN =
   process.env.FFMPEG_PATH ||

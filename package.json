@@ -13,7 +13,7 @@
     "demo:captioned-cropped": "tsx scripts/demoCaptionedCroppedClip.ts",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
-    "test:avs": "node cloudrun-worker/avs_dub.test.js"
+    "test:avs": "vitest run cloudrun-worker/avs_dub.test.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
