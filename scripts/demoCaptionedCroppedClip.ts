@@ -1,5 +1,6 @@
-import { execSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import fs from "fs";
+import ffmpegStatic from "ffmpeg-static";
 import http from "http";
 import os from "os";
 import path from "path";
@@ -57,7 +58,7 @@ export function build9x16FitFilter(probe: { width: number; height: number }): {
   outputHeight: number;
 } {
   const targetHeight = Math.floor(probe.height / 2) * 2;
-  const targetWidth = Math.floor(((targetHeight * 9) / 16) / 2) * 2;
+  const targetWidth = Math.floor((targetHeight * 9) / 16 / 2) * 2;
 
   const filter = [
     `split=2[fg_raw][bg_raw]`,
@@ -166,32 +167,63 @@ export interface ProbeResult {
 }
 
 /**
- * Probes video and audio streams via ffprobe JSON output.
+ * Probes video and audio streams using the bundled ffmpeg-static binary.
+ * This avoids requiring ffprobe to be installed on the system PATH.
  */
 export function probeVideo(filePath: string): ProbeResult {
-  const cmd = `ffprobe -v error -show_entries stream=codec_name,codec_type,width,height,pix_fmt,duration,r_frame_rate -show_entries format=duration -of json "${filePath}"`;
-  const stdout = execSync(cmd, { encoding: "utf8" });
-  const data = JSON.parse(stdout);
+  if (!ffmpegStatic) {
+    throw new Error("ffmpeg-static binary is not available.");
+  }
 
-  const vStream = (data.streams || []).find((s: { codec_type: string }) => s.codec_type === "video");
-  const aStream = (data.streams || []).find((s: { codec_type: string }) => s.codec_type === "audio");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Probe failed: File does not exist: ${filePath}`);
+  }
 
-  if (!vStream) {
+  const result = spawnSync(ffmpegStatic, ["-hide_banner", "-i", filePath, "-f", "null", "-"], {
+    encoding: "utf8",
+  });
+
+  if (result.error) {
+    throw new Error(`Probe failed for ${filePath}: ${result.error.message}`);
+  }
+
+  const stderr = result.stderr || "";
+
+  if (!stderr) {
+    throw new Error(`Probe failed: Could not read FFmpeg metadata for ${filePath}`);
+  }
+
+  const videoMatch = stderr.match(
+    /Stream #\d+:\d+(?:\([^)]*\))?:\s*Video:\s*([^\s,]+)(?:\s*\([^)]*\))?,\s*([^\s,]+).*?\b(\d{2,6})x(\d{2,6})\b.*?\b(\d+(?:\.\d+)?)\s*fps\b/i
+  );
+
+  const audioMatch = stderr.match(/Stream #\d+:\d+(?:\([^)]*\))?:\s*Audio:\s*([^\s,]+)/i);
+
+  if (!videoMatch) {
     throw new Error(`Probe failed: No video stream found in ${filePath}`);
   }
 
-  const formatDuration = parseFloat(data.format?.duration || "0");
-  const streamDuration = parseFloat(vStream.duration || "0");
+  const videoCodec = videoMatch[1] || "unknown";
+  const pixFmt = videoMatch[2] || "unknown";
+  const width = Number(videoMatch[3]);
+  const height = Number(videoMatch[4]);
+  const fps = Number(videoMatch[5]);
+
+  const durationMatch = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/i);
+
+  const duration = durationMatch
+    ? Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3])
+    : 0;
 
   return {
-    width: vStream.width,
-    height: vStream.height,
-    videoCodec: vStream.codec_name || "unknown",
-    pixFmt: vStream.pix_fmt || "unknown",
-    audioCodec: aStream?.codec_name || "none",
-    duration: streamDuration > 0 ? streamDuration : formatDuration,
-    rFrameRate: vStream.r_frame_rate || "unknown",
-    hasAudio: Boolean(aStream),
+    width,
+    height,
+    videoCodec,
+    pixFmt,
+    audioCodec: audioMatch?.[1] || "none",
+    duration,
+    rFrameRate: Number.isFinite(fps) ? `${fps}/1` : "unknown",
+    hasAudio: Boolean(audioMatch),
   };
 }
 
@@ -207,14 +239,14 @@ async function verifyMlServiceHealth(mlServiceUrl: string): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
       `AutoFlip / ML Gateway service is unreachable at ${healthUrl} (${msg}).\n` +
-      `Please ensure ML services are running (e.g. run 'docker compose up -d autoflip ml-gateway').`
+        `Please ensure ML services are running (e.g. run 'docker compose up -d autoflip ml-gateway').`
     );
   }
 
   if (!res.ok && res.status !== 503) {
     throw new Error(
       `AutoFlip / ML Gateway returned HTTP ${res.status} from ${healthUrl}.\n` +
-      `Please verify service logs (e.g. 'docker logs marvedge-ml-gateway').`
+        `Please verify service logs (e.g. 'docker logs marvedge-ml-gateway').`
     );
   }
 
@@ -223,7 +255,7 @@ async function verifyMlServiceHealth(mlServiceUrl: string): Promise<void> {
     if (json.services?.autoflip && json.services.autoflip.includes("unhealthy")) {
       throw new Error(
         `AutoFlip downstream container is reporting unhealthy (${json.services.autoflip}).\n` +
-        `Please check 'docker logs marvedge-autoflip'.`
+          `Please check 'docker logs marvedge-autoflip'.`
       );
     }
   } catch (e: unknown) {
@@ -280,9 +312,10 @@ async function fetchCropTargetsFromAutoFlip(
   inputVideoPath: string,
   probe: ProbeResult
 ): Promise<CropTargetData> {
-  const mlServiceUrl = (
-    process.env.REFRAME_ML_SERVICE_URL || "http://localhost:8000"
-  ).replace(/\/+$/, "");
+  const mlServiceUrl = (process.env.REFRAME_ML_SERVICE_URL || "http://localhost:8000").replace(
+    /\/+$/,
+    ""
+  );
 
   await verifyMlServiceHealth(mlServiceUrl);
 
@@ -311,7 +344,6 @@ async function fetchCropTargetsFromAutoFlip(
     await serverHandle.close();
   }
 }
-
 /**
  * Extracts audio to a temporary file and executes Whisper transcription with word timestamps.
  */
@@ -324,8 +356,7 @@ async function transcribeAudio(
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
     throw new Error(
-      "Missing GROQ_API_KEY.\n" +
-      "Add it to .env.local or provide it through the environment."
+      "Missing GROQ_API_KEY.\n" + "Add it to .env.local or provide it through the environment."
     );
   }
 
@@ -333,18 +364,39 @@ async function transcribeAudio(
   const tempAudioPath = path.join(tempDir, "audio.mp3");
 
   try {
-    const extractCmd = `ffmpeg -y -i "${inputVideoPath}" -vn -acodec libmp3lame -ar 16000 -ac 1 "${tempAudioPath}"`;
-    execSync(extractCmd, { stdio: ["ignore", "ignore", "pipe"] });
+    if (!ffmpegStatic) {
+      throw new Error("ffmpeg-static binary is not available.");
+    }
+
+    execFileSync(
+      ffmpegStatic,
+      [
+        "-y",
+        "-i",
+        inputVideoPath,
+        "-vn",
+        "-acodec",
+        "libmp3lame",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        tempAudioPath,
+      ],
+      { stdio: ["ignore", "ignore", "pipe"] }
+    );
 
     if (!fs.existsSync(tempAudioPath) || fs.statSync(tempAudioPath).size === 0) {
       throw new Error("Extracted audio file is missing or empty.");
     }
 
     const audioStream = fs.createReadStream(tempAudioPath);
+
     try {
       const { transcript, cues } = await transcribeAudioWithGroq(audioStream, {
         apiKey,
       });
+
       return {
         cues,
         wordCount: transcript.words.length,
@@ -376,12 +428,12 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
   if (!options.inputVideo && !options.isFixtureMode) {
     console.error(
       "Error: Missing required input video path.\n\n" +
-      "Usage:\n" +
-      "  npm run demo:captioned-cropped -- \"<path-to-video>\"\n" +
-      "  npm run demo:captioned-cropped -- --fixture\n\n" +
-      "Examples:\n" +
-      "  npm run demo:captioned-cropped -- \"C:\\Users\\Shambhavi\\Videos\\demo.mp4\"\n" +
-      "  npm run demo:captioned-cropped -- \"C:\\marvedge-task53-media\\02_single_speaker.avi\"\n"
+        "Usage:\n" +
+        '  npm run demo:captioned-cropped -- "<path-to-video>"\n' +
+        "  npm run demo:captioned-cropped -- --fixture\n\n" +
+        "Examples:\n" +
+        '  npm run demo:captioned-cropped -- "C:\\Users\\Shambhavi\\Videos\\demo.mp4"\n' +
+        '  npm run demo:captioned-cropped -- "C:\\marvedge-task53-media\\02_single_speaker.avi"\n'
     );
     process.exitCode = 1;
     return;
@@ -391,8 +443,7 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
   let inputVideoPath = options.inputVideo;
   if (options.isFixtureMode && !inputVideoPath) {
     inputVideoPath =
-      process.env.DEMO_INPUT_VIDEO ||
-      "C:\\marvedge-task53-media\\02_single_speaker.avi";
+      process.env.DEMO_INPUT_VIDEO || "C:\\marvedge-task53-media\\02_single_speaker.avi";
   }
 
   if (!inputVideoPath || !fs.existsSync(inputVideoPath)) {
@@ -410,13 +461,13 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
 
   console.log(`Input:\n  ${inputVideoPath}\n`);
 
-  // 2. Probe input video with ffprobe
+  // 2. Probe input video with bundled FFmpeg
   let probe: ProbeResult;
   try {
     probe = probeVideo(inputVideoPath);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Error: ffprobe inspection failed: ${msg}`);
+    console.error(`Error: Video inspection failed: ${msg}`);
     process.exitCode = 1;
     return;
   }
@@ -424,7 +475,7 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
   if (!options.skipCaptions && !probe.hasAudio) {
     console.error(
       `Error: Input video does not contain an audio stream suitable for captioning: ${inputVideoPath}\n` +
-      `If you wish to test cropping only on a silent video, pass --skip-captions.`
+        `If you wish to test cropping only on a silent video, pass --skip-captions.`
     );
     process.exitCode = 1;
     return;
@@ -456,17 +507,14 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
 
   if (options.isFixtureMode) {
     const fixtureJson =
-      process.env.DEMO_CROP_TARGETS ||
-      path.resolve("task53-results/case_b_response.json");
+      process.env.DEMO_CROP_TARGETS || path.resolve("task53-results/case_b_response.json");
     if (!fs.existsSync(fixtureJson)) {
       console.error(`Error: Crop target fixture not found: ${fixtureJson}`);
       process.exitCode = 1;
       return;
     }
     try {
-      const raw = JSON.parse(
-        fs.readFileSync(fixtureJson, "utf8").replace(/^\uFEFF/, "")
-      );
+      const raw = JSON.parse(fs.readFileSync(fixtureJson, "utf8").replace(/^\uFEFF/, ""));
       const payload = raw.crop_targets || raw;
       validateCropTargetData(payload);
       const cropTargets = payload.crop_targets;
@@ -486,9 +534,7 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
     }
   } else if (options.cropTargetsPath) {
     if (!fs.existsSync(options.cropTargetsPath)) {
-      console.error(
-        `Error: Specified crop target JSON not found: ${options.cropTargetsPath}`
-      );
+      console.error(`Error: Specified crop target JSON not found: ${options.cropTargetsPath}`);
       process.exitCode = 1;
       return;
     }
@@ -515,15 +561,11 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
     }
   } else if (isAlreadyVertical) {
     // Video is already in vertical 9:16 aspect ratio (e.g. smartphone recordings)
-    console.log(
-      "Framing:\n  PASS (native vertical input: preserving full 9:16 content)\n"
-    );
+    console.log("Framing:\n  PASS (native vertical input: preserving full 9:16 content)\n");
     cropFilter = "crop=trunc(ih*9/16/2)*2:ih:(iw-trunc(ih*9/16/2)*2)/2:0";
   } else if (options.reframeMode === "fit") {
     // Explicit fit mode requested: preserve full horizontal width with blurred backdrop
-    console.log(
-      "Framing:\n  PASS (fit mode: 9:16 multi-person preserving blurred background)\n"
-    );
+    console.log("Framing:\n  PASS (fit mode: 9:16 multi-person preserving blurred background)\n");
     cropFilter = build9x16FitFilter(probe).filter;
   } else if (options.skipCrop && options.reframeMode === "crop") {
     console.log(
@@ -577,10 +619,9 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
             `  Notice: AutoFlip detected salient regions spanning ${(
               spatialSpreadRatio * 100
             ).toFixed(0)}% of frame width,\n` +
-            `  which exceeds a single 9:16 crop aperture (${(
-              (cropW / probe.width) *
-              100
-            ).toFixed(0)}%).\n` +
+            `  which exceeds a single 9:16 crop aperture (${((cropW / probe.width) * 100).toFixed(
+              0
+            )}%).\n` +
             `  Using multi-person preserving 9:16 reframe (blurred backdrop) to ensure no subjects are excluded.\n` +
             `  (Pass --reframe-mode crop to force single-subject pan & scan).\n`
         );
@@ -611,26 +652,31 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
   }
 
   try {
-    const cropCmd = [
-      "ffmpeg",
-      "-y",
-      "-i",
-      `"${inputVideoPath}"`,
-      "-vf",
-      `"${cropFilter}"`,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "fast",
-      "-crf",
-      "23",
-      "-pix_fmt",
-      "yuv420p",
-      probe.hasAudio ? "-c:a aac" : "-an",
-      `"${tempCroppedPath}"`,
-    ].join(" ");
+    if (!ffmpegStatic) {
+      throw new Error("ffmpeg-static binary is not available.");
+    }
 
-    execSync(cropCmd, { stdio: ["ignore", "ignore", "pipe"] });
+    execFileSync(
+      ffmpegStatic,
+      [
+        "-y",
+        "-i",
+        inputVideoPath,
+        "-vf",
+        cropFilter,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        ...(probe.hasAudio ? ["-c:a", "aac"] : ["-an"]),
+        tempCroppedPath,
+      ],
+      { stdio: ["ignore", "ignore", "pipe"] }
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Error: FFmpeg crop transcode failed: ${msg}`);
@@ -668,7 +714,9 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
         return;
       }
       try {
-        const rawJson = JSON.parse(fs.readFileSync(options.transcriptPath, "utf8").replace(/^\uFEFF/, ""));
+        const rawJson = JSON.parse(
+          fs.readFileSync(options.transcriptPath, "utf8").replace(/^\uFEFF/, "")
+        );
         const normalized = normalizeWhisperResponse(rawJson);
         cues = normalized.cues;
         wordCount = normalized.transcript.words.length;
@@ -720,7 +768,10 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
       // Responsive horizontal and vertical margins + word wrap for narrow 9:16 canvas
       const responsiveMarginH = Math.max(10, Math.min(60, Math.round(croppedProbe.width * 0.06)));
       const responsiveMarginV = Math.max(12, Math.min(60, Math.round(croppedProbe.height * 0.05)));
-      const responsiveFontSize = Math.max(12, Math.min(24, Math.round(croppedProbe.height * 0.038)));
+      const responsiveFontSize = Math.max(
+        12,
+        Math.min(24, Math.round(croppedProbe.height * 0.038))
+      );
 
       let assContent = fs.readFileSync(assPath, "utf8");
       // Enable word-wrapping (WrapStyle: 1)
@@ -766,39 +817,48 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
       }
     }
 
+    const escapedAss = escapeFfmpegFilterPath(path.resolve(assPath));
+
     try {
-      const escapedAss = escapeFfmpegFilterPath(path.resolve(assPath));
-      let burnCmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        `"${tempCroppedPath}"`,
-        "-vf",
-        `"subtitles=${escapedAss}"`,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "23",
-        "-pix_fmt",
-        "yuv420p",
-        croppedProbe.hasAudio ? "-c:a copy" : "-an",
-        `"${finalVideoPath}"`,
-      ].join(" ");
+      if (!ffmpegStatic) {
+        throw new Error("ffmpeg-static binary is not available.");
+      }
 
       try {
-        execSync(burnCmd, { stdio: ["ignore", "ignore", "pipe"] });
-      } catch {
-        // Audio stream copy might fail if container demands re-encoding; retry with AAC
-        if (croppedProbe.hasAudio) {
-          burnCmd = [
-            "ffmpeg",
+        execFileSync(
+          ffmpegStatic,
+          [
             "-y",
             "-i",
-            `"${tempCroppedPath}"`,
+            tempCroppedPath,
             "-vf",
-            `"subtitles=${escapedAss}"`,
+            `subtitles=${escapedAss}`,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            ...(croppedProbe.hasAudio ? ["-c:a", "copy"] : ["-an"]),
+            finalVideoPath,
+          ],
+          { stdio: ["ignore", "ignore", "pipe"] }
+        );
+      } catch {
+        if (!croppedProbe.hasAudio) {
+          throw new Error("Subtitle burn-in failed.");
+        }
+
+        execFileSync(
+          ffmpegStatic,
+          [
+            "-y",
+            "-i",
+            tempCroppedPath,
+            "-vf",
+            `subtitles=${escapedAss}`,
             "-c:v",
             "libx264",
             "-preset",
@@ -811,10 +871,10 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
             "aac",
             "-b:a",
             "128k",
-            `"${finalVideoPath}"`,
-          ].join(" ");
-          execSync(burnCmd, { stdio: ["ignore", "ignore", "pipe"] });
-        }
+            finalVideoPath,
+          ],
+          { stdio: ["ignore", "ignore", "pipe"] }
+        );
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -841,13 +901,15 @@ export async function runCaptionedCroppedDemo(): Promise<void> {
     return;
   }
 
-  console.log(`Final video:\n  ${path.relative(process.cwd(), finalVideoPath).replace(/\\/g, "/")}\n`);
+  console.log(
+    `Final video:\n  ${path.relative(process.cwd(), finalVideoPath).replace(/\\/g, "/")}\n`
+  );
 
   // 7. Probe & Validate Final Output
   const finalProbe = probeVideo(finalVideoPath);
   const aspectRatio = finalProbe.width / finalProbe.height;
 
-  console.log("ffprobe:\n  PASS\n");
+  console.log("Video probe:\n  PASS\n");
   console.log(`  Input Path: ${inputVideoPath}`);
   console.log(`  Output Path: ${finalVideoPath}`);
   console.log(`  Input Duration: ${probe.duration.toFixed(2)}s`);
