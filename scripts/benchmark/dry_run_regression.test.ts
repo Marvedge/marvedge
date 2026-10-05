@@ -32,7 +32,6 @@ function makeCues(
 ): SubtitleCue[] {
   const step = totalDurationSec / n;
   return Array.from({ length: n }, (_, i) => ({
-    id: `cue-${i}`,
     start: i * step,
     end: i * step + cueDurationSec,
     text: `Cue ${i + 1} — sample localized subtitle text.`,

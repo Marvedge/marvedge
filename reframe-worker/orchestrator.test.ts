@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "fs";
 import path from "path";
-process.env.CALLBACK_SECRET = "test-secret";
+// Ensure CALLBACK_SECRET is always present for these orchestrator tests.
+// CI does not provide .env.local, so we inject a deterministic test value here.
+// config.test.ts independently tests the missing-secret throw by explicitly
+// deleting process.env.CALLBACK_SECRET inside its own test.
+process.env.CALLBACK_SECRET = process.env.CALLBACK_SECRET || "test-callback-secret";
 import type { CropTargetData } from "../app/types/editor/crop-target";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
 import {
@@ -355,61 +359,6 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
   });
 
   describe("Phase 2 Fallback and Error Classification (Task-00082)", () => {
-    it("triggers static center crop fallback and persists metadata when AutoFlip returns zero crop targets", async () => {
-      mockExecuteMl.mockResolvedValueOnce({
-        schema_version: 1,
-        source: { width: 1920, height: 1080, fps: 30, duration_sec: 5 },
-        output: { aspect_ratio: "9:16" },
-        crop_targets: [],
-      });
-
-      const context: ReframeJobContext = {
-        jobId: "job-empty-targets",
-        attemptsMade: 0,
-        maxAttempts: 3,
-      };
-
-      const result = await processReframeJob(
-        {
-          ...sampleJobPayload,
-          jobId: "job-empty-targets",
-        },
-        context,
-        {
-          executeMl: mockExecuteMl,
-          renderVideo: mockRenderVideo,
-          sendCallback: mockSendCallback,
-          resultCache: localCache,
-        }
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.fallbackMetadata).toEqual({
-        fallback: true,
-        fallbackStage: "REFRAME",
-        fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
-        attemptsMade: 1,
-      });
-
-      // Crop targets should be non-empty and centered
-      expect(result.cropTargets.crop_targets.length).toBeGreaterThan(0);
-      expect(result.cropTargets.crop_targets[0].crop.width).toBe(608);
-      expect(result.cropTargets.crop_targets[0].crop.height).toBe(1080);
-      expect(result.cropTargets.crop_targets[0].crop.x).toBe(656);
-
-      // Verify callback received fallback metadata
-      expect(mockSendCallback).toHaveBeenCalledWith(
-        expect.objectContaining({
-          jobId: "job-empty-targets",
-          status: "COMPLETED",
-          fallback: true,
-          fallbackStage: "REFRAME",
-          fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
-          attemptsMade: 1,
-        })
-      );
-    });
-
     it("triggers static center crop fallback when AutoFlip returns invalid/unusable crop targets", async () => {
       mockExecuteMl.mockResolvedValueOnce({
         schema_version: 1,
@@ -1249,22 +1198,27 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       }
     });
 
-    // D. Empty crop_targets are schema-valid but unusable by the render pipeline.
-    it("Test D: Empty crop_targets use the validated center-crop fallback", async () => {
+    // Empty crop targets are schema-valid but unusable by the render pipeline.
+    it("uses validated center-crop fallback for empty crop targets", async () => {
       const emptyTargets: CropTargetData = {
         schema_version: 1,
-        source: { width: 1920, height: 1080 },
+        source: { width: 1920, height: 1080, fps: 30, duration_sec: 5 },
         output: { aspect_ratio: "9:16" },
         crop_targets: [],
       };
       mockExecuteMl.mockResolvedValue(emptyTargets);
 
-      const result = await processReframeJob(sampleJobPayload, defaultContext, {
-        executeMl: mockExecuteMl,
-        renderVideo: mockRenderVideo,
-        sendCallback: mockSendCallback,
-        resultCache: localCache,
-      });
+      const fallbackJobId = "job-empty-targets";
+      const result = await processReframeJob(
+        { ...sampleJobPayload, jobId: fallbackJobId },
+        { ...defaultContext, jobId: fallbackJobId },
+        {
+          executeMl: mockExecuteMl,
+          renderVideo: mockRenderVideo,
+          sendCallback: mockSendCallback,
+          resultCache: localCache,
+        }
+      );
 
       expect(result.success).toBe(true);
       expect(result.fallbackMetadata).toEqual({
@@ -1273,7 +1227,7 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
         attemptsMade: 1,
       });
-      expect(result.cropTargets.crop_targets.length).toBeGreaterThan(0);
+      expect(result.cropTargets.crop_targets).toHaveLength(2);
       expect(result.cropTargets.crop_targets[0].crop).toEqual({
         x: 656,
         y: 0,
@@ -1283,14 +1237,17 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
       expect(mockRenderVideo).toHaveBeenCalledWith(
         sampleJobPayload.videoUrl,
         result.cropTargets,
-        { jobId: sampleJobPayload.jobId }
+        { jobId: fallbackJobId }
       );
       expect(mockSendCallback).toHaveBeenCalledWith(
         expect.objectContaining({
+          jobId: fallbackJobId,
           status: "COMPLETED",
           cropTargets: result.cropTargets,
           fallback: true,
+          fallbackStage: "REFRAME",
           fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
+          attemptsMade: 1,
         })
       );
     });
@@ -1385,6 +1342,10 @@ describe("Reframe Worker Orchestrator (Task-00023 Phase 2)", () => {
         { x: -1, y: 0, width: 608, height: 1080, err: "crop.x must be non-negative" },
         // negative y
         { x: 0, y: -1, width: 608, height: 1080, err: "crop.y must be non-negative" },
+        // zero width
+        { x: 0, y: 0, width: 0, height: 1080, err: "crop.width must be positive" },
+        // zero height
+        { x: 0, y: 0, width: 608, height: 0, err: "crop.height must be positive" },
       ];
 
       for (const item of badBoundsCases) {

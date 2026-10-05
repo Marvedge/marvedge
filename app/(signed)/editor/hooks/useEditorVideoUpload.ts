@@ -101,7 +101,9 @@ export async function uploadEditorVideoFile(
   const toastId = toast.loading("Uploading video to Cloudinary...");
   callbacks?.setIsUploading?.(true);
 
-  const uploadPromise = (async (): Promise<string | null> => {
+  let uploadPromise: Promise<string | null> = Promise.resolve(null);
+
+  uploadPromise = (async (): Promise<string | null> => {
     try {
       const secureUrl = await uploadVideoToCloudinary({
         file,
@@ -150,7 +152,6 @@ export async function uploadEditorVideoFile(
   })();
 
   activeVideoUploadPromise = uploadPromise;
-
   try {
     return await uploadPromise;
   } finally {

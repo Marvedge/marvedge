@@ -28,6 +28,8 @@ const CHUNK_DURATION_SECS = Number(process.env.CHUNK_DURATION_SECS || 10);
 const AVS_VOICEOVER_PREFIX = process.env.AVS_VOICEOVER_PREFIX || "avs-voiceover/";
 // GCS object prefix for AVS time-aligned MP4s (in the processed bucket).
 const AVS_ALIGNED_PREFIX = process.env.AVS_ALIGNED_PREFIX || "avs-aligned/";
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(os.tmpdir(), "marvedge-artifacts");
+fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => {});
 // Frame rate the aligned segments are normalized to so they concat with -c copy.
 const AVS_SYNC_FPS = Number(process.env.AVS_SYNC_FPS || 30);
 // GCS object prefix for WTM webcam-bubble composited MP4s (processed bucket).
@@ -1195,7 +1197,10 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
 
-  const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
+  const processedBucket =
+    process.env.STORAGE_PROVIDER === "local"
+      ? "local"
+      : PROCESSED_BUCKET || "local";
   const startedAt = Date.now();
   const workDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "marvedge-avs-dub-"),
@@ -1313,19 +1318,42 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
 
     const duration = round3(await probeDurationSeconds(alignedPath));
 
-    const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
-    await uploadProcessedChunkToGcs({
-      bucketName: processedBucket,
-      objectName,
-      sourcePath: alignedPath,
-    });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (_e) {
-      /* Ignore if UBLA is enforced — signed URL still works. */
+    let alignedVideoUrl;
+    if (
+      process.env.STORAGE_PROVIDER !== "local" &&
+      processedBucket &&
+      processedBucket !== "local"
+    ) {
+      try {
+        const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
+        await uploadProcessedChunkToGcs({
+          bucketName: processedBucket,
+          objectName,
+          sourcePath: alignedPath,
+        });
+        const fileRef = storage.bucket(processedBucket).file(objectName);
+        try {
+          await fileRef.makePublic();
+        } catch (_e) {
+          /* Ignore if UBLA is enforced — signed URL still works. */
+        }
+        alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+      } catch (gcsErr) {
+        console.warn(
+          `[avs-dub] GCS upload failed (${gcsErr.message}). Falling back to local artifact serving.`,
+        );
+      }
     }
-    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+
+    if (!alignedVideoUrl) {
+      const localArtifactName = `aligned-${randomUUID()}.mp4`;
+      const localArtifactPath = path.join(ARTIFACTS_DIR, localArtifactName);
+      await fs.copyFile(alignedPath, localArtifactPath);
+      const port = process.env.PORT || 8080;
+      const host = process.env.WORKER_PUBLIC_URL || `http://localhost:${port}`;
+      alignedVideoUrl = `${host}/artifacts/${localArtifactName}`;
+      console.log(`[avs-dub] Artifact saved locally at ${alignedVideoUrl}`);
+    }
 
     console.log(
       `[avs-dub] steps=${videoSegments.length} stretched=${stretched} ` +
@@ -2177,6 +2205,8 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/healthz", (_req, res) => {
   res.status(200).json({ ok: true });
 });
+
+app.use("/artifacts", express.static(ARTIFACTS_DIR));
 
 // shared secret so strangers cannot trigger pricey video jobs.
 // while the secret is missing we only warn, so local runs keep working.

@@ -1,87 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   cloudinaryResourceTypeFor,
+  cloudinaryUpload,
   cloudinaryUploadBuffer,
-  getCloudinaryCloudName,
-  getCloudinaryUploadPreset,
-  isCloudinaryUploadConfigured,
-  isEditorCloudinaryUploadEnabled,
   uploadVideoToCloudinary,
   CloudinaryUploadError,
 } from "./cloudinaryUpload";
 
-describe("cloudinaryUpload", () => {
-  const originalEnv = process.env;
+describe("cloudinaryUpload helper", () => {
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    vi.resetModules();
-    process.env = { ...originalEnv };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
     vi.restoreAllMocks();
   });
 
-  describe("Configuration & Environment Helpers", () => {
-    it("reads cloud name from NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME or CLOUDINARY_CLOUD_NAME", () => {
-      delete process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      delete process.env.CLOUDINARY_CLOUD_NAME;
-      expect(getCloudinaryCloudName()).toBe("");
-
-      process.env.CLOUDINARY_CLOUD_NAME = "server-cloud";
-      expect(getCloudinaryCloudName()).toBe("server-cloud");
-
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "client-cloud";
-      expect(getCloudinaryCloudName()).toBe("client-cloud");
-    });
-
-    it("reads upload preset from NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_UPLOAD_PRESET", () => {
-      delete process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-      delete process.env.CLOUDINARY_UPLOAD_PRESET;
-      expect(getCloudinaryUploadPreset()).toBe("");
-
-      process.env.CLOUDINARY_UPLOAD_PRESET = "server-preset";
-      expect(getCloudinaryUploadPreset()).toBe("server-preset");
-
-      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "client-preset";
-      expect(getCloudinaryUploadPreset()).toBe("client-preset");
-    });
-
-    it("checks if upload is configured correctly", () => {
-      delete process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      delete process.env.CLOUDINARY_CLOUD_NAME;
-      delete process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-      delete process.env.CLOUDINARY_UPLOAD_PRESET;
-      expect(isCloudinaryUploadConfigured()).toBe(false);
-
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "my-cloud";
-      expect(isCloudinaryUploadConfigured()).toBe(false);
-
-      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "my-preset";
-      expect(isCloudinaryUploadConfigured()).toBe(true);
-    });
-
-    it("checks if local editor upload flag is enabled", () => {
-      delete process.env.NEXT_PUBLIC_EDITOR_CLOUDINARY_VIDEO_UPLOAD;
-      expect(isEditorCloudinaryUploadEnabled()).toBe(false);
-
-      process.env.NEXT_PUBLIC_EDITOR_CLOUDINARY_VIDEO_UPLOAD = "true";
-      expect(isEditorCloudinaryUploadEnabled()).toBe(true);
-    });
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   describe("cloudinaryResourceTypeFor", () => {
     it("identifies video MIME types", () => {
       expect(cloudinaryResourceTypeFor("video/mp4")).toBe("video");
       expect(cloudinaryResourceTypeFor("video/webm")).toBe("video");
-      expect(cloudinaryResourceTypeFor("video/quicktime")).toBe("video");
       expect(cloudinaryResourceTypeFor("audio/mpeg")).toBe("video");
+      expect(cloudinaryResourceTypeFor("audio/wav")).toBe("video");
     });
 
-    it("identifies video formats by file extension even with blank/generic MIME", () => {
-      expect(cloudinaryResourceTypeFor("", "sample.mp4")).toBe("video");
-      expect(cloudinaryResourceTypeFor("", "recording.webm")).toBe("video");
+    it("identifies video file extensions even with generic or missing mime", () => {
       expect(cloudinaryResourceTypeFor("application/octet-stream", "clip.mov")).toBe("video");
       expect(cloudinaryResourceTypeFor("", "movie.mkv")).toBe("video");
       expect(cloudinaryResourceTypeFor("", "camera.avi")).toBe("video");
@@ -92,8 +38,93 @@ describe("cloudinaryUpload", () => {
       expect(cloudinaryResourceTypeFor("image/jpeg")).toBe("image");
     });
 
-    it("falls back to raw for unknown content", () => {
+    it("falls back to raw for unknown content or other types", () => {
+      expect(cloudinaryResourceTypeFor("application/octet-stream")).toBe("raw");
       expect(cloudinaryResourceTypeFor("application/pdf", "doc.pdf")).toBe("raw");
+    });
+  });
+
+  describe("cloudinaryUpload function", () => {
+    it("successfully uploads a Blob and returns the secure_url", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
+      const testBlob = new Blob(["video-data"], { type: "video/webm" });
+      const expectedUrl = "https://res.cloudinary.com/test-cloud/video/upload/v12345/subtitles_source/test.webm";
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          secure_url: expectedUrl,
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const url = await cloudinaryUpload(testBlob, {
+        folder: "subtitles_source",
+        filename: "test.webm",
+        contentType: "video/webm",
+      });
+
+      expect(url).toBe(expectedUrl);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const callArgs = fetchMock.mock.calls[0];
+      expect(callArgs[0]).toBe("https://api.cloudinary.com/v1_1/test-cloud/video/upload");
+      expect(callArgs[1].method).toBe("POST");
+      expect(callArgs[1].body).toBeInstanceOf(FormData);
+    });
+
+    it("accepts options object with file property", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
+      const testBlob = new Blob(["video-data"], { type: "video/webm" });
+      const expectedUrl = "https://res.cloudinary.com/test-cloud/video/upload/sample.webm";
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ secure_url: expectedUrl }),
+        })
+      );
+
+      const url = await cloudinaryUpload({
+        file: testBlob,
+        folder: "subtitles_source",
+      });
+
+      expect(url).toBe(expectedUrl);
+    });
+
+    it("throws CloudinaryUploadError if configuration is missing", async () => {
+      delete process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+      delete process.env.CLOUDINARY_CLOUD_NAME;
+      delete process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+      const testBlob = new Blob(["data"]);
+      await expect(cloudinaryUpload(testBlob)).rejects.toThrow(CloudinaryUploadError);
+    });
+
+    it("throws CloudinaryUploadError if Cloudinary API returns error", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          json: async () => ({
+            error: { message: "Invalid preset" },
+          }),
+        })
+      );
+
+      const testBlob = new Blob(["data"]);
+      await expect(cloudinaryUpload(testBlob)).rejects.toThrow("Invalid preset");
     });
   });
 

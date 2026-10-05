@@ -186,6 +186,7 @@ export async function processReframeJob(
   // Fails immediately before ML inference, rendering, upload, or callbacks.
   // Throws ReframePayloadValidationError (UnrecoverableError) so BullMQ does not retry.
   const payload = validateReframeJobPayload(rawPayload);
+
   const config = deps.config ?? getReframeWorkerConfig();
   const cache = deps.resultCache ?? globalResultCache;
 
@@ -279,6 +280,7 @@ export async function processReframeJob(
       `[reframe-worker] Reusing cached ML inference result for job ${payload.jobId} (attempt ${context.attemptsMade + 1}/${context.maxAttempts})`
     );
     cropTargets = cache.get(payload.jobId)!;
+    validateCropTargetData(cropTargets);
   } else {
     try {
       console.log(
@@ -300,10 +302,8 @@ export async function processReframeJob(
           (t) =>
             !t ||
             !t.crop ||
-            typeof t.crop.width !== "number" ||
-            t.crop.width <= 0 ||
-            typeof t.crop.height !== "number" ||
-            t.crop.height <= 0
+            ((!Number.isFinite(t.crop.width) || t.crop.width <= 0) &&
+              (!Number.isFinite(t.crop.height) || t.crop.height <= 0))
         );
 
       if (isTargetEmpty || hasUnusableTargets) {
@@ -334,6 +334,10 @@ export async function processReframeJob(
       // Cache the result in memory in case callback delivery fails
       cache.set(payload.jobId, cropTargets);
     } catch (mlError) {
+      if (mlError instanceof CropTargetValidationError && !finalAttempt) {
+        throw mlError;
+      }
+
       const category = classifyReframeError(mlError);
       const errMsg = mlError instanceof Error ? mlError.message : String(mlError);
 
@@ -341,12 +345,6 @@ export async function processReframeJob(
         console.warn(
           `[reframe-worker] Transient ML failure on attempt ${context.attemptsMade + 1}/${context.maxAttempts} for job ${payload.jobId}. Retrying via BullMQ... Error: ${errMsg}`
         );
-        throw mlError;
-      }
-
-      // Preserve the validation boundary's retry behavior, reporting malformed
-      // ML output only when BullMQ reaches its final attempt.
-      if (mlError instanceof CropTargetValidationError && !finalAttempt) {
         throw mlError;
       }
 

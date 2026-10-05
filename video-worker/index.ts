@@ -16,12 +16,20 @@ import {
   waitForDubbingCompletion,
 } from "../app/lib/elevenlabs/dubbing";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
+import {
+  postJobCallbackWithRetry,
+  processDubbingJob,
+} from "../app/lib/avs/dubbingProcessor";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 // Load env from common locations (video-worker/.env and parent app .env).
 // Note: environment variables are read once at process start; restart the worker after editing .env.
 (() => {
   const candidates = [
+    path.resolve(process.cwd(), ".env.local"),
+    path.resolve(process.cwd(), "../.env.local"),
+    path.resolve(__dirname, ".env.local"),
+    path.resolve(__dirname, "../.env.local"),
     path.resolve(process.cwd(), ".env"),
     path.resolve(process.cwd(), "../.env"),
     path.resolve(__dirname, ".env"),
@@ -1594,28 +1602,111 @@ audioWorker.on("failed", (job, err) => {
 });
 
 console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
-// ── Dubbing Worker (ElevenLabs) ─────────────────────────────────────────────
-const dubbingWorker = new Worker(
+// ── Reframe Worker (Task-00023 Architecture) ──────────────────────────────────
+// Note: Video reframing is decoupled from this monolithic worker. It runs in a
+// dedicated lightweight worker process (reframe-worker/index.ts; npm run worker:reframe)
+// with zero Prisma/Postgres imports, communicating with pure ML inference over HTTP
+// and reporting results via authenticated backend callback.
+
+// ── Dubbing Worker (AVS Dubbing — Task-00059) ──────────────────────────────────
+// Processes pre-recorded dubbed audio time-alignment via Cloud Run /avs-dub and
+// reports completion/failure via authenticated HTTP callback to Next.js.
+const dubbingConcurrency = Math.max(
+  1,
+  parseInt(process.env.DUBBING_WORKER_CONCURRENCY || "1", 10) || 1
+);
+
+// Cloud Run /avs-dub timeout is 15 minutes (900_000 ms).
+// Configure BullMQ lockDuration and stalledInterval so healthy long-running
+// dubbing jobs are not falsely flagged as stalled.
+const dubbingLockDuration = Math.max(
+  120_000,
+  parseInt(process.env.DUBBING_LOCK_DURATION_MS || "300000", 10) || 300_000
+);
+const dubbingStalledInterval = Math.max(
+  30_000,
+  parseInt(process.env.DUBBING_STALLED_INTERVAL_MS || "300000", 10) || 300_000
+);
+
+export const dubbingWorker = new Worker(
   "dubbing-processing",
   async (job: Job) => {
-    const { jobId, sourceUrl, targetLanguage } = job.data;
+    if (job.name === "avs-dub") {
+      try {
+        await processDubbingJob(job.data, {
+          updateProgress: async (pct: number) => {
+            await job.updateProgress(pct);
+          },
+        });
+      } catch (error) {
+        const maxAttempts =
+          typeof job.opts.attempts === "number" && job.opts.attempts > 0
+            ? job.opts.attempts
+            : 1;
+        const fallbackJobId =
+          typeof job.data?.jobId === "string" ? job.data.jobId : "";
+        const fallbackVideoUrl =
+          typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
 
+        if (
+          job.attemptsMade + 1 < maxAttempts ||
+          !fallbackJobId.trim() ||
+          !fallbackVideoUrl.trim()
+        ) {
+          throw error;
+        }
+
+        const reason = error instanceof Error ? error.message : String(error);
+        const fallbackPayload = {
+          jobId: fallbackJobId,
+          status: "COMPLETED" as const,
+          alignedVideoUrl: fallbackVideoUrl,
+          duration:
+            typeof job.data.sourceDuration === "number" &&
+            Number.isFinite(job.data.sourceDuration) &&
+            job.data.sourceDuration >= 0
+              ? job.data.sourceDuration
+              : 0,
+          fallback: true,
+          fallbackStage: "DUBBING",
+          fallbackReason: reason,
+          attemptsMade: job.attemptsMade + 1,
+        };
+
+        try {
+          await postJobCallbackWithRetry(fallbackPayload);
+        } catch (callbackError) {
+          console.error(
+            `[dubbing-worker] Final fallback callback failed for job ${job.id}:`,
+            callbackError
+          );
+          throw new AggregateError(
+            [error, callbackError],
+            `Dubbing failed and source-video fallback callback could not be delivered for job ${job.id}`
+          );
+        }
+
+        await job.updateProgress(100);
+        console.warn(
+          `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
+        );
+      }
+      return;
+    }
+
+    if (job.name !== "dubbing") {
+      throw new Error(`Unsupported dubbing job type: ${job.name}`);
+    }
+
+    const { jobId, sourceUrl, targetLanguage } = job.data;
     try {
       await prisma.videoJob.update({
         where: { id: jobId },
-        data: {
-          status: "PROCESSING",
-          progress: 10,
-        },
+        data: { status: "PROCESSING", progress: 10 },
       });
-
       await job.updateProgress(10);
 
-      const dubbingJob = await createDubbingJob({
-        sourceUrl,
-        targetLanguage,
-      });
-
+      const dubbingJob = await createDubbingJob({ sourceUrl, targetLanguage });
       await prisma.videoJob.update({
         where: { id: jobId },
         data: {
@@ -1629,13 +1720,9 @@ const dubbingWorker = new Worker(
           },
         },
       });
-
       await job.updateProgress(25);
 
-      const completedJob = await waitForDubbingCompletion(
-        dubbingJob.dubbingId
-      );
-
+      const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
       await prisma.videoJob.update({
         where: { id: jobId },
         data: {
@@ -1651,11 +1738,9 @@ const dubbingWorker = new Worker(
           },
         },
       });
-
       await job.updateProgress(100);
     } catch (error: any) {
       console.error(`[Dubbing ${jobId}] failed:`, error);
-
       await prisma.videoJob.update({
         where: { id: jobId },
         data: {
@@ -1663,18 +1748,25 @@ const dubbingWorker = new Worker(
           error: error?.message || "Dubbing failed",
         },
       });
-
       throw error;
     }
   },
   {
-    connection: connection as any,
-    concurrency: 1,
+    connection: new Redis(redisUrl, { maxRetriesPerRequest: null }) as any,
+    concurrency: dubbingConcurrency,
+    lockDuration: dubbingLockDuration,
+    stalledInterval: dubbingStalledInterval,
+    maxStalledCount: 1,
   }
 );
 
 dubbingWorker.on("failed", (job, err) => {
-  console.log(`Dubbing job ${job?.id} failed: ${err.message}`);
+  console.log(`Dubbing job ${job?.name} ${job?.id} failed: ${err.message}`);
 });
 
-console.log("🎙️ Dubbing Worker ready...");
+console.log(
+  `🎙️ Dubbing Worker ready (concurrency=${dubbingConcurrency}, lockDuration=${dubbingLockDuration}ms)...`
+);
+console.log(
+  `🎙️ Dub service target: ${process.env.AVS_DUB_SERVICE_URL || "(defaulting to GCP_VIDEO_WORKER_URL)"}`
+);

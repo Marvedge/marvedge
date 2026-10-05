@@ -88,9 +88,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     const jobData = job.jobData as unknown;
     let subtitles: unknown = null;
-    // AVS time-alignment (kind: "AVS_SYNC" and the dub variant "AVS_DUB")
-    // surfaces its aligned source here so the client can poll for it; additive
-    // and inert for every other job kind.
+    // AVS time-alignment (kind: "AVS_SYNC" | "AVS_DUB") surfaces its aligned
+    // source here so the client can poll for it; additive and inert for every
+    // other job kind.
     let aligned: { alignedVideoUrl: unknown; duration: unknown } | null = null;
     // Reframe saliency trajectory (kind: "REFRAME") surfaces cropTargets here.
     let cropTargets: unknown = null;
