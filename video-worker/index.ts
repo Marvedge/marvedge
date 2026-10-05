@@ -11,6 +11,10 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 import axios from "axios";
+import {
+  createDubbingJob,
+  waitForDubbingCompletion,
+} from "../app/lib/elevenlabs/dubbing";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
@@ -1590,9 +1594,87 @@ audioWorker.on("failed", (job, err) => {
 });
 
 console.log(`🎵 Audio Worker ready (concurrency=${audioConcurrency})...`);
+// ── Dubbing Worker (ElevenLabs) ─────────────────────────────────────────────
+const dubbingWorker = new Worker(
+  "dubbing-processing",
+  async (job: Job) => {
+    const { jobId, sourceUrl, targetLanguage } = job.data;
 
-// ── Reframe Worker (Task-00023 Architecture) ──────────────────────────────────
-// Note: Video reframing is decoupled from this monolithic worker. It runs in a
-// dedicated lightweight worker process (reframe-worker/index.ts; npm run worker:reframe)
-// with zero Prisma/Postgres imports, communicating with pure ML inference over HTTP
-// and reporting results via authenticated backend callback.
+    try {
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "PROCESSING",
+          progress: 10,
+        },
+      });
+
+      await job.updateProgress(10);
+
+      const dubbingJob = await createDubbingJob({
+        sourceUrl,
+        targetLanguage,
+      });
+
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          progress: 25,
+          jobData: {
+            kind: "DUBBING",
+            sourceUrl,
+            targetLanguage,
+            dubbingId: dubbingJob.dubbingId,
+            providerStatus: dubbingJob.status,
+          },
+        },
+      });
+
+      await job.updateProgress(25);
+
+      const completedJob = await waitForDubbingCompletion(
+        dubbingJob.dubbingId
+      );
+
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          jobData: {
+            kind: "DUBBING",
+            sourceUrl,
+            targetLanguage,
+            dubbingId: completedJob.dubbingId,
+            providerStatus: completedJob.status,
+            audioEndpoint: `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`,
+          },
+        },
+      });
+
+      await job.updateProgress(100);
+    } catch (error: any) {
+      console.error(`[Dubbing ${jobId}] failed:`, error);
+
+      await prisma.videoJob.update({
+        where: { id: jobId },
+        data: {
+          status: "FAILED",
+          error: error?.message || "Dubbing failed",
+        },
+      });
+
+      throw error;
+    }
+  },
+  {
+    connection: connection as any,
+    concurrency: 1,
+  }
+);
+
+dubbingWorker.on("failed", (job, err) => {
+  console.log(`Dubbing job ${job?.id} failed: ${err.message}`);
+});
+
+console.log("🎙️ Dubbing Worker ready...");

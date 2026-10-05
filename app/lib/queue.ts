@@ -31,3 +31,7 @@ export const reframeQueue = new Queue("reframe-processing", {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   connection: connection as any,
 });
+export const dubbingQueue = new Queue("dubbing-processing", {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  connection: connection as any,
+});
