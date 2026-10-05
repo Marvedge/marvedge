@@ -31,6 +31,7 @@
 // loses the data with no error anywhere.
 
 import { UNKNOWN_COMPANY, sourceDescription } from "./normalize";
+import { deliveryHostIsPublic } from "./deliveryCheck";
 import type { NormalizedContact } from "./normalize";
 import type { DeliveryOutcome, SalesforceCredentials } from "./types";
 
@@ -112,6 +113,12 @@ export async function deliverToSalesforce(
 ): Promise<DeliveryOutcome> {
   const endpoint = credentials.endpoint?.trim() || SALESFORCE_WEB_TO_LEAD_URL;
   const body = new URLSearchParams(toWebToLeadFields(credentials, contact, fieldMap));
+
+  // same rebinding guard as webhooks: custom endpoints get rechecked now
+  if (!(await deliveryHostIsPublic(endpoint))) {
+    console.error("[crm] salesforce delivery blocked: unsafe host");
+    return { ok: false, retryable: false, error: "Endpoint failed safety check" };
+  }
 
   let response: Response;
   try {

@@ -2,7 +2,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { ZoomEffect } from "@/app/types/editor/zoom-effect";
 import { Segment } from "../hooks/useEditorState";
-import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
+import { uploadBlobToCloudinary } from "@/app/lib/cloudinaryClientUpload";
 import { fixWebmDurationIfNeeded } from "@/app/lib/fixWebmDuration";
 import type { SubtitleStyle } from "@/app/lib/subtitles";
 import type { WatermarkConfig } from "@/app/types/wtm";
@@ -85,15 +85,11 @@ async function uploadDemoSourceVideo(videoUrl: string): Promise<string | null> {
     const videoBlob = await response.blob();
     const fixedVideoBlob = await fixWebmDurationIfNeeded(videoBlob);
 
-    console.log("Uploading source video to GCS...");
-    const upload = await uploadBlobToGcs({
-      blob: fixedVideoBlob,
-      filename: "video.webm",
-      kind: "demo-source",
-    });
-    return upload.url;
+    console.log("Uploading source video to Cloudinary...");
+    const uploadedUrl = await uploadBlobToCloudinary(fixedVideoBlob, "demo_sources");
+    return uploadedUrl;
   } catch (cloudError) {
-    console.error("Error uploading source video to GCS:", cloudError);
+    console.error("Error uploading source video to Cloudinary:", cloudError);
     toast.dismiss();
     toast.error("Failed to upload source video");
     return null;
@@ -706,7 +702,7 @@ async function resolveExportBackground({
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function createMp4Downloader(jobId: string, sidebarTitle: string) {
+export function createMp4Downloader(jobId: string, sidebarTitle: string) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return async (_url: string) => {
     const safeName = (sidebarTitle || "Exported_Demo")
@@ -746,13 +742,13 @@ function createMp4Downloader(jobId: string, sidebarTitle: string) {
   };
 }
 
-interface PollExportJobParams {
+export interface PollExportJobParams {
   jobId: string;
   setProgress: (p: number) => void;
   toastId: string | number;
 }
 
-async function pollExportJob({
+export async function pollExportJob({
   jobId,
   setProgress,
   toastId,

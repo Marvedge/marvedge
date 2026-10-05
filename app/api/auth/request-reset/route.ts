@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
@@ -13,8 +16,9 @@ export async function POST(req: Request) {
 
     if (!email) {
       const session = await getServerSession(authOptions);
-      if (session?.user?.email) {
-        email = session.user.email;
+      const sessionEmail = session?.user?.email;
+      if (typeof sessionEmail === "string" && sessionEmail.trim()) {
+        email = sessionEmail.trim();
       }
     }
 
@@ -22,33 +26,68 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
+    // keep inbox spam and guessing cheap: 5 sends per 15 minutes
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded
+      ? forwarded.split(",")[0].trim()
+      : req.headers.get("x-real-ip")?.trim() || "unknown";
+    if (await isRateLimited(`request-reset:${ip}:${email.toLowerCase()}`, 5, 900)) {
+      return NextResponse.json(
+        { error: "Too many attempts, please try again later" },
+        { status: 429 }
+      );
+    }
+
     // Check for Resend API key early
     if (!process.env.RESEND_API_KEY) {
       console.error("Missing RESEND_API_KEY");
-      return NextResponse.json({ error: "Email service not configured" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
+    // reply the same whether or not the account exists, so the
+    // response never confirms which emails are registered
     if (!user) {
-      return NextResponse.json({ error: "No user found with this email" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Password reset link sent to your email." },
+        { status: 200 }
+      );
     }
 
     // Optional: block users without passwords (OAuth accounts)
     if (!user.password) {
       return NextResponse.json(
-        { error: "This account does not support password reset" },
-        { status: 400 }
+        { message: "Password reset link sent to your email." },
+        { status: 200 }
       );
     }
 
     const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Save token in existing PasswordReset.otp field to avoid schema migration.
+    // Store only the token hash so a database read cannot expose a usable reset token.
+    // Drop expired rows first so one inbox cannot pile up rows without end.
+    await prisma.passwordReset.deleteMany({
+      where: { email, expiresAt: { lte: new Date() } },
+    });
+    // Keep at most 3 live rows per email so resend spam stays bounded.
+    const liveCount = await prisma.passwordReset.count({
+      where: { email, expiresAt: { gt: new Date() } },
+    });
+    if (liveCount >= 3) {
+      const oldest = await prisma.passwordReset.findFirst({
+        where: { email, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: "asc" },
+      });
+      if (oldest) {
+        await prisma.passwordReset.delete({ where: { id: oldest.id } });
+      }
+    }
     await prisma.passwordReset.create({
       data: {
         email,
-        otp: token,
+        otp: tokenHash,
         expiresAt,
       },
     });

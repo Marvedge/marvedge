@@ -8,7 +8,7 @@ const resetPasswordSchema = z
   .object({
     email: z.string().min(1, "Please enter your email").email("Invalid email address"),
     token: z.string().min(1, "Invalid reset token"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -45,10 +45,14 @@ export const useResetPassword = () => {
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isLoading) {
+      return;
+    }
     setIsLoading(true);
+    // Trim email and token, leave passwords raw.
     const formData = {
-      email: emailRef.current?.value.trim(),
-      token: searchParams.get("token") || "",
+      email: (emailRef.current?.value ?? "").trim(),
+      token: (searchParams.get("token") || "").trim(),
       password: passwordRef.current?.value,
       confirmPassword: confirmPasswordRef.current?.value,
     };

@@ -1,0 +1,17 @@
+# Lightweight service layer image derived from marvedge-autoflip:latest.
+# Packages the baseline AutoFlip graph and FastAPI HTTP server.
+FROM marvedge-autoflip:latest
+
+# Deploy verified baseline headless graph (Task-00023)
+COPY autoflip/autoflip_headless_graph.pbtxt /mediapipe/mediapipe/examples/desktop/autoflip/autoflip_headless_graph.pbtxt
+
+# Install Python HTTP service dependencies
+WORKDIR /app
+COPY autoflip/requirements.txt /app/
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
+
+# Copy service implementation and unit tests
+COPY autoflip/service.py autoflip/server.py autoflip/test_service.py /app/
+
+EXPOSE 8000
+ENTRYPOINT ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

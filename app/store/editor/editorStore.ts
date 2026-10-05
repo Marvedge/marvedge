@@ -84,6 +84,10 @@ export interface EditorStoreState {
   // Demo.editing.avs. Null until the feature produces state for this demo.
   avs: AvsState | null;
 
+  // Whether the preview should play the dubbed-aligned source (`avs.dubAligned`)
+  // instead of the original recording. Session-only UI state — never persisted.
+  previewDubSource: boolean;
+
   // WTM (Automated Video Watermarking & Compositing) — persisted to
   // Demo.editing.wtm. Null until the branding panel produces state for this demo.
   wtm: WtmState | null;
@@ -124,6 +128,7 @@ export interface EditorStoreState {
   setBrowserFrameDrawShadow: Dispatch<SetStateAction<boolean>>;
   setBrowserFrameDrawBorder: Dispatch<SetStateAction<boolean>>;
   setAvs: Dispatch<SetStateAction<AvsState | null>>;
+  setPreviewDubSource: Dispatch<SetStateAction<boolean>>;
   setWtm: Dispatch<SetStateAction<WtmState | null>>;
 
   reset: () => void;
@@ -169,6 +174,7 @@ const initialState = {
   browserFrameDrawShadow: true,
   browserFrameDrawBorder: false,
   avs: null as AvsState | null,
+  previewDubSource: false,
   wtm: null as WtmState | null,
 };
 
@@ -215,6 +221,7 @@ export const useEditorStore = create<EditorStoreState>((set) => ({
   setBrowserFrameDrawBorder: (v) =>
     set((s) => ({ browserFrameDrawBorder: resolve(v, s.browserFrameDrawBorder) })),
   setAvs: (v) => set((s) => ({ avs: resolve(v, s.avs) })),
+  setPreviewDubSource: (v) => set((s) => ({ previewDubSource: resolve(v, s.previewDubSource) })),
   setWtm: (v) => set((s) => ({ wtm: resolve(v, s.wtm) })),
 
   reset: () => set({ ...initialState }),

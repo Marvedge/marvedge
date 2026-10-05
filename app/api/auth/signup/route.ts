@@ -1,10 +1,17 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 
 export async function POST(req: Request) {
+  let body;
   try {
-    const body = await req.json();
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  try {
     const { name, email, password } = body || {};
 
     if (!name || !email || !password) {
@@ -14,7 +21,47 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+    }
+
+    // Trim once and reuse below: the check above must judge the same address
+    // the lookup and save use. Case is left alone on purpose so existing
+    // mixed-case accounts keep working.
+    const cleanEmail = email.trim();
+    const cleanName = typeof name === "string" ? name.trim() : "";
+
+    if (!cleanName) {
+      return NextResponse.json(
+        { error: "Name, email, and password are required" },
+        { status: 400 }
+      );
+    }
+
+    // Keep key lower only for the limit bucket so mixed case mail still works.
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded
+      ? forwarded.split(",")[0].trim()
+      : req.headers.get("x-real-ip")?.trim() || "unknown";
+    if (await isRateLimited(`signup:${ip}:${cleanEmail.toLowerCase()}`, 5, 900)) {
+      return NextResponse.json(
+        { error: "Too many attempts, please try again later" },
+        { status: 429 }
+      );
+    }
+
+    if (typeof password !== "string" || password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
+    }
+
+    if (password.length > 72) {
+      return NextResponse.json({ error: "Password is too long" }, { status: 400 });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existingUser) {
       return NextResponse.json({ error: "User already exists" }, { status: 400 });
     }
@@ -23,8 +70,8 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.create({
       data: {
-        name,
-        email,
+        name: cleanName,
+        email: cleanEmail,
         password: hashedPassword,
       },
     });
@@ -40,12 +87,6 @@ export async function POST(req: Request) {
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error("Signup error:", error);
-    return NextResponse.json(
-      {
-        error: "Failed to create user",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
 }

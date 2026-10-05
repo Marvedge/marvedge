@@ -15,6 +15,7 @@ import {
   createDubbingJob,
   waitForDubbingCompletion,
 } from "../app/lib/elevenlabs/dubbing";
+import { runClipScoringJob } from "../app/lib/clips/jobs";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 // Load env from common locations (video-worker/.env and parent app .env).
@@ -810,6 +811,14 @@ function computeTargetSizeForRatio(
 const worker = new Worker(
   "video-processing",
   async (job: Job) => {
+    if (job.name === "clip-scoring") {
+      return await runClipScoringJob(job.data, prisma, {
+        updateProgress: async (progress: number) => {
+          await job.updateProgress(progress);
+        },
+      });
+    }
+
     const jobStartTs = Date.now();
     const {
       jobId,
