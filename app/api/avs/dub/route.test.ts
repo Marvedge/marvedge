@@ -30,15 +30,11 @@ vi.mock("@/app/lib/avs/flags", () => ({
   isAvsEnabled: vi.fn(() => true),
 }));
 
-vi.mock("@/app/lib/avs/access", () => ({
-  isAvsAllowed: vi.fn((plan: string) => plan === "PRO" || plan === "ENTERPRISE"),
-}));
-
 vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpDubSync: vi.fn(),
 }));
 
-// Mock Next.js after() to synchronously invoke the background callback in tests
+// Mock Next.js after() to invoke the background callback in tests.
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
   return {
@@ -52,7 +48,6 @@ vi.mock("next/server", async (importOriginal) => {
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
-import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
 import { POST, runDubAlignment } from "./route";
 
@@ -68,23 +63,26 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(isAvsEnabled).mockReturnValue(true);
-    vi.mocked(isAvsAllowed).mockImplementation((p) => p === "PRO" || p === "ENTERPRISE");
     vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
   });
 
   describe("Synchronous Route Validation (Deterministic Rejection)", () => {
     it("returns 404 when AVS feature flag is disabled", async () => {
       vi.mocked(isAvsEnabled).mockReturnValue(false);
+
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
+
       expect(res.status).toBe(404);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
     });
 
     it("returns 401 when session is missing", async () => {
       vi.mocked(getServerSession).mockResolvedValue(null);
+
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
+
       expect(res.status).toBe(401);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
     });
@@ -92,26 +90,43 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     it("returns 404 when user is not found", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
       vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
+
       expect(res.status).toBe(404);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
     });
 
-    it("returns 403 when user plan is FREE", async () => {
+    it("allows a signed-in FREE user to create a dubbing job", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
       vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "FREE" } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-free" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
-      expect(res.status).toBe(403);
-      expect(prisma.videoJob.create).not.toHaveBeenCalled();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true, jobId: "job-free" });
+      expect(prisma.videoJob.create).toHaveBeenCalledWith({
+        data: {
+          userId: "u-1",
+          demoId: null,
+          videoUrl: "https://example.com/video.mp4",
+          status: "PENDING",
+          jobData: { kind: "AVS_DUB" },
+        },
+      });
     });
 
     it("returns 400 when videoUrl is missing", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
       vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "PRO" } as never);
+
       const req = makeDubRequest({});
       const res = await POST(req);
+
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.error).toBe("Missing videoUrl");
@@ -121,13 +136,17 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     it("returns 404 when demoId belongs to a different user", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
       vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "PRO" } as never);
-      vi.mocked(prisma.demo.findUnique).mockResolvedValue({ id: "demo-1", userId: "u-other" } as never);
+      vi.mocked(prisma.demo.findUnique).mockResolvedValue({
+        id: "demo-1",
+        userId: "u-other",
+      } as never);
 
       const req = makeDubRequest({
         videoUrl: "https://example.com/video.mp4",
         demoId: "demo-1",
       });
       const res = await POST(req);
+
       expect(res.status).toBe(404);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
     });
@@ -210,7 +229,7 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       await runDubAlignment("job-dub-2", {
         ...defaultInput,
-        dubUrl: "", // missing dubUrl
+        dubUrl: "",
       });
 
       expect(invokeGcpDubSync).not.toHaveBeenCalled();

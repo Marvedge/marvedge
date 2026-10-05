@@ -6,6 +6,7 @@ import { uploadBlobToCloudinary } from "@/app/lib/cloudinaryClientUpload";
 import { fixWebmDurationIfNeeded } from "@/app/lib/fixWebmDuration";
 import type { SubtitleStyle } from "@/app/lib/subtitles";
 import type { WatermarkConfig } from "@/app/types/wtm";
+import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
 
 function getDemoIdFromApiResponse(data: unknown): string | null {
   if (!data || typeof data !== "object") {

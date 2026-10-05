@@ -17,8 +17,13 @@ vi.mock("@/app/lib/prisma", () => ({
   },
 }));
 
+vi.mock("@/app/lib/awsJobProgress", () => ({
+  getAwsJobProgress: vi.fn(),
+}));
+
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
+import { getAwsJobProgress } from "@/app/lib/awsJobProgress";
 import { GET } from "./route";
 
 function makeGetRequest(jobId: string): [NextRequest, { params: Promise<{ id: string }> }] {
@@ -75,9 +80,7 @@ describe("GET /api/jobs/[id]", () => {
       schema_version: 1,
       source: { width: 1920, height: 1080 },
       output: { aspect_ratio: "9:16" },
-      crop_targets: [
-        { timestamp_sec: 0, crop: { x: 656, y: 0, width: 608, height: 1080 } },
-      ],
+      crop_targets: [{ timestamp_sec: 0, crop: { x: 656, y: 0, width: 608, height: 1080 } }],
     };
 
     vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
@@ -257,5 +260,151 @@ describe("GET /api/jobs/[id]", () => {
     expect(json.fallback).toBe(true);
     expect(json.fallbackStage).toBe("DUBBING");
     expect(json.fallbackReason).toBe("GCP worker failed after multiple retries");
+  });
+
+  it("returns 400 for an empty id without hitting the database", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+
+    const [req] = makeGetRequest("job-1");
+    const emptyCtx = { params: Promise.resolve({ id: "" }) };
+    const res = await GET(req, emptyCtx);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("Invalid job id");
+    expect(prisma.videoJob.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a malformed id without hitting the database", async () => {
+    const [req] = makeGetRequest("job-1");
+    for (const badId of ["../evil", "a".repeat(5000), "job id", "job.id"]) {
+      vi.clearAllMocks();
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+      const res = await GET(req, { params: Promise.resolve({ id: badId }) });
+      expect(res.status).toBe(400);
+      expect(prisma.videoJob.findUnique).not.toHaveBeenCalled();
+    }
+  });
+
+  it("maps CANCELLED to cancelled", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-cancelled-1",
+      userId: "u-1",
+      status: "CANCELLED",
+      progress: 40,
+      exportedUrl: null,
+      error: null,
+      jobData: null,
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-cancelled-1");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.state).toBe("cancelled");
+    expect(json.status).toBe("cancelled");
+  });
+
+  it("returns unknown instead of leaking an unmapped status", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-future-1",
+      userId: "u-1",
+      status: "SOME_FUTURE_STATUS",
+      progress: 10,
+      exportedUrl: null,
+      error: null,
+      jobData: null,
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-future-1");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.state).toBe("unknown");
+    expect(json.status).toBe("unknown");
+  });
+
+  it("surfaces alignedVideoUrl and duration for AVS_SYNC jobs", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-sync-1",
+      userId: "u-1",
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl: "https://example.com/aligned.mp4",
+      error: null,
+      jobData: {
+        kind: "AVS_SYNC",
+        alignedVideoUrl: "https://example.com/aligned.mp4",
+        duration: 8.25,
+      },
+    } as never);
+
+    const [req, ctx] = makeGetRequest("job-sync-1");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.aligned).toEqual({
+      alignedVideoUrl: "https://example.com/aligned.mp4",
+      duration: 8.25,
+    });
+  });
+
+  it("prefers AWS splitter progress when enabled", async () => {
+    const prevAws = process.env.USE_AWS_SPLITTER;
+    const prevGcp = process.env.USE_GCP_WORKER;
+    process.env.USE_AWS_SPLITTER = "true";
+    delete process.env.USE_GCP_WORKER;
+    try {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        id: "job-aws-1",
+        userId: "u-1",
+        status: "PROCESSING",
+        progress: 5,
+        exportedUrl: null,
+        error: null,
+        jobData: null,
+      } as never);
+      vi.mocked(getAwsJobProgress).mockResolvedValue({
+        state: "active",
+        progress: 62,
+        exportedUrl: null,
+        error: null,
+        totalChunks: 10,
+        chunksFinished: 6,
+      });
+
+      const [req, ctx] = makeGetRequest("job-aws-1");
+      const res = await GET(req, ctx);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(getAwsJobProgress).toHaveBeenCalledWith("job-aws-1");
+      expect(json.state).toBe("active");
+      expect(json.progress).toBe(62);
+    } finally {
+      if (prevAws === undefined) {
+        delete process.env.USE_AWS_SPLITTER;
+      } else {
+        process.env.USE_AWS_SPLITTER = prevAws;
+      }
+      if (prevGcp === undefined) {
+        delete process.env.USE_GCP_WORKER;
+      } else {
+        process.env.USE_GCP_WORKER = prevGcp;
+      }
+    }
+  });
+
+  it("returns 500 when the database throws", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+    vi.mocked(prisma.videoJob.findUnique).mockRejectedValue(new Error("db down"));
+
+    const [req, ctx] = makeGetRequest("job-1");
+    const res = await GET(req, ctx);
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Internal Server Error");
   });
 });

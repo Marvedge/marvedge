@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import type { Session } from "next-auth";
 import { videoToMP4 } from "@/app/lib/ffmpeg";
 import { sanitizeFilename } from "@/app/lib/constants";
+import { useBlobStore } from "@/app/store/blobStore";
+import { getActiveVideoUploadPromise } from "@/app/(signed)/editor/hooks/useEditorVideoUpload";
 
 export function getUserInitials(session: Session | null): string {
   return session?.user?.name
@@ -22,6 +24,24 @@ interface UseRecorderActionsProps {
   setShowSavePopup: (value: boolean) => void;
 }
 
+export async function executeEditVideoNavigation(router: { push: (url: string) => void }): Promise<void> {
+  const activeUpload = getActiveVideoUploadPromise();
+  let canonicalUrl = useBlobStore.getState().canonicalVideoUrl;
+  if (activeUpload) {
+    toast.loading("Completing Cloudinary upload...", { id: "recorder-edit-upload" });
+    const uploadedUrl = await activeUpload;
+    toast.dismiss("recorder-edit-upload");
+    if (uploadedUrl) {
+      canonicalUrl = uploadedUrl;
+    }
+  }
+  if (canonicalUrl && (canonicalUrl.startsWith("http://") || canonicalUrl.startsWith("https://"))) {
+    router.push(`/editor?video=${encodeURIComponent(canonicalUrl)}`);
+  } else {
+    router.push("/editor");
+  }
+}
+
 export function useRecorderActions({
   blob,
   setProcessingDownload,
@@ -38,11 +58,12 @@ export function useRecorderActions({
     }
   }, [router]);
 
-  const handleEditVideo = useCallback(() => {
+  const handleEditVideo = useCallback(async () => {
     try {
-      router.push("/editor");
+      await executeEditVideoNavigation(router);
     } catch (error) {
       console.error("Navigation error:", error);
+      router.push("/editor");
     }
   }, [router]);
 

@@ -53,7 +53,9 @@ export function loadReframeWorkerEnv(): void {
 loadReframeWorkerEnv();
 
 export function getReframeWorkerConfig(): ReframeWorkerConfig {
-  loadReframeWorkerEnv();
+  if (process.env.NODE_ENV !== "test") {
+    loadReframeWorkerEnv();
+  }
 
   const redisUrl = process.env.REDIS_URL?.trim() || "redis://localhost:6379";
 
@@ -64,6 +66,9 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
   const backendUrl = rawBackendUrl.replace(/\/+$/, "");
 
   const callbackSecret = process.env.CALLBACK_SECRET?.trim() || "";
+  if (!callbackSecret) {
+    throw new Error("CALLBACK_SECRET is required for the Reframe Worker");
+  }
 
   if (!callbackSecret && process.env.NODE_ENV !== "test") {
     console.warn(
