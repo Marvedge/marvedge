@@ -29,6 +29,16 @@ export interface ClipJobDbClient {
       status: string;
       jobData: unknown;
     } | null>;
+    findFirst?: (args: {
+      where: {
+        status: string;
+        OR?: Array<{ demoId?: string; videoUrl?: string }>;
+        demoId?: string;
+        videoUrl?: string;
+      };
+      select: { jobData: true };
+    }) => Promise<{ jobData: unknown } | null>;
+
     update: (args: {
       where: { id: string };
       data: {
@@ -42,13 +52,23 @@ export interface ClipJobDbClient {
   demo?: {
     findUnique: (args: {
       where: { id: string };
-      select: { id: string; subtitles: unknown; duration: number | null; videoUrl: string };
-    }) => Promise<{ id: string; subtitles: unknown; duration: number | null; videoUrl: string } | null>;
+      select: {
+        id: true;
+        subtitles: true;
+        duration: true;
+        videoUrl: true;
+      };
+    }) => Promise<{
+      id: string;
+      subtitles: unknown;
+      duration: number | null;
+      videoUrl: string;
+    } | null>;
   };
   subtitleTrack?: {
     findFirst: (args: {
       where: { demoId: string; status: string };
-      select: { cues: unknown };
+      select: { cues: true };
     }) => Promise<{ cues: unknown } | null>;
   };
 }
@@ -85,7 +105,14 @@ export async function runClipScoringJob(
   db: ClipJobDbClient,
   opts: RunClipScoringJobOptions = {}
 ): Promise<ClipCandidate[]> {
-  const { jobId, demoId, videoUrl, cues: suppliedCues, duration: suppliedDuration, options } = payload;
+  const {
+    jobId,
+    demoId,
+    videoUrl,
+    cues: suppliedCues,
+    duration: suppliedDuration,
+    options,
+  } = payload;
   const scorer = opts.scoringFn || scoreTranscriptClips;
   const updateProgress = opts.updateProgress || (async () => {});
 
@@ -109,7 +136,9 @@ export async function runClipScoringJob(
       suppliedDuration,
     });
 
-    console.log(`[clip-scoring] Resolved ${cues.length} cues, duration=${duration.toFixed(2)}s for job ${jobId}`);
+    console.log(
+      `[clip-scoring] Resolved ${cues.length} cues, duration=${duration.toFixed(2)}s for job ${jobId}`
+    );
     await updateProgress(30);
 
     await withDbRetry(() =>
@@ -122,7 +151,12 @@ export async function runClipScoringJob(
     // 3. Optional visual scene detection if video file/path is available
     let scenes: SceneBoundary[] = [];
     const targetVideo = resolvedVideoUrl || videoUrl;
-    if (targetVideo && (targetVideo.startsWith("file://") || targetVideo.startsWith("/") || targetVideo.includes(":\\"))) {
+    if (
+      targetVideo &&
+      (targetVideo.startsWith("file://") ||
+        targetVideo.startsWith("/") ||
+        targetVideo.includes(":\\"))
+    ) {
       try {
         const sceneFn = opts.sceneDetectionFn || detectSceneCuts;
         scenes = await sceneFn(targetVideo);
@@ -149,7 +183,9 @@ export async function runClipScoringJob(
       options,
     });
 
-    console.log(`[clip-scoring] Scoring completed: generated ${candidates.length} ranked candidates for ${jobId}`);
+    console.log(
+      `[clip-scoring] Scoring completed: generated ${candidates.length} ranked candidates for ${jobId}`
+    );
     await updateProgress(90);
 
     // 5. Persist candidates to VideoJob.jobData and mark COMPLETED

@@ -126,7 +126,7 @@ test.describe("Forgot-password UI", () => {
     await expect(page).toHaveURL(/\/auth\/signin/);
   });
 
-  test("shows a controlled API error and remains on the page", async ({ page }) => {
+  test("shows a safe API error and remains on the page", async ({ page }) => {
     await page.route("**/api/auth/request-reset", async (route) => {
       await route.fulfill({
         status: 429,
@@ -140,7 +140,7 @@ test.describe("Forgot-password UI", () => {
     await page.getByPlaceholder("Your Email").fill("qa@example.com");
     await page.getByRole("button", { name: "Send Reset Link" }).click();
 
-    await expect(page.getByText("Too many attempts, please try again later")).toBeVisible();
+    await expect(page.getByText("Failed to send link.")).toBeVisible();
 
     await expect(page).toHaveURL(/\/auth\/forgot-password/);
 
@@ -157,7 +157,7 @@ test.describe("Forgot-password UI", () => {
     await page.getByPlaceholder("Your Email").fill("qa@example.com");
     await page.getByRole("button", { name: "Send Reset Link" }).click();
 
-    await expect(page.getByText("Server error")).toBeVisible();
+    await expect(page.getByText("Failed to send link.")).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/forgot-password/);
   });
 });
