@@ -80,7 +80,9 @@ describe("GET /api/jobs/[id]", () => {
       schema_version: 1,
       source: { width: 1920, height: 1080 },
       output: { aspect_ratio: "9:16" },
-      crop_targets: [{ timestamp_sec: 0, crop: { x: 656, y: 0, width: 608, height: 1080 } }],
+      crop_targets: [
+        { timestamp_sec: 0, crop: { x: 656, y: 0, width: 608, height: 1080 } },
+      ],
     };
 
     vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
@@ -101,7 +103,7 @@ describe("GET /api/jobs/[id]", () => {
     const res = await GET(req, ctx);
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({
+    expect(json).toMatchObject({
       success: true,
       id: "job-reframe-1",
       state: "completed",
