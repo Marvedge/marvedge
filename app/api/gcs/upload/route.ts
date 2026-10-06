@@ -4,7 +4,15 @@ import { getServerSession } from "next-auth";
 import { Storage } from "@google-cloud/storage";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
-import { isVideoUploadKind, validateVideoUpload } from "@/app/lib/subtitles";
+import { isVideoUploadKind, MAX_UPLOAD_BYTES, validateVideoUpload } from "@/app/lib/subtitles";
+
+/**
+ * Ceiling for non-video uploads (watermark logo, background image, generic)
+ * on the signed link itself. Video kinds use MAX_UPLOAD_BYTES (2 GB) instead.
+ * Watermarks are client-checked at 2 MB and backgrounds are a few MB, so
+ * 50 MB is far above every legitimate use — it only stops bucket-filling.
+ */
+const MAX_GENERIC_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 function getStorageClient() {
   const projectId = (
@@ -90,6 +98,46 @@ async function getCurrentUserId(sessionUser: { id?: string; email?: string | nul
   return user?.id || null;
 }
 
+/**
+ * Second half of the size control. The browser PUTs bytes straight into the
+ * bucket, so after a successful PUT it calls back with the object name and
+ * the real stored size is checked here. Oversized objects are deleted on the
+ * spot; honest uploads pass through untouched.
+ */
+async function verifyUploadedObject(bucketName: string, object: unknown, userId: string) {
+  if (typeof object !== "string" || !object) {
+    return NextResponse.json({ ok: false, error: "Missing object" }, { status: 400 });
+  }
+  // Objects are minted as uploads/<kind>/<userId>/... — only the owner who
+  // was handed the URL may verify it, so one user cannot probe or delete
+  // another user's uploads.
+  const parts = object.split("/");
+  if (parts.length < 4 || parts[0] !== "uploads" || parts[2] !== userId) {
+    return NextResponse.json({ ok: false, error: "Unknown upload" }, { status: 404 });
+  }
+  const capBytes = isVideoUploadKind(parts[1]) ? MAX_UPLOAD_BYTES : MAX_GENERIC_UPLOAD_BYTES;
+  try {
+    const storage = getStorageClient();
+    const file = storage.bucket(bucketName).file(object);
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size);
+    if (!Number.isFinite(size)) {
+      return NextResponse.json({ ok: false, error: "Upload not finished" }, { status: 404 });
+    }
+    if (size > capBytes) {
+      await file.delete().catch(() => undefined);
+      return NextResponse.json(
+        { ok: false, error: "That file is too large and was removed. Choose a smaller file." },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json({ ok: true, size });
+  } catch (error) {
+    console.error("GCS upload verify error:", error);
+    return NextResponse.json({ ok: false, error: "Upload not found" }, { status: 404 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -115,7 +163,16 @@ export async function POST(req: NextRequest) {
       contentType?: string;
       kind?: string;
       size?: number;
+      action?: string;
+      object?: string;
     };
+
+    // Second half of the size control: after the browser PUTs the bytes it
+    // calls back here and the real stored size is checked (see below).
+    if (body.action === "verify") {
+      return verifyUploadedObject(bucketName, body.object, userId);
+    }
+
     const kind = toSafeKind(body.kind);
     const contentType = String(body.contentType || "application/octet-stream");
 
@@ -126,14 +183,12 @@ export async function POST(req: NextRequest) {
     // background image goes through this same route and must not be judged
     // against them.
     //
-    // `size` is what the client SAYS it is about to upload, and an absent one is
-    // not fatal. Note the honest limitation: the signed URL this route returns
-    // carries no length constraint, so a client that declares 10 MB and then
-    // PUTs 10 GB is not stopped here. Closing that needs either a
-    // `x-goog-content-length-range` condition on the signed URL or a bucket-side
-    // policy, neither of which is configured today. This check stops the
-    // ordinary case — a user picking a file that is too big — not a determined
-    // attacker.
+    // Two layers: (1) `size` is what the client SAYS it is about to upload —
+    // the check below stops the ordinary case of a user picking a file that is
+    // too big. (2) A client can lie about `size`, and a PUT signed URL cannot
+    // carry a length condition, so after the browser PUTs the bytes it must
+    // call back with { action: "verify", object } and the real stored size is
+    // checked, deleting the object when it is over the cap.
     if (isVideoUploadKind(kind)) {
       const check = validateVideoUpload({
         filename: body.filename,

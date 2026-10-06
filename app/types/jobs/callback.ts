@@ -5,6 +5,9 @@
 // ZERO Prisma/Postgres imports.
 
 import type { CropTargetData } from "../editor/crop-target";
+import type { JobFallbackMetadata } from "./fallback";
+
+export * from "./fallback";
 
 export type ReframeProcessingCallbackPayload = {
   jobId: string;
@@ -12,7 +15,7 @@ export type ReframeProcessingCallbackPayload = {
   progress: number;
 };
 
-export type ReframeCompletedCallbackPayload = {
+export type ReframeCompletedCallbackPayload = JobFallbackMetadata & {
   jobId: string;
   status: "COMPLETED";
   cropTargets: CropTargetData;
@@ -42,9 +45,7 @@ export type ExportFailedCallbackPayload = {
   error?: string;
 };
 
-export type ExportCallbackPayload =
-  | ExportCompletedCallbackPayload
-  | ExportFailedCallbackPayload;
+export type ExportCallbackPayload = ExportCompletedCallbackPayload | ExportFailedCallbackPayload;
 
 /**
  * Union of all valid callback payloads sent to POST /api/jobs/callback.
@@ -66,6 +67,4 @@ export interface JobCallbackErrorResponse {
   error: string;
 }
 
-export type JobCallbackResponse =
-  | JobCallbackSuccessResponse
-  | JobCallbackErrorResponse;
+export type JobCallbackResponse = JobCallbackSuccessResponse | JobCallbackErrorResponse;

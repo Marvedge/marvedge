@@ -10,9 +10,8 @@ import {
   formatAssKaraokeText,
   formatAssTime,
   generateAssContent,
-  writeAssFile,
-  type GenerateAssOptions,
 } from "./ass";
+import { writeAssFile } from "./ass.server";
 import { DEFAULT_SUBTITLE_STYLE, toAssOverrideTags, toAssStyleLine } from "./style";
 import type { SubtitleCue, SubtitleStyle } from "./types";
 import { cuesFromWhisperWords, normalizeWhisperResponse } from "./whisper";
@@ -698,9 +697,12 @@ describe("Canonical ASS Generator & Serializer (Task-00038)", () => {
           },
         ];
 
-        const assPath = writeAssFile(tempDir, cues, 1920, 1080, undefined, null, "karaoke.ass", {
-          karaoke: true,
-        });
+        const assPath = path.join(tempDir, "karaoke.ass");
+        fs.writeFileSync(
+          assPath,
+          generateAssContent(cues, 1920, 1080, undefined, null, { karaoke: true }),
+          "utf8"
+        );
         const escapedPath = escapeFfmpegFilterPath(assPath);
 
         const cmd = `ffmpeg -y -f lavfi -i color=c=black:s=1920x1080:d=1 -vf "subtitles=${escapedPath}" -frames:v 1 -f null -`;

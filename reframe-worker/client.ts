@@ -5,7 +5,11 @@
 // 2. Calling the backend authenticated callback at /api/jobs/callback
 // Contains ZERO Prisma / Postgres imports.
 
-import type { CropTargetData } from "../app/types/editor/crop-target";
+import {
+  type CropTargetData,
+  validateCropTargetData,
+  CropTargetValidationError,
+} from "../app/types/editor/crop-target";
 
 export interface MlInferenceRequest {
   videoUrl: string;
@@ -25,6 +29,20 @@ export interface MlInferenceEnvelope {
   [key: string]: unknown;
 }
 
+export class MlInferenceHttpError extends Error {
+  readonly status: number;
+  readonly isClientError: boolean;
+  readonly isServerError: boolean;
+
+  constructor(status: number, message: string) {
+    super(`ML inference HTTP ${status}: ${message}`);
+    this.name = "MlInferenceHttpError";
+    this.status = status;
+    this.isClientError = status >= 400 && status < 500;
+    this.isServerError = status >= 500 && status < 600;
+  }
+}
+
 import type { JobCallbackPayload } from "../app/types/jobs/callback";
 import {
   CallbackHttpError,
@@ -35,14 +53,15 @@ import {
 export {
   type JobCallbackPayload,
   CallbackHttpError,
+  CropTargetValidationError,
   postJobCallback,
   postJobCallbackWithRetry,
 };
 
 /**
  * Invokes the pure, stateless ML inference service over HTTP POST /reframe.
- * Performs basic response envelope verification only. Authoritative validation
- * is handled by the backend callback via validateCropTargetData().
+ * Authoritatively validates the extracted CropTargetData using validateCropTargetData()
+ * before returning it to the orchestrator to prevent malformed crop data from reaching FFmpeg.
  */
 export async function callMlInference(
   mlServiceUrl: string,
@@ -73,9 +92,7 @@ export async function callMlInference(
       } catch {
         errDetail = await response.text().catch(() => "");
       }
-      throw new Error(
-        `ML inference HTTP ${response.status}${errDetail ? `: ${errDetail}` : ""}`
-      );
+      throw new MlInferenceHttpError(response.status, errDetail || response.statusText);
     }
 
     const data = (await response.json()) as MlInferenceEnvelope;
@@ -84,41 +101,43 @@ export async function callMlInference(
     }
 
     if (data.ok === false) {
-      throw new Error(
-        `ML inference error: ${data.error || "Service reported failure"}`
-      );
+      throw new Error(`ML inference error: ${data.error || "Service reported failure"}`);
     }
+
+    let extracted: unknown;
 
     // Direct CropTargetData root envelope support (Task-00016 schema)
     if (
-      "schema_version" in data &&
       "crop_targets" in data &&
       Array.isArray((data as unknown as Record<string, unknown>).crop_targets)
     ) {
-      return data as unknown as CropTargetData;
-    }
-
-    // Canonical response: { ok: true, crop_targets: CropTargetData }
-    if (
-      data.crop_targets &&
+      extracted = data;
+    } else if (
+      // Canonical response: { ok: true, crop_targets: CropTargetData }
+      "crop_targets" in data &&
+      data.crop_targets !== null &&
       typeof data.crop_targets === "object" &&
       !Array.isArray(data.crop_targets)
     ) {
-      return data.crop_targets as CropTargetData;
-    }
-
-    // Alternate envelope: { cropTargets: CropTargetData }
-    if (
-      data.cropTargets &&
+      extracted = data.crop_targets;
+    } else if (
+      // Alternate envelope: { cropTargets: CropTargetData }
+      "cropTargets" in data &&
+      data.cropTargets !== null &&
       typeof data.cropTargets === "object" &&
       !Array.isArray(data.cropTargets)
     ) {
-      return data.cropTargets as CropTargetData;
+      extracted = data.cropTargets;
+    } else if ("schema_version" in data) {
+      extracted = data;
+    } else {
+      throw new Error(
+        "ML inference response envelope missing 'crop_targets' object"
+      );
     }
 
-    throw new Error(
-      "ML inference response envelope missing 'crop_targets' object"
-    );
+    validateCropTargetData(extracted);
+    return extracted;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`ML inference timed out after ${timeoutMs}ms`);
@@ -128,4 +147,3 @@ export async function callMlInference(
     clearTimeout(timer);
   }
 }
-

@@ -81,6 +81,14 @@ async function dispatchVideoJob(
   normalizedPayload: Record<string, unknown>
 ): Promise<void> {
   try {
+    // Do not overwrite a settled job. A COMPLETED or CANCELLED record is final.
+    const existing = await prisma.videoJob
+      .findUnique({ where: { id: jobId }, select: { status: true } })
+      .catch(() => null);
+    if (existing?.status === "COMPLETED" || existing?.status === "CANCELLED") {
+      return;
+    }
+
     await prisma.videoJob.update({
       where: { id: jobId },
       data: {
@@ -135,16 +143,34 @@ async function dispatchVideoJob(
 
     const completedTasks = await Promise.all(results);
 
-    const validChunkFilenames = (
-      completedTasks as { result?: { skipped?: boolean; processedObject?: string } }[]
-    )
-      .filter((res) => res && res.result && !res.result.skipped)
-      .map((res) => res.result!.processedObject!);
+    // Drop bad chunks safely. Only string non empty outputs are merged.
+    const chunkResults = completedTasks as {
+      result?: { skipped?: boolean; processedObject?: unknown };
+    }[];
+    const validChunkFilenames = chunkResults
+      .filter(
+        (res) =>
+          res &&
+          res.result &&
+          !res.result.skipped &&
+          typeof res.result.processedObject === "string" &&
+          res.result.processedObject.length > 0
+      )
+      .map((res) => res.result?.processedObject as string);
+    const skippedCount = chunkResults.length - validChunkFilenames.length;
+    if (skippedCount > 0) {
+      console.warn(`Skipped ${skippedCount} bad chunks with missing output`);
+    }
 
     await prisma.videoJob.update({
       where: { id: jobId },
       data: { progress: 80 },
     });
+
+    // Fail fast with a clear cause instead of merging an empty list.
+    if (validChunkFilenames.length === 0) {
+      throw new Error("No chunks to merge: all chunks failed or were skipped");
+    }
 
     const mergeResp = await invokeGcpWorker(
       {
@@ -173,6 +199,25 @@ async function dispatchVideoJob(
         error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
       },
     });
+  }
+}
+
+// One retry for cold start. Chunk ids are deterministic so a retry is safe.
+async function dispatchVideoJobWithColdStartRetry(
+  jobId: string,
+  videoUrl: string,
+  duration: number,
+  normalizedPayload: Record<string, unknown>
+): Promise<void> {
+  try {
+    await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("fetch failed") && !msg.toLowerCase().includes("cold start")) {
+      throw err;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+    await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
   }
 }
 
@@ -216,9 +261,14 @@ export async function POST(req: NextRequest) {
       customBackgroundUrl = customBackgroundUrl.replace("gs://", "https://storage.googleapis.com/");
     }
 
-    if (!duration || typeof duration !== "number") {
+    // Accept a string number from the client by coercing it. NaN stays invalid.
+    const coercedDuration = typeof duration === "string" ? Number(duration) : duration;
+    if (!coercedDuration || typeof coercedDuration !== "number" || Number.isNaN(coercedDuration)) {
       return NextResponse.json({ error: "Missing or invalid duration" }, { status: 400 });
     }
+
+    // Resolve the caller before any ownership check below: the demo check
+    // compares against userId, so the user row must be loaded first.
 
     const user = await prisma.user.findFirst({
       where: {
@@ -351,7 +401,9 @@ export async function POST(req: NextRequest) {
     };
 
     // 2. Dispatch to GCP Cloud Run workers (Scatter-Gather)
-    after(() => dispatchVideoJob(jobRecord.id, videoUrl, duration, normalizedPayload));
+    after(() =>
+      dispatchVideoJobWithColdStartRetry(jobRecord.id, videoUrl, coercedDuration, normalizedPayload)
+    );
 
     // 3. Return the job ID to the client instantly
     return NextResponse.json({

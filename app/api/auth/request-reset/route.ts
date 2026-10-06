@@ -16,8 +16,9 @@ export async function POST(req: Request) {
 
     if (!email) {
       const session = await getServerSession(authOptions);
-      if (session?.user?.email) {
-        email = session.user.email;
+      const sessionEmail = session?.user?.email;
+      if (typeof sessionEmail === "string" && sessionEmail.trim()) {
+        email = sessionEmail.trim();
       }
     }
 
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     // Check for Resend API key early
     if (!process.env.RESEND_API_KEY) {
       console.error("Missing RESEND_API_KEY");
-      return NextResponse.json({ error: "Email service not configured" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
@@ -62,13 +63,31 @@ export async function POST(req: Request) {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Save token in existing PasswordReset.otp field to avoid schema migration.
+    // Store only the token hash so a database read cannot expose a usable reset token.
+    // Drop expired rows first so one inbox cannot pile up rows without end.
+    await prisma.passwordReset.deleteMany({
+      where: { email, expiresAt: { lte: new Date() } },
+    });
+    // Keep at most 3 live rows per email so resend spam stays bounded.
+    const liveCount = await prisma.passwordReset.count({
+      where: { email, expiresAt: { gt: new Date() } },
+    });
+    if (liveCount >= 3) {
+      const oldest = await prisma.passwordReset.findFirst({
+        where: { email, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: "asc" },
+      });
+      if (oldest) {
+        await prisma.passwordReset.delete({ where: { id: oldest.id } });
+      }
+    }
     await prisma.passwordReset.create({
       data: {
         email,
-        otp: token,
+        otp: tokenHash,
         expiresAt,
       },
     });

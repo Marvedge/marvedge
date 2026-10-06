@@ -44,17 +44,18 @@ async def check_service_health(client: httpx.AsyncClient, name: str, url: str) -
         if resp.status_code == 200:
             try:
                 data = resp.json()
-                if isinstance(data, dict):
-                    status_val = data.get("status")
-                    if status_val == "ok":
-                        return "healthy"
-                    if status_val == "degraded":
-                        return "degraded"
-                    if status_val in ("unhealthy", "error"):
-                        return f"unhealthy ({status_val})"
             except Exception:
-                pass
-            return "healthy"
+                return "unhealthy (invalid response)"
+            if not isinstance(data, dict):
+                return "unhealthy (invalid response)"
+            status_val = data.get("status")
+            if status_val == "ok":
+                return "healthy"
+            if status_val == "degraded":
+                return "degraded"
+            if status_val in ("unhealthy", "error"):
+                return f"unhealthy ({status_val})"
+            return "unhealthy (invalid response)"
         return f"unhealthy (status {resp.status_code})"
     except httpx.TimeoutException:
         return "unhealthy (timeout)"
@@ -74,9 +75,15 @@ async def health() -> JSONResponse:
             autoflip_task, talknet_task
         )
 
-    all_healthy = autoflip_status == "healthy" and talknet_status == "healthy"
+    autoflip_ready = autoflip_status == "healthy"
+    talknet_ready = talknet_status == "healthy"
+
+    all_healthy = autoflip_ready and talknet_ready
     status_str = "ok" if all_healthy else "degraded"
-    status_code = 200 if all_healthy else 503
+    # HTTP 200 is returned whenever standalone AutoFlip reframe is healthy,
+    # even if secondary TalkNet is degraded or unavailable. HTTP 503 is returned
+    # only when AutoFlip reframe itself cannot be served.
+    status_code = 200 if autoflip_ready else 503
 
     return JSONResponse(
         status_code=status_code,
@@ -85,6 +92,10 @@ async def health() -> JSONResponse:
             "services": {
                 "autoflip": autoflip_status,
                 "talknet": talknet_status,
+            },
+            "ready": {
+                "reframe": autoflip_ready,
+                "talknet": talknet_ready,
             },
         },
     )

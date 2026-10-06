@@ -5,6 +5,8 @@ import {
   interpolateCropTarget,
   buildCropExpression,
   buildFfmpegCropFilter,
+  parseAspectRatio,
+  calculateCenterCropTargets,
   type CropTargetData,
 } from "./crop-target";
 
@@ -285,6 +287,159 @@ describe("Revised Crop coordinate JSON contract validation suite", () => {
       };
       expect(() => validateCropTargetData(autoflipOutput)).not.toThrow();
     });
+
+    it("rejects overflowed timestamp payload from run_autoflip_to_json", () => {
+      const overflowOutput = {
+        schema_version: 1,
+        source: {
+          width: 720,
+          height: 480,
+          fps: 29.97,
+          duration_sec: 15.45,
+        },
+        output: {
+          aspect_ratio: "9:16",
+        },
+        timeline: {
+          timebase: "seconds",
+          sampling: "keyframes_interpolated",
+        },
+        crop_targets: [
+          {
+            timestamp_sec: 18446744073709.52,
+            frame: 0,
+            crop: { x: 225.0, y: 0.0, width: 270.0, height: 480.0 },
+            source: "autoflip",
+          },
+        ],
+      };
+      expect(() => validateCropTargetData(overflowOutput)).toThrow(
+        CropTargetValidationError
+      );
+      expect(() => validateCropTargetData(overflowOutput)).toThrow(
+        /exceeds duration/
+      );
+    });
+  });
+
+  describe("Phase 2 — Static Center Crop Fallback Geometry", () => {
+    it("parses valid aspect ratios and rejects invalid ones", () => {
+      expect(parseAspectRatio("9:16")).toEqual({ width: 9, height: 16, ratio: 9 / 16 });
+      expect(parseAspectRatio("1:1")).toEqual({ width: 1, height: 1, ratio: 1 });
+      expect(parseAspectRatio("16:9")).toEqual({ width: 16, height: 9, ratio: 16 / 9 });
+      expect(parseAspectRatio(" 4:3 ")).toEqual({ width: 4, height: 3, ratio: 4 / 3 });
+
+      expect(() => parseAspectRatio("")).toThrow(CropTargetValidationError);
+      expect(() => parseAspectRatio("invalid")).toThrow(CropTargetValidationError);
+      expect(() => parseAspectRatio("9:0")).toThrow(CropTargetValidationError);
+      expect(() => parseAspectRatio("0:16")).toThrow(CropTargetValidationError);
+      expect(() => parseAspectRatio("-9:16")).toThrow(CropTargetValidationError);
+    });
+
+    // 1. Center crop for 9:16 target on 16:9 source (source wider than target)
+    it("calculates 9:16 center crop for 16:9 source (1920x1080)", () => {
+      const source = { width: 1920, height: 1080, fps: 30, duration_sec: 10 };
+      const result = calculateCenterCropTargets(source, "9:16", "job-center-1");
+
+      expect(() => validateCropTargetData(result)).not.toThrow();
+      expect(result.crop_targets).toHaveLength(2); // start and end keyframes
+      const crop = result.crop_targets[0].crop;
+
+      // targetRatio = 9/16 = 0.5625. sourceRatio = 1920/1080 = 1.777.
+      // source is wider -> cropHeight = 1080, cropWidth = roundToEven(1080 * 9 / 16) = roundToEven(607.5) = 608
+      expect(crop.height).toBe(1080);
+      expect(crop.width).toBe(608);
+      expect(crop.x).toBe((1920 - 608) / 2); // 656
+      expect(crop.y).toBe(0);
+      expect(crop.x + crop.width).toBeLessThanOrEqual(source.width);
+      expect(crop.y + crop.height).toBeLessThanOrEqual(source.height);
+    });
+
+    // 2. Center crop for 1:1 target on 16:9 source
+    it("calculates 1:1 center crop for 16:9 source (1920x1080)", () => {
+      const source = { width: 1920, height: 1080 };
+      const result = calculateCenterCropTargets(source, "1:1");
+
+      expect(() => validateCropTargetData(result)).not.toThrow();
+      const crop = result.crop_targets[0].crop;
+      // sourceRatio = 1.777 > targetRatio = 1 -> cropHeight = 1080, cropWidth = 1080
+      expect(crop.height).toBe(1080);
+      expect(crop.width).toBe(1080);
+      expect(crop.x).toBe((1920 - 1080) / 2); // 420
+      expect(crop.y).toBe(0);
+    });
+
+    // 3. Center crop for 16:9 target on 9:16 source (source taller than target)
+    it("calculates 16:9 center crop for 9:16 source (1080x1920)", () => {
+      const source = { width: 1080, height: 1920 };
+      const result = calculateCenterCropTargets(source, "16:9");
+
+      expect(() => validateCropTargetData(result)).not.toThrow();
+      const crop = result.crop_targets[0].crop;
+      // sourceRatio = 1080/1920 = 0.5625 < targetRatio = 16/9 = 1.777.
+      // source is taller -> cropWidth = 1080, cropHeight = roundToEven(1080 / (16/9)) = roundToEven(607.5) = 608
+      expect(crop.width).toBe(1080);
+      expect(crop.height).toBe(608);
+      expect(crop.x).toBe(0);
+      expect(crop.y).toBe((1920 - 608) / 2); // 656
+      expect(crop.x + crop.width).toBeLessThanOrEqual(source.width);
+      expect(crop.y + crop.height).toBeLessThanOrEqual(source.height);
+    });
+
+    // 4. Source wider than target
+    it("guarantees centered x and full height when source is wider than target", () => {
+      const source = { width: 2000, height: 1000 }; // ratio 2.0
+      const result = calculateCenterCropTargets(source, "4:3"); // ratio 1.333
+      const crop = result.crop_targets[0].crop;
+
+      expect(crop.height).toBe(1000);
+      expect(crop.width).toBeLessThan(source.width);
+      expect(crop.x).toBeGreaterThan(0);
+      expect(crop.y).toBe(0);
+      expect(crop.x + crop.width).toBeLessThanOrEqual(source.width);
+    });
+
+    // 5. Source taller than target
+    it("guarantees centered y and full width when source is taller than target", () => {
+      const source = { width: 1000, height: 2000 }; // ratio 0.5
+      const result = calculateCenterCropTargets(source, "4:3"); // ratio 1.333
+      const crop = result.crop_targets[0].crop;
+
+      expect(crop.width).toBe(1000);
+      expect(crop.height).toBeLessThan(source.height);
+      expect(crop.x).toBe(0);
+      expect(crop.y).toBeGreaterThan(0);
+      expect(crop.y + crop.height).toBeLessThanOrEqual(source.height);
+    });
+
+    // 6. Crop target stays strictly inside source dimensions
+    it("guarantees crop coordinates stay within arbitrary source dimensions", () => {
+      const testCases = [
+        { w: 1920, h: 1080, aspect: "9:16" },
+        { w: 1080, h: 1920, aspect: "9:16" },
+        { w: 1280, h: 720, aspect: "1:1" },
+        { w: 854, h: 480, aspect: "16:9" },
+        { w: 3840, h: 2160, aspect: "9:16" },
+        { w: 500, h: 500, aspect: "9:16" },
+      ];
+
+      for (const tc of testCases) {
+        const result = calculateCenterCropTargets({ width: tc.w, height: tc.h }, tc.aspect);
+        const crop = result.crop_targets[0].crop;
+
+        expect(crop.x).toBeGreaterThanOrEqual(0);
+        expect(crop.y).toBeGreaterThanOrEqual(0);
+        expect(crop.width).toBeGreaterThan(0);
+        expect(crop.height).toBeGreaterThan(0);
+        expect(crop.x + crop.width).toBeLessThanOrEqual(tc.w);
+        expect(crop.y + crop.height).toBeLessThanOrEqual(tc.h);
+        expect(() => validateCropTargetData(result)).not.toThrow();
+      }
+    });
+
+    it("rejects invalid dimensions in center crop helper", () => {
+      expect(() => calculateCenterCropTargets({ width: 0, height: 1080 }, "9:16")).toThrow();
+      expect(() => calculateCenterCropTargets({ width: 1920, height: -10 }, "9:16")).toThrow();
+    });
   });
 });
-
