@@ -1,10 +1,11 @@
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
+import { dubbingQueue } from "@/app/lib/queue";
 import type { Step, DubTiming } from "@/app/types/avs";
 
 // Per-step encode + concat is comparable to /avs-sync; same generous budget.
@@ -61,9 +62,10 @@ function toHttpUrl(url: string): string {
 /**
  * Run the dubbed-audio pacing alignment in the background and record the result
  * on the job for client polling via /api/jobs/[id].
- * Degrades gracefully (returns source unchanged) when dubUrl or dubTimings are absent.
+ * Degrades gracefully (returns source unchanged) when dubUrl/dubTimings are absent
+ * or when the worker execution/alignment fails (Task-00083).
  */
-async function runDubAlignment(
+export async function runDubAlignment(
   jobId: string,
   input: {
     videoUrl: string;
@@ -73,52 +75,82 @@ async function runDubAlignment(
     sourceDuration: number;
   }
 ): Promise<void> {
+  const normalizedVideoUrl = toHttpUrl(input.videoUrl);
   try {
-    await prisma.videoJob.update({
+    const job = await prisma.videoJob.findUnique({
       where: { id: jobId },
+      select: { status: true },
+    });
+    if (job?.status === "COMPLETED" || job?.status === "CANCELLED") {
+      return;
+    }
+
+    await prisma.videoJob.updateMany({
+      where: { id: jobId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
       data: { status: "PROCESSING", progress: 20 },
     });
 
-    let alignedVideoUrl = input.videoUrl;
+    let alignedVideoUrl = normalizedVideoUrl;
     let duration = input.sourceDuration;
 
     const canAlign = Boolean(input.dubUrl) && input.steps.length > 0 && input.dubTimings.length > 0;
 
     if (canAlign) {
       const result = await invokeGcpDubSync({
-        videoUrl: input.videoUrl,
+        videoUrl: normalizedVideoUrl,
         dubUrl: input.dubUrl,
         steps: input.steps,
         dubTimings: input.dubTimings,
       });
-      alignedVideoUrl = result.alignedVideoUrl;
+      alignedVideoUrl = toHttpUrl(result.alignedVideoUrl);
       duration = result.duration || input.sourceDuration;
     }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
+    await prisma.videoJob.updateMany({
+      where: { id: jobId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
       data: {
         status: "COMPLETED",
         progress: 100,
+        exportedUrl: alignedVideoUrl,
         jobData: {
           kind: "AVS_DUB",
           alignedVideoUrl,
           duration,
           fallback: !canAlign,
+          ...(!canAlign
+            ? {
+                fallbackStage: "DUBBING",
+                fallbackReason: "MISSING_DUB_INPUT",
+              }
+            : {}),
         },
+        error: null,
       },
     });
   } catch (err) {
-    console.error("AVS dub-sync job failed:", err);
+    console.error("AVS dub-sync job failed, falling back to source video (Task-00083):", err);
+    const reason = err instanceof Error ? err.message : "Dub-sync alignment failed";
     await prisma.videoJob
-      .update({
-        where: { id: jobId },
+      .updateMany({
+        where: { id: jobId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
         data: {
-          status: "FAILED",
-          error: err instanceof Error ? err.message : "Dub-sync alignment failed",
+          status: "COMPLETED",
+          progress: 100,
+          exportedUrl: normalizedVideoUrl,
+          jobData: {
+            kind: "AVS_DUB",
+            alignedVideoUrl: normalizedVideoUrl,
+            duration: input.sourceDuration,
+            fallback: true,
+            fallbackStage: "DUBBING",
+            fallbackReason: reason,
+          },
+          error: null,
         },
       })
-      .catch(() => {});
+      .catch((updateErr) => {
+        console.error("Failed to update degraded dubbing job:", updateErr);
+      });
   }
 }
 
@@ -146,12 +178,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Open to every signed-in plan for now; the wider AVS pipeline stays
-  // PRO/ENTERPRISE-gated (see /api/avs/sync).
-
   let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as Record<string, unknown>;
+    const parsedBody: unknown = await req.json();
+    if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+      return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+    }
+    body = parsedBody as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -189,14 +222,21 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  after(() =>
-    runDubAlignment(jobRecord.id, {
+  await dubbingQueue.add(
+    "avs-dub",
+    {
+      jobId: jobRecord.id,
       videoUrl,
       dubUrl,
       steps,
       dubTimings,
       sourceDuration,
-    })
+      userId: user.id,
+      demoId,
+    },
+    {
+      jobId: jobRecord.id,
+    }
   );
 
   return NextResponse.json({ success: true, jobId: jobRecord.id });

@@ -117,7 +117,10 @@ export function validateCropTargetData(value: unknown): asserts value is CropTar
   );
 
   if (data.timeline !== undefined) {
-    assert(typeof data.timeline === "object" && data.timeline !== null, "timeline must be an object");
+    assert(
+      typeof data.timeline === "object" && data.timeline !== null,
+      "timeline must be an object"
+    );
     const timelineRecord = data.timeline as Record<string, unknown>;
     if (timelineRecord.timebase !== undefined) {
       assert(timelineRecord.timebase === "seconds", "timeline.timebase must be seconds");
@@ -248,7 +251,7 @@ export function simplifyCropTargets<
   T extends {
     timestamp_sec: number;
     crop: { x: number; y: number; width?: number; height?: number };
-  }
+  },
 >(targets: T[], tolerancePx = 0.5): T[] {
   if (targets.length <= 2) {
     return [...targets];
@@ -262,7 +265,9 @@ export function simplifyCropTargets<
     const next = targets[i + 1];
 
     const dtTotal = next.timestamp_sec - prev.timestamp_sec;
-    if (dtTotal <= 1e-6) continue;
+    if (dtTotal <= 1e-6) {
+      continue;
+    }
 
     const alpha = (curr.timestamp_sec - prev.timestamp_sec) / dtTotal;
     const interpX = prev.crop.x + (next.crop.x - prev.crop.x) * alpha;
@@ -302,10 +307,9 @@ export function buildCropExpression(
     const current = val(targets[i].crop);
     const next = val(targets[i + 1].crop);
     const delta = (Number(next) - Number(current)).toFixed(4);
-    const duration = Math.max(
-      EPS,
-      targets[i + 1].timestamp_sec - targets[i].timestamp_sec
-    ).toFixed(4);
+    const duration = Math.max(EPS, targets[i + 1].timestamp_sec - targets[i].timestamp_sec).toFixed(
+      4
+    );
     return `${current}+(${delta})*(t-${start})/${duration}`;
   }
 

@@ -422,6 +422,7 @@ export function computeBoxPaddingPx(fontPx: number, outlineWidth = 0): number {
   );
 }
 
+
 /**
  * A style resolved to pixels at a given frame height. THE one place a percentage
  * becomes a number of pixels — the CSS and ASS mappings below both go through

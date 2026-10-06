@@ -118,4 +118,30 @@ describe("uploadBlobToCloudinary", () => {
     expect(attachedFile.size).toBe(dummyBlob.size);
     expect(attachedFile.type).toBe("video/mp4");
   });
+
+  it("supports custom folder parameter", async () => {
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "my_cloud";
+    process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "my_preset";
+
+    let calledBody: any = null;
+
+    global.fetch = vi.fn().mockImplementation((url, init) => {
+      calledBody = init.body as FormData;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          secure_url: "https://res.cloudinary.com/my_cloud/video/upload/v12345/demo_sources/video.mp4",
+        }),
+      });
+    });
+
+    const dummyBlob = new Blob(["dummy video bytes"], { type: "video/mp4" });
+    const resultUrl = await uploadBlobToCloudinary(dummyBlob, "demo_sources");
+
+    expect(resultUrl).toBe(
+      "https://res.cloudinary.com/my_cloud/video/upload/v12345/demo_sources/video.mp4"
+    );
+    expect(calledBody?.get("folder")).toBe("demo_sources");
+  });
 });

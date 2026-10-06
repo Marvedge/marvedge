@@ -1,4 +1,11 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+// Mock dotenv so dotenv.config() never reads .env / .env.local from disk.
+// Without this, getReframeWorkerConfig() internally calls loadReframeWorkerEnv()
+// which repopulates process.env.CALLBACK_SECRET from .env.local even after the
+// test deletes it — silently preventing the throw-on-missing assertion from firing.
+vi.mock("dotenv", () => ({ default: { config: vi.fn() } }));
+
 import { getReframeWorkerConfig } from "./config";
 
 describe("Reframe Worker Config", () => {

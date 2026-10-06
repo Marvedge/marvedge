@@ -48,6 +48,39 @@ describe("FFmpeg Scene Detection Parser", () => {
     expect(parseFfmpegSceneLog("", 0)).toEqual([]);
   });
 
+  it("gracefully falls back to full-duration scene when FFmpeg execution fails (Task-00084)", async () => {
+    const { detectSceneCuts } = await import("./scenes");
+
+    // Injected failing execFile implementation
+    const mockFailingExecFile = ((
+      _file: string,
+      _args: readonly string[] | null | undefined,
+      _options: unknown,
+      callback?: (error: Error | null, stdout: string, stderr: string) => void
+    ) => {
+      const cb = typeof _options === "function" ? _options : callback;
+      if (typeof cb === "function") {
+        cb(new Error("Injected FFmpeg failure"), "", "ffmpeg: command failed with code 1");
+      }
+      return {} as ReturnType<typeof import("node:child_process").execFile>;
+    }) as typeof import("node:child_process").execFile;
+
+    const totalDuration = 15.5;
+    const scenes = await detectSceneCuts("mock_video.mp4", {
+      totalDuration,
+      execFile: mockFailingExecFile,
+    });
+
+    expect(Array.isArray(scenes)).toBe(true);
+    expect(scenes).toHaveLength(1);
+    expect(scenes[0]).toEqual({
+      startTime: 0,
+      endTime: totalDuration,
+    });
+    expect(scenes[0].startTime).toBe(0);
+    expect(scenes[0].endTime).toBe(15.5);
+  });
+
   it("executes real FFmpeg on sample video to detect scene boundaries", async () => {
     const { detectSceneCuts } = await import("./scenes");
     const scenes = await detectSceneCuts("public/icons/autoflip_1_demo.mp4", {

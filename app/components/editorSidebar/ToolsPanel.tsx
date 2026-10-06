@@ -4,11 +4,13 @@ import axios from "axios";
 import AddTextSection from "./AddTextSection";
 import ExportResultModal from "../ExportResultModal";
 import { useEditorStore } from "@/app/store/editor/editorStore";
+import { useBlobStore } from "@/app/store/blobStore";
 import { uploadBlobToCloudinary } from "@/app/lib/cloudinaryClientUpload";
 import {
   pollExportJob,
   createMp4Downloader,
 } from "@/app/(signed)/editor/utils/videoHandlers";
+import { getVideoDimensions } from "@/app/lib/reframe/dimensions";
 
 interface ToolsPanelProps {
   aspectRatio: string;
@@ -26,6 +28,7 @@ interface ToolsPanelProps {
   onAddTextOverlay?: () => void;
   textOverlayColor: string;
   setTextOverlayColor?: (value: string) => void;
+  onAutoGenerateSubtitles?: (url: string) => Promise<void> | void;
 }
 
 const ToolsPanel: React.FC<ToolsPanelProps> = ({
@@ -44,8 +47,11 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
   onAddTextOverlay,
   textOverlayColor,
   setTextOverlayColor,
+  onAutoGenerateSubtitles,
 }) => {
   const videoUrl = useEditorStore((s) => s.videoUrl);
+  const setVideoUrl = useEditorStore((s) => s.setVideoUrl);
+  const setStoreAspectRatio = useEditorStore((s) => s.setAspectRatio);
   const savedDemoId = useEditorStore((s) => s.savedDemoId);
   const sidebarTitle = useEditorStore((s) => s.sidebarTitle);
 
@@ -95,11 +101,26 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
         resolvedUrl = data.url;
       }
 
+      // Obtain source video intrinsic dimensions for fallback path
+      const sourceDimensions = await getVideoDimensions(videoUrl);
+      const source =
+        sourceDimensions &&
+        Number.isFinite(sourceDimensions.width) &&
+        sourceDimensions.width > 0 &&
+        Number.isFinite(sourceDimensions.height) &&
+        sourceDimensions.height > 0
+          ? {
+              width: sourceDimensions.width,
+              height: sourceDimensions.height,
+            }
+          : undefined;
+
       toast.loading("Submitting reframe job...", { id: toastId });
       const createRes = await axios.post("/api/reframe", {
         videoUrl: resolvedUrl,
         targetAspectRatio: targetRatio,
         demoId: savedDemoId || undefined,
+        ...(source ? { source } : {}),
       });
 
       const jobId = createRes.data?.jobId;
@@ -120,6 +141,13 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
 
       setReframedJobId(jobId);
       setReframedUrl(outputUrl);
+      // Promote the reframed video to the active editor video so subtitles and export consume it
+      setVideoUrl(outputUrl);
+      useBlobStore.getState().setCanonicalVideoUrl(outputUrl);
+      if (setAspectRatio) {
+        setAspectRatio(targetRatio);
+      }
+      setStoreAspectRatio(targetRatio);
       setShowResultModal(true);
 
       // Auto-trigger download of the reframed MP4
@@ -128,6 +156,15 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
         `${sidebarTitle || "Demo"}_reframed_${targetRatio.replace(":", "_")}`
       );
       await downloadHandler(outputUrl);
+
+      // Automatically chain subtitle generation onto the reframed video if wired
+      if (onAutoGenerateSubtitles) {
+        try {
+          await onAutoGenerateSubtitles(outputUrl);
+        } catch (subErr) {
+          console.error("Auto subtitle generation failed after reframe:", subErr);
+        }
+      }
     } catch (err: unknown) {
       console.error("Auto-reframe failed:", err);
       const errMsg =

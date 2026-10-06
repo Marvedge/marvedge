@@ -29,6 +29,7 @@ export function hasExplicitVideoParam(
   if (params?.get("video")) {
     return true;
   }
+
   if (locationSearch) {
     try {
       return Boolean(new URLSearchParams(locationSearch).get("video"));
@@ -36,6 +37,7 @@ export function hasExplicitVideoParam(
       return false;
     }
   }
+
   if (typeof window !== "undefined" && window.location?.search) {
     try {
       return Boolean(new URLSearchParams(window.location.search).get("video"));
@@ -43,6 +45,7 @@ export function hasExplicitVideoParam(
       return false;
     }
   }
+
   return false;
 }
 
@@ -69,12 +72,15 @@ export function shouldInitializeFromBlob({
   if (currentVideoUrl) {
     return false;
   }
+
   if (!hasBlob) {
     return false;
   }
+
   if (hasExplicitVideoParam(params, locationSearch)) {
     return false;
   }
+
   return true;
 }
 
@@ -115,26 +121,39 @@ export function useEditorSyncEffects({
       })
     ) {
       const canonical = useBlobStore.getState().canonicalVideoUrl;
-      if (canonical && (canonical.startsWith("http://") || canonical.startsWith("https://"))) {
+
+      if (
+        canonical &&
+        (canonical.startsWith("http://") || canonical.startsWith("https://"))
+      ) {
         setVideoUrl(canonical);
       } else {
         setVideoUrl(URL.createObjectURL(blob!));
       }
     }
   }, [videoUrl, blob, params, setVideoUrl]);
-
   useEffect(() => {
+    // An explicit ?video= URL always has the highest precedence.
     if (hasExplicitVideoParam(params)) {
       return;
     }
-    // A cached/recorded blob URL must never overwrite an already-valid HTTPS video URL (e.g. from upload or param)
+
+    // Never overwrite an already-valid remote video URL.
     if (videoUrl && !videoUrl.startsWith("blob:")) {
       return;
     }
+
+    // Never overwrite a canonical remote video URL from the blob store.
     const canonical = useBlobStore.getState().canonicalVideoUrl;
-    if (canonical && (canonical.startsWith("http://") || canonical.startsWith("https://"))) {
+
+    if (
+      canonical &&
+      (canonical.startsWith("http://") || canonical.startsWith("https://"))
+    ) {
       return;
     }
+
+    // Fall back to the recorded video URL when no stronger source exists.
     if (recordedVideoUrl) {
       setVideoUrl(recordedVideoUrl);
     }
@@ -158,12 +177,15 @@ export function useEditorSyncEffects({
     if (currentSegments.length === 0 || segments.length > 0) {
       return;
     }
+
     const numeric = currentSegments
       .map((s) => ({
-        start: typeof s.start === "string" ? parseFloat(s.start) : Number(s.start),
+        start:
+          typeof s.start === "string" ? parseFloat(s.start) : Number(s.start),
         end: typeof s.end === "string" ? parseFloat(s.end) : Number(s.end),
       }))
       .filter((s) => !isNaN(s.start) && !isNaN(s.end));
+
     if (numeric.length > 0) {
       setSegments(numeric);
     }
@@ -179,7 +201,11 @@ export function useEditorSyncEffects({
     if (!Number.isFinite(resolvedDuration) || resolvedDuration <= 0) {
       return;
     }
-    if (timelineEndTime <= 0 || Math.abs(timelineEndTime - resolvedDuration) > 0.5) {
+
+    if (
+      timelineEndTime <= 0 ||
+      Math.abs(timelineEndTime - resolvedDuration) > 0.5
+    ) {
       setTimelineStartTime(0);
       setTimelineEndTime(resolvedDuration);
       setInputStartTime(formatTimeForInput(0));

@@ -6,11 +6,8 @@
 // Contains ZERO Prisma / Postgres imports.
 // Pure HTTP boundary - no child_process execution.
 
-import { Worker, Job } from "bullmq";
+import { Worker, Job, type ConnectionOptions } from "bullmq";
 import Redis from "ioredis";
-import dotenv from "dotenv";
-import path from "path";
-import fs from "fs";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
 import { getReframeWorkerConfig, loadReframeWorkerEnv } from "./config";
 import { processReframeJob, type ReframeJobContext } from "./orchestrator";
@@ -35,14 +32,17 @@ const worker = new Worker<ReframeJobPayload>(
   "reframe-processing",
   async (job: Job<ReframeJobPayload>) => {
     const context: ReframeJobContext = {
-      jobId: job.data.jobId,
+      jobId: typeof job.data?.jobId === "string" ? job.data.jobId : "",
       attemptsMade: job.attemptsMade,
       maxAttempts: job.opts.attempts ?? 1,
+      discardJob: async () => {
+        await job.discard();
+      },
     };
     return await processReframeJob(job.data, context);
   },
   {
-    connection: redisConnection as any,
+    connection: redisConnection as unknown as ConnectionOptions,
     concurrency: config.workerConcurrency,
   }
 );
