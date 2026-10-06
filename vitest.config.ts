@@ -14,6 +14,6 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, "e2e/**", "cloudrun-worker/**"],
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
 });
