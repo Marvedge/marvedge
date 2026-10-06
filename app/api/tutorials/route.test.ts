@@ -42,9 +42,25 @@ vi.mock("@/app/lib/cloudinary", () => ({
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
+import cloudinary from "@/app/lib/cloudinary";
 import { GET, POST } from "./route";
 
-function makeTutorialRequest(): NextRequest {
+// 1x1 PNG: valid magic bytes, tiny decoded size.
+const VALID_PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+function makeSlide(overrides: Record<string, unknown> = {}) {
+  return {
+    title: "Slide 1",
+    description: "Test slide",
+    imageData: VALID_PNG_DATA_URL,
+    clicks: [],
+    timestamp: 0,
+    ...overrides,
+  };
+}
+
+function makeTutorialRequest(slides: unknown[] = [makeSlide()]): NextRequest {
   return new NextRequest("http://localhost:3000/api/tutorials", {
     method: "POST",
     headers: {
@@ -53,15 +69,7 @@ function makeTutorialRequest(): NextRequest {
     body: JSON.stringify({
       title: "QA tutorial",
       description: "Regression test",
-      slides: [
-        {
-          title: "Slide 1",
-          description: "Test slide",
-          imageData: "data:image/png;base64,aGVsbG8=",
-          clicks: [],
-          timestamp: 0,
-        },
-      ],
+      slides,
     }),
   });
 }
@@ -135,5 +143,54 @@ describe("/api/tutorials internal error privacy (Bug 0032)", () => {
     expect(JSON.stringify(body)).not.toContain("connection");
 
     expect(consoleErrorSpy).toHaveBeenCalledWith("Tutorial fetch error:", internalError);
+  });
+});
+
+describe("/api/tutorials upload caps (#445)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(getServerSession).mockResolvedValue({
+      user: {
+        id: "user-1",
+        email: "qa@example.com",
+        name: "QA Tester",
+        image: null,
+      },
+    } as never);
+
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "user-1",
+      email: "qa@example.com",
+    } as never);
+  });
+
+  it("rejects more than 30 slides without uploading", async () => {
+    const slides = Array.from({ length: 31 }, (_, i) =>
+      makeSlide({ title: `Slide ${i + 1}` })
+    );
+    const response = await POST(makeTutorialRequest(slides));
+    expect(response.status).toBe(413);
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
+  });
+
+  it("rejects a slide whose decoded bytes exceed 5MB", async () => {
+    const big = Buffer.alloc(5 * 1024 * 1024 + 1, 0);
+    // Keep PNG magic so the size check (not the type check) fires.
+    big[0] = 0x89;
+    big[1] = 0x50;
+    big[2] = 0x4e;
+    big[3] = 0x47;
+    const imageData = `data:image/png;base64,${big.toString("base64")}`;
+    const response = await POST(makeTutorialRequest([makeSlide({ imageData })]));
+    expect(response.status).toBe(413);
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-image bytes by magic bytes", async () => {
+    const imageData = "data:image/png;base64,aGVsbG8="; // "hello", no image magic
+    const response = await POST(makeTutorialRequest([makeSlide({ imageData })]));
+    expect(response.status).toBe(400);
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
   });
 });
