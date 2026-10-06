@@ -67,7 +67,17 @@ function getGcpWorkerUrl() {
   return (process.env.GCP_VIDEO_WORKER_URL || "").trim();
 }
 
-function normalizeWorkerBaseUrl(rawUrl: string) {
+/**
+ * Returns the resolved service URL for AVS dubbing.
+ * When AVS_DUB_SERVICE_URL is set (local dev / Docker), routes to that service.
+ * In production or when unset, preserves the existing GCP_VIDEO_WORKER_URL.
+ */
+export function getDubServiceUrl(): string {
+  const override = (process.env.AVS_DUB_SERVICE_URL || "").trim();
+  return override || getGcpWorkerUrl();
+}
+
+export function normalizeWorkerBaseUrl(rawUrl: string) {
   let url = rawUrl.trim();
   if (!url) {
     return "";
@@ -80,15 +90,16 @@ function normalizeWorkerBaseUrl(rawUrl: string) {
     /\/(process|subtitles|avs-voiceover|avs-sync|avs-dub|wtm-composite|package-hls|merge)$/i,
     ""
   );
+  url = url.replace(/\/+$/, "");
   return url;
 }
 
 export async function invokeGcpWorker(
   payload: GcpWorkerPayload,
   endpoint = "/process",
-  options: { timeoutMs?: number } = {}
+  options: { timeoutMs?: number; serviceUrl?: string } = {}
 ) {
-  const rawUrl = getGcpWorkerUrl();
+  const rawUrl = (options.serviceUrl || getGcpWorkerUrl()).trim();
   if (!rawUrl) {
     throw new Error("GCP_VIDEO_WORKER_URL is not configured");
   }
@@ -428,7 +439,11 @@ const AVS_DUB_TIMEOUT_MS = 15 * 60 * 1000;
  *
  * FALLBACK: no dubUrl/dubTimings → worker returns the source unchanged.
  */
-export async function invokeGcpDubSync(payload: GcpDubSyncPayload): Promise<GcpDubSyncResult> {
+export async function invokeGcpDubSync(
+  payload: GcpDubSyncPayload,
+  options?: { timeoutMs?: number; serviceUrl?: string }
+): Promise<GcpDubSyncResult> {
+  const resolvedServiceUrl = options?.serviceUrl || getDubServiceUrl();
   const body = await invokeGcpWorker(
     {
       recipeId: "avs-dub",
@@ -438,7 +453,10 @@ export async function invokeGcpDubSync(payload: GcpDubSyncPayload): Promise<GcpD
       dubTimings: payload.dubTimings,
     },
     "/avs-dub",
-    { timeoutMs: AVS_DUB_TIMEOUT_MS }
+    {
+      timeoutMs: options?.timeoutMs ?? AVS_DUB_TIMEOUT_MS,
+      serviceUrl: resolvedServiceUrl,
+    }
   );
 
   const result = body.result;

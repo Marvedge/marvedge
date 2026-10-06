@@ -17,7 +17,6 @@ const FFMPEG_BIN =
     }
   })() ||
   "/usr/bin/ffmpeg";
-
 const FFPROBE_BIN =
   process.env.FFPROBE_PATH ||
   (() => {
@@ -379,7 +378,8 @@ function remapSubtitleCuesToTrimmedTimeline(rawCues, keepSegments, removeSegment
 function ffmpegEscapeFilterValue(value) {
   let str = String(value).replace(/\\/g, "/");
   if (/^[a-zA-Z]:/.test(str)) {
-    str = str[0] + "\\\\:" + str.slice(2);
+    str = str[0] + "\\:" + str.slice(2);
+
   }
   return str;
 }

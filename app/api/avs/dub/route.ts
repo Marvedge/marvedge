@@ -1,10 +1,11 @@
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
+import { dubbingQueue } from "@/app/lib/queue";
 import type { Step, DubTiming } from "@/app/types/avs";
 
 // Per-step encode + concat is comparable to /avs-sync; same generous budget.
@@ -177,12 +178,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Open to every signed-in plan for now; the wider AVS pipeline stays
-  // PRO/ENTERPRISE-gated (see /api/avs/sync).
-
   let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as Record<string, unknown>;
+    const parsedBody: unknown = await req.json();
+    if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+      return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+    }
+    body = parsedBody as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -220,14 +222,21 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  after(() =>
-    runDubAlignment(jobRecord.id, {
+  await dubbingQueue.add(
+    "avs-dub",
+    {
+      jobId: jobRecord.id,
       videoUrl,
       dubUrl,
       steps,
       dubTimings,
       sourceDuration,
-    })
+      userId: user.id,
+      demoId,
+    },
+    {
+      jobId: jobRecord.id,
+    }
   );
 
   return NextResponse.json({ success: true, jobId: jobRecord.id });

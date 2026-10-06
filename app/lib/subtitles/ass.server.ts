@@ -6,6 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { generateAssContent } from "./ass";
+import type { GenerateAssOptions } from "./ass";
 import type { SubtitleCue, SubtitleStyle } from "./types";
 
 /**
@@ -19,10 +20,12 @@ export function writeAssFile(
   height: number,
   style?: SubtitleStyle,
   language?: string | null,
-  filename = "subtitles.ass"
+  filename = "subtitles.ass",
+  options?: GenerateAssOptions
 ): string {
-  const content = generateAssContent(cues, width, height, style, language);
   const filePath = path.join(destDir, filename);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const content = generateAssContent(cues, width, height, style, language, options);
   fs.writeFileSync(filePath, content, "utf8");
   return filePath;
 }

@@ -74,6 +74,142 @@ export function escapeFfmpegFilterPath(filePath: string): string {
     .replace(/\]/g, "\\]");
 }
 
+export interface GenerateAssOptions {
+  /**
+   * Whether to format dialogue text with ASS karaoke override tags (`{\k...}`).
+   * When true, cues with valid `words` use word-level timing, while cues
+   * without `words` fall back to standard text.
+   * Defaults to false.
+   */
+  karaoke?: boolean;
+}
+
+export type AssKaraokeOptions = GenerateAssOptions;
+
+/**
+ * Formats a single subtitle cue's text with ASS karaoke override tags (`{\k...}`),
+ * using word-level timestamps from `cue.words`.
+ *
+ * Rules:
+ * 1. If `cue.words` is absent, empty, or has no valid words, falls back to plain escaped text.
+ * 2. Converts word start/end timestamps into ASS centiseconds using endpoint rounding
+ *    to prevent cumulative drift.
+ * 3. Emits a leading silence tag (`{\k<lead>}`) if the first word starts after `cue.start`.
+ * 4. Preserves inter-word speech pauses by emitting gap tags (`{\k<gap>} `).
+ * 5. Escapes all word text via `escapeAssText()` so user/Whisper input cannot inject ASS tags.
+ * 6. Preserves punctuation attached to words and newline line breaks (`\N`).
+ * 7. Applies right-to-left directional embedding (`applyRtlBidi`) when `isRtl` or RTL language is specified.
+ */
+export function formatAssKaraokeText(
+  cue: SubtitleCue,
+  isRtlOrLanguage?: boolean | string | null
+): string {
+  if (!cue) return "";
+  const isRtl =
+    typeof isRtlOrLanguage === "boolean"
+      ? isRtlOrLanguage
+      : isRtlLanguage(String(isRtlOrLanguage || ""));
+
+  const fallbackText = escapeAssText(cue.text || "");
+  const words = cue.words;
+
+  if (!Array.isArray(words) || words.length === 0) {
+    return isRtl ? applyRtlBidi(fallbackText) : fallbackText;
+  }
+
+  // Filter valid words: must have a non-empty string, finite non-negative numbers, end > start
+  const validWords = words.filter((w) => {
+    if (!w || typeof w !== "object") return false;
+    if (typeof w.word !== "string" || w.word.trim().length === 0) return false;
+    const start = Number(w.start);
+    const end = Number(w.end);
+    return Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start;
+  });
+
+  if (validWords.length === 0) {
+    return isRtl ? applyRtlBidi(fallbackText) : fallbackText;
+  }
+
+  // Ensure deterministic chronological ordering
+  const sorted = [...validWords].sort((a, b) => a.start - b.start);
+
+  const cueStart = Math.max(0, Number.isFinite(cue.start) ? cue.start : 0);
+  const cueStartCs = Math.round(cueStart * 100);
+
+  // Helper to round second timestamps to centiseconds
+  const toCs = (sec: number) => Math.max(0, Math.round(sec * 100));
+
+  let result = "";
+
+  // 1. Leading silence: gap between cue.start and firstWord.start
+  const firstWordStartCs = toCs(sorted[0].start);
+  const leadCs = Math.max(0, firstWordStartCs - cueStartCs);
+  if (leadCs > 0) {
+    result += `{\\k${leadCs}}`;
+  }
+
+  // Scan raw cue text to preserve newlines (\n -> \N) between words
+  const rawText = String(cue.text || "");
+  let textCursor = 0;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const current = sorted[i];
+    const wStartCs = toCs(current.start);
+    const wEndCs = toCs(current.end);
+    const wDurCs = Math.max(0, wEndCs - wStartCs);
+
+    // Escape word text to prevent ASS injection
+    const escapedWord = escapeAssText(current.word.trim());
+    result += `{\\k${wDurCs}}${escapedWord}`;
+
+    if (i < sorted.length - 1) {
+      const next = sorted[i + 1];
+      const nextStartCs = toCs(next.start);
+      const gapCs = Math.max(0, nextStartCs - wEndCs);
+
+      // Determine separator: check if raw text contained a newline between these words
+      let separator = " ";
+      let isNewline = false;
+      const currentPos = rawText.indexOf(current.word, textCursor);
+      if (currentPos !== -1) {
+        textCursor = currentPos + current.word.length;
+        const nextPos = rawText.indexOf(next.word, textCursor);
+        if (nextPos !== -1) {
+          const between = rawText.slice(textCursor, nextPos);
+          if (/\r|\n/.test(between)) {
+            isNewline = true;
+          } else if (between.length === 0) {
+            separator = "";
+          }
+          textCursor = nextPos;
+        }
+      }
+
+      if (isNewline) {
+        // Line break with optional gap duration
+        if (gapCs > 0) {
+          result += `\\N{\\k${gapCs}}`;
+        } else {
+          result += "\\N";
+        }
+      } else if (separator === "") {
+        if (gapCs > 0) {
+          result += `{\\k${gapCs}}`;
+        }
+      } else {
+        // Space with optional gap duration
+        if (gapCs > 0) {
+          result += `{\\k${gapCs}} `;
+        } else {
+          result += " ";
+        }
+      }
+    }
+  }
+
+  return isRtl ? applyRtlBidi(result) : result;
+}
+
 /**
  * Generates the full string content of an Advanced SubStation Alpha (ASS v4.00+) document.
  *
@@ -85,7 +221,8 @@ export function generateAssContent(
   width: number,
   height: number,
   style?: SubtitleStyle,
-  language?: string | null
+  language?: string | null,
+  options?: GenerateAssOptions
 ): string {
   const w = Math.max(2, Math.round(Number(width) || 1920));
   const h = Math.max(2, Math.round(Number(height) || 1080));
@@ -107,7 +244,7 @@ export function generateAssContent(
     "ScriptType: v4.00+",
     `PlayResX: ${w}`,
     `PlayResY: ${h}`,
-    "WrapStyle: 2",
+    `WrapStyle: ${language ? 1 : 2}`,
     "ScaledBorderAndShadow: yes",
     "",
     "[V4+ Styles]",
@@ -126,8 +263,13 @@ export function generateAssContent(
     .map((c) => {
       const start = formatAssTime(c.start);
       const end = formatAssTime(c.end);
-      const escaped = escapeAssText(c.text);
-      const text = isRtl ? applyRtlBidi(escaped) : escaped;
+      let text: string;
+      if (options?.karaoke) {
+        text = formatAssKaraokeText(c, isRtl);
+      } else {
+        const escaped = escapeAssText(c.text);
+        text = isRtl ? applyRtlBidi(escaped) : escaped;
+      }
       return `Dialogue: 0,${start},${end},Default,,0,0,0,,${tags}${text}`;
     });
 
