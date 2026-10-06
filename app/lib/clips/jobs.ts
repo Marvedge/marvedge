@@ -7,7 +7,7 @@
 // DB client and scoring function as arguments so unit tests can inject mocks.
 
 import { scoreTranscriptClips } from "./scorer";
-import { detectSceneCuts } from "./scenes";
+import { detectSceneCuts, type SceneDetectionOptions } from "./scenes";
 import type { ClipCandidate, ClipScoringInput, ClipScoringOptions, SceneBoundary } from "./types";
 import { resolveTranscriptCues } from "./service";
 import type { SubtitleCue } from "../subtitles/types";
@@ -75,8 +75,13 @@ export interface ClipJobDbClient {
 
 export interface RunClipScoringJobOptions {
   scoringFn?: (input: ClipScoringInput) => Promise<ClipCandidate[]>;
-  sceneDetectionFn?: (videoPath: string) => Promise<SceneBoundary[]>;
+  sceneDetectionFn?: (
+    videoPath: string,
+    options?: SceneDetectionOptions
+  ) => Promise<SceneBoundary[]>;
   updateProgress?: (progress: number) => Promise<void>;
+  attemptsMade?: number;
+  maxAttempts?: number;
 }
 
 /** Small retry wrapper for DB writes (Neon cold-starts, same as worker standard). */
@@ -115,6 +120,9 @@ export async function runClipScoringJob(
   } = payload;
   const scorer = opts.scoringFn || scoreTranscriptClips;
   const updateProgress = opts.updateProgress || (async () => {});
+  const attemptsMade = opts.attemptsMade ?? 0;
+  const maxAttempts =
+    typeof opts.maxAttempts === "number" && opts.maxAttempts > 0 ? opts.maxAttempts : 1;
 
   console.log(`[clip-scoring] Starting job ${jobId} (demoId=${demoId || "none"})...`);
 
@@ -159,7 +167,7 @@ export async function runClipScoringJob(
     ) {
       try {
         const sceneFn = opts.sceneDetectionFn || detectSceneCuts;
-        scenes = await sceneFn(targetVideo);
+        scenes = await sceneFn(targetVideo, { totalDuration: duration });
         console.log(`[clip-scoring] Detected ${scenes.length} visual scenes for job ${jobId}`);
       } catch (sceneErr) {
         console.warn(`[clip-scoring] Scene detection skipped for ${jobId}:`, sceneErr);
@@ -209,18 +217,23 @@ export async function runClipScoringJob(
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[clip-scoring] Job ${jobId} failed:`, errorMsg);
 
-    // Mark VideoJob as FAILED
-    await withDbRetry(() =>
-      db.videoJob.update({
-        where: { id: jobId },
-        data: {
-          status: "FAILED",
-          error: errorMsg,
-        },
-      })
-    ).catch((dbErr) => {
-      console.error(`[clip-scoring] Failed to mark job ${jobId} as FAILED:`, dbErr);
-    });
+    if (attemptsMade + 1 >= maxAttempts) {
+      await withDbRetry(() =>
+        db.videoJob.update({
+          where: { id: jobId },
+          data: {
+            status: "FAILED",
+            error: errorMsg,
+          },
+        })
+      ).catch((dbErr) => {
+        console.error(`[clip-scoring] Failed to mark job ${jobId} as FAILED:`, dbErr);
+      });
+    } else {
+      console.warn(
+        `[clip-scoring] Job ${jobId} failed on an intermediate attempt; BullMQ will retry.`
+      );
+    }
 
     throw err;
   }

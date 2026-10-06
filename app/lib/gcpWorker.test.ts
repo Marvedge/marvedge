@@ -3,6 +3,7 @@ import {
   getDubServiceUrl,
   normalizeWorkerBaseUrl,
   invokeGcpDubSync,
+  invokeGcpWorker,
   type GcpDubSyncPayload,
 } from "./gcpWorker";
 
@@ -71,6 +72,21 @@ describe("gcpWorker - AVS Dubbing Service URL Resolution & Routing", () => {
   });
 
   describe("invokeGcpDubSync Routing Execution", () => {
+    it("does not retry deterministic 4xx responses", async () => {
+      process.env.GCP_VIDEO_WORKER_URL = "https://worker.example.com";
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: "Invalid subtitle input" }),
+      });
+
+      await expect(invokeGcpWorker({ recipeId: "subtitles" }, "/subtitles")).rejects.toThrow(
+        "Invalid subtitle input"
+      );
+
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+    });
+
     it("TEST A — local override: POSTs to http://cloudrun-worker:8080/avs-dub exactly once", async () => {
       process.env.AVS_DUB_SERVICE_URL = "http://cloudrun-worker:8080";
       process.env.GCP_VIDEO_WORKER_URL = "https://production-gcp-worker.run.app";

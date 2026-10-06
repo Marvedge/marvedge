@@ -63,6 +63,34 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
     expect(updateProgress).toHaveBeenCalledWith(100);
   });
 
+  it("does not send FAILED if final progress reporting fails after completion", async () => {
+    const invokeDubSync = vi.fn().mockResolvedValue({
+      alignedVideoUrl: "https://storage.googleapis.com/processed-bucket/aligned-dub.mp4",
+      duration: 11.2,
+    });
+    const postCallback = vi.fn().mockResolvedValue(undefined);
+    const updateProgress = vi.fn(async (progress: number) => {
+      if (progress === 100) {
+        throw new Error("Redis unavailable");
+      }
+    });
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      processDubbingJob(basePayload, { invokeDubSync, postCallback, updateProgress })
+    ).resolves.toBeUndefined();
+
+    expect(postCallback).toHaveBeenCalledOnce();
+    expect(postCallback).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "COMPLETED" })
+    );
+    expect(logError).not.toHaveBeenCalledWith(
+      expect.stringContaining("Job job-dub-123 failed:"),
+      expect.anything()
+    );
+    logError.mockRestore();
+  });
+
   describe("B. Fallback handling", () => {
     it("falls back to source video when dubUrl is empty without invoking GCP", async () => {
       const invokeDubSync = vi.fn();
@@ -144,6 +172,43 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
         error: "Cloud Run /avs-dub connection reset",
       });
     });
+
+    it("does not send FAILED callback on an intermediate attempt", async () => {
+      const originalError = new Error("Cloud Run /avs-dub connection reset");
+      const invokeDubSync = vi.fn().mockRejectedValue(originalError);
+      const postCallback = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        processDubbingJob(basePayload, {
+          invokeDubSync,
+          postCallback,
+          isFinalAttempt: false,
+        })
+      ).rejects.toBe(originalError);
+
+      expect(postCallback).not.toHaveBeenCalled();
+    });
+
+    it("sends FAILED callback on a final attempt and re-throws the original error", async () => {
+      const originalError = new Error("Cloud Run /avs-dub connection reset");
+      const invokeDubSync = vi.fn().mockRejectedValue(originalError);
+      const postCallback = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        processDubbingJob(basePayload, {
+          invokeDubSync,
+          postCallback,
+          isFinalAttempt: true,
+        })
+      ).rejects.toBe(originalError);
+
+      expect(postCallback).toHaveBeenCalledTimes(1);
+      expect(postCallback).toHaveBeenCalledWith({
+        jobId: "job-dub-123",
+        status: "FAILED",
+        error: "Cloud Run /avs-dub connection reset",
+      });
+    });
   });
 
   describe("D. Validation of payload and GCP output", () => {
@@ -167,6 +232,18 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
         status: "FAILED",
         error: "Missing required videoUrl",
       });
+    });
+
+    it("does not send FAILED callback for missing videoUrl on an intermediate attempt", async () => {
+      const postCallback = vi.fn().mockResolvedValue(undefined);
+      await expect(
+        processDubbingJob(
+          { ...basePayload, videoUrl: "" },
+          { postCallback, isFinalAttempt: false }
+        )
+      ).rejects.toThrow("Missing required videoUrl");
+
+      expect(postCallback).not.toHaveBeenCalled();
     });
 
     it("rejects non-http/https URL from GCP worker and sends FAILED callback", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseFfmpegSceneLog } from "./scenes";
 
 describe("FFmpeg Scene Detection Parser", () => {
@@ -41,11 +41,24 @@ describe("FFmpeg Scene Detection Parser", () => {
     const scenes = parseFfmpegSceneLog(emptyLog, 45.0);
 
     expect(scenes).toEqual([{ startTime: 0, endTime: 45.0 }]);
+    expect(parseFfmpegSceneLog(emptyLog, 0)).toEqual([]);
+    expect(parseFfmpegSceneLog(emptyLog, 0.05)).toEqual([{ startTime: 0, endTime: 0.05 }]);
   });
 
   it("handles empty or malformed strings gracefully", () => {
     expect(parseFfmpegSceneLog("", 30.0)).toEqual([{ startTime: 0, endTime: 30.0 }]);
     expect(parseFfmpegSceneLog("", 0)).toEqual([]);
+    expect(parseFfmpegSceneLog("", Number.POSITIVE_INFINITY)).toEqual([]);
+    expect(parseFfmpegSceneLog("[showinfo] pts_time:4.0", Number.NaN)).toEqual([
+      { startTime: 0, endTime: 4 },
+      { startTime: 4, endTime: 9 },
+    ]);
+  });
+
+  it("falls back to the known full duration when detected cuts lie beyond it", () => {
+    expect(parseFfmpegSceneLog("[showinfo] pts_time:12.0", 10)).toEqual([
+      { startTime: 0, endTime: 10 },
+    ]);
   });
 
   it("gracefully falls back to full-duration scene when FFmpeg execution fails (Task-00084)", async () => {
@@ -79,6 +92,30 @@ describe("FFmpeg Scene Detection Parser", () => {
     });
     expect(scenes[0].startTime).toBe(0);
     expect(scenes[0].endTime).toBe(15.5);
+  });
+
+  it("uses the full-duration fallback when FFmpeg fails after emitting partial scene logs", async () => {
+    const { detectSceneCuts } = await import("./scenes");
+    const logWarning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mockFailingExecFile = ((...args: unknown[]) => {
+      const callback = args[3] as
+        | ((error: Error | null, stdout: string, stderr: string) => void)
+        | undefined;
+      callback?.(new Error("Injected FFmpeg failure"), "", "[Parsed_showinfo_1] pts_time:4.0");
+      return {} as ReturnType<typeof import("node:child_process").execFile>;
+    }) as typeof import("node:child_process").execFile;
+
+    const scenes = await detectSceneCuts("mock_video.mp4", {
+      totalDuration: 15.5,
+      execFile: mockFailingExecFile,
+    });
+
+    expect(scenes).toEqual([{ startTime: 0, endTime: 15.5 }]);
+    expect(logWarning).toHaveBeenCalledWith(
+      "[scene-detection] FFmpeg failed; using the duration fallback:",
+      expect.any(Error)
+    );
+    logWarning.mockRestore();
   });
 
   it("executes real FFmpeg on sample video to detect scene boundaries", async () => {

@@ -63,6 +63,16 @@ export type GcpWorkerResponse = {
   error?: string;
 };
 
+class GcpWorkerHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = "GcpWorkerHttpError";
+  }
+}
+
 function getGcpWorkerUrl() {
   return (process.env.GCP_VIDEO_WORKER_URL || "").trim();
 }
@@ -153,13 +163,25 @@ export async function invokeGcpWorker(
             attempt++;
             continue;
           }
-          throw new Error(body.error || `GCP worker failed (${response.status}) at ${url}`);
+          throw new GcpWorkerHttpError(
+            response.status,
+            body.error || `GCP worker failed (${response.status}) at ${url}`
+          );
         }
 
         return body;
       } catch (e: unknown) {
         if (attempt >= maxAttempts - 1) {
           throw e; // Max attempts reached
+        }
+
+        if (
+          e instanceof GcpWorkerHttpError &&
+          e.status >= 400 &&
+          e.status < 500 &&
+          e.status !== 429
+        ) {
+          throw e;
         }
 
         const errorMessage = e instanceof Error ? e.message : String(e);

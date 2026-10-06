@@ -120,6 +120,7 @@ export interface DubbingProcessorDeps {
   updateProgress?: (percent: number) => Promise<void> | void;
   uploadToCloudinary?: UploadToCloudinaryFn;
   serviceUrl?: string;
+  isFinalAttempt?: boolean;
 }
 
 /**
@@ -208,6 +209,7 @@ export async function processDubbingJob(
   payload: DubbingJobPayload,
   deps: DubbingProcessorDeps = {}
 ): Promise<void> {
+  const isFinalAttempt = deps.isFinalAttempt ?? true;
   const invokeDubSync =
     deps.invokeDubSync ??
     ((p: GcpDubSyncPayload) =>
@@ -223,11 +225,18 @@ export async function processDubbingJob(
     throw new Error("Invalid payload: missing jobId");
   }
   if (!payload.videoUrl || typeof payload.videoUrl !== "string") {
-    await postCallback({
-      jobId: payload.jobId,
-      status: "FAILED",
-      error: "Missing required videoUrl",
-    });
+    if (isFinalAttempt) {
+      await postCallback({
+        jobId: payload.jobId,
+        status: "FAILED",
+        error: "Missing required videoUrl",
+      });
+    } else {
+      console.warn(
+        `[dubbingProcessor] Job ${payload.jobId} failed on an intermediate attempt; BullMQ will retry:`,
+        "Missing required videoUrl"
+      );
+    }
     throw new Error("Missing required videoUrl");
   }
 
@@ -326,23 +335,36 @@ export async function processDubbingJob(
       duration,
     });
 
-    await updateProgress(100);
-  } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : "Dub-sync alignment failed";
-    console.error(`[dubbingProcessor] Job ${payload.jobId} failed:`, errorMessage);
-
     try {
-      await postCallback({
-        jobId: payload.jobId,
-        status: "FAILED",
-        error: errorMessage,
-      });
-    } catch (cbErr) {
+      await updateProgress(100);
+    } catch (progressError) {
       console.error(
-        `[dubbingProcessor] Failed to send FAILED callback for ${payload.jobId}:`,
-        cbErr
+        `[dubbingProcessor] Job ${payload.jobId} completed, but final progress could not be updated:`,
+        progressError
       );
+    }
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Dub-sync alignment failed";
+    if (!isFinalAttempt) {
+      console.warn(
+        `[dubbingProcessor] Job ${payload.jobId} failed on an intermediate attempt; BullMQ will retry:`,
+        errorMessage
+      );
+    } else {
+      console.error(`[dubbingProcessor] Job ${payload.jobId} failed:`, errorMessage);
+
+      try {
+        await postCallback({
+          jobId: payload.jobId,
+          status: "FAILED",
+          error: errorMessage,
+        });
+      } catch (cbErr) {
+        console.error(
+          `[dubbingProcessor] Failed to send FAILED callback for ${payload.jobId}:`,
+          cbErr
+        );
+      }
     }
 
     throw err;
