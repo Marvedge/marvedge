@@ -27,7 +27,9 @@ const EXEMPT_EMAILS = [
 async function isExportAllowed(
   userId: string,
   email: string | null | undefined,
-  plan: string | null
+  plan: string | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any = prisma
 ): Promise<boolean> {
   const isExempt =
     (email && EXEMPT_EMAILS.includes(email)) || plan === "PRO" || plan === "ENTERPRISE";
@@ -35,15 +37,22 @@ async function isExportAllowed(
     return true;
   }
 
-  const jobCount = await prisma.videoJob.count({
+  const jobCount = await db.videoJob.count({
     where: { userId, status: "COMPLETED" },
   });
-  const savedCount = await prisma.exportedVideo.count({
+  const savedCount = await db.exportedVideo.count({
     where: { userId },
   });
   const exportCount = Math.max(jobCount, savedCount);
 
   return exportCount < 3;
+}
+
+class FreeTrialLimitError extends Error {
+  constructor() {
+    super("Free trial limit");
+    this.name = "FreeTrialLimitError";
+  }
 }
 
 // --- WTM (watermark) -------------------------------------------------------
@@ -307,16 +316,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const exportAllowed = await isExportAllowed(userId, session.user.email, user.plan);
-    if (!exportAllowed) {
-      return NextResponse.json(
-        {
-          error: "Free trial limit of 3 exports reached. Please upgrade your plan.",
-        },
-        { status: 403 }
-      );
-    }
-
     // Decide the watermark from the user's plan (free → forced badge, PRO →
     // their config or none). undefined when the flag is off, so the recipe is
     // identical to today and non-WTM exports are unchanged.
@@ -345,36 +344,59 @@ export async function POST(req: NextRequest) {
     const subtitleLanguage =
       !burnSubtitles || rawSubtitleLanguage === "multi" ? null : rawSubtitleLanguage;
 
-    // 1. Create a job record in the database
-    const jobRecord = await prisma.videoJob.create({
-      data: {
-        userId,
-        demoId: demoId || null,
-        videoUrl,
-        status: "PENDING",
-        jobData: {
-          segments: segments || [],
-          zoomEffects: zoomEffects || [],
-          textOverlays: textOverlays || [],
-          subtitles: recipeSubtitles,
-          selectedBackground: selectedBackground || null,
-          customBackgroundUrl: customBackgroundUrl || null,
-          imageMap: imageMap || {},
-          settings: settings || null,
-          aspectRatio: aspectRatio || "native",
-          browserFrame: browserFrame || {
-            mode: "default",
-            drawShadow: true,
-            drawBorder: false,
+    // 1. Create a job record in the database, serialized per user: the free-trial
+    // allowance check and the insert run in one transaction behind a
+    // SELECT ... FOR UPDATE on the caller's User row, so concurrent exports
+    // cannot both pass a count-then-create race. No schema change.
+    let jobRecord;
+    try {
+      jobRecord = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+        const exportAllowed = await isExportAllowed(userId, session.user.email, user.plan, tx);
+        if (!exportAllowed) {
+          throw new FreeTrialLimitError();
+        }
+        return tx.videoJob.create({
+          data: {
+            userId,
+            demoId: demoId || null,
+            videoUrl,
+            status: "PENDING",
+            jobData: {
+              segments: segments || [],
+              zoomEffects: zoomEffects || [],
+              textOverlays: textOverlays || [],
+              subtitles: recipeSubtitles,
+              selectedBackground: selectedBackground || null,
+              customBackgroundUrl: customBackgroundUrl || null,
+              imageMap: imageMap || {},
+              settings: settings || null,
+              aspectRatio: aspectRatio || "native",
+              browserFrame: browserFrame || {
+                mode: "default",
+                drawShadow: true,
+                drawBorder: false,
+              },
+              // Spread into a fresh object literal so the Prisma Json field accepts
+              // it (a named interface lacks the implicit index signature Prisma wants).
+              ...(subtitleStyle ? { subtitleStyle: { ...subtitleStyle } } : {}),
+              ...(subtitleLanguage ? { subtitleLanguage } : {}),
+              ...(watermark ? { watermark: { ...watermark } } : {}),
+            },
           },
-          // Spread into a fresh object literal so the Prisma Json field accepts
-          // it (a named interface lacks the implicit index signature Prisma wants).
-          ...(subtitleStyle ? { subtitleStyle: { ...subtitleStyle } } : {}),
-          ...(subtitleLanguage ? { subtitleLanguage } : {}),
-          ...(watermark ? { watermark: { ...watermark } } : {}),
-        },
-      },
-    });
+        });
+      });
+    } catch (txErr) {
+      if (txErr instanceof FreeTrialLimitError) {
+        return NextResponse.json(
+          {
+            error: "Free trial limit of 3 exports reached. Please upgrade your plan.",
+          },
+          { status: 403 }
+        );
+      }
+      throw txErr;
+    }
 
     const normalizedPayload = {
       jobId: jobRecord.id,

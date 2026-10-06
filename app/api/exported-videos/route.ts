@@ -104,24 +104,6 @@ export async function POST(req: NextRequest) {
       (session.user.email && EXEMPT_EMAILS.includes(session.user.email)) ||
       userRecord?.plan === "PRO" ||
       userRecord?.plan === "ENTERPRISE";
-    if (!isExempt) {
-      const jobCount = await prisma.videoJob.count({
-        where: { userId, status: "COMPLETED" },
-      });
-      const savedCount = await prisma.exportedVideo.count({
-        where: { userId },
-      });
-      const exportCount = Math.max(jobCount, savedCount);
-
-      if (exportCount >= 3) {
-        return NextResponse.json(
-          {
-            error: "Free trial limit of 3 exports reached. Please upgrade to Pro.",
-          },
-          { status: 403 }
-        );
-      }
-    }
 
     if (!exportedUrl) {
       return NextResponse.json({ error: "exportedUrl is required" }, { status: 400 });
@@ -157,74 +139,119 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (demoId && upsertByDemo) {
-      const previous = await prisma.exportedVideo.findUnique({
-        where: { demoId },
-        select: { id: true, userId: true, exportedUrl: true },
+    // Serialize the free-trial allowance check with the insert behind a
+    // SELECT ... FOR UPDATE on the caller's User row, so concurrent saves
+    // cannot both pass a count-then-create race. No schema change.
+    try {
+      const txResult = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+        if (!isExempt) {
+          const jobCount = await tx.videoJob.count({
+            where: { userId, status: "COMPLETED" },
+          });
+          const savedCount = await tx.exportedVideo.count({
+            where: { userId },
+          });
+          const exportCount = Math.max(jobCount, savedCount);
+
+          if (exportCount >= 3) {
+            const limitError = new Error("Free trial limit");
+            (limitError as Error & { status?: number }).status = 403;
+            throw limitError;
+          }
+        }
+
+        if (demoId && upsertByDemo) {
+          const previous = await tx.exportedVideo.findUnique({
+            where: { demoId },
+            select: { id: true, userId: true, exportedUrl: true },
+          });
+
+          if (previous && previous.userId !== userId) {
+            const forbiddenError = new Error("Forbidden");
+            (forbiddenError as Error & { status?: number }).status = 403;
+            throw forbiddenError;
+          }
+
+          const exportedVideo = await tx.exportedVideo.upsert({
+            where: { demoId },
+            update: {
+              title: normalizedTitle,
+              description: normalizedDescription,
+              exportedUrl,
+              shareableUrl: exportedUrl,
+              sourceVideoUrl: normalizedSourceUrl,
+              settings: settings ?? null,
+            },
+            create: {
+              userId,
+              demoId,
+              title: normalizedTitle,
+              description: normalizedDescription,
+              exportedUrl,
+              shareableUrl: exportedUrl,
+              sourceVideoUrl: normalizedSourceUrl,
+              settings: settings ?? null,
+            },
+          });
+
+          await tx.demo.update({
+            where: { id: demoId },
+            data: { exportedUrl },
+          });
+
+          return { exportedVideo, previousUrl: previous?.exportedUrl, upserted: true as const };
+        }
+
+        const exportedVideo = await tx.exportedVideo.create({
+          data: {
+            userId,
+            demoId: demoId ?? null,
+            title: normalizedTitle,
+            description: normalizedDescription,
+            exportedUrl,
+            shareableUrl: exportedUrl,
+            sourceVideoUrl: normalizedSourceUrl,
+            settings: settings ?? null,
+          },
+        });
+
+        return { exportedVideo, previousUrl: undefined, upserted: false as const };
       });
 
-      if (previous && previous.userId !== userId) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (txResult.upserted) {
+        if (txResult.previousUrl && txResult.previousUrl !== exportedUrl) {
+          await deleteCloudinaryVideoByUrl(txResult.previousUrl);
+        }
+
+        // OVL PR 8 — package HLS renditions for the export that just landed.
+        // AFTER THE RESPONSE, never in it: a three-rung ladder takes minutes and
+        // the editor is waiting on this call to tell the user their export saved.
+        // Same shape as dispatchVideoJob() in app/api/jobs/create/route.ts.
+        // packageDemoHls() is a no-op when OVERLAYS_HLS_ENABLED is unset, is
+        // idempotent when the source has not changed, and never throws — a
+        // packaging failure leaves the demo playing its progressive MP4, which is
+        // what it would have done anyway.
+        after(() => packageDemoHls(demoId));
+
+        return NextResponse.json({ success: true, exportedVideo: txResult.exportedVideo });
       }
 
-      const exportedVideo = await prisma.exportedVideo.upsert({
-        where: { demoId },
-        update: {
-          title: normalizedTitle,
-          description: normalizedDescription,
-          exportedUrl,
-          shareableUrl: exportedUrl,
-          sourceVideoUrl: normalizedSourceUrl,
-          settings: settings ?? null,
-        },
-        create: {
-          userId,
-          demoId,
-          title: normalizedTitle,
-          description: normalizedDescription,
-          exportedUrl,
-          shareableUrl: exportedUrl,
-          sourceVideoUrl: normalizedSourceUrl,
-          settings: settings ?? null,
-        },
-      });
-
-      await prisma.demo.update({
-        where: { id: demoId },
-        data: { exportedUrl },
-      });
-
-      if (previous?.exportedUrl && previous.exportedUrl !== exportedUrl) {
-        await deleteCloudinaryVideoByUrl(previous.exportedUrl);
+      return NextResponse.json({ success: true, exportedVideo: txResult.exportedVideo });
+    } catch (txError) {
+      if (txError instanceof Error && (txError as Error & { status?: number }).status === 403) {
+        if (txError.message === "Forbidden") {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        return NextResponse.json(
+          {
+            error: "Free trial limit of 3 exports reached. Please upgrade to Pro.",
+          },
+          { status: 403 }
+        );
       }
-
-      // OVL PR 8 — package HLS renditions for the export that just landed.
-      // AFTER THE RESPONSE, never in it: a three-rung ladder takes minutes and
-      // the editor is waiting on this call to tell the user their export saved.
-      // Same shape as dispatchVideoJob() in app/api/jobs/create/route.ts.
-      // packageDemoHls() is a no-op when OVERLAYS_HLS_ENABLED is unset, is
-      // idempotent when the source has not changed, and never throws — a
-      // packaging failure leaves the demo playing its progressive MP4, which is
-      // what it would have done anyway.
-      after(() => packageDemoHls(demoId));
-
-      return NextResponse.json({ success: true, exportedVideo });
+      throw txError;
     }
-
-    const exportedVideo = await prisma.exportedVideo.create({
-      data: {
-        userId,
-        demoId: demoId ?? null,
-        title: normalizedTitle,
-        description: normalizedDescription,
-        exportedUrl,
-        shareableUrl: exportedUrl,
-        sourceVideoUrl: normalizedSourceUrl,
-        settings: settings ?? null,
-      },
-    });
-
-    return NextResponse.json({ success: true, exportedVideo });
   } catch (error) {
     console.error("Error saving exported video:", error);
     return NextResponse.json({ error: "Failed to save exported video" }, { status: 500 });
