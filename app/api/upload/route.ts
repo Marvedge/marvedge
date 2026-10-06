@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     const safeUserId = session.user.id.replace(/[^\w-]/g, "_");
     const publicId = `${safeUserId}/${Date.now()}`;
 
-    
+
     let uploadResult: UploadApiResponse;
 
     try {
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
-    
+
 
     // FIX: return minimal fields only — never leak api_key/signature/version_id
     return NextResponse.json({

@@ -1,9 +1,9 @@
 # GPU Cost & Concurrency Recommendations
 
-**Document:** `docs/GPU_COST_CONCURRENCY.md`  
-**Task:** Task-00081 — Document final GPU cost-per-minute figures and concurrency recommendations for the backend/infra team  
-**Sprint:** Sprint 1 — V3 AI/ML Core Pipeline  
-**Authors:** Aaditya Agarwal, Ashish Mishra  
+**Document:** `docs/GPU_COST_CONCURRENCY.md`
+**Task:** Task-00081 — Document final GPU cost-per-minute figures and concurrency recommendations for the backend/infra team
+**Sprint:** Sprint 1 — V3 AI/ML Core Pipeline
+**Authors:** Aaditya Agarwal, Ashish Mishra
 **Status:** ✅ Final — validated against live Colab T4 benchmark runs (30 Sep 2026)
 
 ---

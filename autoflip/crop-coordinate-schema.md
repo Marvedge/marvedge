@@ -156,4 +156,3 @@ Where:
 2. **FFmpeg Filter Limit:** A single FFmpeg `crop` filter instance cannot alter output dimensions mid-stream without causing filtergraph errors or downstream encoder bitstream violations.
 3. **Renderer Segmentation Requirement:** Consumers/renderers must segment the timeline at crop-dimension transitions (`trim → crop_i:scale → setsar`) and render each segment appropriately before concatenation (`concat` filter).
 4. **Adapter Scope:** The helper function `buildFfmpegCropFilter()` represents a fixed-dimension crop filter (evaluating coordinates against `targets[0]` dimensions) and must **not** be interpreted as supporting dynamic crop dimensions within a single continuous stream.
-

@@ -74,8 +74,17 @@ export async function uploadEditorVideoFile(
       setTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
     useBlobStore.getState().setCanonicalVideoUrl(null);
-    toast.success(callbacks?.setUploadedFileUrl ? "File uploaded successfully!" : "Video loaded locally");
+    toast.success(
+      callbacks?.setUploadedFileUrl ? "File uploaded successfully!" : "Video loaded locally"
+    );
     return localBlobUrl;
+  }
+
+  // Dedupe: while a Cloudinary upload is in flight, join it instead of
+  // starting a second one (double-click / recorder+editor race). The first
+  // call owns the singleton; late joiners share its outcome.
+  if (activeVideoUploadPromise) {
+    return activeVideoUploadPromise;
   }
 
   // Explicit Cloudinary flow:
@@ -92,7 +101,9 @@ export async function uploadEditorVideoFile(
   const toastId = toast.loading("Uploading video to Cloudinary...");
   callbacks?.setIsUploading?.(true);
 
-  const uploadPromise = (async (): Promise<string | null> => {
+  let uploadPromise: Promise<string | null> = Promise.resolve(null);
+
+  uploadPromise = (async (): Promise<string | null> => {
     try {
       const secureUrl = await uploadVideoToCloudinary({
         file,
@@ -137,14 +148,17 @@ export async function uploadEditorVideoFile(
       return null;
     } finally {
       callbacks?.setIsUploading?.(false);
-      if (activeVideoUploadPromise === uploadPromise) {
-        activeVideoUploadPromise = null;
-      }
     }
   })();
 
   activeVideoUploadPromise = uploadPromise;
-  return uploadPromise;
+  try {
+    return await uploadPromise;
+  } finally {
+    if (activeVideoUploadPromise === uploadPromise) {
+      activeVideoUploadPromise = null;
+    }
+  }
 }
 
 export function useEditorVideoUpload() {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cuesFromWhisperSegments,
   cuesFromWhisperWords,
@@ -8,6 +8,27 @@ import {
 } from "./whisper";
 import type { WhisperSegment, WhisperWord } from "./types";
 import { arabicWhisperResponse } from "./fixtures/whisperSample";
+
+const { createMock, groqInstances } = vi.hoisted(() => ({
+  createMock: vi.fn(),
+  groqInstances: [] as Array<{ apiKey: string }>,
+}));
+
+vi.mock("groq-sdk", () => {
+  class MockGroq {
+    apiKey: string;
+    audio = {
+      transcriptions: {
+        create: (...args: any[]) => createMock(...args),
+      },
+    };
+    constructor(opts: { apiKey: string }) {
+      this.apiKey = opts.apiKey;
+      groqInstances.push(opts);
+    }
+  }
+  return { default: MockGroq };
+});
 
 describe("Whisper word timestamp normalization & clustering (Task-00038)", () => {
   describe("normalizeWhisperWords", () => {
@@ -293,7 +314,7 @@ describe("Whisper word timestamp normalization & clustering (Task-00038)", () =>
       });
 
       it("invokes Groq API with whisper-large-v3, verbose_json, and timestamp granularities", async () => {
-        const mockCreate = vi.fn().mockResolvedValue({
+        createMock.mockResolvedValueOnce({
           task: "transcribe",
           language: "english",
           duration: 2.0,
@@ -308,28 +329,90 @@ describe("Whisper word timestamp normalization & clustering (Task-00038)", () =>
           ],
         });
 
-        const GroqModule = await import("groq-sdk");
-        const GroqClass = GroqModule.default;
-
-        // Mock post method on prototype which handles transcriptions.create
-        const spy = vi.spyOn(GroqClass.prototype as any, "post").mockImplementation(async (path: string, options: any) => {
-          return mockCreate(options?.body);
+        const dummyAudio = Buffer.from("dummy-audio");
+        const result = await transcribeAudioWithWhisper(dummyAudio, {
+          apiKey: "gsk_test_mock_key",
         });
 
-        try {
-          const dummyAudio = Buffer.from("dummy-audio");
-          const result = await transcribeAudioWithWhisper(dummyAudio, {
-            apiKey: "gsk_test_mock_key",
-          });
-
-          expect(mockCreate).toHaveBeenCalled();
-          expect(result.transcript.text).toBe("Mocked transcription response");
-          expect(result.cues).toHaveLength(1);
-          expect(result.cues[0].words).toHaveLength(3);
-        } finally {
-          spy.mockRestore();
-        }
+        expect(createMock).toHaveBeenCalledTimes(1);
+        expect(result.transcript.text).toBe("Mocked transcription response");
+        expect(result.cues).toHaveLength(1);
+        expect(result.cues[0].words).toHaveLength(3);
       });
+    });
+  });
+
+  describe("transcribeAudioWithWhisper configuration", () => {
+    const originalEnvKey = process.env.GROQ_API_KEY;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      groqInstances.length = 0;
+      process.env.GROQ_API_KEY = originalEnvKey;
+    });
+
+    afterEach(() => {
+      process.env.GROQ_API_KEY = originalEnvKey;
+    });
+
+    it("uses process.env.GROQ_API_KEY when no apiKey option is passed", async () => {
+      process.env.GROQ_API_KEY = "env-secret-key-123";
+      createMock.mockResolvedValueOnce({ text: "Transcribed audio", words: [] });
+
+      const { transcript } = await transcribeAudioWithWhisper({} as any);
+
+      expect(groqInstances).toHaveLength(1);
+      expect(groqInstances[0].apiKey).toBe("env-secret-key-123");
+      expect(transcript.text).toBe("Transcribed audio");
+    });
+
+    it("uses options.apiKey override when provided, even if env var exists", async () => {
+      process.env.GROQ_API_KEY = "env-secret-key-123";
+      createMock.mockResolvedValueOnce({ text: "Override key text", words: [] });
+
+      await transcribeAudioWithWhisper({} as any, { apiKey: "custom-override-key-456" });
+
+      expect(groqInstances).toHaveLength(1);
+      expect(groqInstances[0].apiKey).toBe("custom-override-key-456");
+    });
+
+    it("passes transcription options to Groq and returns clustered cues", async () => {
+      createMock.mockResolvedValueOnce({
+        text: "One two",
+        words: [
+          { word: "One", start: 0, end: 0.5 },
+          { word: "two", start: 0.8, end: 1.2 },
+        ],
+      });
+      const dummyFile = { name: "sample.mp3" };
+
+      const result = await transcribeAudioWithWhisper(dummyFile, {
+        apiKey: "test-key",
+        model: "whisper-large-v3",
+        language: "es",
+        prompt: "Business presentation",
+        temperature: 0.3,
+        clustering: { maxGapSeconds: 0.2 },
+      });
+
+      expect(createMock).toHaveBeenCalledWith({
+        file: dummyFile,
+        model: "whisper-large-v3",
+        response_format: "verbose_json",
+        timestamp_granularities: ["word", "segment"],
+        language: "es",
+        prompt: "Business presentation",
+        temperature: 0.3,
+      });
+      expect(result.cues.map((cue) => cue.text)).toEqual(["One", "two"]);
+    });
+
+    it("propagates transcription client errors cleanly", async () => {
+      createMock.mockRejectedValueOnce(new Error("Groq API 429 Too Many Requests"));
+
+      await expect(transcribeAudioWithWhisper({} as any, { apiKey: "test-key" })).rejects.toThrow(
+        "Groq API 429 Too Many Requests"
+      );
     });
   });
 });

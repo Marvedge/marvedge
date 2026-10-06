@@ -1,11 +1,12 @@
-// Server-side ASS subtitle file writer (Task-00038, Task-00067).
+// Server-side ASS subtitle file writer (Task-00038, Task-00082).
 //
 // Node-only: uses fs and path to synchronously write .ass files to disk for
-// render workers and server-side utilities.
+// reframe-worker, cloudrun-worker, and export workers.
 
 import fs from "fs";
 import path from "path";
 import { generateAssContent } from "./ass";
+import type { GenerateAssOptions } from "./ass";
 import type { SubtitleCue, SubtitleStyle } from "./types";
 
 /**
@@ -20,13 +21,11 @@ export function writeAssFile(
   style?: SubtitleStyle,
   language?: string | null,
   filename = "subtitles.ass",
-  options?: any
+  options?: GenerateAssOptions
 ): string {
-  if (!fs.existsSync(destDir)) {
-    fs.mkdirSync(destDir, { recursive: true });
-  }
-  const content = (generateAssContent as any)(cues, width, height, style, language, options);
   const filePath = path.join(destDir, filename);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const content = generateAssContent(cues, width, height, style, language, options);
   fs.writeFileSync(filePath, content, "utf8");
   return filePath;
 }

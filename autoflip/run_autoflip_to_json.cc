@@ -169,9 +169,26 @@ absl::Status RunAutoFlipToJson() {
       continue;
     }
 
-    double timestamp_sec = static_cast<double>(render_frame.timestamp_us()) / 1000000.0;
-    if (timestamp_sec < 0.0) {
-      timestamp_sec = 0.0;
+    // render_frame.timestamp_us() is declared as uint64 in protobuf (autoflip_messages.proto).
+    // In MediaPipe, packet timestamps originate as signed int64_t microseconds. When a video
+    // starts with a negative lead-in timestamp (e.g. B-frame edit lists, as in 06_moving_subject.mp4
+    // with ~ -33,363 us), implicit conversion to uint64_t causes an unsigned underflow wrap-around
+    // (~18,446,744,073,709,518,249).
+    // Safely interpret the uint64_t as signed int64_t to recover the true signed value.
+    const int64_t signed_timestamp_us = static_cast<int64_t>(render_frame.timestamp_us());
+
+    // Negative lead-in timestamps clamp to 0.0 seconds.
+    double timestamp_sec = 0.0;
+    if (signed_timestamp_us > 0) {
+      timestamp_sec = static_cast<double>(signed_timestamp_us) / 1000000.0;
+    }
+
+    // Guard against impossible/corrupted timestamps far exceeding source duration
+    if (video_header.duration > 0.0 &&
+        timestamp_sec > static_cast<double>(video_header.duration) + 10.0) {
+      ABSL_LOG(WARNING) << "Ignoring frame with timestamp exceeding duration: "
+                        << timestamp_sec << " > " << video_header.duration;
+      continue;
     }
 
     // Task-00016 validation invariant: timestamps must be strictly monotonic.
@@ -217,10 +234,14 @@ absl::Status RunAutoFlipToJson() {
     last_timestamp_sec = timestamp_sec;
   }
 
-  // Ensure duration_sec covers the last detected timestamp
+  // Ensure duration_sec covers the source duration accurately.
+  // Protect against uninitialized or runaway timestamps overwriting container duration.
   double duration_sec = static_cast<double>(video_header.duration);
-  if (duration_sec <= 0.0 || (last_timestamp_sec > duration_sec)) {
+  if (duration_sec <= 0.0) {
     duration_sec = (last_timestamp_sec >= 0.0) ? last_timestamp_sec : 0.0;
+  } else if (last_timestamp_sec > duration_sec && (last_timestamp_sec <= duration_sec + 2.0)) {
+    // Allow small container drift extension if reasonable
+    duration_sec = last_timestamp_sec;
   }
 
   const std::string json_output = BuildCropTargetJson(

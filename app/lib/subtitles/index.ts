@@ -133,8 +133,11 @@ export {
   applyRtlBidi,
   escapeAssText,
   escapeFfmpegFilterPath,
+  formatAssKaraokeText,
   formatAssTime,
   generateAssContent,
+  type AssKaraokeOptions,
+  type GenerateAssOptions,
 } from "./ass";
 
 export {

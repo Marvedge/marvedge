@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -28,16 +28,18 @@ const CHUNK_DURATION_SECS = Number(process.env.CHUNK_DURATION_SECS || 10);
 const AVS_VOICEOVER_PREFIX = process.env.AVS_VOICEOVER_PREFIX || "avs-voiceover/";
 // GCS object prefix for AVS time-aligned MP4s (in the processed bucket).
 const AVS_ALIGNED_PREFIX = process.env.AVS_ALIGNED_PREFIX || "avs-aligned/";
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(os.tmpdir(), "marvedge-artifacts");
+fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => {});
 // Frame rate the aligned segments are normalized to so they concat with -c copy.
 const AVS_SYNC_FPS = Number(process.env.AVS_SYNC_FPS || 30);
 // GCS object prefix for WTM webcam-bubble composited MP4s (processed bucket).
 const WTM_COMPOSITE_PREFIX = process.env.WTM_COMPOSITE_PREFIX || "wtm-composite/";
 // BOTH compositor inputs are normalized to this frame rate first: a 60 FPS
 // screen capture overlaid with a 24 FPS webcam otherwise drifts apart over a
-// long recording (PRD §6.4 edge case).
+// long recording (PRD Â§6.4 edge case).
 const WTM_COMPOSITE_FPS = Number(process.env.WTM_COMPOSITE_FPS || 30);
 // Bubble inset from its corner, in px at 1080p and scaled with the source
-// height — mirrors the watermark margin logic in render.js.
+// height â€” mirrors the watermark margin logic in render.js.
 const WTM_BUBBLE_MARGIN_PX = 25;
 // Bubble diameter as a fraction of the source height. Mirrors
 // DEFAULT_WEBCAM.size / WTM_WEBCAM_SIZE_MIN / MAX in app/lib/wtm/webcam.ts.
@@ -65,13 +67,13 @@ const AVS_ALLOWED_VOICES = new Set([
 const HLS_PREFIX = process.env.HLS_PREFIX || "hls/";
 // The rendition ladder, highest first. 1080p is the top rung because the export
 // pipeline never produces more, and a rung above the source is only ever an
-// upscale that costs bitrate and adds nothing — ladderForSource() drops those.
+// upscale that costs bitrate and adds nothing â€” ladderForSource() drops those.
 const HLS_LADDER = [
   { height: 1080, videoKbps: 5000, maxrateKbps: 5350, bufsizeKbps: 7500, audioKbps: 192 },
   { height: 720, videoKbps: 2800, maxrateKbps: 3000, bufsizeKbps: 4200, audioKbps: 128 },
   { height: 480, videoKbps: 1400, maxrateKbps: 1500, bufsizeKbps: 2100, audioKbps: 96 },
 ];
-// Segment length in seconds. Also the GOP length — see the keyframe comment in
+// Segment length in seconds. Also the GOP length â€” see the keyframe comment in
 // packageHlsJob(). Four is the usual compromise: shorter means more requests and
 // more playlist, longer means a slower first frame and coarser ABR reactions.
 const HLS_SEGMENT_SECONDS = Number(process.env.HLS_SEGMENT_SECONDS || 4);
@@ -221,7 +223,7 @@ function ffmpegErrorDetail(err) {
   return (
     lines
       .slice(-2)
-      .join(" — ")
+      .join(" â€” ")
       // The detail is shown to the user, so strip the container's own scratch
       // paths: they mean nothing to them and expose our internals for no gain.
       .replace(/\/tmp\/\S+/g, "the file")
@@ -245,19 +247,19 @@ async function extractAudioWav16kMono(inputPath, wavPath) {
       wavPath,
     ]);
   } catch (err) {
-    // PRD §13, corrupted / incomplete uploads. This is the FIRST thing that
+    // PRD Â§13, corrupted / incomplete uploads. This is the FIRST thing that
     // touches the actual bytes, so a truncated recording, a zero-length upload
-    // or a container ffmpeg cannot demux all land here — and used to reach the
+    // or a container ffmpeg cannot demux all land here â€” and used to reach the
     // user as a wall of ffmpeg banner text, or as a bare "Internal Server
     // Error" once something upstream flattened it.
     const detail = ffmpegErrorDetail(err);
     console.error(`[subtitles] ffmpeg audio extract failed: ${detail}`);
 
-    // A file with no audio stream at all is not a broken file — it is a silent
+    // A file with no audio stream at all is not a broken file â€” it is a silent
     // screen recording, which is an ordinary thing to have. Distinguished from a
     // corrupted file because the fix is completely different: "re-upload it"
     // is useless advice for a video that simply has no sound. (This is NOT the
-    // same case as a video whose audio contains no speech — that one reaches
+    // same case as a video whose audio contains no speech â€” that one reaches
     // Deepgram, returns no cues, and surfaces as "No speech detected".)
     if (/does not contain any stream|Output file (#\d+ )?does not contain/i.test(detail)) {
       throw new Error(
@@ -266,7 +268,7 @@ async function extractAudioWav16kMono(inputPath, wavPath) {
     }
 
     throw new Error(
-      `This video could not be read — it may be corrupted or the upload may be incomplete. Try re-uploading it. (${detail || "ffmpeg could not decode the file"})`,
+      `This video could not be read â€” it may be corrupted or the upload may be incomplete. Try re-uploading it. (${detail || "ffmpeg could not decode the file"})`,
     );
   }
 }
@@ -315,17 +317,17 @@ function cuesFromDeepgramWords(words) {
 
 // SUB PR 5: not every language is on the same Deepgram model.
 //
-// nova-2 — what this worker has always sent, and still the default for every
+// nova-2 â€” what this worker has always sent, and still the default for every
 // language that has always worked. Its request is unchanged.
 //
-// nova-3 — used ONLY for languages nova-2 does not cover. Arabic is the one such
+// nova-3 â€” used ONLY for languages nova-2 does not cover. Arabic is the one such
 // language among the seven the product offers: it is absent from nova-2's
 // language list, and nova-3 added it as its first right-to-left language across
 // 17 regional variants.
 //
 // This mirrors `sttModelFor()` in app/lib/subtitles/languages.ts, which is the
 // source of truth and carries the full reasoning; that module cannot be imported
-// here (this worker is a standalone package). Keep the two in step — the table
+// here (this worker is a standalone package). Keep the two in step â€” the table
 // there is pinned by app/lib/subtitles/languages.test.ts.
 const DEEPGRAM_DEFAULT_MODEL = "nova-2";
 const DEEPGRAM_MODEL_BY_LANGUAGE = {
@@ -428,8 +430,8 @@ async function processSubtitlesJob({ videoUrl, language }) {
     );
     const deepgramMs = Date.now() - dgStart;
 
-    // PRD §7 sets the target PER UNIT OF VIDEO ("< 60s for a 10-minute video"),
-    // so the elapsed times alone cannot be checked against it — you need to know
+    // PRD Â§7 sets the target PER UNIT OF VIDEO ("< 60s for a 10-minute video"),
+    // so the elapsed times alone cannot be checked against it â€” you need to know
     // how long the input was. Derived from the WAV rather than probed: the
     // extract above pins the format at 16 kHz mono PCM s16le, so the byte count
     // divided by 32000 IS the duration, exactly, for the cost of one stat.
@@ -553,25 +555,37 @@ function splitTextForAura(text, limit = AURA_CHAR_LIMIT) {
   return chunks.length > 0 ? chunks : [trimmed];
 }
 
-/** Synthesize one text chunk to an MP3 file via Deepgram Aura `/v1/speak`. */
+/** Synthesize one text chunk to an MP3 file via ElevenLabs. */
 async function synthesizeAuraChunk(text, voiceId, outputPath) {
-  const apiKey = (process.env.DEEPGRAM_API_KEY || "").trim();
+  const apiKey = (process.env.ELEVENLABS_API_KEY || "").trim();
   if (!apiKey) {
-    throw new Error("Missing DEEPGRAM_API_KEY in Cloud Run environment");
+    throw new Error("Missing ELEVENLABS_API_KEY in Cloud Run environment");
   }
-  const params = new URLSearchParams({ model: voiceId, encoding: "mp3" });
-  const resp = await fetch(`https://api.deepgram.com/v1/speak?${params.toString()}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${apiKey}`,
-      "Content-Type": "application/json",
+
+  const elevenVoiceId =
+    (process.env.ELEVENLABS_VOICE_ID || "CwhRBWXzGAHq8TQ4Fs17").trim();
+
+  const resp = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${elevenVoiceId}`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        Accept: "audio/mpeg",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+      }),
     },
-    body: JSON.stringify({ text }),
-  });
+  );
+
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => "");
-    throw new Error(`Deepgram Aura failed (${resp.status}): ${errBody}`);
+    throw new Error(`ElevenLabs TTS failed (${resp.status}): ${errBody}`);
   }
+
   const bytes = Buffer.from(await resp.arrayBuffer());
   await fs.writeFile(outputPath, bytes);
 }
@@ -865,14 +879,14 @@ async function downloadToPath(url, destinationPath) {
 
 /**
  * Time-align the continuous voiceover to the video per step (AVS-2.4):
- *  - T_audio > T_video → freeze the step's last frame for the overflow;
- *  - T_video > T_audio → pad the step's voiceover with trailing silence;
+ *  - T_audio > T_video â†’ freeze the step's last frame for the overflow;
+ *  - T_video > T_audio â†’ pad the step's voiceover with trailing silence;
  * so each step lasts max(T_video, T_audio) and audio/video stay in sync
  * end-to-end. Video segments (with freeze) and audio segments (with silence)
  * are concatenated separately, then the continuous aligned audio is muxed onto
- * the continuous video → ONE aligned MP4 (the source the normal export then
+ * the continuous video â†’ ONE aligned MP4 (the source the normal export then
  * processes). Returns { alignedVideoUrl, duration }. FALLBACK: no voiceover /
- * steps → the original source is returned unchanged.
+ * steps â†’ the original source is returned unchanged.
  */
 async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
   if (!videoUrl) throw new Error("videoUrl is required");
@@ -880,7 +894,7 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
   const stepList = normalizeSyncSteps(steps);
   const timingMap = buildTimingMap(stepTimings);
 
-  // Fallback: nothing to align → hand back the original source untouched.
+  // Fallback: nothing to align â†’ hand back the original source untouched.
   if (!audioUrl || stepList.length === 0 || timingMap.size === 0) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
@@ -1183,7 +1197,10 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
 
-  const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
+  const processedBucket =
+    process.env.STORAGE_PROVIDER === "local"
+      ? "local"
+      : PROCESSED_BUCKET || "local";
   const startedAt = Date.now();
   const workDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "marvedge-avs-dub-"),
@@ -1301,19 +1318,42 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
 
     const duration = round3(await probeDurationSeconds(alignedPath));
 
-    const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
-    await uploadProcessedChunkToGcs({
-      bucketName: processedBucket,
-      objectName,
-      sourcePath: alignedPath,
-    });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (_e) {
-      /* Ignore if UBLA is enforced — signed URL still works. */
+    let alignedVideoUrl;
+    if (
+      process.env.STORAGE_PROVIDER !== "local" &&
+      processedBucket &&
+      processedBucket !== "local"
+    ) {
+      try {
+        const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
+        await uploadProcessedChunkToGcs({
+          bucketName: processedBucket,
+          objectName,
+          sourcePath: alignedPath,
+        });
+        const fileRef = storage.bucket(processedBucket).file(objectName);
+        try {
+          await fileRef.makePublic();
+        } catch (_e) {
+          /* Ignore if UBLA is enforced — signed URL still works. */
+        }
+        alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+      } catch (gcsErr) {
+        console.warn(
+          `[avs-dub] GCS upload failed (${gcsErr.message}). Falling back to local artifact serving.`,
+        );
+      }
     }
-    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+
+    if (!alignedVideoUrl) {
+      const localArtifactName = `aligned-${randomUUID()}.mp4`;
+      const localArtifactPath = path.join(ARTIFACTS_DIR, localArtifactName);
+      await fs.copyFile(alignedPath, localArtifactPath);
+      const port = process.env.PORT || 8080;
+      const host = process.env.WORKER_PUBLIC_URL || `http://localhost:${port}`;
+      alignedVideoUrl = `${host}/artifacts/${localArtifactName}`;
+      console.log(`[avs-dub] Artifact saved locally at ${alignedVideoUrl}`);
+    }
 
     console.log(
       `[avs-dub] steps=${videoSegments.length} stretched=${stretched} ` +
@@ -1386,7 +1426,7 @@ function bubbleOverlayXY(position, margin) {
 
 /**
  * Composite the webcam clip onto the source as a circular corner bubble
- * (WTM-6.4) — a PRE-PASS producing ONE MP4 that the normal chunked export then
+ * (WTM-6.4) â€” a PRE-PASS producing ONE MP4 that the normal chunked export then
  * processes, exactly like /avs-sync. The filter chain:
  *   - `fps` on BOTH inputs first, so a 60 FPS capture + a 24 FPS webcam can't
  *     drift apart;
@@ -1396,14 +1436,14 @@ function bubbleOverlayXY(position, margin) {
  *     as the alpha channel, giving a clean circular cutout;
  *   - `overlay` at the requested corner.
  * The ORIGINAL SOURCE AUDIO is mapped through untouched and the webcam's audio
- * is never mapped — the screen recording already carries mic/tab audio, so
+ * is never mapped â€” the screen recording already carries mic/tab audio, so
  * muxing the webcam too would double it. Returns { compositedVideoUrl,
- * duration }. FALLBACK: no webcam → the source is returned unchanged.
+ * duration }. FALLBACK: no webcam â†’ the source is returned unchanged.
  */
 async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape }) {
   if (!videoUrl) throw new Error("videoUrl is required");
 
-  // Fallback: nothing to composite → hand the source straight back, no ffmpeg.
+  // Fallback: nothing to composite â†’ hand the source straight back, no ffmpeg.
   if (!webcamUrl) {
     return { compositedVideoUrl: videoUrl, duration: 0 };
   }
@@ -1431,7 +1471,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
     const diameter = evenDimension(Math.min(sourceHeight, fraction * sourceHeight));
     const corner = WTM_POSITIONS.includes(position) ? position : "bl";
     const margin = Math.max(1, Math.round((sourceHeight * WTM_BUBBLE_MARGIN_PX) / 1080));
-    // v1 is circle-only (PRD §6.4). An unknown shape degrades to a circle
+    // v1 is circle-only (PRD Â§6.4). An unknown shape degrades to a circle
     // rather than failing the export; the field stays for future shapes.
     const bubbleShape = "circle";
     if (shape && shape !== bubbleShape) {
@@ -1439,7 +1479,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
     }
 
     // `split` is required because the squared webcam feeds BOTH the mask
-    // generator and alphamerge — a filtergraph label can only be consumed once.
+    // generator and alphamerge â€” a filtergraph label can only be consumed once.
     const filterComplex = [
       `[1:v]fps=${WTM_COMPOSITE_FPS},crop='min(iw,ih)':'min(iw,ih)',` +
         `scale=${diameter}:${diameter},setsar=1,split=2[sqa][sqb]`,
@@ -1535,7 +1575,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
 // of this worker writes to, because R2 is where app/lib/r2.ts's `r2://` scheme
 // and public host live and the player has to be able to fetch segments from a
 // public CDN edge. R2 is S3-compatible, so this is @aws-sdk/client-s3 pointed at
-// the account endpoint — the same client construction as app/lib/r2.ts.
+// the account endpoint â€” the same client construction as app/lib/r2.ts.
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "";
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
@@ -1652,8 +1692,8 @@ function hashFile(filePath) {
  * LOAD-BEARING FOR -var_stream_map. That option names the output streams for
  * each variant by index, so a map of `v:0,a:0` against a source with no audio
  * refers to an output stream that does not exist and ffmpeg fails the whole run.
- * A silent screen capture is not exotic — a demo recorded with the mic off is
- * one — so the map is built from what the source actually has.
+ * A silent screen capture is not exotic â€” a demo recorded with the mic off is
+ * one â€” so the map is built from what the source actually has.
  */
 async function probeHasAudio(filePath) {
   try {
@@ -1714,7 +1754,7 @@ async function listFilesRecursive(dir, base = dir) {
  * A player switching rendition can only cut at a segment boundary, and a segment
  * can only start on a keyframe. If the renditions place their keyframes at
  * different timestamps their segments cover different spans of the video, and
- * every quality switch repeats or skips a fraction of a second — the classic
+ * every quality switch repeats or skips a fraction of a second â€” the classic
  * stutter on every switch. Four settings enforce alignment here and all four are
  * needed:
  *
@@ -1737,8 +1777,8 @@ async function listFilesRecursive(dir, base = dir) {
  * in the filtergraph, which is faster and is the only way every scaler sees
  * identical input frames.
  *
- * Output is fMP4 (`-hls_segment_type fmp4`) — an init segment plus .m4s media
- * segments — rather than MPEG-TS. fMP4 is what current players want, shares a
+ * Output is fMP4 (`-hls_segment_type fmp4`) â€” an init segment plus .m4s media
+ * segments â€” rather than MPEG-TS. fMP4 is what current players want, shares a
  * container with the MP4 the rest of the pipeline produces, and avoids the TS
  * muxer's audio-priming quirks.
  *
@@ -1804,7 +1844,7 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     const hashMs = Date.now() - hashStartedAt;
 
     // SLOW-PATH IDEMPOTENCY: we had to download to learn the hash, but the
-    // encode — the expensive part by two orders of magnitude — is still skipped
+    // encode â€” the expensive part by two orders of magnitude â€” is still skipped
     // when the bytes have not changed.
     if (!force) {
       const manifest = await readManifest();
@@ -1828,7 +1868,7 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     const hasAudio = await probeHasAudio(sourcePath);
     const gopFrames = Math.max(1, Math.round(HLS_SEGMENT_SECONDS * HLS_FPS));
 
-    // ONE FLAT DIRECTORY, and %v only ever in a FILENAME — never as a directory
+    // ONE FLAT DIRECTORY, and %v only ever in a FILENAME â€” never as a directory
     // component. ffmpeg derives the master playlist's path from the dirname of
     // the output playlist argument, so an output of `out/%v/index.m3u8` asks it
     // to write the master into a directory literally called "%v". Flat filenames
@@ -1903,13 +1943,13 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
       "vod",
       "-hls_segment_type",
       "fmp4",
-      // Declares that every segment can be decoded independently — true because
+      // Declares that every segment can be decoded independently â€” true because
       // of the keyframe settings above, and what lets a player start on any
       // segment when it switches rendition.
       "-hls_flags",
       "independent_segments",
       // Relative, so ffmpeg resolves it against the variant playlist's own
-      // directory — which is outDir for all three — and %v expands to the
+      // directory â€” which is outDir for all three â€” and %v expands to the
       // `name:` from var_stream_map below. Gives 1080p_init.mp4 etc.
       "-hls_fmp4_init_filename",
       "%v_init.mp4",
@@ -1931,8 +1971,8 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     const duration = round3(await probeDurationSeconds(sourcePath));
 
     // Upload everything produced, preserving the relative layout the playlists
-    // reference. Every URI inside a playlist — the master's variant references,
-    // a variant's init and segment references — is a bare filename, so all of it
+    // reference. Every URI inside a playlist â€” the master's variant references,
+    // a variant's init and segment references â€” is a bare filename, so all of it
     // has to land under the one `hls/<demoId>/` prefix and nowhere else.
     const uploadStartedAt = Date.now();
     const files = await listFilesRecursive(outDir);
@@ -2165,6 +2205,8 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/healthz", (_req, res) => {
   res.status(200).json({ ok: true });
 });
+
+app.use("/artifacts", express.static(ARTIFACTS_DIR));
 
 // shared secret so strangers cannot trigger pricey video jobs.
 // while the secret is missing we only warn, so local runs keep working.

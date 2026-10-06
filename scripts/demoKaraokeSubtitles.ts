@@ -8,7 +8,7 @@ import {
   normalizeWhisperResponse,
   transcribeAudioWithWhisper,
 } from "../app/lib/subtitles/index";
-import { writeAssFile } from "../app/lib/subtitles/ass.server";
+import { writeAssFile } from "../app/lib/subtitles/server";
 import { realisticWhisperVerboseResponse } from "../app/lib/subtitles/fixtures/whisperSample";
 
 /**
