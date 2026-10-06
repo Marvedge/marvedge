@@ -16,9 +16,9 @@ import {
 import {
   escapeFfmpegFilterPath,
   normalizeWhisperResponse,
-  writeAssFile,
   type SubtitleCue,
 } from "../app/lib/subtitles/index";
+import { writeAssFile } from "../app/lib/subtitles/server";
 import { transcribeAudioWithGroq } from "./groqWhisper";
 import { realisticWhisperVerboseResponse } from "../app/lib/subtitles/fixtures/whisperSample";
 import { callMlInference } from "../reframe-worker/client";

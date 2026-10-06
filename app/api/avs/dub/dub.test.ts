@@ -87,10 +87,8 @@ describe("POST /api/avs/dub", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      success: true,
-      jobId: "job-new-123",
-    });
+    const data = await res.json();
+    expect(data).toEqual({ success: true, jobId: "job-new-123" });
     expect(prisma.videoJob.create).toHaveBeenCalled();
     expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
   });

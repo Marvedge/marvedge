@@ -1,4 +1,4 @@
-// Canonical ASS subtitle document generator and file writer (Task-00038).
+// Canonical ASS subtitle document generator (Task-00038, Task-00082).
 //
 // Responsibilities:
 // 1. Assembles valid ASS v4.00+ documents with Script Info, V4+ Styles, and Events.
@@ -7,10 +7,9 @@
 // 4. Safely escapes text (curly braces, newlines, RTL script formatting).
 // 5. Provides cross-platform path escaping (escapeFfmpegFilterPath) compatible with
 //    FFmpeg's filtergraph parser on Windows and Linux.
-// 6. Writes .ass files for libass rendering by reframe-worker and export workers.
+// Pure and isomorphic: no fs, no path, safe for both browser and server.
+// For writing .ass files to disk, use writeAssFile from ./ass.server.
 
-import fs from "fs";
-import path from "path";
 import { isRtlLanguage } from "./languages";
 import { toAssOverrideTags, toAssStyleLine } from "./style";
 import type { SubtitleCue, SubtitleStyle } from "./types";
@@ -275,26 +274,4 @@ export function generateAssContent(
     });
 
   return `${header}\n${lines.join("\n")}\n`;
-}
-
-/**
- * Synchronously writes an ASS subtitle file to disk and returns its absolute path.
- */
-export function writeAssFile(
-  destDir: string,
-  cues: readonly SubtitleCue[],
-  width: number,
-  height: number,
-  style?: SubtitleStyle,
-  language?: string | null,
-  filename = "subtitles.ass",
-  options?: GenerateAssOptions
-): string {
-  if (!fs.existsSync(destDir)) {
-    fs.mkdirSync(destDir, { recursive: true });
-  }
-  const content = generateAssContent(cues, width, height, style, language, options);
-  const filePath = path.join(destDir, filename);
-  fs.writeFileSync(filePath, content, "utf8");
-  return filePath;
 }

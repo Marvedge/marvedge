@@ -7,8 +7,8 @@ import {
   escapeFfmpegFilterPath,
   normalizeWhisperResponse,
   transcribeAudioWithWhisper,
-  writeAssFile,
 } from "../app/lib/subtitles/index";
+import { writeAssFile } from "../app/lib/subtitles/server";
 import { realisticWhisperVerboseResponse } from "../app/lib/subtitles/fixtures/whisperSample";
 
 /**

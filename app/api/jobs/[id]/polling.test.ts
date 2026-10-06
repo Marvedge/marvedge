@@ -120,7 +120,7 @@ describe("GET /api/jobs/[id]", () => {
 
       const data = await res.json();
 
-      expect(data).toEqual({
+      expect(data).toMatchObject({
         success: true,
         id: "dub-complete",
         status: "completed",

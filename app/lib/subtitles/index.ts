@@ -136,7 +136,6 @@ export {
   formatAssKaraokeText,
   formatAssTime,
   generateAssContent,
-  writeAssFile,
   type AssKaraokeOptions,
   type GenerateAssOptions,
 } from "./ass";

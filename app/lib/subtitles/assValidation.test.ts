@@ -10,10 +10,10 @@ import {
   formatAssKaraokeText,
   generateAssContent,
   normalizeWhisperResponse,
-  writeAssFile,
   type SubtitleCue,
   type SubtitleStyle,
 } from "./index";
+import { writeAssFile } from "./ass.server";
 import {
   arabicWhisperResponse,
   realisticWhisperVerboseResponse,
