@@ -34,9 +34,15 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpDubSync: vi.fn(),
 }));
 
-// Mock Next.js after() to invoke the background callback in tests.
+vi.mock("@/app/lib/queue", () => ({
+  dubbingQueue: {
+    add: vi.fn().mockResolvedValue({ id: "bullmq-job-1" }),
+  },
+}));
+
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
+
   return {
     ...actual,
     after: (fn: () => unknown) => {
@@ -49,6 +55,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
+import { dubbingQueue } from "@/app/lib/queue";
 import { POST, runDubAlignment } from "./route";
 
 function makeDubRequest(body: unknown): NextRequest {
@@ -75,6 +82,7 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       expect(res.status).toBe(404);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
     it("returns 401 when session is missing", async () => {
@@ -85,6 +93,7 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       expect(res.status).toBe(401);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
     it("returns 404 when user is not found", async () => {
@@ -96,19 +105,27 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       expect(res.status).toBe(404);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
     it("allows a signed-in FREE user to create a dubbing job", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
-      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "FREE" } as never);
-      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-free" } as never);
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({
+        id: "u-1",
+        plan: "FREE",
+      } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({
+        id: "job-free",
+      } as never);
 
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ success: true, jobId: "job-free" });
+      expect(await res.json()).toEqual({
+        success: true,
+        jobId: "job-free",
+      });
       expect(prisma.videoJob.create).toHaveBeenCalledWith({
         data: {
           userId: "u-1",
@@ -118,11 +135,15 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
           jobData: { kind: "AVS_DUB" },
         },
       });
+      expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
     });
 
     it("returns 400 when videoUrl is missing", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
-      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "PRO" } as never);
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({
+        id: "u-1",
+        plan: "PRO",
+      } as never);
 
       const req = makeDubRequest({});
       const res = await POST(req);
@@ -131,11 +152,15 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       const json = await res.json();
       expect(json.error).toBe("Missing videoUrl");
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
     it("returns 404 when demoId belongs to a different user", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
-      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "PRO" } as never);
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({
+        id: "u-1",
+        plan: "PRO",
+      } as never);
       vi.mocked(prisma.demo.findUnique).mockResolvedValue({
         id: "demo-1",
         userId: "u-other",
@@ -149,13 +174,18 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       expect(res.status).toBe(404);
       expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
     it("creates a VideoJob with kind AVS_DUB and returns jobId on valid request", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
-      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1", plan: "PRO" } as never);
-      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-dub-123" } as never);
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({
+        id: "u-1",
+        plan: "PRO",
+      } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({
+        id: "job-dub-123",
+      } as never);
 
       const req = makeDubRequest({
         videoUrl: "gs://bucket/reframed_captioned.mp4",
@@ -166,10 +196,12 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json).toEqual({ success: true, jobId: "job-dub-123" });
 
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: true,
+        jobId: "job-dub-123",
+      });
       expect(prisma.videoJob.create).toHaveBeenCalledWith({
         data: {
           userId: "u-1",
@@ -179,6 +211,23 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
           jobData: { kind: "AVS_DUB" },
         },
       });
+      expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
+      expect(dubbingQueue.add).toHaveBeenCalledWith(
+        "avs-dub",
+        {
+          jobId: "job-dub-123",
+          videoUrl: "https://storage.googleapis.com/bucket/reframed_captioned.mp4",
+          dubUrl: "https://example.com/dub.mp3",
+          steps: [{ id: "step-1", index: 0, startTime: 0, endTime: 5 }],
+          dubTimings: [{ stepId: "step-1", start: 0, end: 5.2 }],
+          sourceDuration: 10,
+          userId: "u-1",
+          demoId: null,
+        },
+        {
+          jobId: "job-dub-123",
+        }
+      );
     });
   });
 
@@ -192,7 +241,9 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     };
 
     it("Scenario 1: Successful dubbing produces aligned output with fallback=false", async () => {
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        status: "PENDING",
+      } as never);
       vi.mocked(invokeGcpDubSync).mockResolvedValue({
         alignedVideoUrl: "https://storage.googleapis.com/bucket/avs-dub/aligned-output.mp4",
         duration: 10.2,
@@ -206,9 +257,11 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
         steps: defaultInput.steps,
         dubTimings: defaultInput.dubTimings,
       });
-
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
-        where: { id: "job-dub-1", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          id: "job-dub-1",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -225,7 +278,9 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     });
 
     it("Scenario 2: Missing dub input gracefully completes with input video and fallback=true", async () => {
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        status: "PENDING",
+      } as never);
 
       await runDubAlignment("job-dub-2", {
         ...defaultInput,
@@ -233,9 +288,11 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       });
 
       expect(invokeGcpDubSync).not.toHaveBeenCalled();
-
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
-        where: { id: "job-dub-2", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          id: "job-dub-2",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -254,7 +311,9 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     });
 
     it("Scenario 3: Cloud Run worker failure gracefully degrades to COMPLETED with fallback metadata", async () => {
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        status: "PENDING",
+      } as never);
       vi.mocked(invokeGcpDubSync).mockRejectedValue(
         new Error("FFmpeg process failed with exit code 1: Invalid audio stream")
       );
@@ -262,7 +321,10 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       await runDubAlignment("job-dub-3", defaultInput);
 
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
-        where: { id: "job-dub-3", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          id: "job-dub-3",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -281,7 +343,9 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     });
 
     it("Scenario 4: Transient retry exhaustion gracefully degrades to COMPLETED with fallback metadata", async () => {
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        status: "PENDING",
+      } as never);
       vi.mocked(invokeGcpDubSync).mockRejectedValue(
         new Error("GCP worker failed after multiple retries")
       );
@@ -289,7 +353,10 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       await runDubAlignment("job-dub-4", defaultInput);
 
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
-        where: { id: "job-dub-4", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          id: "job-dub-4",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -308,7 +375,9 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     });
 
     it("Scenario 5: gs:// URL input is normalized to HTTPS URL in fallback metadata and exportedUrl", async () => {
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        status: "PENDING",
+      } as never);
       vi.mocked(invokeGcpDubSync).mockRejectedValue(new Error("Worker timeout"));
 
       await runDubAlignment("job-dub-5", {
@@ -319,7 +388,10 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       const expectedHttpUrl = "https://storage.googleapis.com/my-bucket/reframed_clip.mp4";
 
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
-        where: { id: "job-dub-5", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          id: "job-dub-5",
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -338,7 +410,9 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     });
 
     it("Scenario 6: Terminal-state protection ignores execution if job is already COMPLETED or CANCELLED", async () => {
-      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "COMPLETED" } as never);
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+        status: "COMPLETED",
+      } as never);
 
       await runDubAlignment("job-dub-6", defaultInput);
 
