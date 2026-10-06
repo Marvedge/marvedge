@@ -139,6 +139,9 @@ async function runSyntheticDemo(outputDir: string): Promise<void> {
   console.log(`Task-00067 Karaoke Demo
 Mode: synthetic fixture
 
+Provider: Groq (synthetic fixture)
+Model: whisper-large-v3
+
 Whisper words: ${wordCount}
 Subtitle cues: ${cueCount}
 
@@ -201,9 +204,9 @@ async function runRealVideoDemo(inputVideoPath: string, outputDir: string): Prom
   // 3. Load environment variables (.env.local, .env) following standard Next.js precedence
   loadEnvConfig(process.cwd());
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.GROQ_API_KEY) {
     console.error("Transcription: FAIL");
-    console.error("Error: Missing OPENAI_API_KEY for Whisper transcription. Please configure OPENAI_API_KEY in your environment or .env.local file.");
+    console.error("Error: Missing GROQ_API_KEY for Groq Whisper transcription. Please configure GROQ_API_KEY in your environment or .env.local file.");
     process.exit(1);
   }
 
@@ -371,11 +374,14 @@ async function runRealVideoDemo(inputVideoPath: string, outputDir: string): Prom
   console.log(`Task-00067 Karaoke Demo
 Mode: real video
 
+Provider: Groq
+Model: whisper-large-v3
+
 Input:
   ${inputVideoPath}
 
 Transcription:
-  Whisper PASS
+  Groq Whisper PASS
 
 Whisper words: ${wordCount}
 Subtitle cues: ${cueCount}
