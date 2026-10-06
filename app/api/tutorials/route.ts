@@ -5,6 +5,9 @@ import { prisma } from "@/app/lib/prisma";
 import cloudinary from "@/app/lib/cloudinary";
 import type { UploadApiOptions } from "cloudinary";
 
+const TUTORIAL_SAVE_ERROR = "Failed to save tutorial";
+const TUTORIAL_FETCH_ERROR = "Failed to fetch tutorials";
+
 interface SlideData {
   title: string;
   description: string;
@@ -28,6 +31,7 @@ interface TutorialPayload {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -102,15 +106,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(tutorial);
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to save tutorial";
+    // Retain diagnostic details in server logs without exposing Prisma,
+    // database or infrastructure information to the client.
     console.error("Tutorial save error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+
+    return NextResponse.json({ error: TUTORIAL_SAVE_ERROR }, { status: 500 });
   }
 }
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -131,8 +138,10 @@ export async function GET() {
 
     return NextResponse.json(tutorials);
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to fetch tutorials";
+    // Retain diagnostic details in server logs without exposing Prisma,
+    // database or infrastructure information to the client.
     console.error("Tutorial fetch error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+
+    return NextResponse.json({ error: TUTORIAL_FETCH_ERROR }, { status: 500 });
   }
 }

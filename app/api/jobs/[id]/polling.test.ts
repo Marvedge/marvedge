@@ -27,6 +27,7 @@ function createPollingRequest(jobId: string): {
   const req = new NextRequest(`http://localhost:3000/api/jobs/${jobId}`, {
     method: "GET",
   });
+
   return {
     req,
     context: { params: Promise.resolve({ id: jobId }) },
@@ -38,9 +39,13 @@ describe("GET /api/jobs/[id]", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
     vi.mocked(getServerSession).mockResolvedValue({
-      user: { id: mockUserId, email: "user@example.com" },
-    } as any);
+      user: {
+        id: mockUserId,
+        email: "user@example.com",
+      },
+    } as never);
   });
 
   describe("Authentication and ownership", () => {
@@ -49,7 +54,9 @@ describe("GET /api/jobs/[id]", () => {
 
       const { req, context } = createPollingRequest("job-1");
       const res = await GET(req, context);
+
       expect(res.status).toBe(401);
+
       const data = await res.json();
       expect(data.error).toBe("Unauthorized");
     });
@@ -59,7 +66,9 @@ describe("GET /api/jobs/[id]", () => {
 
       const { req, context } = createPollingRequest("job-404");
       const res = await GET(req, context);
+
       expect(res.status).toBe(404);
+
       const data = await res.json();
       expect(data.error).toBe("Job not found");
     });
@@ -73,11 +82,13 @@ describe("GET /api/jobs/[id]", () => {
         exportedUrl: null,
         error: null,
         jobData: null,
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("job-other");
       const res = await GET(req, context);
+
       expect(res.status).toBe(403);
+
       const data = await res.json();
       expect(data.error).toBe("Forbidden");
     });
@@ -85,6 +96,13 @@ describe("GET /api/jobs/[id]", () => {
 
   describe("AVS_DUB polling", () => {
     it("returns alignedVideoUrl and duration for completed AVS_DUB job", async () => {
+      const jobData = {
+        kind: "AVS_DUB",
+        alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-dub.mp4",
+        duration: 35.5,
+        fallback: false,
+      };
+
       vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
         id: "dub-complete",
         userId: mockUserId,
@@ -92,35 +110,30 @@ describe("GET /api/jobs/[id]", () => {
         progress: 100,
         exportedUrl: null,
         error: null,
-        jobData: {
-          kind: "AVS_DUB",
-          alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-dub.mp4",
-          duration: 35.5,
-          fallback: false,
-        },
-      } as any);
+        jobData,
+      } as never);
 
       const { req, context } = createPollingRequest("dub-complete");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data).toMatchObject({
         success: true,
         id: "dub-complete",
-        state: "completed",
         status: "completed",
+        state: "completed",
         progress: 100,
+        exportedUrl: null,
+        error: null,
+        jobData,
+        fallback: false,
+        subtitles: null,
         aligned: {
           alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-dub.mp4",
           duration: 35.5,
-        },
-        fallback: false,
-        jobData: {
-          kind: "AVS_DUB",
-          alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-dub.mp4",
-          duration: 35.5,
-          fallback: false,
         },
       });
     });
@@ -136,13 +149,15 @@ describe("GET /api/jobs/[id]", () => {
         jobData: {
           kind: "AVS_DUB",
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("dub-pending");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data.success).toBe(true);
       expect(data.state).toBe("waiting");
       expect(data.progress).toBe(0);
@@ -163,13 +178,15 @@ describe("GET /api/jobs/[id]", () => {
         jobData: {
           kind: "AVS_DUB",
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("dub-processing");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data.state).toBe("active");
       expect(data.progress).toBe(30);
     });
@@ -185,13 +202,15 @@ describe("GET /api/jobs/[id]", () => {
         jobData: {
           kind: "AVS_DUB",
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("dub-failed");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data.state).toBe("failed");
       expect(data.error).toBe("Dub-sync alignment failed");
     });
@@ -207,10 +226,11 @@ describe("GET /api/jobs/[id]", () => {
         jobData: {
           kind: "AVS_DUB",
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("dub-cancelled");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
@@ -232,13 +252,15 @@ describe("GET /api/jobs/[id]", () => {
           alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-sync.mp4",
           duration: 18.2,
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("sync-job");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data.aligned).toEqual({
         alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-sync.mp4",
         duration: 18.2,
@@ -247,7 +269,15 @@ describe("GET /api/jobs/[id]", () => {
     });
 
     it("returns subtitles for SUBTITLES job", async () => {
-      const mockCues = [{ id: "1", start: 0, end: 2, text: "Hello" }];
+      const mockCues = [
+        {
+          id: "1",
+          start: 0,
+          end: 2,
+          text: "Hello",
+        },
+      ];
+
       vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
         id: "sub-job",
         userId: mockUserId,
@@ -259,13 +289,15 @@ describe("GET /api/jobs/[id]", () => {
           kind: "SUBTITLES",
           subtitles: mockCues,
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("sub-job");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data.subtitles).toEqual(mockCues);
       expect(data.aligned).toBeUndefined();
     });
@@ -281,13 +313,15 @@ describe("GET /api/jobs/[id]", () => {
         jobData: {
           segments: [],
         },
-      } as any);
+      } as never);
 
       const { req, context } = createPollingRequest("export-job");
       const res = await GET(req, context);
+
       expect(res.status).toBe(200);
 
       const data = await res.json();
+
       expect(data.exportedUrl).toBe("https://storage.googleapis.com/bucket/output.mp4");
       expect(data.subtitles).toBeNull();
       expect(data.aligned).toBeUndefined();

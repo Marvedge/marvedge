@@ -46,12 +46,12 @@ describe("POST /api/avs/dub", () => {
 
     vi.mocked(getServerSession).mockResolvedValue({
       user: { id: mockUserId, email: "pro@example.com" },
-    } as any);
+    } as never);
 
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: mockUserId,
       plan: "PRO",
-    } as any);
+    } as never);
 
     vi.mocked(prisma.videoJob.create).mockResolvedValue({
       id: "job-new-123",
@@ -60,7 +60,7 @@ describe("POST /api/avs/dub", () => {
       videoUrl: "https://storage.googleapis.com/bucket/video.mp4",
       status: "PENDING",
       jobData: { kind: "AVS_DUB" },
-    } as any);
+    } as never);
   });
 
   it("returns 404 when AVS feature flag is disabled", async () => {
@@ -77,17 +77,20 @@ describe("POST /api/avs/dub", () => {
     expect(res.status).toBe(401);
   });
 
-  it("accepts an authenticated user with a FREE plan", async () => {
+  it("allows a signed-in FREE user to create a dubbing job", async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: mockUserId,
       plan: "FREE",
-    } as any);
+    } as never);
 
     const req = createDubRequest({ videoUrl: "https://example.com/v.mp4" });
     const res = await POST(req);
+
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data).toEqual({ success: true, jobId: "job-new-123" });
+    expect(prisma.videoJob.create).toHaveBeenCalled();
+    expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
   });
 
   it("returns 400 when videoUrl is missing", async () => {
@@ -102,7 +105,7 @@ describe("POST /api/avs/dub", () => {
     vi.mocked(prisma.demo.findUnique).mockResolvedValue({
       id: "demo-other",
       userId: "someone-else",
-    } as any);
+    } as never);
 
     const req = createDubRequest({
       videoUrl: "https://example.com/v.mp4",
@@ -118,7 +121,7 @@ describe("POST /api/avs/dub", () => {
     vi.mocked(prisma.demo.findUnique).mockResolvedValue({
       id: "demo-456",
       userId: mockUserId,
-    } as any);
+    } as never);
 
     const requestPayload = {
       videoUrl: "gs://raw-bucket/source.mp4",
@@ -142,18 +145,16 @@ describe("POST /api/avs/dub", () => {
     const data = await res.json();
     expect(data).toEqual({ success: true, jobId: "job-new-123" });
 
-    // VideoJob created in DB with PENDING status
     expect(prisma.videoJob.create).toHaveBeenCalledWith({
       data: {
         userId: mockUserId,
         demoId: "demo-456",
-        videoUrl: "https://storage.googleapis.com/raw-bucket/source.mp4", // normalized gs:// -> https://
+        videoUrl: "https://storage.googleapis.com/raw-bucket/source.mp4",
         status: "PENDING",
         jobData: { kind: "AVS_DUB" },
       },
     });
 
-    // Enqueued into BullMQ dubbing-processing
     expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
     expect(dubbingQueue.add).toHaveBeenCalledWith(
       "avs-dub",
