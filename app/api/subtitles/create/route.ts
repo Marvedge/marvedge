@@ -277,9 +277,6 @@ export async function POST(req: NextRequest) {
         })
         .catch(() => {});
     }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

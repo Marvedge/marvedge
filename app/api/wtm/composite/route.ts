@@ -106,9 +106,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("WTM composite failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Compositing failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Compositing failed" }, { status: 500 });
   }
 }
