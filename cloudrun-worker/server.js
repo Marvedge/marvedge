@@ -2551,4 +2551,3 @@ app.post("/merge", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Cloud Run worker listening on :${PORT}`);
 });
-

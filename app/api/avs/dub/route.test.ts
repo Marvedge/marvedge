@@ -40,17 +40,6 @@ vi.mock("@/app/lib/queue", () => ({
   },
 }));
 
-vi.mock("next/server", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("next/server")>();
-
-  return {
-    ...actual,
-    after: (fn: () => unknown) => {
-      fn();
-    },
-  };
-});
-
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
@@ -418,6 +407,49 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
 
       expect(invokeGcpDubSync).not.toHaveBeenCalled();
       expect(prisma.videoJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("BUG-002 Regression: worker fetch failure records a COMPLETED fallback", async () => {
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({ status: "PENDING" } as never);
+
+      vi.mocked(prisma.videoJob.updateMany)
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 1 });
+      vi.mocked(invokeGcpDubSync).mockRejectedValue(new Error("fetch failed"));
+
+      await runDubAlignment("job-dub-regression", {
+        videoUrl: "https://storage.googleapis.com/bucket/source.mp4",
+        dubUrl: "https://example.com/dub.mp3",
+        steps: [{ id: "step-1", index: 0, startTime: 0, endTime: 5 }],
+        dubTimings: [{ stepId: "step-1", start: 0, end: 5.2 }],
+        sourceDuration: 10,
+      });
+
+      const updateCalls = vi.mocked(prisma.videoJob.updateMany).mock.calls;
+      expect(updateCalls).toHaveLength(2);
+
+      expect(updateCalls[0][0]).toEqual({
+        where: { id: "job-dub-regression", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        data: { status: "PROCESSING", progress: 20 },
+      });
+
+      expect(updateCalls[1][0]).toEqual({
+        where: { id: "job-dub-regression", status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          exportedUrl: "https://storage.googleapis.com/bucket/source.mp4",
+          jobData: {
+            kind: "AVS_DUB",
+            alignedVideoUrl: "https://storage.googleapis.com/bucket/source.mp4",
+            duration: 10,
+            fallback: true,
+            fallbackStage: "DUBBING",
+            fallbackReason: "fetch failed",
+          },
+          error: null,
+        },
+      });
     });
   });
 });
