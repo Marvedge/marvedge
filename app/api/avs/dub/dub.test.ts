@@ -77,7 +77,7 @@ describe("POST /api/avs/dub", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 403 when user plan is FREE", async () => {
+  it("accepts an authenticated user with a FREE plan", async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: mockUserId,
       plan: "FREE",
@@ -85,9 +85,9 @@ describe("POST /api/avs/dub", () => {
 
     const req = createDubRequest({ videoUrl: "https://example.com/v.mp4" });
     const res = await POST(req);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.error).toContain("PRO and ENTERPRISE");
+    expect(data).toEqual({ success: true, jobId: "job-new-123" });
   });
 
   it("returns 400 when videoUrl is missing", async () => {

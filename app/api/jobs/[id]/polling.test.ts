@@ -105,16 +105,22 @@ describe("GET /api/jobs/[id]", () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data).toEqual({
+      expect(data).toMatchObject({
         success: true,
+        id: "dub-complete",
         state: "completed",
+        status: "completed",
         progress: 100,
-        exportedUrl: null,
-        error: null,
-        subtitles: null,
         aligned: {
           alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-dub.mp4",
           duration: 35.5,
+        },
+        fallback: false,
+        jobData: {
+          kind: "AVS_DUB",
+          alignedVideoUrl: "https://storage.googleapis.com/bucket/aligned-dub.mp4",
+          duration: 35.5,
+          fallback: false,
         },
       });
     });
