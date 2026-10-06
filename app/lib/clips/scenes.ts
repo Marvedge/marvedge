@@ -22,19 +22,22 @@ export interface SceneDetectionOptions {
   execFile?: typeof execFile;
 }
 
+function fullDurationScene(totalDuration: number): SceneBoundary[] {
+  return Number.isFinite(totalDuration) && totalDuration > 0
+    ? [{ startTime: 0, endTime: totalDuration }]
+    : [];
+}
+
 /**
  * Parses stderr output from FFmpeg's `select='gt(scene,threshold)',showinfo` filter.
  *
  * Extracts PTS timestamps of detected scene changes and returns contiguous SceneBoundary spans.
  */
-export function parseFfmpegSceneLog(
-  logText: string,
-  totalDuration = 0
-): SceneBoundary[] {
+export function parseFfmpegSceneLog(logText: string, totalDuration = 0): SceneBoundary[] {
+  const safeDuration = Number.isFinite(totalDuration) && totalDuration > 0 ? totalDuration : 0;
+
   if (!logText || typeof logText !== "string") {
-    return totalDuration > 0
-      ? [{ startTime: 0, endTime: totalDuration }]
-      : [];
+    return fullDurationScene(safeDuration);
   }
 
   // Look for showinfo pts_time lines: e.g. "pts_time:14.500" or "pts_time: 14.50"
@@ -54,15 +57,10 @@ export function parseFfmpegSceneLog(
   }
 
   if (cutTimes.length === 0) {
-    return totalDuration > 0
-      ? [{ startTime: 0, endTime: Math.max(0.1, totalDuration) }]
-      : [];
+    return fullDurationScene(safeDuration);
   }
 
-  const effectiveDuration =
-    totalDuration > 0
-      ? totalDuration
-      : Math.max(...cutTimes) + 5.0;
+  const effectiveDuration = safeDuration > 0 ? safeDuration : Math.max(...cutTimes) + 5.0;
 
   const scenes: SceneBoundary[] = [];
   let currentStart = 0;
@@ -85,7 +83,7 @@ export function parseFfmpegSceneLog(
     });
   }
 
-  return scenes;
+  return scenes.length > 0 ? scenes : fullDurationScene(safeDuration);
 }
 
 /**
@@ -98,27 +96,23 @@ export async function detectSceneCuts(
 ): Promise<SceneBoundary[]> {
   const threshold = options.threshold ?? 0.3;
   const timeoutMs = options.timeoutMs ?? 60000;
-  const totalDuration = options.totalDuration ?? 0;
+  const totalDuration =
+    typeof options.totalDuration === "number" &&
+    Number.isFinite(options.totalDuration) &&
+    options.totalDuration > 0
+      ? options.totalDuration
+      : 0;
   const ffmpegBin = options.ffmpegPath || ffmpegStatic;
 
   if (!ffmpegBin) {
-    // Fallback if no binary available
-    return totalDuration > 0
-      ? [{ startTime: 0, endTime: totalDuration }]
-      : [];
+    return fullDurationScene(totalDuration);
+  }
+  if (typeof videoPath !== "string" || !videoPath.trim()) {
+    return fullDurationScene(totalDuration);
   }
 
   const filterArg = `select='gt(scene,${threshold})',showinfo`;
-  const args = [
-    "-nostdin",
-    "-i",
-    videoPath,
-    "-filter:v",
-    filterArg,
-    "-f",
-    "null",
-    "-",
-  ];
+  const args = ["-nostdin", "-i", videoPath, "-filter:v", filterArg, "-f", "null", "-"];
 
   const runExecFile = options.execFile ?? execFile;
 
@@ -128,16 +122,16 @@ export async function detectSceneCuts(
       args,
       { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
       (err, stdout, stderr) => {
+        if (err) {
+          console.warn("[scene-detection] FFmpeg failed; using the duration fallback:", err);
+          resolve(fullDurationScene(totalDuration));
+          return;
+        }
+
         // FFmpeg writes filter output to stderr
         const output = `${stdout || ""}\n${stderr || ""}`;
         const scenes = parseFfmpegSceneLog(output, totalDuration);
-
-        // Even on execution failure, return fallback scene span rather than crashing
-        if (scenes.length === 0 && totalDuration > 0) {
-          resolve([{ startTime: 0, endTime: totalDuration }]);
-        } else {
-          resolve(scenes);
-        }
+        resolve(scenes);
       }
     );
   });

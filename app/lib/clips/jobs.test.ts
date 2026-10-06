@@ -88,6 +88,35 @@ describe("runClipScoringJob (Task-00050)", () => {
     expect(progressMock).toHaveBeenCalledWith(100);
   });
 
+  it("passes the known video duration to scene detection", async () => {
+    const sceneDetectionMock = vi.fn().mockResolvedValue([{ startTime: 0, endTime: 30 }]);
+    const scoringMock = vi.fn().mockResolvedValue([sampleCandidate]);
+    const videoPath = "C:\\videos\\sample.mp4";
+
+    await runClipScoringJob(
+      {
+        jobId: "job-scenes-1",
+        videoUrl: videoPath,
+        duration: 30,
+        cues: [{ start: 0, end: 30, text: "Sample transcript" }],
+      },
+      mockDb,
+      {
+        sceneDetectionFn: sceneDetectionMock,
+        scoringFn: scoringMock,
+      }
+    );
+
+    expect(sceneDetectionMock).toHaveBeenCalledWith(videoPath, {
+      totalDuration: 30,
+    });
+    expect(scoringMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scenes: [{ startTime: 0, endTime: 30 }],
+      })
+    );
+  });
+
   it("marks VideoJob as FAILED and rethrows error when scoringFn fails", async () => {
     const scoringError = new Error("OpenAI rate limit exceeded");
     const scoringMock = vi.fn().mockRejectedValue(scoringError);
@@ -102,6 +131,8 @@ describe("runClipScoringJob (Task-00050)", () => {
         mockDb,
         {
           scoringFn: scoringMock,
+          attemptsMade: 2,
+          maxAttempts: 3,
         }
       )
     ).rejects.toThrow("OpenAI rate limit exceeded");
@@ -113,6 +144,33 @@ describe("runClipScoringJob (Task-00050)", () => {
         error: "OpenAI rate limit exceeded",
       },
     });
+  });
+
+  it("does not persist FAILED on an intermediate scoring attempt", async () => {
+    const scoringError = new Error("OpenAI rate limit exceeded");
+    const scoringMock = vi.fn().mockRejectedValue(scoringError);
+
+    await expect(
+      runClipScoringJob(
+        {
+          jobId: "job-retry-1",
+          duration: 30,
+          cues: [{ start: 0, end: 10, text: "Sample" }],
+        },
+        mockDb,
+        {
+          scoringFn: scoringMock,
+          attemptsMade: 0,
+          maxAttempts: 3,
+        }
+      )
+    ).rejects.toBe(scoringError);
+
+    expect(mockDb.videoJob.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "FAILED" }),
+      })
+    );
   });
 
   it("marks VideoJob as FAILED when no transcript cues are found", async () => {

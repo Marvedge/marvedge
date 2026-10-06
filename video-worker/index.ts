@@ -11,15 +11,12 @@ import path from "path";
 import os from "os";
 import { execFileSync } from "child_process";
 import axios from "axios";
-import {
-  createDubbingJob,
-  waitForDubbingCompletion,
-} from "../app/lib/elevenlabs/dubbing";
+import { createDubbingJob, waitForDubbingCompletion } from "../app/lib/elevenlabs/dubbing";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
-import {
-  postJobCallbackWithRetry,
-  processDubbingJob,
-} from "../app/lib/avs/dubbingProcessor";
+import { postJobCallbackWithRetry, processDubbingJob } from "../app/lib/avs/dubbingProcessor";
+import { runSubtitleJobWithRetry } from "./subtitleRetry";
+import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
+import { updateCompletedJobProgress } from "./completedJobProgress";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 // Load env from common locations (video-worker/.env and parent app .env).
@@ -821,6 +818,9 @@ const worker = new Worker(
   async (job: Job) => {
     if (job.name === "clip-scoring") {
       return await runClipScoringJob(job.data, prisma, {
+        attemptsMade: job.attemptsMade,
+        maxAttempts:
+          typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1,
         updateProgress: async (progress: number) => {
           await job.updateProgress(progress);
         },
@@ -1477,84 +1477,97 @@ const subtitleWorker = new Worker(
   "subtitle-processing",
   async (job: Job) => {
     const { jobId, videoUrl, demoId, language } = job.data;
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `stt-${jobId}-`));
-    const inputPath = path.join(tempDir, "input.webm");
-    const wavPath = path.join(tempDir, "audio.wav");
+    const maxAttempts =
+      typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
+    let tempDir: string | undefined;
 
     try {
-      await withRetry(() =>
-        prisma.videoJob.update({
-          where: { id: jobId },
-          data: { status: "PROCESSING", progress: 5 },
-        })
-      );
-      await job.updateProgress(5);
+      await runSubtitleJobWithRetry({
+        jobId,
+        attemptsMade: job.attemptsMade,
+        maxAttempts,
+        process: async () => {
+          tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `stt-${jobId}-`));
+          const inputPath = path.join(tempDir, "input.webm");
+          const wavPath = path.join(tempDir, "audio.wav");
 
-      await downloadVideo(videoUrl, inputPath);
-      await job.updateProgress(25);
-      await withRetry(() =>
-        prisma.videoJob.update({
-          where: { id: jobId },
-          data: { progress: 25 },
-        })
-      );
+          await withRetry(() =>
+            prisma.videoJob.update({
+              where: { id: jobId },
+              data: { status: "PROCESSING", progress: 5 },
+            })
+          );
+          await job.updateProgress(5);
 
-      // Probe for best-effort mic stream selection.
-      const meta = await new Promise<any>((res, rej) => {
-        ffmpeg.ffprobe(inputPath, (err, m) => (err ? rej(err) : res(m)));
-      });
-      const micIdx = pickBestMicAudioStreamIndex(meta);
+          await downloadVideo(videoUrl, inputPath);
+          await job.updateProgress(25);
+          await withRetry(() =>
+            prisma.videoJob.update({
+              where: { id: jobId },
+              data: { progress: 25 },
+            })
+          );
 
-      await extractAudioWav16kMono(inputPath, wavPath, micIdx);
-      await job.updateProgress(55);
-      await withRetry(() =>
-        prisma.videoJob.update({
-          where: { id: jobId },
-          data: { progress: 55 },
-        })
-      );
+          // Probe for best-effort mic stream selection.
+          const meta = await new Promise<any>((res, rej) => {
+            ffmpeg.ffprobe(inputPath, (err, m) => (err ? rej(err) : res(m)));
+          });
+          const micIdx = pickBestMicAudioStreamIndex(meta);
 
-      const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+          await extractAudioWav16kMono(inputPath, wavPath, micIdx);
+          await job.updateProgress(55);
+          await withRetry(() =>
+            prisma.videoJob.update({
+              where: { id: jobId },
+              data: { progress: 55 },
+            })
+          );
 
-      if (demoId) {
-        await prisma.demo.update({
-          where: { id: demoId },
-          data: {
-            subtitles: {
-              provider: "deepgram",
-              language: String(language || "multi"),
-              cues,
+          const cues = await transcribeWithDeepgram(wavPath, String(language || "multi"));
+
+          if (demoId) {
+            await prisma.demo.update({
+              where: { id: demoId },
+              data: {
+                subtitles: {
+                  provider: "deepgram",
+                  language: String(language || "multi"),
+                  cues,
+                },
+              },
+            });
+          }
+
+          await prisma.videoJob.update({
+            where: { id: jobId },
+            data: {
+              status: "COMPLETED",
+              progress: 100,
+              jobData: {
+                kind: "SUBTITLES",
+                provider: "deepgram",
+                language: String(language || "multi"),
+                subtitles: cues,
+              },
             },
-          },
-        });
-      }
-
-      await prisma.videoJob.update({
-        where: { id: jobId },
-        data: {
-          status: "COMPLETED",
-          progress: 100,
-          jobData: {
-            kind: "SUBTITLES",
-            provider: "deepgram",
-            language: String(language || "multi"),
-            subtitles: cues,
-          },
+          });
+          await updateCompletedJobProgress(jobId, "Subtitle", () => job.updateProgress(100));
+        },
+        persistFailure: async (message) => {
+          console.error(`[${jobId}] ❌ Subtitle job failed:`, message);
+          await prisma.videoJob.update({
+            where: { id: jobId },
+            data: {
+              status: "FAILED",
+              error: message,
+            },
+          });
         },
       });
-      await job.updateProgress(100);
-    } catch (error: any) {
-      console.error(`[${jobId}] ❌ Subtitle job failed:`, error?.message || error);
-      await prisma.videoJob.update({
-        where: { id: jobId },
-        data: {
-          status: "FAILED",
-          error: error?.message || "Subtitle generation failed",
-        },
-      });
-      throw error;
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      if (tempDir) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     }
   },
   {
@@ -1632,27 +1645,22 @@ export const dubbingWorker = new Worker(
   "dubbing-processing",
   async (job: Job) => {
     if (job.name === "avs-dub") {
+      const maxAttempts =
+        typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
+      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+
       try {
         await processDubbingJob(job.data, {
+          isFinalAttempt,
           updateProgress: async (pct: number) => {
             await job.updateProgress(pct);
           },
         });
       } catch (error) {
-        const maxAttempts =
-          typeof job.opts.attempts === "number" && job.opts.attempts > 0
-            ? job.opts.attempts
-            : 1;
-        const fallbackJobId =
-          typeof job.data?.jobId === "string" ? job.data.jobId : "";
-        const fallbackVideoUrl =
-          typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
+        const fallbackJobId = typeof job.data?.jobId === "string" ? job.data.jobId : "";
+        const fallbackVideoUrl = typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
 
-        if (
-          job.attemptsMade + 1 < maxAttempts ||
-          !fallbackJobId.trim() ||
-          !fallbackVideoUrl.trim()
-        ) {
+        if (!isFinalAttempt || !fallbackJobId.trim() || !fallbackVideoUrl.trim()) {
           throw error;
         }
 
@@ -1686,7 +1694,7 @@ export const dubbingWorker = new Worker(
           );
         }
 
-        await job.updateProgress(100);
+        await updateCompletedJobProgress(fallbackJobId, "Dubbing", () => job.updateProgress(100));
         console.warn(
           `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
         );
@@ -1699,57 +1707,76 @@ export const dubbingWorker = new Worker(
     }
 
     const { jobId, sourceUrl, targetLanguage } = job.data;
-    try {
-      await prisma.videoJob.update({
-        where: { id: jobId },
-        data: { status: "PROCESSING", progress: 10 },
-      });
-      await job.updateProgress(10);
+    const maxAttempts =
+      typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
 
-      const dubbingJob = await createDubbingJob({ sourceUrl, targetLanguage });
-      await prisma.videoJob.update({
-        where: { id: jobId },
-        data: {
-          progress: 25,
-          jobData: {
-            kind: "DUBBING",
-            sourceUrl,
-            targetLanguage,
-            dubbingId: dubbingJob.dubbingId,
-            providerStatus: dubbingJob.status,
-          },
-        },
-      });
-      await job.updateProgress(25);
+    await runDubbingJobWithRetry({
+      jobId,
+      attemptsMade: job.attemptsMade,
+      maxAttempts,
+      process: async () => {
+        const existingJob = await prisma.videoJob.findUnique({
+          where: { id: jobId },
+          select: { jobData: true },
+        });
+        const reusableDubbingJob = getReusableDubbingJob(
+          existingJob?.jobData,
+          sourceUrl,
+          targetLanguage
+        );
 
-      const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
-      await prisma.videoJob.update({
-        where: { id: jobId },
-        data: {
-          status: "COMPLETED",
-          progress: 100,
-          jobData: {
-            kind: "DUBBING",
-            sourceUrl,
-            targetLanguage,
-            dubbingId: completedJob.dubbingId,
-            providerStatus: completedJob.status,
-            audioEndpoint: `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`,
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: { status: "PROCESSING", progress: 10 },
+        });
+        await job.updateProgress(10);
+
+        const dubbingJob =
+          reusableDubbingJob ?? (await createDubbingJob({ sourceUrl, targetLanguage }));
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: {
+            progress: 25,
+            jobData: {
+              kind: "DUBBING",
+              sourceUrl,
+              targetLanguage,
+              dubbingId: dubbingJob.dubbingId,
+              providerStatus: dubbingJob.status,
+            },
           },
-        },
-      });
-      await job.updateProgress(100);
-    } catch (error: any) {
-      console.error(`[Dubbing ${jobId}] failed:`, error);
-      await prisma.videoJob.update({
-        where: { id: jobId },
-        data: {
-          status: "FAILED",
-          error: error?.message || "Dubbing failed",
-        },
-      });
-      throw error;
-    }
+        });
+        await job.updateProgress(25);
+
+        const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: {
+            status: "COMPLETED",
+            progress: 100,
+            jobData: {
+              kind: "DUBBING",
+              sourceUrl,
+              targetLanguage,
+              dubbingId: completedJob.dubbingId,
+              providerStatus: completedJob.status,
+              audioEndpoint: `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`,
+            },
+          },
+        });
+        await updateCompletedJobProgress(jobId, "Dubbing", () => job.updateProgress(100));
+      },
+      persistFailure: async (message) => {
+        console.error(`[Dubbing ${jobId}] failed:`, message);
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: {
+            status: "FAILED",
+            error: message,
+          },
+        });
+      },
+    });
   },
   {
     connection: new Redis(redisUrl, { maxRetriesPerRequest: null }) as any,

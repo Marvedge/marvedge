@@ -160,7 +160,12 @@ async function dispatchSubtitleJob(
           error: err instanceof Error ? err.message : "Subtitle generation failed",
         },
       })
-      .catch(() => {});
+      .catch((persistError: unknown) => {
+        console.error(
+          `[subtitles] Failed to persist FAILED status for job ${jobId}:`,
+          persistError
+        );
+      });
   }
 }
 
