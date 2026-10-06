@@ -7,7 +7,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { createHash, randomUUID } = require("node:crypto");
 const { createReadStream } = require("node:fs");
-
+const { fetchSafeUrl } = require("./safe-download.cjs");
 const express = require("express");
 const { Storage } = require("@google-cloud/storage");
 const { Firestore, FieldValue } = require("@google-cloud/firestore");
@@ -178,23 +178,12 @@ async function getSignedHttpUrlForGsUri(uri) {
 }
 
 async function downloadFromUrl({ url, destinationPath }) {
-  // never let a job point us at internal addresses
-  let parsed;
-  try {
-    parsed = new URL(String(url));
-  } catch {
-    throw new Error("Invalid source URL");
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Refusing to fetch non-http(s) URL");
-  }
-  if (isBlockedWorkerHost(parsed.hostname)) {
-    throw new Error("Refusing to fetch blocked host");
-  }
-  const response = await fetch(url);
+  const response = await fetchSafeUrl(url);
+
   if (!response.ok) {
     throw new Error(`Failed to download source video: ${response.status}`);
   }
+
   const bytes = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(destinationPath, bytes);
 }
@@ -2213,56 +2202,6 @@ app.use("/artifacts", express.static(ARTIFACTS_DIR));
 // once WORKER_SECRET is set on Cloud Run, requests without it get a 401.
 const WORKER_SECRET = process.env.WORKER_SECRET || "";
 
-function isBlockedWorkerHost(hostname) {
-  const host = String(hostname || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\.+$/, "");
-  if (!host || host === "localhost") {
-    return true;
-  }
-  const bare = host.replace(/^\[|\]$/g, "");
-  if (bare.includes(":")) {
-    if (bare === "::1") {
-      return true;
-    }
-    const first = bare.split(":")[0] === "" ? "0" : bare.split(":")[0];
-    const value = parseInt(first, 16);
-    if (Number.isFinite(value)) {
-      if (value >= 0xfc00 && value <= 0xfdff) {
-        return true;
-      }
-      if (value >= 0xfe80 && value <= 0xfebf) {
-        return true;
-      }
-    }
-    return false;
-  }
-  const octets = bare.split(".").map((part) => {
-    if (/^0x[0-9a-f]+$/i.test(part)) {
-      return parseInt(part, 16);
-    }
-    if (/^0[0-7]+$/.test(part)) {
-      return parseInt(part, 8);
-    }
-    if (/^\d+$/.test(part)) {
-      return parseInt(part, 10);
-    }
-    return NaN;
-  });
-  if (octets.length !== 4 || octets.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) {
-    return !bare.includes(".");
-  }
-  const [a, b] = octets;
-  return (
-    a === 10 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    a === 0
-  );
-}
 
 function requireWorkerAuth(req, res, next) {
   if (!WORKER_SECRET) {

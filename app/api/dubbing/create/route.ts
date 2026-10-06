@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { dubbingQueue } from "@/app/lib/queue";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 
 export const maxDuration = 300;
 
@@ -14,16 +15,12 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = (await req.json()) as Record<string, unknown>;
 
-    const sourceUrl =
-      typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
+    const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
 
     const targetLanguage =
       typeof body.targetLanguage === "string"
@@ -31,10 +28,7 @@ export async function POST(req: NextRequest) {
         : DEFAULT_TARGET_LANGUAGE;
 
     if (!sourceUrl) {
-      return NextResponse.json(
-        { error: "Missing sourceUrl" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing sourceUrl" }, { status: 400 });
     }
 
     if (!/^https?:\/\//i.test(sourceUrl)) {
@@ -44,11 +38,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!isSafeUrl(sourceUrl)) {
+      return NextResponse.json({ error: "Unsafe sourceUrl" }, { status: 400 });
+    }
+
     if (!/^[a-z]{2,5}$/i.test(targetLanguage)) {
-      return NextResponse.json(
-        { error: "Invalid targetLanguage" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid targetLanguage" }, { status: 400 });
     }
 
     const jobRecord = await prisma.videoJob.create({
@@ -85,9 +80,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Create dubbing job error:", error);
 
-    return NextResponse.json(
-      { error: "Failed to create dubbing job" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create dubbing job" }, { status: 500 });
   }
 }

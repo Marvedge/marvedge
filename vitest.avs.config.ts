@@ -1,8 +1,8 @@
-import { configDefaults, defineConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["cloudrun-worker/avs_dub.test.js"],
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    include: ["cloudrun-worker/**/*.test.js"],
+    exclude: ["**/node_modules/**", "**/.git/**", "e2e/**"],
   },
 });

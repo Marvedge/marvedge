@@ -6,6 +6,7 @@ import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
 import { dubbingQueue } from "@/app/lib/queue";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 import type { Step, DubTiming } from "@/app/types/avs";
 
 // Per-step encode + concat is comparable to /avs-sync; same generous budget.
@@ -16,20 +17,25 @@ function parseSteps(value: unknown): Step[] {
   if (!Array.isArray(value)) {
     return [];
   }
+
   const steps: Step[] = [];
+
   for (const entry of value) {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
+
     const rec = entry as Record<string, unknown>;
     const id = typeof rec.id === "string" ? rec.id : "";
     const startTime = typeof rec.startTime === "number" ? rec.startTime : NaN;
     const endTime = typeof rec.endTime === "number" ? rec.endTime : NaN;
     const index = typeof rec.index === "number" ? rec.index : steps.length;
+
     if (id && Number.isFinite(startTime) && Number.isFinite(endTime) && endTime > startTime) {
       steps.push({ id, index, startTime, endTime });
     }
   }
+
   return steps;
 }
 
@@ -38,23 +44,28 @@ function parseDubTimings(value: unknown): DubTiming[] {
   if (!Array.isArray(value)) {
     return [];
   }
+
   const timings: DubTiming[] = [];
+
   for (const entry of value) {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
+
     const rec = entry as Record<string, unknown>;
     const stepId = typeof rec.stepId === "string" ? rec.stepId : "";
     const start = typeof rec.start === "number" ? rec.start : NaN;
     const end = typeof rec.end === "number" ? rec.end : NaN;
+
     if (stepId && Number.isFinite(start) && Number.isFinite(end) && end > start) {
       timings.push({ stepId, start, end });
     }
   }
+
   return timings;
 }
 
-/** Normalize a gs:// URL to a public https URL. */
+/** Normalize a gs:// URL to a public HTTPS URL. */
 function toHttpUrl(url: string): string {
   return url.startsWith("gs://") ? url.replace("gs://", "https://storage.googleapis.com/") : url;
 }
@@ -76,18 +87,26 @@ export async function runDubAlignment(
   }
 ): Promise<void> {
   const normalizedVideoUrl = toHttpUrl(input.videoUrl);
+
   try {
     const job = await prisma.videoJob.findUnique({
       where: { id: jobId },
       select: { status: true },
     });
+
     if (job?.status === "COMPLETED" || job?.status === "CANCELLED") {
       return;
     }
 
     await prisma.videoJob.updateMany({
-      where: { id: jobId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
-      data: { status: "PROCESSING", progress: 20 },
+      where: {
+        id: jobId,
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
+      data: {
+        status: "PROCESSING",
+        progress: 20,
+      },
     });
 
     let alignedVideoUrl = normalizedVideoUrl;
@@ -102,12 +121,16 @@ export async function runDubAlignment(
         steps: input.steps,
         dubTimings: input.dubTimings,
       });
+
       alignedVideoUrl = toHttpUrl(result.alignedVideoUrl);
       duration = result.duration || input.sourceDuration;
     }
 
     await prisma.videoJob.updateMany({
-      where: { id: jobId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+      where: {
+        id: jobId,
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
       data: {
         status: "COMPLETED",
         progress: 100,
@@ -129,10 +152,15 @@ export async function runDubAlignment(
     });
   } catch (err) {
     console.error("AVS dub-sync job failed, falling back to source video (Task-00083):", err);
+
     const reason = err instanceof Error ? err.message : "Dub-sync alignment failed";
+
     await prisma.videoJob
       .updateMany({
-        where: { id: jobId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          id: jobId,
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         data: {
           status: "COMPLETED",
           progress: 100,
@@ -160,6 +188,7 @@ export async function POST(req: NextRequest) {
   }
 
   const session = await getServerSession(authOptions);
+
   if (!session || !session.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -169,9 +198,15 @@ export async function POST(req: NextRequest) {
       OR: [
         session.user.id ? { id: session.user.id as string } : undefined,
         session.user.email ? { email: session.user.email } : undefined,
-      ].filter(Boolean) as Array<{ id?: string; email?: string }>,
+      ].filter(Boolean) as Array<{
+        id?: string;
+        email?: string;
+      }>,
     },
-    select: { id: true, plan: true },
+    select: {
+      id: true,
+      plan: true,
+    },
   });
 
   if (!user) {
@@ -179,34 +214,55 @@ export async function POST(req: NextRequest) {
   }
 
   let body: Record<string, unknown>;
+
   try {
     const parsedBody: unknown = await req.json();
+
     if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
       return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
     }
+
     body = parsedBody as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const rawVideoUrl = typeof body.videoUrl === "string" ? body.videoUrl : "";
+  const rawVideoUrl = typeof body.videoUrl === "string" ? body.videoUrl.trim() : "";
+
   if (!rawVideoUrl) {
     return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
   }
+
   const videoUrl = toHttpUrl(rawVideoUrl);
 
-  const rawDubUrl = typeof body.dubUrl === "string" ? body.dubUrl : "";
+  if (!isSafeUrl(videoUrl)) {
+    return NextResponse.json({ error: "Unsafe videoUrl" }, { status: 400 });
+  }
+
+  const rawDubUrl = typeof body.dubUrl === "string" ? body.dubUrl.trim() : "";
+
   const dubUrl = rawDubUrl ? toHttpUrl(rawDubUrl) : "";
+
+  if (dubUrl && !isSafeUrl(dubUrl)) {
+    return NextResponse.json({ error: "Unsafe dubUrl" }, { status: 400 });
+  }
+
   const steps = parseSteps(body.steps);
   const dubTimings = parseDubTimings(body.dubTimings);
+
   const sourceDuration = typeof body.duration === "number" ? body.duration : 0;
+
   const demoId = typeof body.demoId === "string" ? body.demoId : null;
 
   if (demoId) {
     const demo = await prisma.demo.findUnique({
       where: { id: demoId },
-      select: { id: true, userId: true },
+      select: {
+        id: true,
+        userId: true,
+      },
     });
+
     if (!demo || demo.userId !== user.id) {
       return NextResponse.json({ error: "Demo not found" }, { status: 404 });
     }
@@ -218,7 +274,9 @@ export async function POST(req: NextRequest) {
       demoId,
       videoUrl,
       status: "PENDING",
-      jobData: { kind: "AVS_DUB" },
+      jobData: {
+        kind: "AVS_DUB",
+      },
     },
   });
 
@@ -239,5 +297,8 @@ export async function POST(req: NextRequest) {
     }
   );
 
-  return NextResponse.json({ success: true, jobId: jobRecord.id });
+  return NextResponse.json({
+    success: true,
+    jobId: jobRecord.id,
+  });
 }
