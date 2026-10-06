@@ -174,8 +174,7 @@ export async function POST(req: NextRequest) {
       public_id: uploadResult.public_id,
     });
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to upload file";
     console.error("Upload API Error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
   }
 }
