@@ -18,21 +18,21 @@ All bugs catalogued below were pulled directly from the commit log on `origin/ma
 
 These were identified and merged to `master` during the week. Listed for completeness and audit trail.
 
-| # | Bug | Area | PR | Fix Commit |
-|---|-----|------|----|------------|
-| 01 | SSRF: dubbing source URLs were not validated against `isSafeUrl`, allowing internal network requests | Security / Dubbing | #441 | `df59a0b` |
-| 02 | SSRF: GCS object resolution endpoint had no origin authorization check | Security / GCS | #440 | `1a43b6b` |
-| 03 | SSRF: `/api/subtitles/create` passed `videoUrl` to worker without `isSafeUrl` gating | Security / Subtitles | #447 | `802f09e` |
-| 04 | SSRF: `/api/avs/sync` passed both `videoUrl` and `audioUrl` without `isSafeUrl` gating | Security / AVS | #448 | `91448a8` |
-| 05 | Free-trial export check had a race condition — concurrent requests could both pass the paywall guard | Paywall / Billing | #449 | `33c279c` |
-| 06 | Internal server errors leaked raw worker hostnames (e.g. `video-worker-abc123-uc.a.run.app`) in `500` HTTP bodies | Info Leakage | #451 | `ede9ef1` |
-| 07 | Tutorial slide upload: no cap on slide count, file size, or image MIME type — DoS vector | Tutorials / Upload | #450 | `165c767` |
-| 08 | Tutorial upload: no per-user rate limiting and no base64 length guard — Bug 0031 repro at 100 slides | Tutorials / Security | #454 | `f33e071` |
-| 09 | Tutorial internal errors leaked raw messages to the client | Tutorials / Info Leakage | #437 | `e363ee7` |
-| 10 | FFmpeg URL safety bypass: `processChunkJob` passed `videoUrl` to FFmpeg directly without `isSafeUrl` | Security / Worker | #453 | `435afe0` |
-| 11 | Pipeline failure recovery: `dubbingProcessor`, `clips/jobs`, `gcpWorker` did not handle transient GCP errors; partial failures hard-crashed the pipeline | Pipeline Reliability | #452 | `584c6ab` |
-| 12 | `cloudrun-worker/**` was excluded from Vitest — `npm run test:avs` returned exit code 1 with "No test files found" | CI / Testing | #439 | `7487e1e` |
-| 13 | `scripts/ml` and `ml-worker` preprocessing paths were out of sync — GPU batching and multi-speaker tracking hardening not parity-matched | MLOps / Preprocessing | #439 | `01d3c9e` |
+| #   | Bug                                                                                                                                                      | Area                     | PR   | Fix Commit |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ---- | ---------- |
+| 01  | SSRF: dubbing source URLs were not validated against `isSafeUrl`, allowing internal network requests                                                     | Security / Dubbing       | #441 | `df59a0b`  |
+| 02  | SSRF: GCS object resolution endpoint had no origin authorization check                                                                                   | Security / GCS           | #440 | `1a43b6b`  |
+| 03  | SSRF: `/api/subtitles/create` passed `videoUrl` to worker without `isSafeUrl` gating                                                                     | Security / Subtitles     | #447 | `802f09e`  |
+| 04  | SSRF: `/api/avs/sync` passed both `videoUrl` and `audioUrl` without `isSafeUrl` gating                                                                   | Security / AVS           | #448 | `91448a8`  |
+| 05  | Free-trial export check had a race condition — concurrent requests could both pass the paywall guard                                                     | Paywall / Billing        | #449 | `33c279c`  |
+| 06  | Internal server errors leaked raw worker hostnames (e.g. `video-worker-abc123-uc.a.run.app`) in `500` HTTP bodies                                        | Info Leakage             | #451 | `ede9ef1`  |
+| 07  | Tutorial slide upload: no cap on slide count, file size, or image MIME type — DoS vector                                                                 | Tutorials / Upload       | #450 | `165c767`  |
+| 08  | Tutorial upload: no per-user rate limiting and no base64 length guard — Bug 0031 repro at 100 slides                                                     | Tutorials / Security     | #454 | `f33e071`  |
+| 09  | Tutorial internal errors leaked raw messages to the client                                                                                               | Tutorials / Info Leakage | #437 | `e363ee7`  |
+| 10  | FFmpeg URL safety bypass: `processChunkJob` passed `videoUrl` to FFmpeg directly without `isSafeUrl`                                                     | Security / Worker        | #453 | `435afe0`  |
+| 11  | Pipeline failure recovery: `dubbingProcessor`, `clips/jobs`, `gcpWorker` did not handle transient GCP errors; partial failures hard-crashed the pipeline | Pipeline Reliability     | #452 | `584c6ab`  |
+| 12  | `cloudrun-worker/**` was excluded from Vitest — `npm run test:avs` returned exit code 1 with "No test files found"                                       | CI / Testing             | #439 | `7487e1e`  |
+| 13  | `scripts/ml` and `ml-worker` preprocessing paths were out of sync — GPU batching and multi-speaker tracking hardening not parity-matched                 | MLOps / Preprocessing    | #439 | `01d3c9e`  |
 
 ---
 
@@ -46,12 +46,13 @@ These are open issues that are **blocking or directly risky for production**. Th
 
 **Severity:** Critical  
 **Area:** Billing / Access Control  
-**Status:** Open — no fix branch exists  
+**Status:** Open — no fix branch exists
 
 **Description:**  
 `/api/avs/dub` (Task-83) fetches `user.plan` from the database (`select: { id: true, plan: true }`) but never evaluates it. A FREE-plan user can successfully submit dubbing jobs, bypassing the PRO/ENTERPRISE paywall entirely. The `dub.test.ts` suite explicitly asserts a `403` response for FREE users with the message `"PRO and ENTERPRISE"`, but the route does not return this — it returns `200 OK`.
 
 **Evidence:**
+
 ```
 route.ts:174  select: { id: true, plan: true }
 → user.plan is fetched but never checked after this line
@@ -60,6 +61,7 @@ route.ts:174  select: { id: true, plan: true }
 
 **Fix Required:**  
 Add a plan gate immediately after the `if (!user)` guard in `app/api/avs/dub/route.ts`:
+
 ```ts
 if (!["PRO", "ENTERPRISE"].includes(user.plan ?? "")) {
   return NextResponse.json(
@@ -68,6 +70,7 @@ if (!["PRO", "ENTERPRISE"].includes(user.plan ?? "")) {
   );
 }
 ```
+
 Also resolve the conflict between `dub.test.ts` and `route.test.ts` — the two test files currently hold opposite expectations for FREE-user behavior.
 
 ---
@@ -80,9 +83,10 @@ Also resolve the conflict between `dub.test.ts` and `route.test.ts` — the two 
 
 **Description:**  
 Three tests in `app/api/avs/dub/route.test.ts` hang until the 5-second Vitest timeout:
+
 1. `allows a signed-in FREE user to create a dubbing job`
 2. `creates a VideoJob with kind AVS_DUB and returns jobId on valid request`
-3. *(plan gate assertion failure)*
+3. _(plan gate assertion failure)_
 
 **Root Cause:**  
 `runDubAlignment` is called as a `void` fire-and-forget inside the POST handler, but the tests mock `prisma.videoJob.findUnique` which is called inside `runDubAlignment`. Because the mock is not set up in the test's Prisma mock object, the unresolved promise hangs indefinitely. The test suite's Prisma mock is missing `videoJob.findUnique`.
@@ -171,16 +175,16 @@ There is no Playwright or integration test that verifies the dubbing paywall fro
 
 ## Summary Table
 
-| ID | Title | Category | Severity | Status |
-|----|-------|----------|----------|--------|
-| M01 | `/api/avs/dub` — plan gate missing, FREE users bypass paywall | Billing | 🔴 Critical | **Open** |
-| M02 | `route.test.ts` — 3 tests timing out (missing `findUnique` mock) | Testing / CI | 🔴 High | **Open** |
-| M03 | `DEFAULT_TARGET_LANGUAGE = "ta"` silent fallback in dubbing | Localization | 🔴 High | **Open** |
-| S01 | `iouThres = 0.1` in scripts/ml vs `0.5` in ml-worker | ML Quality | 🟡 Medium | Backlog |
-| S02 | Dead `return` statement in `crop_video` | Code Quality | 🟡 Low | Backlog |
-| S03 | Plan gate intent not locked between `dub.test.ts` and `route.test.ts` | Product Process | 🟡 Medium | Needs sign-off |
-| S04 | `ml-worker` still uses deprecated scenedetect v3 API | MLOps / Deps | 🟡 Low | Backlog |
-| S05 | No Playwright smoke test for dubbing paywall from UI | Testing Gap | 🟡 Medium | Backlog |
+| ID  | Title                                                                 | Category        | Severity    | Status         |
+| --- | --------------------------------------------------------------------- | --------------- | ----------- | -------------- |
+| M01 | `/api/avs/dub` — plan gate missing, FREE users bypass paywall         | Billing         | 🔴 Critical | **Open**       |
+| M02 | `route.test.ts` — 3 tests timing out (missing `findUnique` mock)      | Testing / CI    | 🔴 High     | **Open**       |
+| M03 | `DEFAULT_TARGET_LANGUAGE = "ta"` silent fallback in dubbing           | Localization    | 🔴 High     | **Open**       |
+| S01 | `iouThres = 0.1` in scripts/ml vs `0.5` in ml-worker                  | ML Quality      | 🟡 Medium   | Backlog        |
+| S02 | Dead `return` statement in `crop_video`                               | Code Quality    | 🟡 Low      | Backlog        |
+| S03 | Plan gate intent not locked between `dub.test.ts` and `route.test.ts` | Product Process | 🟡 Medium   | Needs sign-off |
+| S04 | `ml-worker` still uses deprecated scenedetect v3 API                  | MLOps / Deps    | 🟡 Low      | Backlog        |
+| S05 | No Playwright smoke test for dubbing paywall from UI                  | Testing Gap     | 🟡 Medium   | Backlog        |
 
 **Must fix before launch: 3 open items (M01, M02, M03)**  
 **Acceptable to ship and improve later: 5 items (S01–S05)**
