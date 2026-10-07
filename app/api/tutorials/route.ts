@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import cloudinary from "@/app/lib/cloudinary";
 import type { UploadApiOptions } from "cloudinary";
 
@@ -16,6 +17,15 @@ const MAX_SLIDE_BYTES = 5 * 1024 * 1024; // 5MB decoded per slide
 const MAX_TOTAL_SLIDE_BYTES = 5 * 1024 * 1024; // 5MB decoded total
 
 const ALLOWED_SLIDE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+// 5MB decoded ≈ 6.8MB base64. Reject oversized payloads on the raw string
+// BEFORE Buffer.from decodes them, so a giant base64 blob cannot force a
+// full in-memory decode before the 5MB cap fires.
+const MAX_IMAGE_DATA_CHARS = 7 * 1024 * 1024;
+
+// Same posture as POST /api/upload: max 10 tutorial saves per minute per user.
+const TUTORIAL_RATE_LIMIT = 10;
+const TUTORIAL_RATE_WINDOW_SECONDS = 60;
 
 // Sniff real content — data-URL prefixes and client MIME hints are not trusted.
 function detectSlideMime(buffer: Buffer): string | null {
@@ -77,6 +87,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Rate-limit before parsing the body: each accepted request can trigger up
+    // to 30 Cloudinary uploads, so repeated calls are a direct cost vector.
+    if (await isRateLimited(`tutorials:${session.user.email}`, TUTORIAL_RATE_LIMIT, TUTORIAL_RATE_WINDOW_SECONDS)) {
+      return NextResponse.json({ error: "Too many requests (max 10 per minute)" }, { status: 429 });
+    }
+
     const body = (await req.json()) as TutorialPayload;
     const { title, description, slides } = body;
 
@@ -104,6 +120,9 @@ export async function POST(req: NextRequest) {
     for (const slide of slides) {
       if (!slide || typeof slide.imageData !== "string" || slide.imageData.length === 0) {
         return NextResponse.json({ error: "Invalid slide image" }, { status: 400 });
+      }
+      if (slide.imageData.length > MAX_IMAGE_DATA_CHARS) {
+        return NextResponse.json({ error: "Slide image too large (max 5MB)" }, { status: 413 });
       }
       let buffer: Buffer;
       try {
