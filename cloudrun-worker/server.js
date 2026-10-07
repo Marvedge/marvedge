@@ -8,6 +8,7 @@ const { promisify } = require("node:util");
 const { createHash, randomUUID } = require("node:crypto");
 const { createReadStream } = require("node:fs");
 const { fetchSafeUrl } = require("./safe-download.cjs");
+const { prepareChunkInput } = require("./chunk-input.cjs");
 const express = require("express");
 const { Storage } = require("@google-cloud/storage");
 const { Firestore, FieldValue } = require("@google-cloud/firestore");
@@ -2072,30 +2073,14 @@ async function processChunkJob({
     const dlStartMs = Date.now();
     let dlMs = 0;
 
-    if (
-      typeof startTime === "number" &&
-      typeof duration === "number" &&
-      videoUrl
-    ) {
-      // Logical splitting: Skip physical download, use URL directly as inputPath.
-      // For gs:// sources, sign URL so ffmpeg can stream it.
-      if (String(videoUrl).startsWith("gs://")) {
-        inputPath = await getSignedHttpUrlForGsUri(String(videoUrl));
-      } else {
-        inputPath = String(videoUrl);
-      }
-    } else if (videoUrl) {
-      if (String(videoUrl).startsWith("gs://")) {
-        await downloadFromGsUri({
-          uri: String(videoUrl),
-          destinationPath: inputPath,
-        });
-      } else {
-        await downloadFromUrl({
-          url: String(videoUrl),
-          destinationPath: inputPath,
-        });
-      }
+    const downloadedSource = await prepareChunkInput({
+      videoUrl,
+      destinationPath: inputPath,
+      downloadFromGsUri,
+      downloadFromUrl,
+    });
+
+    if (downloadedSource) {
       dlMs = Date.now() - dlStartMs;
     } else {
       await downloadRawChunkFromGcs({
