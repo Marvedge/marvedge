@@ -317,7 +317,10 @@ def crop_video(args, track, cropFile, flist=None):
     for fidx, frame in enumerate(track['frame']):
         cs = args.cropScale
         bs = dets['s'][fidx]
-        bsi = int(bs * (1 + 2 * cs))
+        # Static-slide guard: if bsi is 0 (identical constant bbox, no motion)
+        # the pad collapses to 0 and the subsequent crop slice is empty.
+        # Clamp to a minimum of 1 pixel so the slice always produces a valid tile.
+        bsi = max(1, int(bs * (1 + 2 * cs)))
 
         # Frame bounds and read guard
         if frame < 0 or frame >= len(flist):
@@ -396,7 +399,6 @@ def crop_video(args, track, cropFile, flist=None):
         'is_fallback': track.get('is_fallback', False),
         'fallback_reason': track.get('fallback_reason', None),
     }
-    return {'track': track, 'proc_track': dets}
 
 def generate_metadata(vidTracks, args):
     metadata = {"tracks": []}
