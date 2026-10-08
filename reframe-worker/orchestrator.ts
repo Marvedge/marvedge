@@ -50,6 +50,7 @@ export interface ReframeJobContext {
   attemptsMade: number;
   maxAttempts: number;
   discardJob?: () => Promise<void> | void;
+  recordInferenceDuration?: (status: "success" | "failure", durationSeconds: number) => void;
 }
 
 export interface ReframeOrchestratorDeps {
@@ -195,6 +196,8 @@ export async function processReframeJob(
     ((req: MlInferenceRequest) =>
       callMlInference(config.mlServiceUrl, req, {
         timeoutMs: config.mlTimeoutMs,
+        onDuration: (status, durationSeconds) =>
+          context.recordInferenceDuration?.(status, durationSeconds),
       }));
 
   const renderVideo =
@@ -406,7 +409,6 @@ export async function processReframeJob(
       }
     }
   }
-
 
   // ── Step 2: Render Reframed MP4 ─────────────────────────────────────────
   let exportedUrl: string | undefined;
