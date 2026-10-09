@@ -1,11 +1,11 @@
+/* eslint-disable max-lines-per-function */
 import { describe, expect, it, vi } from "vitest";
 import {
   processDubbingJob,
   postJobCallbackWithRetry,
   type DubbingJobPayload,
-  type DubbingCallbackPayload,
 } from "./dubbingProcessor";
-import type { GcpDubSyncPayload, GcpDubSyncResult } from "../gcpWorker";
+import type { GcpDubSyncResult } from "../gcpWorker";
 
 describe("AVS Dubbing Processor (processDubbingJob)", () => {
   const basePayload: DubbingJobPayload = {
@@ -214,7 +214,7 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
   describe("D. Validation of payload and GCP output", () => {
     it("rejects missing or non-string jobId", async () => {
       await expect(
-        processDubbingJob({} as any)
+        processDubbingJob({} as unknown as DubbingJobPayload)
       ).rejects.toThrow("missing jobId");
     });
 
@@ -222,7 +222,7 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       const postCallback = vi.fn().mockResolvedValue(undefined);
       await expect(
         processDubbingJob(
-          { jobId: "job-no-vid", videoUrl: "" } as any,
+          { jobId: "job-no-vid", videoUrl: "" } as unknown as DubbingJobPayload,
           { postCallback }
         )
       ).rejects.toThrow("Missing required videoUrl");
@@ -508,6 +508,7 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       const originalEnv = { ...process.env };
       process.env.AVS_DUB_SERVICE_URL = "http://cloudrun-worker:8080";
       process.env.GCP_VIDEO_WORKER_URL = "https://prod-gcp-worker.run.app";
+      process.env.WORKER_SECRET = "test-worker-secret";
 
       let calledUrl = "";
       globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
@@ -542,6 +543,7 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       const originalEnv = { ...process.env };
       delete process.env.AVS_DUB_SERVICE_URL;
       process.env.GCP_VIDEO_WORKER_URL = "https://prod-gcp-worker.run.app";
+      process.env.WORKER_SECRET = "test-worker-secret";
 
       let calledUrl = "";
       globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getDubServiceUrl,
@@ -12,6 +13,7 @@ describe("gcpWorker - AVS Dubbing Service URL Resolution & Routing", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    process.env.WORKER_SECRET = "test-worker-secret";
   });
 
   afterEach(() => {
@@ -71,6 +73,53 @@ describe("gcpWorker - AVS Dubbing Service URL Resolution & Routing", () => {
     });
   });
 
+  describe("invokeGcpWorker authentication", () => {
+    it("fails before fetch when WORKER_SECRET is missing", async () => {
+      process.env.GCP_VIDEO_WORKER_URL =
+        "https://production-gcp-worker.run.app";
+      delete process.env.WORKER_SECRET;
+
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock;
+
+      await expect(
+        invokeGcpWorker({ recipeId: "subtitles" }, "/subtitles")
+      ).rejects.toThrow("WORKER_SECRET is not configured");
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("sends WORKER_SECRET as a bearer token", async () => {
+      process.env.GCP_VIDEO_WORKER_URL =
+        "https://production-gcp-worker.run.app";
+      process.env.WORKER_SECRET = "worker-secret-123";
+
+      let authorization: string | null = null;
+
+      globalThis.fetch = vi.fn().mockImplementation(
+        async (_url: string, init?: RequestInit) => {
+          authorization = new Headers(init?.headers).get("authorization");
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              ok: true,
+              result: { recipeId: "subtitles" },
+            }),
+          };
+        }
+      );
+
+      await invokeGcpWorker(
+        { recipeId: "subtitles" },
+        "/subtitles"
+      );
+
+      expect(authorization).toBe("Bearer worker-secret-123");
+    });
+  });
+
   describe("invokeGcpDubSync Routing Execution", () => {
     it("does not retry deterministic 4xx responses", async () => {
       process.env.GCP_VIDEO_WORKER_URL = "https://worker.example.com";
@@ -93,12 +142,12 @@ describe("gcpWorker - AVS Dubbing Service URL Resolution & Routing", () => {
 
       let capturedUrl = "";
       let capturedMethod = "";
-      let capturedBody: any = null;
+      let capturedBody: Record<string, unknown> = {};
 
-      globalThis.fetch = vi.fn().mockImplementation(async (url: string, init: any) => {
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
         capturedUrl = url;
-        capturedMethod = init?.method;
-        capturedBody = JSON.parse(init?.body || "{}");
+        capturedMethod = init?.method ?? "";
+        capturedBody = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as Record<string, unknown>;
         return {
           ok: true,
           status: 200,
