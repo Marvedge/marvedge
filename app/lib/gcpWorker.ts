@@ -117,6 +117,11 @@ export async function invokeGcpWorker(
   if (!baseUrl) {
     throw new Error("GCP_VIDEO_WORKER_URL is invalid");
   }
+  const workerSecret = (process.env.WORKER_SECRET || "").trim();
+  if (!workerSecret) {
+    throw new Error("WORKER_SECRET is not configured");
+  }
+
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = `${baseUrl}${cleanEndpoint}`;
 
@@ -133,8 +138,6 @@ export async function invokeGcpWorker(
 
   let attempt = 0;
   const maxAttempts = 3;
-  // shared secret so random callers cannot burn our video budget
-  const workerSecret = (process.env.WORKER_SECRET || "").trim();
 
   try {
     while (attempt < maxAttempts) {
@@ -143,7 +146,7 @@ export async function invokeGcpWorker(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(workerSecret ? { Authorization: `Bearer ${workerSecret}` } : {}),
+            Authorization: `Bearer ${workerSecret}`,
           },
           body: JSON.stringify(payload),
           signal: controller.signal,

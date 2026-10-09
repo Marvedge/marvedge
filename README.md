@@ -63,13 +63,15 @@ prefix.
 | `NEXT_PUBLIC_AVS_ENABLED` | Next app (client)         | Shows the "AI Voice" sidebar panel. Set to `true` to enable.          |
 | `OPENAI_API_KEY`          | Next app (server)         | OpenAI script tone rewrite (`/api/avs/script`).                       |
 | `GCP_VIDEO_WORKER_URL`    | Next app (server)         | Reaches the Cloud Run worker for Aura TTS, subtitles, and alignment.  |
+| `WORKER_SECRET`          | Next app + Cloud Run worker | Required shared bearer secret for every worker processing request.      |
 | `DEEPGRAM_API_KEY`        | **Cloud Run worker only** | Deepgram transcription + Aura TTS. The Next app never holds this key. |
 
 To enable AVS for a staging/QA environment, set both `AVS_ENABLED=true` and
 `NEXT_PUBLIC_AVS_ENABLED=true` there (plus `OPENAI_API_KEY` and
-`GCP_VIDEO_WORKER_URL`), and make sure the worker has `DEEPGRAM_API_KEY`. Leave
-all of these blank/unset in production until the feature is signed off. See
-`.env.example` for the full list.
+`GCP_VIDEO_WORKER_URL`), and make sure the worker has `DEEPGRAM_API_KEY`.
+Configure the same non-empty `WORKER_SECRET` in both the Next app and Cloud Run
+worker in every environment that processes jobs. Keep AVS feature flags disabled
+in production until the feature is signed off. See `.env.example` for the full list.
 
 ## Watermarking & Camera Bubble (WTM)
 
