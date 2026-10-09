@@ -67,6 +67,7 @@ const validCropTargets = {
 describe("POST /api/jobs/callback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.CALLBACK_SECRET = "test-callback-secret";
     vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
   });
 
@@ -89,6 +90,47 @@ describe("POST /api/jobs/callback", () => {
       expect(res.status).toBe(401);
       const json = await res.json();
       expect(json.error).toBe("Unauthorized");
+    });
+    it("returns 503 when CALLBACK_SECRET is not configured", async () => {
+      delete process.env.CALLBACK_SECRET;
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+      try {
+        const req = makePostRequest({
+          jobId: "job-1",
+          status: "COMPLETED",
+        });
+
+        const res = await POST(req);
+        const json = await res.json();
+
+        expect(res.status).toBe(503);
+        expect(json.error).toBe("Service unavailable");
+        expect(prisma.videoJob.findUnique).not.toHaveBeenCalled();
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+
+    it("returns 401 for a raw token without the Bearer scheme", async () => {
+      const req = new NextRequest("http://localhost:3000/api/jobs/callback", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "test-callback-secret",
+        },
+        body: JSON.stringify({
+          jobId: "job-1",
+          status: "COMPLETED",
+        }),
+      });
+
+      const res = await POST(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(401);
+      expect(json.error).toBe("Unauthorized");
+      expect(prisma.videoJob.findUnique).not.toHaveBeenCalled();
     });
   });
 

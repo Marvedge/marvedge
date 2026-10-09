@@ -81,9 +81,7 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
     ).resolves.toBeUndefined();
 
     expect(postCallback).toHaveBeenCalledOnce();
-    expect(postCallback).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "COMPLETED" })
-    );
+    expect(postCallback).toHaveBeenCalledWith(expect.objectContaining({ status: "COMPLETED" }));
     expect(logError).not.toHaveBeenCalledWith(
       expect.stringContaining("Job job-dub-123 failed:"),
       expect.anything()
@@ -161,9 +159,9 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
         .mockRejectedValue(new Error("Cloud Run /avs-dub connection reset"));
       const postCallback = vi.fn().mockResolvedValue(undefined);
 
-      await expect(
-        processDubbingJob(basePayload, { invokeDubSync, postCallback })
-      ).rejects.toThrow("Cloud Run /avs-dub connection reset");
+      await expect(processDubbingJob(basePayload, { invokeDubSync, postCallback })).rejects.toThrow(
+        "Cloud Run /avs-dub connection reset"
+      );
 
       expect(postCallback).toHaveBeenCalledTimes(1);
       expect(postCallback).toHaveBeenCalledWith({
@@ -213,18 +211,17 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
 
   describe("D. Validation of payload and GCP output", () => {
     it("rejects missing or non-string jobId", async () => {
-      await expect(
-        processDubbingJob({} as unknown as DubbingJobPayload)
-      ).rejects.toThrow("missing jobId");
+      await expect(processDubbingJob({} as unknown as DubbingJobPayload)).rejects.toThrow(
+        "missing jobId"
+      );
     });
 
     it("rejects missing videoUrl and sends FAILED callback", async () => {
       const postCallback = vi.fn().mockResolvedValue(undefined);
       await expect(
-        processDubbingJob(
-          { jobId: "job-no-vid", videoUrl: "" } as unknown as DubbingJobPayload,
-          { postCallback }
-        )
+        processDubbingJob({ jobId: "job-no-vid", videoUrl: "" } as unknown as DubbingJobPayload, {
+          postCallback,
+        })
       ).rejects.toThrow("Missing required videoUrl");
 
       expect(postCallback).toHaveBeenCalledWith({
@@ -237,10 +234,7 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
     it("does not send FAILED callback for missing videoUrl on an intermediate attempt", async () => {
       const postCallback = vi.fn().mockResolvedValue(undefined);
       await expect(
-        processDubbingJob(
-          { ...basePayload, videoUrl: "" },
-          { postCallback, isFinalAttempt: false }
-        )
+        processDubbingJob({ ...basePayload, videoUrl: "" }, { postCallback, isFinalAttempt: false })
       ).rejects.toThrow("Missing required videoUrl");
 
       expect(postCallback).not.toHaveBeenCalled();
@@ -253,9 +247,9 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       });
       const postCallback = vi.fn().mockResolvedValue(undefined);
 
-      await expect(
-        processDubbingJob(basePayload, { invokeDubSync, postCallback })
-      ).rejects.toThrow("Dub-sync worker returned non-http/https URL");
+      await expect(processDubbingJob(basePayload, { invokeDubSync, postCallback })).rejects.toThrow(
+        "Dub-sync worker returned non-http/https URL"
+      );
 
       expect(postCallback).toHaveBeenCalledWith({
         jobId: "job-dub-123",
@@ -271,9 +265,9 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       });
       const postCallback = vi.fn().mockResolvedValue(undefined);
 
-      await expect(
-        processDubbingJob(basePayload, { invokeDubSync, postCallback })
-      ).rejects.toThrow("Dub-sync worker returned invalid duration");
+      await expect(processDubbingJob(basePayload, { invokeDubSync, postCallback })).rejects.toThrow(
+        "Dub-sync worker returned invalid duration"
+      );
 
       expect(postCallback).toHaveBeenCalledWith({
         jobId: "job-dub-123",
@@ -323,6 +317,34 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       }
     });
 
+    it("fails before fetch when CALLBACK_SECRET is missing", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = vi.fn();
+      globalThis.fetch = mockFetch;
+
+      try {
+        await expect(
+          postJobCallbackWithRetry(
+            {
+              jobId: "job-no-secret",
+              status: "FAILED",
+              error: "test",
+            },
+            {
+              appUrl: "http://localhost:3000",
+              callbackSecret: "   ",
+              maxAttempts: 3,
+              delayMs: 1,
+            }
+          )
+        ).rejects.toThrow("CALLBACK_SECRET is not configured");
+
+        expect(mockFetch).not.toHaveBeenCalled();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it("throws immediately on 4xx rejection without retrying", async () => {
       const originalFetch = globalThis.fetch;
       const mockFetch = vi.fn().mockResolvedValue({
@@ -367,8 +389,18 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
 
       try {
         await postJobCallbackWithRetry(
-          { jobId: "job-retry", status: "COMPLETED", alignedVideoUrl: "https://a.com/b.mp4", duration: 10 },
-          { appUrl: "http://localhost:3000", delayMs: 1, maxAttempts: 3 }
+          {
+            jobId: "job-retry",
+            status: "COMPLETED",
+            alignedVideoUrl: "https://a.com/b.mp4",
+            duration: 10,
+          },
+          {
+            appUrl: "http://localhost:3000",
+            callbackSecret: "secret-123",
+            delayMs: 1,
+            maxAttempts: 3,
+          }
         );
 
         expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -388,7 +420,8 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       const invokeDubSync = vi.fn(async () => fakeGcpResult);
       const postCallback = vi.fn(async () => {});
       const uploadToCloudinary = vi.fn(async () => ({
-        secure_url: "https://res.cloudinary.com/test-cloud/video/upload/v123/dubbed_exports/out.mp4",
+        secure_url:
+          "https://res.cloudinary.com/test-cloud/video/upload/v123/dubbed_exports/out.mp4",
       }));
       const updateProgress = vi.fn();
 
@@ -401,13 +434,16 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
 
       expect(invokeDubSync).toHaveBeenCalledTimes(1);
       expect(uploadToCloudinary).toHaveBeenCalledTimes(1);
-      expect(uploadToCloudinary).toHaveBeenCalledWith("http://localhost:8080/artifacts/aligned-local-1.mp4");
+      expect(uploadToCloudinary).toHaveBeenCalledWith(
+        "http://localhost:8080/artifacts/aligned-local-1.mp4"
+      );
 
       expect(postCallback).toHaveBeenCalledTimes(1);
       expect(postCallback).toHaveBeenCalledWith({
         jobId: "job-dub-123",
         status: "COMPLETED",
-        alignedVideoUrl: "https://res.cloudinary.com/test-cloud/video/upload/v123/dubbed_exports/out.mp4",
+        alignedVideoUrl:
+          "https://res.cloudinary.com/test-cloud/video/upload/v123/dubbed_exports/out.mp4",
         duration: 11.2,
       });
 
@@ -462,7 +498,9 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
         uploadToCloudinary,
       });
 
-      expect(uploadToCloudinary).toHaveBeenCalledWith("http://localhost:8080/artifacts/aligned-auto.mp4");
+      expect(uploadToCloudinary).toHaveBeenCalledWith(
+        "http://localhost:8080/artifacts/aligned-auto.mp4"
+      );
       expect(postCallback).toHaveBeenCalledWith({
         jobId: "job-dub-123",
         status: "COMPLETED",
