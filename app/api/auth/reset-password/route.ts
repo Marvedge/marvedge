@@ -67,12 +67,38 @@ export async function POST(req: Request) {
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  await prisma.user.update({
-    where: { email },
-    data: { password: hashedPassword },
+  const resetCompleted = await prisma.$transaction(async (tx) => {
+    const consumedReset = await tx.passwordReset.deleteMany({
+      where: {
+        id: resetRequest.id,
+        email,
+        otp: otpHash,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (consumedReset.count !== 1) {
+      return false;
+    }
+
+    await tx.user.update({
+      where: { id: account.id },
+      data: {
+        password: hashedPassword,
+        sessionVersion: { increment: 1 },
+      },
+    });
+
+    await tx.passwordReset.deleteMany({
+      where: { email },
+    });
+
+    return true;
   });
 
-  await prisma.passwordReset.deleteMany({ where: { email } }); // cleanup
+  if (!resetCompleted) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
 
   return NextResponse.json({ message: "Password has been reset" });
 }
