@@ -1,7 +1,18 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { validateCropTargetData } from "@/app/types/editor/crop-target";
+
+function secretsMatch(provided: string, expected: string): boolean {
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    providedBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(providedBuffer, expectedBuffer)
+  );
+}
 
 /**
  * Worker webhook endpoint (Cloud Run video worker & reframe worker callbacks).
@@ -15,11 +26,18 @@ import { validateCropTargetData } from "@/app/types/editor/crop-target";
 export async function POST(req: NextRequest) {
   try {
     // ── Authenticate ──────────────────────────────────────────────────
-    const authHeader = req.headers.get("authorization") || "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const expectedSecret = (process.env.CALLBACK_SECRET || "").trim();
 
-    if (!expectedSecret || token !== expectedSecret) {
+    if (!expectedSecret) {
+      console.error("[callback] CALLBACK_SECRET is not configured");
+      return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+    }
+
+    const authHeader = req.headers.get("authorization") || "";
+    const bearerMatch = /^Bearer\s+(\S+)$/i.exec(authHeader.trim());
+    const token = bearerMatch?.[1] ?? "";
+
+    if (!token || !secretsMatch(token, expectedSecret)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -313,11 +331,7 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        if (
-          typeof duration !== "number" ||
-          !Number.isFinite(duration) ||
-          duration < 0
-        ) {
+        if (typeof duration !== "number" || !Number.isFinite(duration) || duration < 0) {
           return NextResponse.json(
             { error: "Invalid duration: must be a finite non-negative number" },
             { status: 400 }
@@ -380,9 +394,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       } else {
         const failureError =
-          typeof error === "string" && error.trim()
-            ? error
-            : "Dub-sync alignment failed";
+          typeof error === "string" && error.trim() ? error : "Dub-sync alignment failed";
 
         if (typeof prisma.videoJob.updateMany === "function") {
           const updateResult = await prisma.videoJob.updateMany({
