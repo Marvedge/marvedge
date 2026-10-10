@@ -23,6 +23,8 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
+    sessionVersion?: number;
+    sessionInvalid?: boolean;
   }
 }
 
@@ -112,29 +114,65 @@ export const authOptions: NextAuthOptions = {
             token.name = session.user.name;
           }
         }
+
         if (user) {
           token.id = user.id;
           token.email = user.email;
           token.name = user.name;
           token.picture = user.image || null;
         }
+
+        const userId =
+          user?.id || (typeof token.id === "string" ? token.id : undefined) || token.sub;
+
+        if (!userId) {
+          token.sessionInvalid = true;
+          return token;
+        }
+
+        const currentUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { sessionVersion: true },
+        });
+
+        if (!currentUser) {
+          token.sessionInvalid = true;
+          return token;
+        }
+
+        if (user) {
+          token.sessionVersion = currentUser.sessionVersion;
+        }
+
+        token.sessionInvalid =
+          typeof token.sessionVersion !== "number" ||
+          token.sessionVersion !== currentUser.sessionVersion;
+
         return token;
       } catch (error) {
         console.error("JWT callback error:", error);
+        token.sessionInvalid = true;
         return token;
       }
     },
     async session({ session, token }) {
       try {
+        if (token.sessionInvalid) {
+          delete (session as { user?: unknown }).user;
+          return session;
+        }
+
         if (session?.user) {
           session.user.id = (token.id as string) || (token.sub as string) || "";
           session.user.email = (token.email as string) || "";
           session.user.name = (token.name as string) || "";
           session.user.image = (token.picture as string | null) || null;
         }
+
         return session;
       } catch (error) {
         console.error("Session callback error:", error);
+        delete (session as { user?: unknown }).user;
         return session;
       }
     },

@@ -9,10 +9,7 @@
 //
 // ZERO Prisma / Postgres imports.
 
-import type {
-  JobCallbackPayload,
-  JobCallbackSuccessResponse,
-} from "../../types/jobs/callback";
+import type { JobCallbackPayload, JobCallbackSuccessResponse } from "../../types/jobs/callback";
 
 export class CallbackHttpError extends Error {
   readonly status: number;
@@ -54,6 +51,12 @@ export async function postJobCallback(
   payload: JobCallbackPayload,
   options: CallbackRequestOptions = {}
 ): Promise<JobCallbackSuccessResponse> {
+  const normalizedSecret = callbackSecret.trim();
+
+  if (!normalizedSecret) {
+    throw new Error("CALLBACK_SECRET is not configured");
+  }
+
   const endpoint = buildCallbackUrl(backendUrl);
   const timeoutMs = options.timeoutMs ?? 15000;
 
@@ -63,10 +66,8 @@ export async function postJobCallback(
   try {
     const headers: Record<string, string> = {
       "content-type": "application/json",
+      authorization: `Bearer ${normalizedSecret}`,
     };
-    if (callbackSecret) {
-      headers["authorization"] = `Bearer ${callbackSecret}`;
-    }
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -83,13 +84,12 @@ export async function postJobCallback(
       } catch {
         errMessage = await response.text().catch(() => "");
       }
-      throw new CallbackHttpError(
-        response.status,
-        errMessage || response.statusText
-      );
+      throw new CallbackHttpError(response.status, errMessage || response.statusText);
     }
 
-    const resBody = (await response.json().catch(() => ({ success: true }))) as JobCallbackSuccessResponse;
+    const resBody = (await response
+      .json()
+      .catch(() => ({ success: true }))) as JobCallbackSuccessResponse;
     return {
       success: true,
       ...(resBody.ignored ? { ignored: resBody.ignored } : {}),
@@ -116,13 +116,19 @@ export async function postJobCallbackWithRetry(
   payload: JobCallbackPayload,
   options: CallbackRetryOptions = {}
 ): Promise<JobCallbackSuccessResponse> {
+  const normalizedSecret = callbackSecret.trim();
+
+  if (!normalizedSecret) {
+    throw new Error("CALLBACK_SECRET is not configured");
+  }
+
   const retries = options.retries ?? 3;
   const delayMs = options.delayMs ?? 1000;
   const timeoutMs = options.timeoutMs;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await postJobCallback(backendUrl, callbackSecret, payload, {
+      return await postJobCallback(backendUrl, normalizedSecret, payload, {
         timeoutMs,
       });
     } catch (error) {

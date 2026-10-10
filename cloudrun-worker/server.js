@@ -15,6 +15,7 @@ const storageLib = require("./storage.cjs");
 // Job state: AWS DynamoDB (primary) with Firestore cold-standby.
 const jobstore   = require("./jobstore.cjs");
 const { renderChunkFromRecipe } = require("./render");
+const { authorizeWorkerRequest } = require("./worker-auth.cjs");
 
 const PORT = Number(process.env.PORT || 8080);
 const RAW_BUCKET = process.env.RAW_BUCKET || "";
@@ -2121,23 +2122,28 @@ app.get("/healthz", (_req, res) => {
 
 app.use("/artifacts", express.static(ARTIFACTS_DIR));
 
-// shared secret so strangers cannot trigger pricey video jobs.
-// while the secret is missing we only warn, so local runs keep working.
-// once WORKER_SECRET is set on Cloud Run, requests without it get a 401.
+// Processing routes require a shared bearer secret.
+// Missing WORKER_SECRET fails closed rather than exposing worker endpoints.
 const WORKER_SECRET = process.env.WORKER_SECRET || "";
 
 
 function requireWorkerAuth(req, res, next) {
-  if (!WORKER_SECRET) {
-    console.warn("[worker] WORKER_SECRET not set, auth skipped");
-    return next();
+  const authResult = authorizeWorkerRequest(
+    WORKER_SECRET,
+    req.headers.authorization
+  );
+
+  if (!authResult.ok) {
+    if (authResult.reason) {
+      console.error(`[worker] ${authResult.reason}`);
+    }
+
+    return res.status(authResult.status).json({
+      ok: false,
+      error: authResult.error,
+    });
   }
-  const token = String(req.headers.authorization || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  if (!token || token !== WORKER_SECRET) {
-    return res.status(401).json({ ok: false, error: "Unauthorized" });
-  }
+
   return next();
 }
 

@@ -49,11 +49,7 @@ describe("Callback HTTP Client (Task-00026)", () => {
       });
       globalThis.fetch = mockFetch;
 
-      const result = await postJobCallback(
-        backendUrl,
-        callbackSecret,
-        samplePayload
-      );
+      const result = await postJobCallback(backendUrl, callbackSecret, samplePayload);
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -66,18 +62,15 @@ describe("Callback HTTP Client (Task-00026)", () => {
       expect(JSON.parse(init.body as string)).toEqual(samplePayload);
     });
 
-    it("handles callback without secret if empty", async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true }),
-      });
+    it("fails before fetch when callback secret is empty", async () => {
+      const mockFetch = vi.fn();
       globalThis.fetch = mockFetch;
 
-      const result = await postJobCallback(backendUrl, "", samplePayload);
-      expect(result.success).toBe(true);
+      await expect(postJobCallback(backendUrl, "   ", samplePayload)).rejects.toThrow(
+        "CALLBACK_SECRET is not configured"
+      );
 
-      const [, init] = mockFetch.mock.calls[0];
-      expect(init.headers["authorization"]).toBeUndefined();
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("throws CallbackHttpError with isClientError=true on HTTP 400", async () => {
@@ -89,9 +82,9 @@ describe("Callback HTTP Client (Task-00026)", () => {
       });
       globalThis.fetch = mockFetch;
 
-      await expect(
-        postJobCallback(backendUrl, callbackSecret, samplePayload)
-      ).rejects.toThrow(CallbackHttpError);
+      await expect(postJobCallback(backendUrl, callbackSecret, samplePayload)).rejects.toThrow(
+        CallbackHttpError
+      );
 
       try {
         await postJobCallback(backendUrl, callbackSecret, samplePayload);
@@ -138,6 +131,17 @@ describe("Callback HTTP Client (Task-00026)", () => {
   });
 
   describe("postJobCallbackWithRetry (Resilience & backoff)", () => {
+    it("fails before retrying when callback secret is empty", async () => {
+      const mockFetch = vi.fn();
+      globalThis.fetch = mockFetch;
+
+      await expect(
+        postJobCallbackWithRetry(backendUrl, "   ", samplePayload, { retries: 3, delayMs: 1 })
+      ).rejects.toThrow("CALLBACK_SECRET is not configured");
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("retries on HTTP 500 and succeeds when subsequent attempt succeeds", async () => {
       const mockFetch = vi
         .fn()
@@ -153,12 +157,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
         });
       globalThis.fetch = mockFetch;
 
-      const result = await postJobCallbackWithRetry(
-        backendUrl,
-        callbackSecret,
-        samplePayload,
-        { retries: 2, delayMs: 10 }
-      );
+      const result = await postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+        retries: 2,
+        delayMs: 10,
+      });
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -179,12 +181,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
         });
       globalThis.fetch = mockFetch;
 
-      const result = await postJobCallbackWithRetry(
-        backendUrl,
-        callbackSecret,
-        samplePayload,
-        { retries: 2, delayMs: 10 }
-      );
+      const result = await postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+        retries: 2,
+        delayMs: 10,
+      });
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -200,12 +200,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
         });
       globalThis.fetch = mockFetch;
 
-      const result = await postJobCallbackWithRetry(
-        backendUrl,
-        callbackSecret,
-        samplePayload,
-        { retries: 2, delayMs: 10 }
-      );
+      const result = await postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+        retries: 2,
+        delayMs: 10,
+      });
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -224,12 +222,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
 
       const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
-      const result = await postJobCallbackWithRetry(
-        backendUrl,
-        callbackSecret,
-        samplePayload,
-        { retries: 3, delayMs: 50 }
-      );
+      const result = await postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+        retries: 3,
+        delayMs: 50,
+      });
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(3);
@@ -250,12 +246,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
       globalThis.fetch = mockFetch;
 
       await expect(
-        postJobCallbackWithRetry(
-          backendUrl,
-          callbackSecret,
-          samplePayload,
-          { retries: 3, delayMs: 10 }
-        )
+        postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+          retries: 3,
+          delayMs: 10,
+        })
       ).rejects.toThrow("Validation error: invalid cropTargets");
 
       // Must NOT retry 4xx errors
@@ -272,12 +266,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
       globalThis.fetch = mockFetch;
 
       await expect(
-        postJobCallbackWithRetry(
-          backendUrl,
-          callbackSecret,
-          samplePayload,
-          { retries: 3, delayMs: 10 }
-        )
+        postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+          retries: 3,
+          delayMs: 10,
+        })
       ).rejects.toThrow(CallbackHttpError);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -293,12 +285,10 @@ describe("Callback HTTP Client (Task-00026)", () => {
       globalThis.fetch = mockFetch;
 
       await expect(
-        postJobCallbackWithRetry(
-          backendUrl,
-          callbackSecret,
-          samplePayload,
-          { retries: 2, delayMs: 10 }
-        )
+        postJobCallbackWithRetry(backendUrl, callbackSecret, samplePayload, {
+          retries: 2,
+          delayMs: 10,
+        })
       ).rejects.toThrow(CallbackHttpError);
 
       // Initial call + 2 retries = 3 calls
