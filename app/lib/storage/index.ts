@@ -232,3 +232,21 @@ export function parseStorageUri(uri: string): { bucket: string; key: string } | 
   if (!match) return null;
   return { bucket: match[1], key: match[2] };
 }
+
+/**
+ * Resolves a native storage URI (s3:// or gs://) to a short-lived HTTPS
+ * download URL (presigned for S3, signed for GCS).
+ *
+ * Use this in API routes when you need to hand the worker a fetchable URL
+ * instead of a raw storage URI.  Throws if the URI is invalid.
+ */
+export async function getPresignedUrl(
+  uri: string,
+  expiresMs = 2 * 60 * 60 * 1000
+): Promise<string> {
+  const parsed = parseStorageUri(uri);
+  if (!parsed) {
+    throw new Error(`[storage] Cannot resolve presigned URL for invalid URI: ${uri}`);
+  }
+  return getSignedDownloadUrl(parsed.bucket, parsed.key, expiresMs);
+}

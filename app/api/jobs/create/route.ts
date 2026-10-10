@@ -1,6 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpWorker } from "@/app/lib/gcpWorker";
+import { parseStorageUri, getPresignedUrl } from "@/app/lib/storage/index";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { normalizeLanguage, sanitizeSubtitleStyle } from "@/app/lib/subtitles";
@@ -262,12 +263,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
     }
 
-    if (typeof videoUrl === "string" && videoUrl.startsWith("gs://")) {
-      videoUrl = videoUrl.replace("gs://", "https://storage.googleapis.com/");
+    // Resolve native storage URIs (s3:// or gs://) to short-lived HTTPS URLs
+    // so the worker can fetch the source without needing its own credentials.
+    // Plain HTTPS URLs are passed through unchanged.
+    if (typeof videoUrl === "string" && parseStorageUri(videoUrl)) {
+      videoUrl = await getPresignedUrl(videoUrl);
     }
 
-    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.startsWith("gs://")) {
-      customBackgroundUrl = customBackgroundUrl.replace("gs://", "https://storage.googleapis.com/");
+    if (typeof customBackgroundUrl === "string" && parseStorageUri(customBackgroundUrl)) {
+      customBackgroundUrl = await getPresignedUrl(customBackgroundUrl);
     }
 
     // Accept a string number from the client by coercing it. NaN stays invalid.

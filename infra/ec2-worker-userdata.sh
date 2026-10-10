@@ -28,7 +28,7 @@ cd /opt/marvedge
 
 # If already cloned (AMI baked or re-run), just pull
 if [ -d ".git" ]; then
-  git pull origin main || true
+  git pull origin master || true
 else
   git clone https://github.com/Marvedge/marvedge.git .
 fi
@@ -52,6 +52,10 @@ PROCESSED_BUCKET=marvedge-processed-ap2
 RECIPES_COLLECTION=marvedge-recipes
 CHUNKS_COLLECTION=marvedge-chunks
 PORT=8080
+# ── Secrets: populate these before launch (or inject via SSM Parameter Store) ──
+# Replace the placeholder values below with real secrets.
+WORKER_SECRET=G1QmTD2svBBvCzGtsEVWtOJun_dX5dxsEQ5cGrLI_t4
+DEEPGRAM_API_KEY=fb744c1f011d2ece95b00f19e5a130a2f2d709fa
 WORKERENV
 
 # Permissions: root-readable only (contains secrets)
