@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -10,12 +10,12 @@ const { createReadStream } = require("node:fs");
 const { fetchSafeUrl } = require("./safe-download.cjs");
 const { prepareChunkInput } = require("./chunk-input.cjs");
 const express = require("express");
-const { Storage } = require("@google-cloud/storage");
-const { Firestore, FieldValue } = require("@google-cloud/firestore");
+// Storage: AWS S3 (primary) with GCS cold-standby — provider controlled by STORAGE_PROVIDER env.
+const storageLib = require("./storage.cjs");
+// Job state: AWS DynamoDB (primary) with Firestore cold-standby.
+const jobstore   = require("./jobstore.cjs");
 const { renderChunkFromRecipe } = require("./render");
 const { authorizeWorkerRequest } = require("./worker-auth.cjs");
-const storage = new Storage();
-const firestore = new Firestore();
 
 const PORT = Number(process.env.PORT || 8080);
 const RAW_BUCKET = process.env.RAW_BUCKET || "";
@@ -122,60 +122,28 @@ function must(name, value) {
   return value;
 }
 
-async function downloadRawChunkFromGcs({
-  bucketName,
-  objectName,
-  destinationPath,
-}) {
-  await storage
-    .bucket(bucketName)
-    .file(objectName)
-    .download({ destination: destinationPath });
+// ---------------------------------------------------------------------------
+// Storage helpers — delegate to storage.cjs (AWS S3 primary / GCS fallback)
+// ---------------------------------------------------------------------------
+
+async function downloadRawChunkFromGcs({ bucketName, objectName, destinationPath }) {
+  // Name kept for backwards compatibility — routes to S3 or GCS per STORAGE_PROVIDER.
+  await storageLib.downloadObject({ bucketName, objectName, destinationPath });
 }
 
 function parseGsUri(uri) {
-  if (typeof uri !== "string" || !uri.startsWith("gs://")) {
-    return null;
-  }
-  const trimmed = uri.slice("gs://".length);
-  const slashIndex = trimmed.indexOf("/");
-  if (slashIndex <= 0) {
-    return null;
-  }
-  const bucket = trimmed.slice(0, slashIndex);
-  const object = trimmed.slice(slashIndex + 1);
-  if (!bucket || !object) {
-    return null;
-  }
-  return { bucket, object };
+  // Supports both gs:// (legacy) and s3:// URIs stored in the database.
+  return storageLib.parseStorageUri(uri);
 }
 
 async function downloadFromGsUri({ uri, destinationPath }) {
-  const parsed = parseGsUri(uri);
-  if (!parsed) {
-    throw new Error(`Invalid gs:// uri: ${uri}`);
-  }
-  await downloadRawChunkFromGcs({
-    bucketName: parsed.bucket,
-    objectName: parsed.object,
-    destinationPath,
-  });
+  // Supports both gs:// and s3:// URIs.
+  await storageLib.downloadFromUri({ uri, destinationPath });
 }
 
 async function getSignedHttpUrlForGsUri(uri) {
-  const parsed = parseGsUri(uri);
-  if (!parsed) {
-    throw new Error(`Invalid gs:// uri: ${uri}`);
-  }
-  const [signedUrl] = await storage
-    .bucket(parsed.bucket)
-    .file(parsed.object)
-    .getSignedUrl({
-      version: "v4",
-      action: "read",
-      expires: Date.now() + 2 * 60 * 60 * 1000,
-    });
-  return signedUrl;
+  // Resolves gs:// or s3:// → short-lived HTTPS URL.
+  return storageLib.getSignedUrlForUri(uri);
 }
 
 async function downloadFromUrl({ url, destinationPath }) {
@@ -451,16 +419,9 @@ async function processSubtitlesJob({ videoUrl, language }) {
   }
 }
 
-async function uploadProcessedChunkToGcs({
-  bucketName,
-  objectName,
-  sourcePath,
-}) {
-  await storage.bucket(bucketName).upload(sourcePath, {
-    destination: objectName,
-    contentType: "video/mp4",
-    resumable: false,
-  });
+async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath }) {
+  // Name kept for backwards compatibility — routes to S3 or GCS per STORAGE_PROVIDER.
+  await storageLib.uploadObject({ bucketName, objectName, sourcePath, contentType: "video/mp4" });
 }
 
 // --- AVS voiceover (Deepgram Aura TTS) -------------------------------------
@@ -621,11 +582,8 @@ async function concatMp3(inputPaths, outputPath, workDir, tag) {
 }
 
 async function uploadVoiceoverToGcs({ bucketName, objectName, sourcePath }) {
-  await storage.bucket(bucketName).upload(sourcePath, {
-    destination: objectName,
-    contentType: "audio/mpeg",
-    resumable: false,
-  });
+  // Routes to S3 or GCS per STORAGE_PROVIDER env — name kept for compatibility.
+  await storageLib.uploadObject({ bucketName, objectName, sourcePath, contentType: "audio/mpeg" });
 }
 
 const round3 = (n) => Math.round(n * 1000) / 1000;
@@ -704,13 +662,8 @@ async function processVoiceoverJob({ lines, voiceId, pronunciation }) {
       sourcePath: finalPath,
     });
 
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const audioUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const audioUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[avs-voiceover] steps=${stepTimings.length} duration=${duration}s ` +
@@ -860,10 +813,12 @@ async function concatByDemuxer(inputPaths, outputPath, workDir, tag) {
 }
 
 async function downloadToPath(url, destinationPath) {
-  if (String(url).startsWith("gs://")) {
-    await downloadFromGsUri({ uri: String(url), destinationPath });
+  const u = String(url);
+  // Handles s3:// (AWS primary), gs:// (GCS legacy/fallback), and plain HTTPS URLs.
+  if (u.startsWith("s3://") || u.startsWith("gs://")) {
+    await storageLib.downloadFromUri({ uri: u, destinationPath });
   } else {
-    await downloadFromUrl({ url: String(url), destinationPath });
+    await downloadFromUrl({ url: u, destinationPath });
   }
 }
 
@@ -979,13 +934,8 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
       objectName,
       sourcePath: alignedPath,
     });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const alignedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[avs-sync] steps=${videoSegments.length} frozen=${frozen} padded=${padded} ` +
@@ -1321,16 +1271,11 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
           objectName,
           sourcePath: alignedPath,
         });
-        const fileRef = storage.bucket(processedBucket).file(objectName);
-        try {
-          await fileRef.makePublic();
-        } catch (_e) {
-          /* Ignore if UBLA is enforced — signed URL still works. */
-        }
-        alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
-      } catch (gcsErr) {
+        // Generate a signed download URL — works for both private S3 and private GCS buckets.
+        alignedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
+      } catch (uploadErr) {
         console.warn(
-          `[avs-dub] GCS upload failed (${gcsErr.message}). Falling back to local artifact serving.`,
+          `[avs-dub] Storage upload failed (${uploadErr.message}). Falling back to local artifact serving.`,
         );
       }
     }
@@ -1539,13 +1484,8 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
       objectName,
       sourcePath: compositedPath,
     });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const compositedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const compositedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[wtm-composite] shape=${bubbleShape} corner=${corner} d=${diameter}px ` +
@@ -2442,21 +2382,11 @@ app.post("/merge", async (req, res) => {
       sourcePath: finalPath,
     });
 
-    const fileRef = storage.bucket(processedBucket).file(finalFilename);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced */
-    }
+    const publicUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: finalFilename });
 
-    const publicUrl = `https://storage.googleapis.com/${processedBucket}/${finalFilename}`;
-
-    for (let i = 0; i < chunkFilenames.length; i++) {
-      storage
-        .bucket(processedBucket)
-        .file(chunkFilenames[i])
-        .delete()
-        .catch(() => {});
+    // Asynchronously clean up the per-chunk objects from storage.
+    for (const chunkKey of chunkFilenames) {
+      storageLib.deleteObject(processedBucket, chunkKey).catch(() => {});
     }
 
     return res.status(200).json({
