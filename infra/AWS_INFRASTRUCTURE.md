@@ -16,7 +16,7 @@
 | **DynamoDB** | `marvedge-chunks` | `ap-southeast-2` · PAY_PER_REQUEST | ✅ Active |
 | **RDS** | `marvedge-db` | `marvedge-db.cfggeg20sv42.ap-southeast-2.rds.amazonaws.com:5432` | ✅ Active |
 | **ElastiCache** | `marvedge-redis` | `marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379` | ✅ Active |
-| **EC2 GPU** | `marvedge-gpu-worker` | `i-02aa4578f3790bae1` · `172.31.8.120` · T4 GPU | ✅ Active |
+| **EC2 GPU** | `marvedge-gpu-worker` | `i-02aa4578f3790bae1` · `172.31.8.120` · T4 GPU | ⏸️ Stopped (Ready) |
 
 ---
 
@@ -77,9 +77,16 @@ REDIS_URL = AWS ElastiCache Redis 7.1    ← BullMQ job queue
 
 ## EC2 GPU Worker — Launch Checklist
 
-> ✅ **GPU quota approved and instance launched.** Case `179162221500540` closed — 4 vCPUs granted.
+> ✅ **GPU quota approved and instance provisioned.**
 >
-> Instance `i-02aa4578f3790bae1` is running at `172.31.8.120:8080` in `ap-southeast-2a`.
+> ⏸️ **Currently STOPPED** to save AWS credits.
+> 
+> To start the pipeline when you are ready to process videos:
+> ```bash
+> aws ec2 start-instances --instance-ids i-02aa4578f3790bae1 --region ap-southeast-2 --profile marvedge
+> ```
+> 
+> Once running, it will automatically listen at `172.31.8.120:8080`.
 > The webapp routes all video exports through `GCP_VIDEO_WORKER_URL=http://172.31.8.120:8080`.
 
 ```bash
