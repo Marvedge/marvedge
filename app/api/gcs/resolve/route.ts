@@ -1,67 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { Storage } from "@google-cloud/storage";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import {
+  getSignedDownloadUrl,
+  objectExists,
+  parseStorageUri,
+} from "@/app/lib/storage";
 
-const SOURCE_NOT_FOUND_ERROR = "Source video object not found in GCS";
+/**
+ * GET /api/gcs/resolve?url=<storage-uri>
+ *
+ * Resolves a private storage URI (s3:// or gs://) to a short-lived signed
+ * HTTPS URL that the browser video player can fetch directly.
+ *
+ * Storage backend: AWS S3 (primary) or GCS (fallback), controlled by
+ * STORAGE_PROVIDER env var. Supports both s3:// and gs:// URIs so that
+ * legacy GCS references stored in the database continue to resolve.
+ *
+ * Security: only the authenticated owner may resolve their own objects.
+ */
 
-function getStorageClient() {
-  const projectId = (
-    process.env.GOOGLE_CLOUD_PROJECT_ID ||
-    process.env.GCP_PROJECT_ID ||
-    ""
-  ).trim();
-  const clientEmail = (process.env.GOOGLE_CLOUD_CLIENT_EMAIL || "").trim();
-  const privateKeyRaw = process.env.GOOGLE_CLOUD_PRIVATE_KEY || "";
-  const privateKey = privateKeyRaw.includes("\\n")
-    ? privateKeyRaw.replace(/\\n/g, "\n")
-    : privateKeyRaw;
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(
-      "Missing Google Cloud credentials env (GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_CLIENT_EMAIL, GOOGLE_CLOUD_PRIVATE_KEY)"
-    );
-  }
-
-  return new Storage({
-    projectId,
-    credentials: {
-      client_email: clientEmail,
-      private_key: privateKey,
-    },
-  });
-}
+const SOURCE_NOT_FOUND_ERROR = "Source video object not found in storage";
 
 function configuredUploadBucket(): string {
-  return (process.env.GCP_RAW_BUCKET || process.env.RAW_BUCKET || "").trim();
-}
-
-function parseGsUri(uri: string) {
-  if (!uri.startsWith("gs://")) {
-    return null;
-  }
-
-  const raw = uri.slice("gs://".length);
-  const slashIdx = raw.indexOf("/");
-
-  if (slashIdx <= 0) {
-    return null;
-  }
-
-  const bucket = raw.slice(0, slashIdx);
-  const object = raw.slice(slashIdx + 1);
-
-  if (!bucket || !object) {
-    return null;
-  }
-
-  return { bucket, object };
+  return (process.env.RAW_BUCKET || process.env.GCP_RAW_BUCKET || "").trim();
 }
 
 function isUserUploadObject(object: string, userId: string): boolean {
   const parts = object.split("/");
-
   return (
     parts.length >= 4 &&
     parts[0] === "uploads" &&
@@ -75,47 +42,30 @@ async function getCurrentUserId(sessionUser: {
   id?: string;
   email?: string | null;
 }): Promise<string | null> {
-  if (sessionUser.id) {
-    return sessionUser.id;
-  }
-
-  if (!sessionUser.email) {
-    return null;
-  }
-
+  if (sessionUser.id) return sessionUser.id;
+  if (!sessionUser.email) return null;
   const user = await prisma.user.findUnique({
     where: { email: sessionUser.email },
     select: { id: true },
   });
-
   return user?.id ?? null;
 }
 
 async function isReferencedByUser(inputUrl: string, userId: string): Promise<boolean> {
   const [demo, videoJob, exportedVideo] = await Promise.all([
     prisma.demo.findFirst({
-      where: {
-        userId,
-        OR: [{ videoUrl: inputUrl }, { exportedUrl: inputUrl }],
-      },
+      where: { userId, OR: [{ videoUrl: inputUrl }, { exportedUrl: inputUrl }] },
       select: { id: true },
     }),
     prisma.videoJob.findFirst({
-      where: {
-        userId,
-        OR: [{ videoUrl: inputUrl }, { exportedUrl: inputUrl }],
-      },
+      where: { userId, OR: [{ videoUrl: inputUrl }, { exportedUrl: inputUrl }] },
       select: { id: true },
     }),
     prisma.exportedVideo.findFirst({
-      where: {
-        userId,
-        OR: [{ exportedUrl: inputUrl }, { sourceVideoUrl: inputUrl }],
-      },
+      where: { userId, OR: [{ exportedUrl: inputUrl }, { sourceVideoUrl: inputUrl }] },
       select: { id: true },
     }),
   ]);
-
   return Boolean(demo || videoJob || exportedVideo);
 }
 
@@ -126,34 +76,26 @@ async function mayResolveObject(
   userId: string
 ): Promise<boolean> {
   const uploadBucket = configuredUploadBucket();
-
   if (uploadBucket && bucket === uploadBucket && isUserUploadObject(object, userId)) {
     return true;
   }
-
   return isReferencedByUser(inputUrl, userId);
 }
 
-async function firstExistingObject(
-  storage: Storage,
-  bucket: string,
-  object: string
-): Promise<string | null> {
+/**
+ * Try the requested object key and fall back to common video extension variants
+ * (for legacy .bin uploads that were stored without an extension).
+ * Returns the first key that actually exists in storage, or null.
+ */
+async function firstExistingKey(bucket: string, object: string): Promise<string | null> {
   const candidates = [object];
-
   if (object.endsWith(".bin")) {
     const base = object.slice(0, -4);
     candidates.push(`${base}.webm`, `${base}.mp4`, `${base}.mov`);
   }
-
   for (const candidate of candidates) {
-    const [exists] = await storage.bucket(bucket).file(candidate).exists();
-
-    if (exists) {
-      return candidate;
-    }
+    if (await objectExists(bucket, candidate)) return candidate;
   }
-
   return null;
 }
 
@@ -164,63 +106,50 @@ function sourceNotFoundResponse() {
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const userId = await getCurrentUserId(session.user);
-
     if (!userId) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const inputUrl = (req.nextUrl.searchParams.get("url") || "").trim();
-
     if (!inputUrl) {
       return NextResponse.json({ ok: false, error: "url is required" }, { status: 400 });
     }
 
-    if (!inputUrl.startsWith("gs://")) {
+    // If it's already a plain HTTPS URL, return it directly — no signing needed.
+    if (!inputUrl.startsWith("s3://") && !inputUrl.startsWith("gs://")) {
       return NextResponse.json({ ok: true, playableUrl: inputUrl });
     }
 
-    const parsed = parseGsUri(inputUrl);
-
+    const parsed = parseStorageUri(inputUrl);
     if (!parsed) {
-      return NextResponse.json({ ok: false, error: "Invalid gs:// URL" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Invalid storage URI (expected s3:// or gs://)" },
+        { status: 400 }
+      );
     }
 
-    const authorized = await mayResolveObject(inputUrl, parsed.bucket, parsed.object, userId);
+    const authorized = await mayResolveObject(inputUrl, parsed.bucket, parsed.key, userId);
+    if (!authorized) return sourceNotFoundResponse();
 
-    if (!authorized) {
-      return sourceNotFoundResponse();
-    }
+    const existingKey = await firstExistingKey(parsed.bucket, parsed.key);
+    if (!existingKey) return sourceNotFoundResponse();
 
-    const storage = getStorageClient();
-    const existingObject = await firstExistingObject(storage, parsed.bucket, parsed.object);
-
-    if (!existingObject) {
-      return sourceNotFoundResponse();
-    }
-
-    const [signedUrl] = await storage
-      .bucket(parsed.bucket)
-      .file(existingObject)
-      .getSignedUrl({
-        version: "v4",
-        action: "read",
-        expires: Date.now() + 2 * 60 * 60 * 1000,
-      });
+    // Generate a 2-hour presigned URL — S3 or GCS per active STORAGE_PROVIDER.
+    const playableUrl = await getSignedDownloadUrl(parsed.bucket, existingKey);
 
     return NextResponse.json({
       ok: true,
-      playableUrl: signedUrl,
-      sourceUrl: `gs://${parsed.bucket}/${existingObject}`,
+      playableUrl,
+      // Return canonical URI — callers should update their DB records to s3:// over time.
+      sourceUrl: `${inputUrl.startsWith("s3://") ? "s3" : "gs"}://${parsed.bucket}/${existingKey}`,
     });
   } catch (error) {
-    console.error("GCS resolve error:", error);
-
+    console.error("[storage] resolve error:", error);
     return NextResponse.json({ ok: false, error: "Failed to resolve video URL" }, { status: 500 });
   }
 }
