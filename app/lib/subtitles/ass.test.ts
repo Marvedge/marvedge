@@ -15,6 +15,7 @@ import { writeAssFile } from "./ass.server";
 import { DEFAULT_SUBTITLE_STYLE, toAssOverrideTags, toAssStyleLine } from "./style";
 import type { SubtitleCue, SubtitleStyle } from "./types";
 import { cuesFromWhisperWords, normalizeWhisperResponse } from "./whisper";
+import ffmpegPath from "ffmpeg-static";
 
 const require_ = createRequire(import.meta.url);
 const worker = require_(path.join(process.cwd(), "cloudrun-worker", "render.js")) as {
@@ -672,7 +673,7 @@ describe("Canonical ASS Generator & Serializer (Task-00038)", () => {
       const { execSync } = require_("child_process") as typeof import("child_process");
       let ffmpegAvailable = false;
       try {
-        execSync("ffmpeg -version", { stdio: "ignore" });
+        execSync(`"${ffmpegPath}" -version`, { stdio: "ignore" });
         ffmpegAvailable = true;
       } catch {
         ffmpegAvailable = false;
@@ -705,7 +706,7 @@ describe("Canonical ASS Generator & Serializer (Task-00038)", () => {
         );
         const escapedPath = escapeFfmpegFilterPath(assPath);
 
-        const cmd = `ffmpeg -y -f lavfi -i color=c=black:s=1920x1080:d=1 -vf "subtitles=${escapedPath}" -frames:v 1 -f null -`;
+        const cmd = `"${ffmpegPath}" -y -f lavfi -i color=c=black:s=1920x1080:d=1 -vf "subtitles=${escapedPath}" -frames:v 1 -f null -`;
         expect(() => execSync(cmd, { stdio: "pipe" })).not.toThrow();
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
