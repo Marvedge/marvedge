@@ -228,13 +228,7 @@ export function isNativeUri(uri: string): boolean {
  * Returns null for invalid or mismatched scheme URIs.
  */
 export function parseStorageUri(uri: string): { bucket: string; key: string } | null {
-  const scheme = activeProvider() === "aws" ? "s3://" : "gs://";
-  if (!uri.startsWith(scheme)) return null;
-  const raw = uri.slice(scheme.length);
-  const idx = raw.indexOf("/");
-  if (idx <= 0) return null;
-  const bucket = raw.slice(0, idx);
-  const key = raw.slice(idx + 1);
-  if (!bucket || !key) return null;
-  return { bucket, key };
+  const match = uri.match(/^(?:s3|gs):\/\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return { bucket: match[1], key: match[2] };
 }
