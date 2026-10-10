@@ -17,6 +17,17 @@ import { postJobCallbackWithRetry, processDubbingJob } from "../app/lib/avs/dubb
 import { runSubtitleJobWithRetry } from "./subtitleRetry";
 import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
 import { updateCompletedJobProgress } from "./completedJobProgress";
+import {
+  getJobOutcomeMetricsMaxDataPoints,
+  getJobOutcomeMetricsObservationWindowSeconds,
+} from "../app/lib/monitoring/jobOutcomeMetrics";
+import { recordLatencyObservationBestEffort } from "../app/lib/monitoring/latencyWindowMetrics";
+import { createWorkerMonitoringRedis } from "../app/lib/monitoring/workerRedis";
+import {
+  recordDubbingJobCompleted,
+  recordFinalDubbingJobFailure,
+  withDubbingJobMetrics,
+} from "./dubbingMetrics";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 // Load env from common locations (video-worker/.env and parent app .env).
@@ -1640,9 +1651,21 @@ const dubbingStalledInterval = Math.max(
   30_000,
   parseInt(process.env.DUBBING_STALLED_INTERVAL_MS || "300000", 10) || 300_000
 );
+const dubbingMetricsMaxDataPoints = getJobOutcomeMetricsMaxDataPoints();
+const dubbingLatencyObservationWindowSeconds = getJobOutcomeMetricsObservationWindowSeconds(
+  process.env
+);
+const dubbingRedisConnection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+const dubbingMonitoringRedisConnection = createWorkerMonitoringRedis(redisUrl);
+if (dubbingMetricsMaxDataPoints === undefined) {
+  console.warn(
+    "[dubbing-worker] Failure-rate history is disabled; configure MONITORING_FAILURE_RATE_OBSERVATION_WINDOW_SECONDS as a whole-minute value."
+  );
+}
 
 export const dubbingWorker = new Worker(
   "dubbing-processing",
+  withDubbingJobMetrics(
   async (job: Job) => {
     if (job.name === "avs-dub") {
       const maxAttempts =
@@ -1778,17 +1801,40 @@ export const dubbingWorker = new Worker(
       },
     });
   },
+    (status, durationSeconds) => {
+      if (dubbingLatencyObservationWindowSeconds !== undefined) {
+        recordLatencyObservationBestEffort(
+          dubbingMonitoringRedisConnection,
+          "dubbing",
+          status,
+          durationSeconds,
+          dubbingLatencyObservationWindowSeconds
+        );
+      }
+    }
+  ),
   {
-    connection: new Redis(redisUrl, { maxRetriesPerRequest: null }) as any,
+    connection: dubbingRedisConnection as any,
     concurrency: dubbingConcurrency,
     lockDuration: dubbingLockDuration,
     stalledInterval: dubbingStalledInterval,
     maxStalledCount: 1,
+    metrics:
+      dubbingMetricsMaxDataPoints === undefined
+        ? undefined
+        : { maxDataPoints: dubbingMetricsMaxDataPoints },
   }
 );
 
 dubbingWorker.on("failed", (job, err) => {
+  if (job) {
+    recordFinalDubbingJobFailure(job, err);
+  }
   console.log(`Dubbing job ${job?.name} ${job?.id} failed: ${err.message}`);
+});
+
+dubbingWorker.on("completed", () => {
+  recordDubbingJobCompleted();
 });
 
 console.log(

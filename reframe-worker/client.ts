@@ -10,6 +10,8 @@ import {
   validateCropTargetData,
   CropTargetValidationError,
 } from "../app/types/editor/crop-target";
+import { reframeInferenceDurationSeconds } from "../app/lib/monitoring/metrics";
+import { performance } from "node:perf_hooks";
 
 export interface MlInferenceRequest {
   videoUrl: string;
@@ -66,13 +68,18 @@ export {
 export async function callMlInference(
   mlServiceUrl: string,
   request: MlInferenceRequest,
-  options: { timeoutMs?: number } = {}
+  options: {
+    timeoutMs?: number;
+    onDuration?: (status: "success" | "failure", durationSeconds: number) => void;
+  } = {}
 ): Promise<CropTargetData> {
   const endpoint = `${mlServiceUrl.replace(/\/+$/, "")}/reframe`;
   const timeoutMs = options.timeoutMs ?? 180000;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = performance.now();
+  let status: "success" | "failure" = "failure";
 
   try {
     const response = await fetch(endpoint, {
@@ -137,6 +144,7 @@ export async function callMlInference(
     }
 
     validateCropTargetData(extracted);
+    status = "success";
     return extracted;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -145,5 +153,12 @@ export async function callMlInference(
     throw error;
   } finally {
     clearTimeout(timer);
+    const durationSeconds = (performance.now() - startedAt) / 1000;
+    reframeInferenceDurationSeconds.observe({ status }, durationSeconds);
+    try {
+      options.onDuration?.(status, durationSeconds);
+    } catch (error) {
+      console.error("[monitoring] Failed to record reframe latency observation:", error);
+    }
   }
 }

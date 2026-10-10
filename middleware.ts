@@ -1,9 +1,32 @@
 import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 import { withAuth } from "next-auth/middleware";
+import { prisma } from "@/app/lib/prisma";
 
 const authMiddleware = withAuth({
   pages: {
     signIn: "/auth/signin",
+  },
+  callbacks: {
+    async authorized({ token }) {
+      const userId = typeof token?.id === "string" ? token.id : token?.sub;
+      const sessionVersion = token?.sessionVersion;
+
+      if (!userId || typeof sessionVersion !== "number") {
+        return false;
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { sessionVersion: true },
+        });
+
+        return user?.sessionVersion === sessionVersion;
+      } catch (error) {
+        console.error("[middleware] Session validation failed:", error);
+        return false;
+      }
+    },
   },
 });
 
@@ -151,6 +174,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 }
 
 export const config = {
+  runtime: "nodejs",
   matcher: [
     "/((?!api|_next/static|_next/image|favicon.ico|icons|images|solid|gradient|background-default-images).*)",
   ],

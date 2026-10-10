@@ -125,11 +125,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // Bind the order to the buyer. Orders created before this fix carry no
-    // email note, so only enforce when the note is present. New orders always
-    // carry it (see create-order), which stops one payment upgrading many accounts.
-    const orderEmail = typeof order.notes?.email === "string" ? order.notes.email : undefined;
-    if (orderEmail && orderEmail.toLowerCase() !== session.user.email.toLowerCase()) {
+    // Fail closed unless Razorpay confirms that this order was created for the
+    // currently authenticated account. A valid signature proves the payment
+    // tuple is genuine, but does not by itself establish account ownership.
+    const orderEmail = typeof order.notes?.email === "string" ? order.notes.email.trim() : "";
+    const sessionEmail = session.user.email.trim();
+
+    if (!orderEmail || orderEmail.toLowerCase() !== sessionEmail.toLowerCase()) {
       return NextResponse.json(
         { success: false, message: "Order does not belong to this account" },
         { status: 403 }

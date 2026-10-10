@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cloudinary from "../cloudinary";
-import type { Step, DubTiming } from "../../types/avs";
+
 import type { GcpDubSyncPayload, GcpDubSyncResult } from "../gcpWorker";
 import { invokeGcpDubSync } from "../gcpWorker";
 
@@ -47,17 +47,13 @@ export type DubbingCallbackPayload =
       error: string;
     };
 
-export type UploadToCloudinaryFn = (
-  videoUrlOrPath: string
-) => Promise<{ secure_url: string }>;
+export type UploadToCloudinaryFn = (videoUrlOrPath: string) => Promise<{ secure_url: string }>;
 
 export async function defaultUploadToCloudinary(
   videoUrlOrPath: string
 ): Promise<{ secure_url: string }> {
   cloudinary.config({
-    cloud_name:
-      process.env.CLOUDINARY_CLOUD_NAME ||
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
   });
@@ -70,18 +66,15 @@ export async function defaultUploadToCloudinary(
     videoUrlOrPath.startsWith("http://127.0.0.1") ||
     videoUrlOrPath.includes("/artifacts/") ||
     Boolean(
-      process.env.AVS_DUB_SERVICE_URL &&
-        videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
+      process.env.AVS_DUB_SERVICE_URL && videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
     ) ||
     Boolean(
       process.env.GCP_VIDEO_WORKER_URL &&
-        videoUrlOrPath.startsWith(process.env.GCP_VIDEO_WORKER_URL)
+      videoUrlOrPath.startsWith(process.env.GCP_VIDEO_WORKER_URL)
     );
 
   if (isLoopbackUrl) {
-    const tempDir = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), "marvedge-dub-upload-")
-    );
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-dub-upload-"));
     tempDirToClean = tempDir;
     const tempFilePath = path.join(tempDir, "aligned.mp4");
 
@@ -138,12 +131,14 @@ export async function postJobCallbackWithRetry(
   }
 ): Promise<void> {
   const rawBaseUrl =
-    opts?.appUrl ||
-    process.env.APP_URL ||
-    process.env.NEXTAUTH_URL ||
-    "http://localhost:3000";
+    opts?.appUrl || process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
   const baseUrl = rawBaseUrl.replace(/\/+$/, "");
-  const secret = opts?.callbackSecret ?? process.env.CALLBACK_SECRET ?? "";
+  const secret = (opts?.callbackSecret ?? process.env.CALLBACK_SECRET ?? "").trim();
+
+  if (!secret) {
+    throw new Error("CALLBACK_SECRET is not configured");
+  }
+
   const maxAttempts = opts?.maxAttempts ?? 3;
   const initialDelay = opts?.delayMs ?? 1000;
 
@@ -156,7 +151,7 @@ export async function postJobCallbackWithRetry(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+          Authorization: `Bearer ${secret}`,
         },
         body: JSON.stringify(payload),
       });
@@ -168,9 +163,7 @@ export async function postJobCallbackWithRetry(
       // Fast fail on client error (unauthorized, invalid body)
       if (res.status >= 400 && res.status < 500) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(
-          `Callback rejected (${res.status}): ${body.error || res.statusText}`
-        );
+        throw new Error(`Callback rejected (${res.status}): ${body.error || res.statusText}`);
       }
 
       // 5xx server error: retry with exponential backoff
@@ -178,9 +171,7 @@ export async function postJobCallbackWithRetry(
       if (attempt >= maxAttempts) {
         throw new Error(`Callback failed with status ${res.status}`);
       }
-      await new Promise((resolve) =>
-        setTimeout(resolve, initialDelay * Math.pow(2, attempt - 1))
-      );
+      await new Promise((resolve) => setTimeout(resolve, initialDelay * Math.pow(2, attempt - 1)));
     } catch (err) {
       if (err instanceof Error && err.message.startsWith("Callback rejected")) {
         throw err;
@@ -189,9 +180,7 @@ export async function postJobCallbackWithRetry(
       if (attempt >= maxAttempts) {
         throw err;
       }
-      await new Promise((resolve) =>
-        setTimeout(resolve, initialDelay * Math.pow(2, attempt - 1))
-      );
+      await new Promise((resolve) => setTimeout(resolve, initialDelay * Math.pow(2, attempt - 1)));
     }
   }
 }
@@ -248,8 +237,7 @@ export async function processDubbingJob(
 
     // Fallback condition preserved from existing runDubAlignment:
     // If dubUrl, steps, or dubTimings are absent, return the source unchanged.
-    const canAlign =
-      Boolean(payload.dubUrl) && steps.length > 0 && dubTimings.length > 0;
+    const canAlign = Boolean(payload.dubUrl) && steps.length > 0 && dubTimings.length > 0;
 
     let alignedVideoUrl = payload.videoUrl;
     let duration =
@@ -268,18 +256,14 @@ export async function processDubbingJob(
         dubTimings,
       });
 
-      if (
-        !result ||
-        typeof result.alignedVideoUrl !== "string" ||
-        !result.alignedVideoUrl.trim()
-      ) {
+      if (!result || typeof result.alignedVideoUrl !== "string" || !result.alignedVideoUrl.trim()) {
         throw new Error("Dub-sync worker returned invalid aligned video URL");
       }
 
       let parsed: URL;
       try {
         parsed = new URL(result.alignedVideoUrl);
-      } catch (urlErr) {
+      } catch {
         throw new Error("Dub-sync worker returned invalid URL");
       }
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -303,11 +287,11 @@ export async function processDubbingJob(
         alignedVideoUrl.includes("/artifacts/") ||
         Boolean(
           process.env.AVS_DUB_SERVICE_URL &&
-            alignedVideoUrl.startsWith(process.env.AVS_DUB_SERVICE_URL)
+          alignedVideoUrl.startsWith(process.env.AVS_DUB_SERVICE_URL)
         ) ||
         Boolean(
           process.env.GCP_VIDEO_WORKER_URL &&
-            alignedVideoUrl.startsWith(process.env.GCP_VIDEO_WORKER_URL)
+          alignedVideoUrl.startsWith(process.env.GCP_VIDEO_WORKER_URL)
         );
 
       const shouldUploadToCloudinary =
@@ -317,7 +301,7 @@ export async function processDubbingJob(
 
       if (shouldUploadToCloudinary) {
         await updateProgress(70);
-        console.log(`[dubbingProcessor] Uploading aligned video to Cloudinary...`);
+        console.log("[dubbingProcessor] Uploading aligned video to Cloudinary...");
         const uploaded = await uploadToCloudinary(alignedVideoUrl);
         if (!uploaded?.secure_url) {
           throw new Error("Cloudinary upload returned no secure_url");

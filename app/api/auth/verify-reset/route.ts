@@ -88,14 +88,38 @@ export async function POST(req: Request) {
 
     const hashedPassword = await hash(password, 10);
 
-    await prisma.user.update({
-      where: { email },
-      data: { password: hashedPassword },
+    const resetCompleted = await prisma.$transaction(async (tx) => {
+      const consumedReset = await tx.passwordReset.deleteMany({
+        where: {
+          id: resetRequest.id,
+          email,
+          otp: resetTokenHash,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (consumedReset.count !== 1) {
+        return false;
+      }
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          password: hashedPassword,
+          sessionVersion: { increment: 1 },
+        },
+      });
+
+      await tx.passwordReset.deleteMany({
+        where: { email },
+      });
+
+      return true;
     });
 
-    await prisma.passwordReset.deleteMany({
-      where: { email },
-    });
+    if (!resetCompleted) {
+      return NextResponse.json({ error: "Invalid or expired reset link." }, { status: 400 });
+    }
 
     return NextResponse.json({ message: "Password reset successfully." });
   } catch (err) {
