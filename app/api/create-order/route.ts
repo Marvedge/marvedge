@@ -23,7 +23,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan } = await req.json();
+    // Broken JSON should read as a bad request, not a 500.
+    let plan: unknown;
+    try {
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      }
+      plan = (parsed as Record<string, unknown>).plan;
+    } catch {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
     // Accept only known plan ids. Amount always comes from PLANS below.
     if (!isPlanId(plan)) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
