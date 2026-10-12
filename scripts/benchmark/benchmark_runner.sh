@@ -63,12 +63,16 @@ run_stage() {
     local dur
     dur=$(get_dur "$clip")
 
-    python3 "$HARNESS" \
+    rm -f "$OUT_DIR/${label}.json"
+    if ! python3 "$HARNESS" \
         --stage "$stage" \
         --cmd   "$cmd" \
         --out   "$OUT_DIR/${label}.json" \
         --gpu-type "$GPU_TYPE" \
-        --video-sec "$dur"
+        --video-sec "$dur"; then
+        echo "[ERROR] ${stage} benchmark failed for ${label} (${clip})" >&2
+        exit 1
+    fi
 }
 
 for LABEL in "${!CLIPS[@]}"; do
