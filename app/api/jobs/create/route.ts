@@ -266,21 +266,26 @@ export async function POST(req: NextRequest) {
       browserFrame,
     } = data;
 
-    let videoUrl = rawVideoUrl;
-    let customBackgroundUrl = rawCustomBackgroundUrl;
-
-    if (!videoUrl) {
+    if (typeof rawVideoUrl !== "string" || !rawVideoUrl.trim()) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
     }
+
+    let videoUrl = rawVideoUrl;
+    let customBackgroundUrl =
+      typeof rawCustomBackgroundUrl === "string" && rawCustomBackgroundUrl.trim()
+        ? rawCustomBackgroundUrl.trim()
+        : undefined;
+    const sanitizedDemoId =
+      typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
 
     // Resolve native storage URIs (s3:// or gs://) to short-lived HTTPS URLs
     // so the worker can fetch the source without needing its own credentials.
     // Plain HTTPS URLs are passed through unchanged.
-    if (typeof videoUrl === "string" && parseStorageUri(videoUrl)) {
+    if (parseStorageUri(videoUrl)) {
       videoUrl = await getPresignedUrl(videoUrl);
     }
 
-    if (typeof customBackgroundUrl === "string" && parseStorageUri(customBackgroundUrl)) {
+    if (customBackgroundUrl && parseStorageUri(customBackgroundUrl)) {
       customBackgroundUrl = await getPresignedUrl(customBackgroundUrl);
     }
 
@@ -310,9 +315,9 @@ export async function POST(req: NextRequest) {
     const userId = user.id;
 
     // the job may float free, but a demoId must be the caller's own demo
-    if (typeof demoId === "string" && demoId) {
+    if (sanitizedDemoId) {
       const demo = await prisma.demo.findUnique({
-        where: { id: demoId },
+        where: { id: sanitizedDemoId },
         select: { id: true, userId: true },
       });
       if (!demo || demo.userId !== userId) {
@@ -373,7 +378,7 @@ export async function POST(req: NextRequest) {
         return tx.videoJob.create({
           data: {
             userId,
-            demoId: demoId || null,
+            demoId: sanitizedDemoId,
             videoUrl,
             status: "PENDING",
             jobData: {
@@ -415,7 +420,7 @@ export async function POST(req: NextRequest) {
     const normalizedPayload = {
       jobId: jobRecord.id,
       userId,
-      demoId: demoId || null,
+      demoId: sanitizedDemoId,
       videoUrl,
       segments: segments || [],
       zoomEffects: zoomEffects || [],
