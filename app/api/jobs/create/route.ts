@@ -239,7 +239,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const data = await req.json();
+    // Malformed payloads should read as a bad request, not a 500.
+    let data: Record<string, unknown>;
+    try {
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      }
+      data = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
     const {
       videoUrl: rawVideoUrl,
       duration,
