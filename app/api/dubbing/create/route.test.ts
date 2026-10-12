@@ -126,6 +126,22 @@ describe("POST /api/dubbing/create URL security", () => {
     expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when targetLanguage is missing instead of guessing Tamil", async () => {
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+      })
+    );
+
+    // Silent "ta" fallback used to mislabel every non-Tamil dub — fail loud now.
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Missing targetLanguage",
+    });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
   it("returns 400 for an invalid target language", async () => {
     const response = await POST(
       makeRequest({
