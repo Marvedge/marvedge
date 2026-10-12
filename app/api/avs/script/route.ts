@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth";
 import OpenAI from "openai";
 
 import { authOptions } from "@/app/lib/auth/options";
+import {
+  MAX_SCRIPT_CHARACTERS,
+  MAX_SCRIPT_LINES,
+  MAX_SCRIPT_REQUEST_BYTES,
+  exceedsTextLimits,
+  isAiActionRateLimited,
+} from "@/app/lib/ai/abuseProtection";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { isAvsAllowed } from "@/app/lib/avs/access";
@@ -151,7 +158,7 @@ export async function POST(req: NextRequest) {
         session.user.email ? { email: session.user.email } : undefined,
       ].filter(Boolean) as Array<{ id?: string; email?: string }>,
     },
-    select: { plan: true },
+    select: { id: true, plan: true },
   });
 
   if (!user) {
@@ -168,6 +175,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const contentLengthHeader = req.headers.get("content-length");
+  const contentLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : 0;
+
+  if (Number.isFinite(contentLength) && contentLength > MAX_SCRIPT_REQUEST_BYTES) {
+    return NextResponse.json({ error: "Script rewrite request is too large" }, { status: 413 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -180,6 +194,10 @@ export async function POST(req: NextRequest) {
   }
   const tone = body.tone;
 
+  if (await isAiActionRateLimited(user.id, "script-rewrite")) {
+    return NextResponse.json({ error: "Too many script rewrite requests" }, { status: 429 });
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "Script rewrite is not configured" }, { status: 500 });
@@ -188,11 +206,27 @@ export async function POST(req: NextRequest) {
 
   try {
     // Per-step mode takes precedence when `lines` is present.
-    const lines = parseLines(body.lines);
-    if (lines !== null && Array.isArray(body.lines)) {
-      if (lines.length === 0) {
+    if (Array.isArray(body.lines)) {
+      if (body.lines.length > MAX_SCRIPT_LINES) {
+        return NextResponse.json({ error: "Script contains too many lines" }, { status: 413 });
+      }
+
+      const lines = parseLines(body.lines);
+
+      if (!lines || lines.length === 0) {
         return NextResponse.json({ error: "No script text to rewrite" }, { status: 400 });
       }
+
+      if (
+        exceedsTextLimits(
+          lines.map((line) => line.text),
+          MAX_SCRIPT_LINES,
+          MAX_SCRIPT_CHARACTERS
+        )
+      ) {
+        return NextResponse.json({ error: "Script text is too large" }, { status: 413 });
+      }
+
       const result = await rewriteLines(openai, lines, tone);
       return NextResponse.json({ lines: result, tone });
     }
@@ -200,9 +234,15 @@ export async function POST(req: NextRequest) {
     // Fallback: single free-form blob.
     if (typeof body.raw === "string") {
       const raw = body.raw.trim();
+
       if (!raw) {
         return NextResponse.json({ error: "No script text to rewrite" }, { status: 400 });
       }
+
+      if (exceedsTextLimits([raw], 1, MAX_SCRIPT_CHARACTERS)) {
+        return NextResponse.json({ error: "Script text is too large" }, { status: 413 });
+      }
+
       const result = await rewriteRaw(openai, raw, tone);
       return NextResponse.json({ raw: result, tone });
     }
