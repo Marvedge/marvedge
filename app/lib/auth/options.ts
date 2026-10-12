@@ -1,4 +1,5 @@
 import { prisma } from "@/app/lib/prisma";
+import { isLoginRateLimited, type LoginRequestHeaders } from "@/app/lib/auth/loginProtection";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -8,6 +9,63 @@ import bcrypt from "bcrypt";
 const DUMMY_PASSWORD_HASH = "$2b$12$i4krTZOz2MpeU7SRmliVOuVWic5MtVADHyf2L4yhRVylEt3tX2T1C";
 const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
 const AUTH_SERVICE_ERROR = "Unable to sign in. Please try again later.";
+
+type LoginCredentials = {
+  email?: string;
+  password?: string;
+};
+
+export async function authorizeCredentials(
+  credentials: LoginCredentials | undefined,
+  headers: LoginRequestHeaders = ({} = {})
+) {
+  try {
+    if (!credentials?.email || !credentials?.password) {
+      throw new Error(INVALID_CREDENTIALS_ERROR);
+    }
+
+    const cleanEmail = credentials.email.trim();
+
+    if (await isLoginRateLimited(cleanEmail, headers)) {
+      throw new Error(INVALID_CREDENTIALS_ERROR);
+    }
+
+    const exactUser = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    let user = exactUser;
+
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: cleanEmail,
+            mode: "insensitive",
+          },
+        },
+      });
+    }
+
+    const passwordHash = user?.password || DUMMY_PASSWORD_HASH;
+
+    const valid = await bcrypt.compare(credentials.password, passwordHash);
+
+    if (!user || !user.password || !valid) {
+      throw new Error(INVALID_CREDENTIALS_ERROR);
+    }
+
+    return user;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === INVALID_CREDENTIALS_ERROR) {
+      throw err;
+    }
+
+    console.error("Credentials authentication failed:", err);
+
+    throw new Error(AUTH_SERVICE_ERROR);
+  }
+}
 
 declare module "next-auth" {
   interface Session {
@@ -47,51 +105,8 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        try {
-          if (!credentials?.email || !credentials?.password) {
-            throw new Error(INVALID_CREDENTIALS_ERROR);
-          }
-
-          // Trim spaces so logins match accounts saved without spaces. Case is
-          // left alone on purpose so existing mixed-case accounts keep working.
-          // Note: login throttle lives on the signin route because authorize
-          // has no request IP to key a limit on safely.
-          const cleanEmail = credentials.email.trim();
-
-          // Attempt to fetch user from DB
-          // Try exact match first so mixed case rows keep working, then try
-          // a case blind match for logins typed in a different case.
-          const exactUser = await prisma.user.findUnique({
-            where: { email: cleanEmail },
-          });
-          let user = exactUser;
-          if (!user) {
-            user = await prisma.user.findFirst({
-              where: { email: { equals: cleanEmail, mode: "insensitive" } },
-            });
-          }
-
-          // Always perform a bcrypt comparison so missing accounts and incorrect
-          // passwords have comparable response times.
-          const passwordHash = user?.password || DUMMY_PASSWORD_HASH;
-          const valid = await bcrypt.compare(credentials.password, passwordHash);
-
-          if (!user || !user.password || !valid) {
-            throw new Error(INVALID_CREDENTIALS_ERROR);
-          }
-
-          return user;
-        } catch (err: unknown) {
-          if (err instanceof Error && err.message === INVALID_CREDENTIALS_ERROR) {
-            throw err;
-          }
-
-          // Keep diagnostic details in server logs, but never return Prisma,
-          // database, environment, or implementation details to the browser.
-          console.error("Credentials authentication failed:", err);
-          throw new Error(AUTH_SERVICE_ERROR);
-        }
+      async authorize(credentials, req) {
+        return authorizeCredentials(credentials, req.headers);
       },
     }),
   ],
