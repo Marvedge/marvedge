@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
+import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
 import { dubbingQueue } from "@/app/lib/queue";
 import { isSafeUrl } from "@/app/lib/safeUrl";
@@ -211,6 +212,15 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  // Paid feature — FREE users can't burn dubbing GPU time.
+  // Matches /avs/sync + /avs/voiceover so the whole AVS family gates the same way.
+  if (!isAvsAllowed(user.plan)) {
+    return NextResponse.json(
+      { error: "Dubbing is available on PRO and ENTERPRISE plans" },
+      { status: 403 }
+    );
   }
 
   let body: Record<string, unknown>;
