@@ -71,6 +71,22 @@ describe("POST /api/dubbing/create URL security", () => {
     expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
 
+  it("returns 400 for malformed JSON instead of a 500", async () => {
+    const bad = new NextRequest("http://localhost:3000/api/dubbing/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // Intentionally broken payload — used to bubble up as "Failed to create...".
+      body: "{not-json",
+    });
+
+    const response = await POST(bad);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid JSON body" });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when sourceUrl is missing", async () => {
     const response = await POST(
       makeRequest({
