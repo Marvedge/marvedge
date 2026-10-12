@@ -469,7 +469,15 @@ def crop_video_track(
     if os.path.exists(temp_avi):
         os.remove(temp_avi)
 
-    return {"track": track, "proc_track": dets}
+    # Keep the same shape as scripts/ml + ml-worker crop_video:
+    # downstream code reads is_fallback / fallback_reason off this dict,
+    # so a plain {"track", "proc_track"} return would KeyError on fallback clips.
+    return {
+        "track": track,
+        "proc_track": dets,
+        "is_fallback": track.get("is_fallback", False),
+        "fallback_reason": track.get("fallback_reason", None),
+    }
 
 
 def evaluate_talknet_scores(
