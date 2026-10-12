@@ -12,7 +12,18 @@ echo "[$(date -u)] Starting Marvedge worker setup..."
 
 # --- System update + essentials -----------------------------------------------
 dnf update -y
-dnf install -y git curl unzip ffmpeg
+dnf install -y git curl unzip
+
+# --- FFmpeg: Amazon Linux 2023 doesn't ship ffmpeg in default repos.
+# Install the johnvansickle.com static build (GPL, x86_64, includes libass).
+FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+curl -fsSL "$FFMPEG_URL" -o /tmp/ffmpeg.tar.xz
+mkdir -p /tmp/ffmpeg-extract
+tar -xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-extract --strip-components=1
+install -m 755 /tmp/ffmpeg-extract/ffmpeg  /usr/local/bin/ffmpeg
+install -m 755 /tmp/ffmpeg-extract/ffprobe /usr/local/bin/ffprobe
+rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg-extract
+ffmpeg -version | head -1
 
 # --- Node.js 20 LTS -----------------------------------------------------------
 curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
@@ -37,13 +48,22 @@ fi
 cd /opt/marvedge/cloudrun-worker
 npm ci --omit=dev
 
-# --- Environment (injected from AWS Secrets Manager or SSM Parameter Store) ---
-# In production, replace these with:
-#   aws ssm get-parameters-by-path --path /marvedge/worker/ --with-decryption
-# For now, the worker reads from /etc/marvedge/worker.env
+# --- Environment ---
+# Non-secret configuration is written inline.
+# Secrets (WORKER_SECRET, DEEPGRAM_API_KEY) are fetched live from SSM Parameter
+# Store at boot so that no credentials are stored in this script or in git history.
+#
+# Required SSM parameters (SecureString, created once by an admin):
+#   /marvedge/worker/WORKER_SECRET
+#   /marvedge/worker/DEEPGRAM_API_KEY
+#
+# The EC2 IAM role (marvedge-worker-role) must have:
+#   ssm:GetParameter on arn:aws:ssm:ap-southeast-2:*:parameter/marvedge/worker/*
 
 ENV_DIR="/etc/marvedge"
-mkdir -p "$ENV_DIR"
+install -d -m 0700 "$ENV_DIR"
+
+# Write non-secret config
 cat > "$ENV_DIR/worker.env" << 'WORKERENV'
 STORAGE_PROVIDER=aws
 AWS_REGION=ap-southeast-2
@@ -52,11 +72,27 @@ PROCESSED_BUCKET=marvedge-processed-ap2
 RECIPES_COLLECTION=marvedge-recipes
 CHUNKS_COLLECTION=marvedge-chunks
 PORT=8080
-# ── Secrets: populate these before launch (or inject via SSM Parameter Store) ──
-# Replace the placeholder values below with real secrets.
-WORKER_SECRET=G1QmTD2svBBvCzGtsEVWtOJun_dX5dxsEQ5cGrLI_t4
-DEEPGRAM_API_KEY=fb744c1f011d2ece95b00f19e5a130a2f2d709fa
 WORKERENV
+
+# Append secrets fetched from SSM Parameter Store (never stored in this script)
+echo "Fetching secrets from SSM Parameter Store..."
+WORKER_SECRET=$(aws ssm get-parameter \
+  --name "/marvedge/worker/WORKER_SECRET" \
+  --with-decryption \
+  --region ap-southeast-2 \
+  --query "Parameter.Value" \
+  --output text)
+
+DEEPGRAM_API_KEY=$(aws ssm get-parameter \
+  --name "/marvedge/worker/DEEPGRAM_API_KEY" \
+  --with-decryption \
+  --region ap-southeast-2 \
+  --query "Parameter.Value" \
+  --output text)
+
+printf 'WORKER_SECRET=%s\n' "$WORKER_SECRET"   >> "$ENV_DIR/worker.env"
+printf 'DEEPGRAM_API_KEY=%s\n' "$DEEPGRAM_API_KEY" >> "$ENV_DIR/worker.env"
+unset WORKER_SECRET DEEPGRAM_API_KEY
 
 # Permissions: root-readable only (contains secrets)
 chmod 600 "$ENV_DIR/worker.env"
