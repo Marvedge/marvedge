@@ -97,34 +97,23 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
       expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
-    it("allows a signed-in FREE user to create a dubbing job", async () => {
+    it("rejects a FREE user with 403 instead of creating a job", async () => {
       vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
       vi.mocked(prisma.user.findFirst).mockResolvedValue({
         id: "u-1",
         plan: "FREE",
       } as never);
-      vi.mocked(prisma.videoJob.create).mockResolvedValue({
-        id: "job-free",
-      } as never);
 
       const req = makeDubRequest({ videoUrl: "https://example.com/video.mp4" });
       const res = await POST(req);
 
-      expect(res.status).toBe(200);
+      // Paywall holds: no VideoJob row, nothing pushed to BullMQ.
+      expect(res.status).toBe(403);
       expect(await res.json()).toEqual({
-        success: true,
-        jobId: "job-free",
+        error: "Dubbing is available on PRO and ENTERPRISE plans",
       });
-      expect(prisma.videoJob.create).toHaveBeenCalledWith({
-        data: {
-          userId: "u-1",
-          demoId: null,
-          videoUrl: "https://example.com/video.mp4",
-          status: "PENDING",
-          jobData: { kind: "AVS_DUB" },
-        },
-      });
-      expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
+      expect(prisma.videoJob.create).not.toHaveBeenCalled();
+      expect(dubbingQueue.add).not.toHaveBeenCalled();
     });
 
     it("returns 400 when videoUrl is missing", async () => {
