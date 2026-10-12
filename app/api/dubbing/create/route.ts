@@ -18,7 +18,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await req.json()) as Record<string, unknown>;
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      // Truncated / hand-edited JSON shouldn't surface as a 500 alarm.
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
     const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
 
