@@ -8,8 +8,8 @@ import { isSafeUrl } from "@/app/lib/safeUrl";
 
 export const maxDuration = 300;
 
-const DEFAULT_TARGET_LANGUAGE = "ta";
-
+// Frontend always sends an explicit targetLanguage — no guessing here,
+// so a dropped field fails loudly instead of dubbing into the wrong language.
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -32,10 +32,14 @@ export async function POST(req: NextRequest) {
 
     const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
 
-    const targetLanguage =
-      typeof body.targetLanguage === "string"
-        ? body.targetLanguage.trim()
-        : DEFAULT_TARGET_LANGUAGE;
+    const rawTargetLanguage =
+      typeof body.targetLanguage === "string" ? body.targetLanguage.trim() : "";
+
+    if (!rawTargetLanguage) {
+      return NextResponse.json({ error: "Missing targetLanguage" }, { status: 400 });
+    }
+
+    const targetLanguage = rawTargetLanguage;
 
     if (!sourceUrl) {
       return NextResponse.json({ error: "Missing sourceUrl" }, { status: 400 });
