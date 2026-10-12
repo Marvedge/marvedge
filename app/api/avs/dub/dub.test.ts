@@ -77,7 +77,7 @@ describe("POST /api/avs/dub", () => {
     expect(res.status).toBe(401);
   });
 
-  it("allows a signed-in FREE user to create a dubbing job", async () => {
+  it("rejects a FREE user with 403 (paywall)", async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: mockUserId,
       plan: "FREE",
@@ -86,11 +86,12 @@ describe("POST /api/avs/dub", () => {
     const req = createDubRequest({ videoUrl: "https://example.com/v.mp4" });
     const res = await POST(req);
 
-    expect(res.status).toBe(200);
+    // FREE tier can't burn dubbing GPU time — same rule as /avs/sync.
+    expect(res.status).toBe(403);
     const data = await res.json();
-    expect(data).toEqual({ success: true, jobId: "job-new-123" });
-    expect(prisma.videoJob.create).toHaveBeenCalled();
-    expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
+    expect(data.error).toBe("Dubbing is available on PRO and ENTERPRISE plans");
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
 
   it("returns 400 when videoUrl is missing", async () => {
