@@ -1,31 +1,30 @@
 import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 import { withAuth } from "next-auth/middleware";
-import { prisma } from "@/app/lib/prisma";
 
+// Edge-safe: no Prisma import here. The JWT callback already stamps
+// sessionInvalid on password-reset, so the token alone is enough to gate.
+// (A Prisma call in middleware forces nodejs + breaks the edge build.)
 const authMiddleware = withAuth({
   pages: {
     signIn: "/auth/signin",
   },
   callbacks: {
     async authorized({ token }) {
-      const userId = typeof token?.id === "string" ? token.id : token?.sub;
-      const sessionVersion = token?.sessionVersion;
-
-      if (!userId || typeof sessionVersion !== "number") {
+      // No token, or one the JWT callback already flagged — bounce to signin.
+      if (!token) {
         return false;
       }
-
-      try {
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { sessionVersion: true },
-        });
-
-        return user?.sessionVersion === sessionVersion;
-      } catch (error) {
-        console.error("[middleware] Session validation failed:", error);
+      if (token.sessionInvalid === true) {
         return false;
       }
+      // Legacy tokens from before sessionVersion shipped have no version stamp.
+      // Fail closed: force a fresh login so reset-revocation can't be dodged.
+      if (typeof token.sessionVersion !== "number") {
+        return false;
+      }
+      const hasIdentity =
+        typeof token.id === "string" || typeof token.sub === "string";
+      return hasIdentity;
     },
   },
 });
@@ -174,8 +173,11 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 }
 
 export const config = {
-  runtime: "nodejs",
   matcher: [
     "/((?!api|_next/static|_next/image|favicon.ico|icons|images|solid|gradient|background-default-images).*)",
   ],
 };
+
+// Note: no `runtime: "nodejs"` here on purpose. Middleware runs on the
+// edge runtime — setting nodejs breaks the build/deploy, so this stays
+// edge-compatible and does its session check via withAuth, not Prisma.
