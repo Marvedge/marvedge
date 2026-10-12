@@ -19,7 +19,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json();
+  // A broken body is a 400, not an unhandled throw.
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = await req.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
   const { firstName, lastName, bio, location, website, image } = body;
 
   // Allow partial update, each field is checked only when sent. Names are trimmed.
