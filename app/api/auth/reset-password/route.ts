@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   }
 
   // slow down guessing: 5 tries per 15 minutes per ip and email
-  if (await isRateLimited(clientKey(req, email), 5, 900)) {
+  if (await isRateLimited(clientKey(req, email), 5, 900, true)) {
     return NextResponse.json(
       { error: "Too many attempts, please try again later" },
       { status: 429 }
