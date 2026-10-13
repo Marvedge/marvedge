@@ -111,4 +111,28 @@ describe("legacy dubbing worker retry handling", () => {
       errors: [originalError, persistenceError],
     });
   });
+  it("does not retry when ElevenLabs dubbing fails with detailed provider error", async () => {
+    const originalError = new Error(
+      "ElevenLabs dubbing failed with status: failed: Source audio could not be separated"
+    );
+    const process = vi.fn().mockRejectedValue(originalError);
+    const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+    const thrown = await runDubbingJobWithRetry({
+      jobId: "dubbing-job",
+      attemptsMade: 0,
+      maxAttempts: 3,
+      process,
+      persistFailure,
+    }).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(UnrecoverableError);
+    expect(thrown).toMatchObject({
+      message: originalError.message,
+      cause: originalError,
+    });
+
+    expect(process).toHaveBeenCalledOnce();
+    expect(persistFailure).toHaveBeenCalledWith(originalError.message);
+  });
 });
