@@ -53,7 +53,9 @@ export async function defaultUploadToCloudinary(
   videoUrlOrPath: string
 ): Promise<{ secure_url: string }> {
   cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    cloud_name:
+      process.env.CLOUDINARY_CLOUD_NAME ||
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
   });
@@ -66,30 +68,35 @@ export async function defaultUploadToCloudinary(
     videoUrlOrPath.startsWith("http://127.0.0.1") ||
     videoUrlOrPath.includes("/artifacts/") ||
     Boolean(
-      process.env.AVS_DUB_SERVICE_URL && videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
+      process.env.AVS_DUB_SERVICE_URL &&
+        videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
     ) ||
     Boolean(
       process.env.GCP_VIDEO_WORKER_URL &&
-      videoUrlOrPath.startsWith(process.env.GCP_VIDEO_WORKER_URL)
+        videoUrlOrPath.startsWith(process.env.GCP_VIDEO_WORKER_URL)
     );
 
-  if (isLoopbackUrl) {
-    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-dub-upload-"));
-    tempDirToClean = tempDir;
-    const tempFilePath = path.join(tempDir, "aligned.mp4");
-
-    const response = await fetch(videoUrlOrPath);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download local artifact for Cloudinary upload (${response.status}): ${response.statusText}`
-      );
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    await fs.promises.writeFile(tempFilePath, Buffer.from(arrayBuffer));
-    fileToUpload = tempFilePath;
-  }
-
   try {
+    if (isLoopbackUrl) {
+      const tempDir = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), "marvedge-dub-upload-")
+      );
+      tempDirToClean = tempDir;
+
+      const tempFilePath = path.join(tempDir, "aligned.mp4");
+
+      const response = await fetch(videoUrlOrPath);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download local artifact for Cloudinary upload (${response.status}): ${response.statusText}`
+        );
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      await fs.promises.writeFile(tempFilePath, Buffer.from(arrayBuffer));
+      fileToUpload = tempFilePath;
+    }
+
     const result = await cloudinary.uploader.upload(fileToUpload, {
       resource_type: "video",
       folder: "dubbed_exports",
@@ -102,11 +109,12 @@ export async function defaultUploadToCloudinary(
     return { secure_url: result.secure_url };
   } finally {
     if (tempDirToClean) {
-      await fs.promises.rm(tempDirToClean, { recursive: true, force: true }).catch(() => {});
+      await fs.promises
+        .rm(tempDirToClean, { recursive: true, force: true })
+        .catch(() => {});
     }
   }
 }
-
 export interface DubbingProcessorDeps {
   invokeDubSync?: (payload: GcpDubSyncPayload) => Promise<GcpDubSyncResult>;
   postCallback?: (payload: DubbingCallbackPayload) => Promise<void>;
