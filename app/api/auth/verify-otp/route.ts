@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   const ip = forwarded
     ? forwarded.split(",")[0].trim()
     : req.headers.get("x-real-ip")?.trim() || "unknown";
-  if (await isRateLimited(`verify-otp:${ip}:${email.toLowerCase()}`, 5, 900)) {
+  if (await isRateLimited(`verify-otp:${ip}:${email.toLowerCase()}`, 5, 900, true)) {
     return NextResponse.json(
       { error: "Too many attempts, please try again later" },
       { status: 429 }
