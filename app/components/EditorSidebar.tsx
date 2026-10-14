@@ -175,6 +175,7 @@ const EditorSidebar: React.FC<EditorSidebarProps> = ({
             onAddTextOverlay={onAddTextOverlay}
             textOverlayColor={textOverlayColor}
             setTextOverlayColor={setTextOverlayColor}
+            onAutoGenerateSubtitles={onAddSubtitles}
           />
 
           {/* Subtitle generation lives in its own tab now. With the editor flag

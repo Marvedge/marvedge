@@ -6,6 +6,7 @@ import { prisma } from "@/app/lib/prisma";
 export async function DELETE() {
   const session = await getServerSession(authOptions);
 
+  // Note: delete should require password or recent session check. Generic error if session is missing.
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -47,6 +48,6 @@ export async function DELETE() {
     return NextResponse.json({ message: "Account deleted successfully" });
   } catch (error) {
     console.error("Error deleting account:", error);
-    return NextResponse.json({ error: error || "Failed to delete account" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
   }
 }

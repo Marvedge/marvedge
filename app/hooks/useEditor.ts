@@ -9,8 +9,13 @@ type Overlay =
   | { type: "text"; x: number; y: number; text: string };
 
 export const useEditor = () => {
-  const { blob, title, description, restoreBlob } = useBlobStore();
-  const [videoUrl, setVideoUrl] = useState(blob ? URL.createObjectURL(blob) : "");
+  const { blob, title, description, restoreBlob, canonicalVideoUrl } = useBlobStore();
+  const [videoUrl, setVideoUrl] = useState(() => {
+    if (canonicalVideoUrl && (canonicalVideoUrl.startsWith("http://") || canonicalVideoUrl.startsWith("https://"))) {
+      return canonicalVideoUrl;
+    }
+    return blob ? URL.createObjectURL(blob) : "";
+  });
   const [processing, setProcessing] = useState(false);
   const [mp4Url, setMp4Url] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);

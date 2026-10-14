@@ -1,6 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpWorker } from "@/app/lib/gcpWorker";
+import { parseStorageUri, getPresignedUrl } from "@/app/lib/storage/index";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { normalizeLanguage, sanitizeSubtitleStyle } from "@/app/lib/subtitles";
@@ -27,7 +28,9 @@ const EXEMPT_EMAILS = [
 async function isExportAllowed(
   userId: string,
   email: string | null | undefined,
-  plan: string | null
+  plan: string | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any = prisma
 ): Promise<boolean> {
   const isExempt =
     (email && EXEMPT_EMAILS.includes(email)) || plan === "PRO" || plan === "ENTERPRISE";
@@ -35,15 +38,22 @@ async function isExportAllowed(
     return true;
   }
 
-  const jobCount = await prisma.videoJob.count({
+  const jobCount = await db.videoJob.count({
     where: { userId, status: "COMPLETED" },
   });
-  const savedCount = await prisma.exportedVideo.count({
+  const savedCount = await db.exportedVideo.count({
     where: { userId },
   });
   const exportCount = Math.max(jobCount, savedCount);
 
   return exportCount < 3;
+}
+
+class FreeTrialLimitError extends Error {
+  constructor() {
+    super("Free trial limit");
+    this.name = "FreeTrialLimitError";
+  }
 }
 
 // --- WTM (watermark) -------------------------------------------------------
@@ -81,6 +91,14 @@ async function dispatchVideoJob(
   normalizedPayload: Record<string, unknown>
 ): Promise<void> {
   try {
+    // Do not overwrite a settled job. A COMPLETED or CANCELLED record is final.
+    const existing = await prisma.videoJob
+      .findUnique({ where: { id: jobId }, select: { status: true } })
+      .catch(() => null);
+    if (existing?.status === "COMPLETED" || existing?.status === "CANCELLED") {
+      return;
+    }
+
     await prisma.videoJob.update({
       where: { id: jobId },
       data: {
@@ -135,16 +153,34 @@ async function dispatchVideoJob(
 
     const completedTasks = await Promise.all(results);
 
-    const validChunkFilenames = (
-      completedTasks as { result?: { skipped?: boolean; processedObject?: string } }[]
-    )
-      .filter((res) => res && res.result && !res.result.skipped)
-      .map((res) => res.result!.processedObject!);
+    // Drop bad chunks safely. Only string non empty outputs are merged.
+    const chunkResults = completedTasks as {
+      result?: { skipped?: boolean; processedObject?: unknown };
+    }[];
+    const validChunkFilenames = chunkResults
+      .filter(
+        (res) =>
+          res &&
+          res.result &&
+          !res.result.skipped &&
+          typeof res.result.processedObject === "string" &&
+          res.result.processedObject.length > 0
+      )
+      .map((res) => res.result?.processedObject as string);
+    const skippedCount = chunkResults.length - validChunkFilenames.length;
+    if (skippedCount > 0) {
+      console.warn(`Skipped ${skippedCount} bad chunks with missing output`);
+    }
 
     await prisma.videoJob.update({
       where: { id: jobId },
       data: { progress: 80 },
     });
+
+    // Fail fast with a clear cause instead of merging an empty list.
+    if (validChunkFilenames.length === 0) {
+      throw new Error("No chunks to merge: all chunks failed or were skipped");
+    }
 
     const mergeResp = await invokeGcpWorker(
       {
@@ -176,6 +212,25 @@ async function dispatchVideoJob(
   }
 }
 
+// One retry for cold start. Chunk ids are deterministic so a retry is safe.
+async function dispatchVideoJobWithColdStartRetry(
+  jobId: string,
+  videoUrl: string,
+  duration: number,
+  normalizedPayload: Record<string, unknown>
+): Promise<void> {
+  try {
+    await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("fetch failed") && !msg.toLowerCase().includes("cold start")) {
+      throw err;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+    await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -184,7 +239,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const data = await req.json();
+    // Malformed payloads should read as a bad request, not a 500.
+    let data: Record<string, unknown>;
+    try {
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      }
+      data = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
     const {
       videoUrl: rawVideoUrl,
       duration,
@@ -201,45 +266,37 @@ export async function POST(req: NextRequest) {
       browserFrame,
     } = data;
 
-    let videoUrl = rawVideoUrl;
-    let customBackgroundUrl = rawCustomBackgroundUrl;
-
-    if (!videoUrl) {
+    if (typeof rawVideoUrl !== "string" || !rawVideoUrl.trim()) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
     }
 
-    if (typeof videoUrl === "string" && videoUrl.startsWith("gs://")) {
-      videoUrl = videoUrl.replace("gs://", "https://storage.googleapis.com/");
+    let videoUrl = rawVideoUrl;
+    let customBackgroundUrl =
+      typeof rawCustomBackgroundUrl === "string" && rawCustomBackgroundUrl.trim()
+        ? rawCustomBackgroundUrl.trim()
+        : undefined;
+    const sanitizedDemoId =
+      typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
+
+    // Resolve native storage URIs (s3:// or gs://) to short-lived HTTPS URLs
+    // so the worker can fetch the source without needing its own credentials.
+    // Plain HTTPS URLs are passed through unchanged.
+    if (parseStorageUri(videoUrl)) {
+      videoUrl = await getPresignedUrl(videoUrl);
     }
 
-    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.startsWith("gs://")) {
-      customBackgroundUrl = customBackgroundUrl.replace("gs://", "https://storage.googleapis.com/");
+    if (customBackgroundUrl && parseStorageUri(customBackgroundUrl)) {
+      customBackgroundUrl = await getPresignedUrl(customBackgroundUrl);
     }
 
-    if (!duration || typeof duration !== "number") {
+    // Accept a string number from the client by coercing it. NaN stays invalid.
+    const coercedDuration = typeof duration === "string" ? Number(duration) : duration;
+    if (!coercedDuration || typeof coercedDuration !== "number" || Number.isNaN(coercedDuration)) {
       return NextResponse.json({ error: "Missing or invalid duration" }, { status: 400 });
     }
 
-    // the job may float free, but a demoId must be the caller's own demo
-    if (typeof demoId === "string" && demoId) {
-      const demo = await prisma.demo.findUnique({
-        where: { id: demoId },
-        select: { id: true, userId: true },
-      });
-      if (!demo || demo.userId !== userId) {
-        return NextResponse.json({ error: "Demo not found" }, { status: 404 });
-      }
-    }
-
-    // the worker fetches this url, so internal addresses stop here
-    if (!isSafeUrl(videoUrl)) {
-      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
-    }
-    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.trim().length > 0) {
-      if (!isSafeUrl(customBackgroundUrl)) {
-        return NextResponse.json({ error: "Background URL is not allowed" }, { status: 400 });
-      }
-    }
+    // Resolve the caller before any ownership check below: the demo check
+    // compares against userId, so the user row must be loaded first.
 
     const user = await prisma.user.findFirst({
       where: {
@@ -257,14 +314,25 @@ export async function POST(req: NextRequest) {
 
     const userId = user.id;
 
-    const exportAllowed = await isExportAllowed(userId, session.user.email, user.plan);
-    if (!exportAllowed) {
-      return NextResponse.json(
-        {
-          error: "Free trial limit of 3 exports reached. Please upgrade your plan.",
-        },
-        { status: 403 }
-      );
+    // the job may float free, but a demoId must be the caller's own demo
+    if (sanitizedDemoId) {
+      const demo = await prisma.demo.findUnique({
+        where: { id: sanitizedDemoId },
+        select: { id: true, userId: true },
+      });
+      if (!demo || demo.userId !== userId) {
+        return NextResponse.json({ error: "Demo not found" }, { status: 404 });
+      }
+    }
+
+    // the worker fetches this url, so internal addresses stop here
+    if (!isSafeUrl(videoUrl)) {
+      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+    }
+    if (typeof customBackgroundUrl === "string" && customBackgroundUrl.trim().length > 0) {
+      if (!isSafeUrl(customBackgroundUrl)) {
+        return NextResponse.json({ error: "Background URL is not allowed" }, { status: 400 });
+      }
     }
 
     // Decide the watermark from the user's plan (free → forced badge, PRO →
@@ -295,41 +363,64 @@ export async function POST(req: NextRequest) {
     const subtitleLanguage =
       !burnSubtitles || rawSubtitleLanguage === "multi" ? null : rawSubtitleLanguage;
 
-    // 1. Create a job record in the database
-    const jobRecord = await prisma.videoJob.create({
-      data: {
-        userId,
-        demoId: demoId || null,
-        videoUrl,
-        status: "PENDING",
-        jobData: {
-          segments: segments || [],
-          zoomEffects: zoomEffects || [],
-          textOverlays: textOverlays || [],
-          subtitles: recipeSubtitles,
-          selectedBackground: selectedBackground || null,
-          customBackgroundUrl: customBackgroundUrl || null,
-          imageMap: imageMap || {},
-          settings: settings || null,
-          aspectRatio: aspectRatio || "native",
-          browserFrame: browserFrame || {
-            mode: "default",
-            drawShadow: true,
-            drawBorder: false,
+    // 1. Create a job record in the database, serialized per user: the free-trial
+    // allowance check and the insert run in one transaction behind a
+    // SELECT ... FOR UPDATE on the caller's User row, so concurrent exports
+    // cannot both pass a count-then-create race. No schema change.
+    let jobRecord;
+    try {
+      jobRecord = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+        const exportAllowed = await isExportAllowed(userId, session.user.email, user.plan, tx);
+        if (!exportAllowed) {
+          throw new FreeTrialLimitError();
+        }
+        return tx.videoJob.create({
+          data: {
+            userId,
+            demoId: sanitizedDemoId,
+            videoUrl,
+            status: "PENDING",
+            jobData: {
+              segments: segments || [],
+              zoomEffects: zoomEffects || [],
+              textOverlays: textOverlays || [],
+              subtitles: recipeSubtitles,
+              selectedBackground: selectedBackground || null,
+              customBackgroundUrl: customBackgroundUrl || null,
+              imageMap: imageMap || {},
+              settings: settings || null,
+              aspectRatio: aspectRatio || "native",
+              browserFrame: browserFrame || {
+                mode: "default",
+                drawShadow: true,
+                drawBorder: false,
+              },
+              // Spread into a fresh object literal so the Prisma Json field accepts
+              // it (a named interface lacks the implicit index signature Prisma wants).
+              ...(subtitleStyle ? { subtitleStyle: { ...subtitleStyle } } : {}),
+              ...(subtitleLanguage ? { subtitleLanguage } : {}),
+              ...(watermark ? { watermark: { ...watermark } } : {}),
+            },
           },
-          // Spread into a fresh object literal so the Prisma Json field accepts
-          // it (a named interface lacks the implicit index signature Prisma wants).
-          ...(subtitleStyle ? { subtitleStyle: { ...subtitleStyle } } : {}),
-          ...(subtitleLanguage ? { subtitleLanguage } : {}),
-          ...(watermark ? { watermark: { ...watermark } } : {}),
-        },
-      },
-    });
+        });
+      });
+    } catch (txErr) {
+      if (txErr instanceof FreeTrialLimitError) {
+        return NextResponse.json(
+          {
+            error: "Free trial limit of 3 exports reached. Please upgrade your plan.",
+          },
+          { status: 403 }
+        );
+      }
+      throw txErr;
+    }
 
     const normalizedPayload = {
       jobId: jobRecord.id,
       userId,
-      demoId: demoId || null,
+      demoId: sanitizedDemoId,
       videoUrl,
       segments: segments || [],
       zoomEffects: zoomEffects || [],
@@ -351,7 +442,9 @@ export async function POST(req: NextRequest) {
     };
 
     // 2. Dispatch to GCP Cloud Run workers (Scatter-Gather)
-    after(() => dispatchVideoJob(jobRecord.id, videoUrl, duration, normalizedPayload));
+    after(() =>
+      dispatchVideoJobWithColdStartRetry(jobRecord.id, videoUrl, coercedDuration, normalizedPayload)
+    );
 
     // 3. Return the job ID to the client instantly
     return NextResponse.json({

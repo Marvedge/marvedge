@@ -505,6 +505,198 @@ def run_unit_tests():
             check("Degenerate-bbox scene does not crash track_shot", False, str(e))
 
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Task-00088: Final accuracy tuning — production edge cases
+    # Edge cases: multiple speakers, no face visible, static slides
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # --- EC-1 (Multi-Speaker): Three concurrent speakers ---
+    print("\n\U0001f465 EC-1 (Multi-Speaker): Three concurrent speakers tracked independently")
+    scene_3spk = []
+    for f in range(30):
+        spk1 = {'frame': f, 'bbox': [50.0,  100.0, 150.0, 200.0], 'conf': 0.98}
+        spk2 = {'frame': f, 'bbox': [350.0, 100.0, 450.0, 200.0], 'conf': 0.96}
+        spk3 = {'frame': f, 'bbox': [650.0, 100.0, 750.0, 200.0], 'conf': 0.94}
+        scene_3spk.append([spk1, spk2, spk3])
+    tracks_3spk = track_shot(args, scene_3spk)
+    check("EC-1: Three concurrent speakers => exactly 3 tracks",
+          len(tracks_3spk) == 3, f"Got {len(tracks_3spk)}")
+    if len(tracks_3spk) == 3:
+        x_means = sorted([numpy.mean(t['bbox'][:, 0]) for t in tracks_3spk])
+        check("EC-1: Three tracks spatially ordered left-to-right",
+              x_means[1] - x_means[0] > 150 and x_means[2] - x_means[1] > 150,
+              f"x_means={x_means}")
+
+    # --- EC-2 (Multi-Speaker): Second speaker enters mid-shot ---
+    print("\n\U0001f465 EC-2 (Multi-Speaker): Second speaker enters mid-shot")
+    args_ec2 = MockArgs()
+    args_ec2.numFailedDet = 10
+    args_ec2.minTrack = 5
+    args_ec2.minFaceSize = 1
+    args_ec2.cropScale = 0.40
+    scene_enter = []
+    for f in range(20):
+        spk1 = {'frame': f, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.98}
+        if f >= 10:
+            spk2 = {'frame': f, 'bbox': [600.0, 100.0, 700.0, 200.0], 'conf': 0.95}
+            scene_enter.append([spk1, spk2])
+        else:
+            scene_enter.append([spk1])
+    tracks_enter = track_shot(args_ec2, scene_enter)
+    check("EC-2: Speaker 1 keeps long track after speaker 2 enters",
+          any(len(t['frame']) >= 15 for t in tracks_enter),
+          f"Frame lengths: {[len(t['frame']) for t in tracks_enter]}")
+    check("EC-2: Second speaker gets its own track",
+          len(tracks_enter) >= 2, f"Expected >=2 tracks, got {len(tracks_enter)}")
+
+    # --- EC-3 (Multi-Speaker): Adjacent speakers with IoU=0 do not merge ---
+    print("\n\U0001f465 EC-3 (Multi-Speaker): Adjacent speakers (IoU=0) do not merge")
+    scene_prox = []
+    for f in range(30):
+        spk1 = {'frame': f, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.98}
+        spk2 = {'frame': f, 'bbox': [210.0, 100.0, 310.0, 200.0], 'conf': 0.95}
+        scene_prox.append([spk1, spk2])
+    tracks_prox = track_shot(args, scene_prox)
+    check("EC-3: Adjacent speakers (IoU=0) => 2 distinct tracks",
+          len(tracks_prox) == 2, f"Expected 2 tracks, got {len(tracks_prox)}")
+
+    # --- EC-4 (Multi-Speaker): Speaker briefly absent then re-enters ---
+    print("\n\U0001f465 EC-4 (Multi-Speaker): Speaker absent 4 frames within numFailedDet=5")
+    args_ec4 = MockArgs()
+    args_ec4.numFailedDet = 5
+    args_ec4.minTrack = 5
+    args_ec4.minFaceSize = 1
+    args_ec4.cropScale = 0.40
+    scene_reenter = []
+    for f in range(30):
+        if 10 <= f <= 13:
+            scene_reenter.append([])
+        else:
+            scene_reenter.append([{'frame': f, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.97}])
+    tracks_reenter = track_shot(args_ec4, scene_reenter)
+    total_fr = sum(len(t['frame']) for t in tracks_reenter)
+    check("EC-4: Re-entering speaker => >=1 track with >=20 frames",
+          len(tracks_reenter) >= 1 and total_fr >= 20,
+          f"{len(tracks_reenter)} tracks, {total_fr} total frames")
+
+    # --- EC-5 (No Face): Entire 500-frame video has zero detections ---
+    print("\n\U0001f636 EC-5 (No Face): 500-frame all-empty => full fallback track")
+    try:
+        from preprocess_faces import center_crop_fallback
+        import tempfile as _tf
+        import shutil as _sh
+        _tmp = _tf.mkdtemp()
+        args_ec5 = MockArgs()
+        args_ec5.pyframesPath = _tmp
+        args_ec5.minTrack = 10
+        fb500 = center_crop_fallback(args_ec5, 0, 500)
+        check("EC-5: 500-frame no-face => fallback not None", fb500 is not None)
+        if fb500 is not None:
+            check("EC-5: fallback spans 500 frames",
+                  len(fb500['frame']) == 500, f"Got {len(fb500['frame'])}")
+            check("EC-5: fallback bbox shape is (500, 4)",
+                  fb500['bbox'].shape == (500, 4), f"Got {fb500['bbox'].shape}")
+            check("EC-5: fallback_reason == 'no_face_detected'",
+                  fb500.get('fallback_reason') == 'no_face_detected',
+                  f"Got '{fb500.get('fallback_reason')}'")
+        _sh.rmtree(_tmp, ignore_errors=True)
+    except ImportError:
+        check("EC-5: center_crop_fallback importable", False, "ImportError")
+
+    # --- EC-6 (No Face): Faces vanish mid-shot, track retained via numFailedDet ---
+    print("\n\U0001f636 EC-6 (No Face): Faces vanish mid-shot, track stays open")
+    args_ec6 = MockArgs()
+    args_ec6.numFailedDet = 50
+    args_ec6.minTrack = 5
+    args_ec6.minFaceSize = 1
+    args_ec6.cropScale = 0.40
+    scene_partial = []
+    for f in range(30):
+        if f < 15:
+            scene_partial.append([{'frame': f, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.95}])
+        else:
+            scene_partial.append([])
+    tracks_partial = track_shot(args_ec6, scene_partial)
+    check("EC-6: Track from first half retained after faces vanish",
+          len(tracks_partial) >= 1, f"Expected >=1 track, got {len(tracks_partial)}")
+
+    # --- EC-7 (Static Slides): Constant bbox across 60 frames (medfilt on flat signal) ---
+    print("\n\U0001f5bc\ufe0f EC-7 (Static Slides): Constant bbox — medfilt on flat signal, no crash")
+    scene_static = [
+        [{'frame': f, 'bbox': [200.0, 150.0, 300.0, 250.0], 'conf': 0.92}]
+        for f in range(60)
+    ]
+    try:
+        tracks_static = track_shot(args, scene_static)
+        check("EC-7: Static-slide track_shot does not crash", True)
+        check("EC-7: Static-slide => exactly 1 track",
+              len(tracks_static) == 1, f"Got {len(tracks_static)}")
+        if len(tracks_static) == 1:
+            x_var = float(numpy.var(tracks_static[0]['bbox'][:, 0]))
+            check("EC-7: Constant bbox x-variance == 0 after medfilt",
+                  x_var < 1e-6, f"Got variance={x_var}")
+    except Exception as e:
+        check("EC-7: Static-slide track_shot does not crash", False, str(e))
+
+    # --- EC-8 (Static Slides): Zero-size point bbox filtered without crash ---
+    print("\n\U0001f5bc\ufe0f EC-8 (Static Slides): Zero-size point bbox filtered, no crash")
+    scene_zero = [
+        [{'frame': f, 'bbox': [150.0, 150.0, 150.0, 150.0], 'conf': 0.9}]
+        for f in range(30)
+    ]
+    try:
+        tracks_zero = track_shot(args, scene_zero)
+        check("EC-8: Zero-size bbox — no exception raised", True)
+        check("EC-8: Zero-size bbox filtered out (minFaceSize=1)",
+              len(tracks_zero) == 0, f"Expected 0 tracks, got {len(tracks_zero)}")
+    except Exception as e:
+        check("EC-8: Zero-size bbox — no exception raised", False, str(e))
+
+    # --- EC-9 (Static Slides): 2-frame track, k_size clamped to 1 (no medfilt path) ---
+    print("\n\U0001f5bc\ufe0f EC-9 (Static Slides): 2-frame track k_size clamped to 1, no crash")
+    # minTrack=1 so the 2-frame track passes the len(track) > minTrack filter
+    # (the guard is len <= minTrack, so minTrack=1 means len>=2 tracks pass)
+    args_ec9 = MockArgs()
+    args_ec9.numFailedDet = 100
+    args_ec9.minTrack = 1
+    args_ec9.minFaceSize = 1
+    args_ec9.cropScale = 0.40
+    scene_2f = [
+        [{'frame': 0, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.9}],
+        [{'frame': 1, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.9}],
+    ]
+    try:
+        tracks_2f = track_shot(args_ec9, scene_2f)
+        check("EC-9: 2-frame static track — no crash", True)
+        check("EC-9: 2-frame static track => 1 track returned",
+              len(tracks_2f) == 1, f"Expected 1, got {len(tracks_2f)}")
+    except Exception as e:
+        check("EC-9: 2-frame static track — no crash", False, str(e))
+
+    # --- EC-10 (Mixed): 2-speaker + no-face + static slide multi-scene ---
+    print("\n\U0001f3ac EC-10 (Mixed): 2-speaker + no-face + static slide scenes")
+    scene_A = [
+        [{'frame': f, 'bbox': [100.0, 100.0, 200.0, 200.0], 'conf': 0.97},
+         {'frame': f, 'bbox': [600.0, 100.0, 700.0, 200.0], 'conf': 0.95}]
+        for f in range(30)
+    ]
+    scene_B = [[] for _ in range(30)]
+    scene_C = [
+        [{'frame': f, 'bbox': [300.0, 200.0, 400.0, 300.0], 'conf': 0.91}]
+        for f in range(30)
+    ]
+    tracks_A = track_shot(args, scene_A)
+    tracks_B = track_shot(args, scene_B)
+    tracks_C = track_shot(args, scene_C)
+    check("EC-10: Scene A (2 speakers) => 2 tracks", len(tracks_A) == 2, f"Got {len(tracks_A)}")
+    check("EC-10: Scene B (no face) => 0 real tracks", len(tracks_B) == 0, f"Got {len(tracks_B)}")
+    check("EC-10: Scene C (static slide) => 1 track", len(tracks_C) == 1, f"Got {len(tracks_C)}")
+    check("EC-10: No cross-scene contamination (A+B+C == 3)",
+          len(tracks_A) + len(tracks_B) + len(tracks_C) == 3,
+          f"Total={len(tracks_A)+len(tracks_B)+len(tracks_C)}")
+
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(

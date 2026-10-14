@@ -34,9 +34,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return NextResponse.json(tutorial);
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to fetch tutorial";
     console.error("Tutorial fetch error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch tutorial" }, { status: 500 });
   }
 }
 
@@ -74,8 +73,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to delete tutorial";
     console.error("Tutorial delete error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete tutorial" }, { status: 500 });
   }
 }

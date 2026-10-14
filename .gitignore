@@ -41,13 +41,42 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-
-
 ##dev 
 task.md
+task-67-demo/
+task-70-demo/
 
 /// addding the fix shareable links in the schema 
 video-worker/node_modules
 video-worker/.env
 video-worker/dist
+cloudrun-worker/node_modules
+
+# Python & ML artifacts
+__pycache__/
+*.py[cod]
+$py.class
+.pytest_cache/
+*.pth
+*.model
+*.pt
+*.bin
+
 cursor_templates/
+playwright-report/
+test-results/
+# Local testing and scratch files
+benchmark_results/
+demo/
+*.ass
+*.ipynb
+model/
+preprocess_diff.txt
+resolve_conflict.py
+test_edges.py
+start_worker.sh
+scripts/test_*.ts
+scripts/test_*.mjs
+scripts/task_*.ts
+scripts/demo_*.ts
+infra/SLACK_ANNOUNCEMENT.md

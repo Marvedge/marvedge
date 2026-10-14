@@ -18,6 +18,8 @@ interface VideoPreviewPlayerProps {
   setDuration: (duration: number | ((prev: number) => number)) => void;
   setPlaying: (playing: boolean) => void;
   duration: number;
+  onUploadVideo?: (file: File) => Promise<string | null | void>;
+  isUploading?: boolean;
 }
 
 export default function VideoPreviewPlayer({
@@ -35,6 +37,8 @@ export default function VideoPreviewPlayer({
   setDuration,
   setPlaying,
   duration,
+  onUploadVideo,
+  isUploading,
 }: VideoPreviewPlayerProps) {
   return (
     <div className="w-full h-full">
@@ -100,7 +104,7 @@ export default function VideoPreviewPlayer({
           progressInterval={50}
         />
       ) : (
-        <EmptyVideoState />
+        <EmptyVideoState onUploadVideo={onUploadVideo} isUploading={isUploading} />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isSafeUrl } from "@/app/lib/safeUrl";
+import { getAudioExtension, getDubbedAudio } from "@/app/lib/elevenlabs/dubbing";
 
 function sanitizeFilename(input: string) {
   const cleaned = input
@@ -26,7 +27,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       where: { id },
       select: {
         userId: true,
+        status: true,
         exportedUrl: true,
+        jobData: true,
       },
     });
 
@@ -36,6 +39,41 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     if (job.userId !== session.user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const jobData = job.jobData as Record<string, unknown> | null;
+    if (
+      jobData?.kind === "DUBBING" &&
+      typeof jobData.dubbingId === "string" &&
+      typeof jobData.targetLanguage === "string"
+    ) {
+      // Guard: only serve audio for jobs that have actually completed. A job
+      // that is still PROCESSING does not yet have retrievable audio at ElevenLabs.
+      if (job.status !== "COMPLETED") {
+        return NextResponse.json({ error: "Dubbing job is not completed" }, { status: 400 });
+      }
+
+      try {
+        const { audio, contentType } = await getDubbedAudio(
+          jobData.dubbingId,
+          jobData.targetLanguage
+        );
+        const ext = getAudioExtension(contentType);
+        const filename = `${sanitizeFilename(title)}.${ext}`;
+        return new NextResponse(audio, {
+          status: 200,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Disposition": `attachment; filename="${filename}"`,
+            "Cache-Control": "no-store",
+          },
+        });
+      } catch (upstreamErr) {
+        // Log full upstream details server-side; return a generic message to
+        // avoid leaking ElevenLabs error bodies or internal paths to clients.
+        console.error("[download] Dubbed audio upstream error:", upstreamErr);
+        return NextResponse.json({ error: "Failed to retrieve dubbed audio" }, { status: 502 });
+      }
     }
 
     if (!job.exportedUrl) {
