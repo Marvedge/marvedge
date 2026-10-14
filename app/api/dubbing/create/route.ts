@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing targetLanguage" }, { status: 400 });
     }
 
-    const targetLanguage = rawTargetLanguage;
+    const targetLanguage = rawTargetLanguage.toLowerCase();
 
     if (!sourceUrl) {
       return NextResponse.json({ error: "Missing sourceUrl" }, { status: 400 });
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unsafe sourceUrl" }, { status: 400 });
     }
 
-    if (!/^[a-z]{2,5}$/i.test(targetLanguage)) {
+    if (!/^[a-z]{2,5}$/.test(targetLanguage)) {
       return NextResponse.json({ error: "Invalid targetLanguage" }, { status: 400 });
     }
 

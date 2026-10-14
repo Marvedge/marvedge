@@ -215,4 +215,46 @@ describe("POST /api/dubbing/create URL security", () => {
       }
     );
   });
+
+  it("normalizes uppercase and padded targetLanguage to lowercase", async () => {
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: " ES ",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      jobId: "job-1",
+      targetLanguage: "es",
+    });
+
+    expect(prisma.videoJob.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        videoUrl: "https://media.example.test/video.mp4",
+        status: "PENDING",
+        progress: 0,
+        jobData: {
+          kind: "DUBBING",
+          targetLanguage: "es",
+        },
+      },
+    });
+
+    expect(dubbingQueue.add).toHaveBeenCalledWith(
+      "dubbing",
+      {
+        jobId: "job-1",
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "es",
+      },
+      {
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      }
+    );
+  });
 });

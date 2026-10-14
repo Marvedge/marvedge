@@ -1772,18 +1772,20 @@ export const dubbingWorker = new Worker(
         await job.updateProgress(25);
 
         const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
+        const audioEndpoint = `/api/dubbing/${jobId}/audio`;
         await prisma.videoJob.update({
           where: { id: jobId },
           data: {
             status: "COMPLETED",
             progress: 100,
+            exportedUrl: audioEndpoint,
             jobData: {
               kind: "DUBBING",
               sourceUrl,
               targetLanguage,
               dubbingId: completedJob.dubbingId,
               providerStatus: completedJob.status,
-              audioEndpoint: `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`,
+              audioEndpoint,
             },
           },
         });
