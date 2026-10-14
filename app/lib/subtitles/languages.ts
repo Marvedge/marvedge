@@ -198,7 +198,8 @@ export function isTranslationTarget(code: string): boolean {
 
 /** Whether a language's script runs right to left (Arabic, of the seven). */
 export function isRtlLanguage(code: string): boolean {
-  return findLanguage(code)?.isRtl ?? false;
+  const base = String(code || "").trim().toLowerCase().split("-")[0];
+  return findLanguage(code)?.isRtl ?? findLanguage(base)?.isRtl ?? false;
 }
 
 /**

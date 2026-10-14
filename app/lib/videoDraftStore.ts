@@ -21,6 +21,7 @@ export interface VideoDraftMeta {
   description: string;
   sourceDuration: number;
   savedAt: number;
+  canonicalVideoUrl?: string | null;
 }
 
 export interface VideoDraft {

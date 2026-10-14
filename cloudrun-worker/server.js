@@ -7,14 +7,15 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { createHash, randomUUID } = require("node:crypto");
 const { createReadStream } = require("node:fs");
-
+const { fetchSafeUrl } = require("./safe-download.cjs");
+const { prepareChunkInput } = require("./chunk-input.cjs");
 const express = require("express");
-const { Storage } = require("@google-cloud/storage");
-const { Firestore, FieldValue } = require("@google-cloud/firestore");
+// Storage: AWS S3 (primary) with GCS cold-standby — provider controlled by STORAGE_PROVIDER env.
+const storageLib = require("./storage.cjs");
+// Job state: AWS DynamoDB (primary) with Firestore cold-standby.
+const jobstore   = require("./jobstore.cjs");
 const { renderChunkFromRecipe } = require("./render");
-
-const storage = new Storage();
-const firestore = new Firestore();
+const { authorizeWorkerRequest } = require("./worker-auth.cjs");
 
 const PORT = Number(process.env.PORT || 8080);
 const RAW_BUCKET = process.env.RAW_BUCKET || "";
@@ -28,16 +29,18 @@ const CHUNK_DURATION_SECS = Number(process.env.CHUNK_DURATION_SECS || 10);
 const AVS_VOICEOVER_PREFIX = process.env.AVS_VOICEOVER_PREFIX || "avs-voiceover/";
 // GCS object prefix for AVS time-aligned MP4s (in the processed bucket).
 const AVS_ALIGNED_PREFIX = process.env.AVS_ALIGNED_PREFIX || "avs-aligned/";
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(os.tmpdir(), "marvedge-artifacts");
+fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => {});
 // Frame rate the aligned segments are normalized to so they concat with -c copy.
 const AVS_SYNC_FPS = Number(process.env.AVS_SYNC_FPS || 30);
 // GCS object prefix for WTM webcam-bubble composited MP4s (processed bucket).
 const WTM_COMPOSITE_PREFIX = process.env.WTM_COMPOSITE_PREFIX || "wtm-composite/";
 // BOTH compositor inputs are normalized to this frame rate first: a 60 FPS
 // screen capture overlaid with a 24 FPS webcam otherwise drifts apart over a
-// long recording (PRD §6.4 edge case).
+// long recording (PRD Â§6.4 edge case).
 const WTM_COMPOSITE_FPS = Number(process.env.WTM_COMPOSITE_FPS || 30);
 // Bubble inset from its corner, in px at 1080p and scaled with the source
-// height — mirrors the watermark margin logic in render.js.
+// height â€” mirrors the watermark margin logic in render.js.
 const WTM_BUBBLE_MARGIN_PX = 25;
 // Bubble diameter as a fraction of the source height. Mirrors
 // DEFAULT_WEBCAM.size / WTM_WEBCAM_SIZE_MIN / MAX in app/lib/wtm/webcam.ts.
@@ -65,13 +68,13 @@ const AVS_ALLOWED_VOICES = new Set([
 const HLS_PREFIX = process.env.HLS_PREFIX || "hls/";
 // The rendition ladder, highest first. 1080p is the top rung because the export
 // pipeline never produces more, and a rung above the source is only ever an
-// upscale that costs bitrate and adds nothing — ladderForSource() drops those.
+// upscale that costs bitrate and adds nothing â€” ladderForSource() drops those.
 const HLS_LADDER = [
   { height: 1080, videoKbps: 5000, maxrateKbps: 5350, bufsizeKbps: 7500, audioKbps: 192 },
   { height: 720, videoKbps: 2800, maxrateKbps: 3000, bufsizeKbps: 4200, audioKbps: 128 },
   { height: 480, videoKbps: 1400, maxrateKbps: 1500, bufsizeKbps: 2100, audioKbps: 96 },
 ];
-// Segment length in seconds. Also the GOP length — see the keyframe comment in
+// Segment length in seconds. Also the GOP length â€” see the keyframe comment in
 // packageHlsJob(). Four is the usual compromise: shorter means more requests and
 // more playlist, longer means a slower first frame and coarser ABR reactions.
 const HLS_SEGMENT_SECONDS = Number(process.env.HLS_SEGMENT_SECONDS || 4);
@@ -82,6 +85,36 @@ const HLS_FPS = Number(process.env.HLS_FPS || 30);
 
 const execFileAsync = promisify(execFile);
 
+if (!process.env.DEEPGRAM_API_KEY && typeof process.loadEnvFile === "function") {
+  for (const envFile of [path.resolve(__dirname, "../.env.local"), path.resolve(__dirname, "../.env")]) {
+    try {
+      process.loadEnvFile(envFile);
+    } catch {}
+  }
+}
+
+const FFMPEG_BIN =
+  process.env.FFMPEG_PATH ||
+  (() => {
+    try {
+      return require("ffmpeg-static");
+    } catch {
+      return "/usr/bin/ffmpeg";
+    }
+  })() ||
+  "/usr/bin/ffmpeg";
+
+const FFPROBE_BIN =
+  process.env.FFPROBE_PATH ||
+  (() => {
+    try {
+      return require("ffprobe-static").path;
+    } catch {
+      return "/usr/bin/ffprobe";
+    }
+  })() ||
+  "/usr/bin/ffprobe";
+
 function must(name, value) {
   if (!value) {
     throw new Error(`Missing required env var: ${name}`);
@@ -89,80 +122,37 @@ function must(name, value) {
   return value;
 }
 
-async function downloadRawChunkFromGcs({
-  bucketName,
-  objectName,
-  destinationPath,
-}) {
-  await storage
-    .bucket(bucketName)
-    .file(objectName)
-    .download({ destination: destinationPath });
+// ---------------------------------------------------------------------------
+// Storage helpers — delegate to storage.cjs (AWS S3 primary / GCS fallback)
+// ---------------------------------------------------------------------------
+
+async function downloadRawChunkFromGcs({ bucketName, objectName, destinationPath }) {
+  // Name kept for backwards compatibility — routes to S3 or GCS per STORAGE_PROVIDER.
+  await storageLib.downloadObject({ bucketName, objectName, destinationPath });
 }
 
 function parseGsUri(uri) {
-  if (typeof uri !== "string" || !uri.startsWith("gs://")) {
-    return null;
-  }
-  const trimmed = uri.slice("gs://".length);
-  const slashIndex = trimmed.indexOf("/");
-  if (slashIndex <= 0) {
-    return null;
-  }
-  const bucket = trimmed.slice(0, slashIndex);
-  const object = trimmed.slice(slashIndex + 1);
-  if (!bucket || !object) {
-    return null;
-  }
-  return { bucket, object };
+  // Supports both gs:// (legacy) and s3:// URIs stored in the database.
+  return storageLib.parseStorageUri(uri);
 }
 
 async function downloadFromGsUri({ uri, destinationPath }) {
-  const parsed = parseGsUri(uri);
-  if (!parsed) {
-    throw new Error(`Invalid gs:// uri: ${uri}`);
-  }
-  await downloadRawChunkFromGcs({
-    bucketName: parsed.bucket,
-    objectName: parsed.object,
-    destinationPath,
-  });
+  // Supports both gs:// and s3:// URIs.
+  await storageLib.downloadFromUri({ uri, destinationPath });
 }
 
 async function getSignedHttpUrlForGsUri(uri) {
-  const parsed = parseGsUri(uri);
-  if (!parsed) {
-    throw new Error(`Invalid gs:// uri: ${uri}`);
-  }
-  const [signedUrl] = await storage
-    .bucket(parsed.bucket)
-    .file(parsed.object)
-    .getSignedUrl({
-      version: "v4",
-      action: "read",
-      expires: Date.now() + 2 * 60 * 60 * 1000,
-    });
-  return signedUrl;
+  // Resolves gs:// or s3:// → short-lived HTTPS URL.
+  return storageLib.getSignedUrlForUri(uri);
 }
 
 async function downloadFromUrl({ url, destinationPath }) {
-  // never let a job point us at internal addresses
-  let parsed;
-  try {
-    parsed = new URL(String(url));
-  } catch {
-    throw new Error("Invalid source URL");
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Refusing to fetch non-http(s) URL");
-  }
-  if (isBlockedWorkerHost(parsed.hostname)) {
-    throw new Error("Refusing to fetch blocked host");
-  }
-  const response = await fetch(url);
+  const response = await fetchSafeUrl(url);
+
   if (!response.ok) {
     throw new Error(`Failed to download source video: ${response.status}`);
   }
+
   const bytes = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(destinationPath, bytes);
 }
@@ -191,7 +181,7 @@ function ffmpegErrorDetail(err) {
   return (
     lines
       .slice(-2)
-      .join(" — ")
+      .join(" â€” ")
       // The detail is shown to the user, so strip the container's own scratch
       // paths: they mean nothing to them and expose our internals for no gain.
       .replace(/\/tmp\/\S+/g, "the file")
@@ -201,7 +191,7 @@ function ffmpegErrorDetail(err) {
 
 async function extractAudioWav16kMono(inputPath, wavPath) {
   try {
-    await execFileAsync("/usr/bin/ffmpeg", [
+    await execFileAsync(FFMPEG_BIN, [
       "-y",
       "-i",
       inputPath,
@@ -215,19 +205,19 @@ async function extractAudioWav16kMono(inputPath, wavPath) {
       wavPath,
     ]);
   } catch (err) {
-    // PRD §13, corrupted / incomplete uploads. This is the FIRST thing that
+    // PRD Â§13, corrupted / incomplete uploads. This is the FIRST thing that
     // touches the actual bytes, so a truncated recording, a zero-length upload
-    // or a container ffmpeg cannot demux all land here — and used to reach the
+    // or a container ffmpeg cannot demux all land here â€” and used to reach the
     // user as a wall of ffmpeg banner text, or as a bare "Internal Server
     // Error" once something upstream flattened it.
     const detail = ffmpegErrorDetail(err);
     console.error(`[subtitles] ffmpeg audio extract failed: ${detail}`);
 
-    // A file with no audio stream at all is not a broken file — it is a silent
+    // A file with no audio stream at all is not a broken file â€” it is a silent
     // screen recording, which is an ordinary thing to have. Distinguished from a
     // corrupted file because the fix is completely different: "re-upload it"
     // is useless advice for a video that simply has no sound. (This is NOT the
-    // same case as a video whose audio contains no speech — that one reaches
+    // same case as a video whose audio contains no speech â€” that one reaches
     // Deepgram, returns no cues, and surfaces as "No speech detected".)
     if (/does not contain any stream|Output file (#\d+ )?does not contain/i.test(detail)) {
       throw new Error(
@@ -236,7 +226,7 @@ async function extractAudioWav16kMono(inputPath, wavPath) {
     }
 
     throw new Error(
-      `This video could not be read — it may be corrupted or the upload may be incomplete. Try re-uploading it. (${detail || "ffmpeg could not decode the file"})`,
+      `This video could not be read â€” it may be corrupted or the upload may be incomplete. Try re-uploading it. (${detail || "ffmpeg could not decode the file"})`,
     );
   }
 }
@@ -285,17 +275,17 @@ function cuesFromDeepgramWords(words) {
 
 // SUB PR 5: not every language is on the same Deepgram model.
 //
-// nova-2 — what this worker has always sent, and still the default for every
+// nova-2 â€” what this worker has always sent, and still the default for every
 // language that has always worked. Its request is unchanged.
 //
-// nova-3 — used ONLY for languages nova-2 does not cover. Arabic is the one such
+// nova-3 â€” used ONLY for languages nova-2 does not cover. Arabic is the one such
 // language among the seven the product offers: it is absent from nova-2's
 // language list, and nova-3 added it as its first right-to-left language across
 // 17 regional variants.
 //
 // This mirrors `sttModelFor()` in app/lib/subtitles/languages.ts, which is the
 // source of truth and carries the full reasoning; that module cannot be imported
-// here (this worker is a standalone package). Keep the two in step — the table
+// here (this worker is a standalone package). Keep the two in step â€” the table
 // there is pinned by app/lib/subtitles/languages.test.ts.
 const DEEPGRAM_DEFAULT_MODEL = "nova-2";
 const DEEPGRAM_MODEL_BY_LANGUAGE = {
@@ -398,8 +388,8 @@ async function processSubtitlesJob({ videoUrl, language }) {
     );
     const deepgramMs = Date.now() - dgStart;
 
-    // PRD §7 sets the target PER UNIT OF VIDEO ("< 60s for a 10-minute video"),
-    // so the elapsed times alone cannot be checked against it — you need to know
+    // PRD Â§7 sets the target PER UNIT OF VIDEO ("< 60s for a 10-minute video"),
+    // so the elapsed times alone cannot be checked against it â€” you need to know
     // how long the input was. Derived from the WAV rather than probed: the
     // extract above pins the format at 16 kHz mono PCM s16le, so the byte count
     // divided by 32000 IS the duration, exactly, for the cost of one stat.
@@ -429,16 +419,9 @@ async function processSubtitlesJob({ videoUrl, language }) {
   }
 }
 
-async function uploadProcessedChunkToGcs({
-  bucketName,
-  objectName,
-  sourcePath,
-}) {
-  await storage.bucket(bucketName).upload(sourcePath, {
-    destination: objectName,
-    contentType: "video/mp4",
-    resumable: false,
-  });
+async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath }) {
+  // Name kept for backwards compatibility — routes to S3 or GCS per STORAGE_PROVIDER.
+  await storageLib.uploadObject({ bucketName, objectName, sourcePath, contentType: "video/mp4" });
 }
 
 // --- AVS voiceover (Deepgram Aura TTS) -------------------------------------
@@ -523,32 +506,44 @@ function splitTextForAura(text, limit = AURA_CHAR_LIMIT) {
   return chunks.length > 0 ? chunks : [trimmed];
 }
 
-/** Synthesize one text chunk to an MP3 file via Deepgram Aura `/v1/speak`. */
+/** Synthesize one text chunk to an MP3 file via ElevenLabs. */
 async function synthesizeAuraChunk(text, voiceId, outputPath) {
-  const apiKey = (process.env.DEEPGRAM_API_KEY || "").trim();
+  const apiKey = (process.env.ELEVENLABS_API_KEY || "").trim();
   if (!apiKey) {
-    throw new Error("Missing DEEPGRAM_API_KEY in Cloud Run environment");
+    throw new Error("Missing ELEVENLABS_API_KEY in Cloud Run environment");
   }
-  const params = new URLSearchParams({ model: voiceId, encoding: "mp3" });
-  const resp = await fetch(`https://api.deepgram.com/v1/speak?${params.toString()}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${apiKey}`,
-      "Content-Type": "application/json",
+
+  const elevenVoiceId =
+    (process.env.ELEVENLABS_VOICE_ID || "CwhRBWXzGAHq8TQ4Fs17").trim();
+
+  const resp = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${elevenVoiceId}`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        Accept: "audio/mpeg",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+      }),
     },
-    body: JSON.stringify({ text }),
-  });
+  );
+
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => "");
-    throw new Error(`Deepgram Aura failed (${resp.status}): ${errBody}`);
+    throw new Error(`ElevenLabs TTS failed (${resp.status}): ${errBody}`);
   }
+
   const bytes = Buffer.from(await resp.arrayBuffer());
   await fs.writeFile(outputPath, bytes);
 }
 
 /** Probe an audio file's duration (seconds) via ffprobe. */
 async function probeDurationSeconds(filePath) {
-  const { stdout } = await execFileAsync("/usr/bin/ffprobe", [
+  const { stdout } = await execFileAsync(FFPROBE_BIN, [
     "-v",
     "error",
     "-show_entries",
@@ -572,7 +567,7 @@ async function concatMp3(inputPaths, outputPath, workDir, tag) {
     .map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
     .join("\n");
   await fs.writeFile(listPath, listContent);
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-f",
     "concat",
@@ -587,11 +582,8 @@ async function concatMp3(inputPaths, outputPath, workDir, tag) {
 }
 
 async function uploadVoiceoverToGcs({ bucketName, objectName, sourcePath }) {
-  await storage.bucket(bucketName).upload(sourcePath, {
-    destination: objectName,
-    contentType: "audio/mpeg",
-    resumable: false,
-  });
+  // Routes to S3 or GCS per STORAGE_PROVIDER env — name kept for compatibility.
+  await storageLib.uploadObject({ bucketName, objectName, sourcePath, contentType: "audio/mpeg" });
 }
 
 const round3 = (n) => Math.round(n * 1000) / 1000;
@@ -670,13 +662,8 @@ async function processVoiceoverJob({ lines, voiceId, pronunciation }) {
       sourcePath: finalPath,
     });
 
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const audioUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const audioUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[avs-voiceover] steps=${stepTimings.length} duration=${duration}s ` +
@@ -734,7 +721,7 @@ async function buildAlignedVideoSegment({ sourcePath, start, videoDur, freeze, o
   if (freeze > 0.001) {
     filters.push(`tpad=stop_mode=clone:stop_duration=${round3(freeze)}`);
   }
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-ss",
     String(round3(start)),
@@ -770,7 +757,7 @@ async function buildAlignedVideoSegment({ sourcePath, start, videoDur, freeze, o
  */
 async function buildAlignedAudioSegment({ voicePath, audioStart, audioDur, totalDur, outputPath }) {
   if (voicePath && audioDur > 0.001) {
-    await execFileAsync("/usr/bin/ffmpeg", [
+    await execFileAsync(FFMPEG_BIN, [
       "-y",
       "-ss",
       String(round3(audioStart)),
@@ -786,7 +773,7 @@ async function buildAlignedAudioSegment({ voicePath, audioStart, audioDur, total
     ]);
     return;
   }
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-f",
     "lavfi",
@@ -811,7 +798,7 @@ async function concatByDemuxer(inputPaths, outputPath, workDir, tag) {
     .map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
     .join("\n");
   await fs.writeFile(listPath, listContent);
-  await execFileAsync("/usr/bin/ffmpeg", [
+  await execFileAsync(FFMPEG_BIN, [
     "-y",
     "-f",
     "concat",
@@ -826,23 +813,25 @@ async function concatByDemuxer(inputPaths, outputPath, workDir, tag) {
 }
 
 async function downloadToPath(url, destinationPath) {
-  if (String(url).startsWith("gs://")) {
-    await downloadFromGsUri({ uri: String(url), destinationPath });
+  const u = String(url);
+  // Handles s3:// (AWS primary), gs:// (GCS legacy/fallback), and plain HTTPS URLs.
+  if (u.startsWith("s3://") || u.startsWith("gs://")) {
+    await storageLib.downloadFromUri({ uri: u, destinationPath });
   } else {
-    await downloadFromUrl({ url: String(url), destinationPath });
+    await downloadFromUrl({ url: u, destinationPath });
   }
 }
 
 /**
  * Time-align the continuous voiceover to the video per step (AVS-2.4):
- *  - T_audio > T_video → freeze the step's last frame for the overflow;
- *  - T_video > T_audio → pad the step's voiceover with trailing silence;
+ *  - T_audio > T_video â†’ freeze the step's last frame for the overflow;
+ *  - T_video > T_audio â†’ pad the step's voiceover with trailing silence;
  * so each step lasts max(T_video, T_audio) and audio/video stay in sync
  * end-to-end. Video segments (with freeze) and audio segments (with silence)
  * are concatenated separately, then the continuous aligned audio is muxed onto
- * the continuous video → ONE aligned MP4 (the source the normal export then
+ * the continuous video â†’ ONE aligned MP4 (the source the normal export then
  * processes). Returns { alignedVideoUrl, duration }. FALLBACK: no voiceover /
- * steps → the original source is returned unchanged.
+ * steps â†’ the original source is returned unchanged.
  */
 async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
   if (!videoUrl) throw new Error("videoUrl is required");
@@ -850,7 +839,7 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
   const stepList = normalizeSyncSteps(steps);
   const timingMap = buildTimingMap(stepTimings);
 
-  // Fallback: nothing to align → hand back the original source untouched.
+  // Fallback: nothing to align â†’ hand back the original source untouched.
   if (!audioUrl || stepList.length === 0 || timingMap.size === 0) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
@@ -912,7 +901,7 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
     await concatByDemuxer(audioSegments, audioPath, workDir, "audio");
 
     const alignedPath = path.join(workDir, "aligned.mp4");
-    await execFileAsync("/usr/bin/ffmpeg", [
+    await execFileAsync(FFMPEG_BIN, [
       "-y",
       "-i",
       videoPath,
@@ -945,13 +934,8 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
       objectName,
       sourcePath: alignedPath,
     });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const alignedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[avs-sync] steps=${videoSegments.length} frozen=${frozen} padded=${padded} ` +
@@ -1153,7 +1137,10 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
     return { alignedVideoUrl: videoUrl, duration: 0 };
   }
 
-  const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
+  const processedBucket =
+    process.env.STORAGE_PROVIDER === "local"
+      ? "local"
+      : PROCESSED_BUCKET || "local";
   const startedAt = Date.now();
   const workDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "marvedge-avs-dub-"),
@@ -1271,19 +1258,37 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
 
     const duration = round3(await probeDurationSeconds(alignedPath));
 
-    const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
-    await uploadProcessedChunkToGcs({
-      bucketName: processedBucket,
-      objectName,
-      sourcePath: alignedPath,
-    });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (_e) {
-      /* Ignore if UBLA is enforced — signed URL still works. */
+    let alignedVideoUrl;
+    if (
+      process.env.STORAGE_PROVIDER !== "local" &&
+      processedBucket &&
+      processedBucket !== "local"
+    ) {
+      try {
+        const objectName = `${AVS_DUB_PREFIX}${randomUUID()}.mp4`;
+        await uploadProcessedChunkToGcs({
+          bucketName: processedBucket,
+          objectName,
+          sourcePath: alignedPath,
+        });
+        // Generate a signed download URL — works for both private S3 and private GCS buckets.
+        alignedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
+      } catch (uploadErr) {
+        console.warn(
+          `[avs-dub] Storage upload failed (${uploadErr.message}). Falling back to local artifact serving.`,
+        );
+      }
     }
-    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+
+    if (!alignedVideoUrl) {
+      const localArtifactName = `aligned-${randomUUID()}.mp4`;
+      const localArtifactPath = path.join(ARTIFACTS_DIR, localArtifactName);
+      await fs.copyFile(alignedPath, localArtifactPath);
+      const port = process.env.PORT || 8080;
+      const host = process.env.WORKER_PUBLIC_URL || `http://localhost:${port}`;
+      alignedVideoUrl = `${host}/artifacts/${localArtifactName}`;
+      console.log(`[avs-dub] Artifact saved locally at ${alignedVideoUrl}`);
+    }
 
     console.log(
       `[avs-dub] steps=${videoSegments.length} stretched=${stretched} ` +
@@ -1314,7 +1319,7 @@ function evenDimension(value) {
 
 /** Probe the first video stream's pixel dimensions via ffprobe. */
 async function probeVideoDimensions(filePath) {
-  const { stdout } = await execFileAsync("/usr/bin/ffprobe", [
+  const { stdout } = await execFileAsync(FFPROBE_BIN, [
     "-v",
     "error",
     "-select_streams",
@@ -1356,7 +1361,7 @@ function bubbleOverlayXY(position, margin) {
 
 /**
  * Composite the webcam clip onto the source as a circular corner bubble
- * (WTM-6.4) — a PRE-PASS producing ONE MP4 that the normal chunked export then
+ * (WTM-6.4) â€” a PRE-PASS producing ONE MP4 that the normal chunked export then
  * processes, exactly like /avs-sync. The filter chain:
  *   - `fps` on BOTH inputs first, so a 60 FPS capture + a 24 FPS webcam can't
  *     drift apart;
@@ -1366,14 +1371,14 @@ function bubbleOverlayXY(position, margin) {
  *     as the alpha channel, giving a clean circular cutout;
  *   - `overlay` at the requested corner.
  * The ORIGINAL SOURCE AUDIO is mapped through untouched and the webcam's audio
- * is never mapped — the screen recording already carries mic/tab audio, so
+ * is never mapped â€” the screen recording already carries mic/tab audio, so
  * muxing the webcam too would double it. Returns { compositedVideoUrl,
- * duration }. FALLBACK: no webcam → the source is returned unchanged.
+ * duration }. FALLBACK: no webcam â†’ the source is returned unchanged.
  */
 async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape }) {
   if (!videoUrl) throw new Error("videoUrl is required");
 
-  // Fallback: nothing to composite → hand the source straight back, no ffmpeg.
+  // Fallback: nothing to composite â†’ hand the source straight back, no ffmpeg.
   if (!webcamUrl) {
     return { compositedVideoUrl: videoUrl, duration: 0 };
   }
@@ -1401,7 +1406,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
     const diameter = evenDimension(Math.min(sourceHeight, fraction * sourceHeight));
     const corner = WTM_POSITIONS.includes(position) ? position : "bl";
     const margin = Math.max(1, Math.round((sourceHeight * WTM_BUBBLE_MARGIN_PX) / 1080));
-    // v1 is circle-only (PRD §6.4). An unknown shape degrades to a circle
+    // v1 is circle-only (PRD Â§6.4). An unknown shape degrades to a circle
     // rather than failing the export; the field stays for future shapes.
     const bubbleShape = "circle";
     if (shape && shape !== bubbleShape) {
@@ -1409,7 +1414,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
     }
 
     // `split` is required because the squared webcam feeds BOTH the mask
-    // generator and alphamerge — a filtergraph label can only be consumed once.
+    // generator and alphamerge â€” a filtergraph label can only be consumed once.
     const filterComplex = [
       `[1:v]fps=${WTM_COMPOSITE_FPS},crop='min(iw,ih)':'min(iw,ih)',` +
         `scale=${diameter}:${diameter},setsar=1,split=2[sqa][sqb]`,
@@ -1429,7 +1434,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
 
     const compositedPath = path.join(workDir, "composited.mp4");
     await execFileAsync(
-      "/usr/bin/ffmpeg",
+      FFMPEG_BIN,
       [
         "-y",
         "-i",
@@ -1479,13 +1484,8 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
       objectName,
       sourcePath: compositedPath,
     });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const compositedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const compositedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[wtm-composite] shape=${bubbleShape} corner=${corner} d=${diameter}px ` +
@@ -1505,7 +1505,7 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
 // of this worker writes to, because R2 is where app/lib/r2.ts's `r2://` scheme
 // and public host live and the player has to be able to fetch segments from a
 // public CDN edge. R2 is S3-compatible, so this is @aws-sdk/client-s3 pointed at
-// the account endpoint — the same client construction as app/lib/r2.ts.
+// the account endpoint â€” the same client construction as app/lib/r2.ts.
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "";
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
@@ -1622,12 +1622,12 @@ function hashFile(filePath) {
  * LOAD-BEARING FOR -var_stream_map. That option names the output streams for
  * each variant by index, so a map of `v:0,a:0` against a source with no audio
  * refers to an output stream that does not exist and ffmpeg fails the whole run.
- * A silent screen capture is not exotic — a demo recorded with the mic off is
- * one — so the map is built from what the source actually has.
+ * A silent screen capture is not exotic â€” a demo recorded with the mic off is
+ * one â€” so the map is built from what the source actually has.
  */
 async function probeHasAudio(filePath) {
   try {
-    const { stdout } = await execFileAsync("/usr/bin/ffprobe", [
+    const { stdout } = await execFileAsync(FFPROBE_BIN, [
       "-v",
       "error",
       "-select_streams",
@@ -1684,7 +1684,7 @@ async function listFilesRecursive(dir, base = dir) {
  * A player switching rendition can only cut at a segment boundary, and a segment
  * can only start on a keyframe. If the renditions place their keyframes at
  * different timestamps their segments cover different spans of the video, and
- * every quality switch repeats or skips a fraction of a second — the classic
+ * every quality switch repeats or skips a fraction of a second â€” the classic
  * stutter on every switch. Four settings enforce alignment here and all four are
  * needed:
  *
@@ -1707,8 +1707,8 @@ async function listFilesRecursive(dir, base = dir) {
  * in the filtergraph, which is faster and is the only way every scaler sees
  * identical input frames.
  *
- * Output is fMP4 (`-hls_segment_type fmp4`) — an init segment plus .m4s media
- * segments — rather than MPEG-TS. fMP4 is what current players want, shares a
+ * Output is fMP4 (`-hls_segment_type fmp4`) â€” an init segment plus .m4s media
+ * segments â€” rather than MPEG-TS. fMP4 is what current players want, shares a
  * container with the MP4 the rest of the pipeline produces, and avoids the TS
  * muxer's audio-priming quirks.
  *
@@ -1774,7 +1774,7 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     const hashMs = Date.now() - hashStartedAt;
 
     // SLOW-PATH IDEMPOTENCY: we had to download to learn the hash, but the
-    // encode — the expensive part by two orders of magnitude — is still skipped
+    // encode â€” the expensive part by two orders of magnitude â€” is still skipped
     // when the bytes have not changed.
     if (!force) {
       const manifest = await readManifest();
@@ -1798,7 +1798,7 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     const hasAudio = await probeHasAudio(sourcePath);
     const gopFrames = Math.max(1, Math.round(HLS_SEGMENT_SECONDS * HLS_FPS));
 
-    // ONE FLAT DIRECTORY, and %v only ever in a FILENAME — never as a directory
+    // ONE FLAT DIRECTORY, and %v only ever in a FILENAME â€” never as a directory
     // component. ffmpeg derives the master playlist's path from the dirname of
     // the output playlist argument, so an output of `out/%v/index.m3u8` asks it
     // to write the master into a directory literally called "%v". Flat filenames
@@ -1873,13 +1873,13 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
       "vod",
       "-hls_segment_type",
       "fmp4",
-      // Declares that every segment can be decoded independently — true because
+      // Declares that every segment can be decoded independently â€” true because
       // of the keyframe settings above, and what lets a player start on any
       // segment when it switches rendition.
       "-hls_flags",
       "independent_segments",
       // Relative, so ffmpeg resolves it against the variant playlist's own
-      // directory — which is outDir for all three — and %v expands to the
+      // directory â€” which is outDir for all three â€” and %v expands to the
       // `name:` from var_stream_map below. Gives 1080p_init.mp4 etc.
       "-hls_fmp4_init_filename",
       "%v_init.mp4",
@@ -1895,14 +1895,14 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
     );
 
     const encodeStartedAt = Date.now();
-    await execFileAsync("/usr/bin/ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 });
+    await execFileAsync(FFMPEG_BIN, args, { maxBuffer: 32 * 1024 * 1024 });
     const encodeMs = Date.now() - encodeStartedAt;
 
     const duration = round3(await probeDurationSeconds(sourcePath));
 
     // Upload everything produced, preserving the relative layout the playlists
-    // reference. Every URI inside a playlist — the master's variant references,
-    // a variant's init and segment references — is a bare filename, so all of it
+    // reference. Every URI inside a playlist â€” the master's variant references,
+    // a variant's init and segment references â€” is a bare filename, so all of it
     // has to land under the one `hls/<demoId>/` prefix and nowhere else.
     const uploadStartedAt = Date.now();
     const files = await listFilesRecursive(outDir);
@@ -2013,30 +2013,14 @@ async function processChunkJob({
     const dlStartMs = Date.now();
     let dlMs = 0;
 
-    if (
-      typeof startTime === "number" &&
-      typeof duration === "number" &&
-      videoUrl
-    ) {
-      // Logical splitting: Skip physical download, use URL directly as inputPath.
-      // For gs:// sources, sign URL so ffmpeg can stream it.
-      if (String(videoUrl).startsWith("gs://")) {
-        inputPath = await getSignedHttpUrlForGsUri(String(videoUrl));
-      } else {
-        inputPath = String(videoUrl);
-      }
-    } else if (videoUrl) {
-      if (String(videoUrl).startsWith("gs://")) {
-        await downloadFromGsUri({
-          uri: String(videoUrl),
-          destinationPath: inputPath,
-        });
-      } else {
-        await downloadFromUrl({
-          url: String(videoUrl),
-          destinationPath: inputPath,
-        });
-      }
+    const downloadedSource = await prepareChunkInput({
+      videoUrl,
+      destinationPath: inputPath,
+      downloadFromGsUri,
+      downloadFromUrl,
+    });
+
+    if (downloadedSource) {
       dlMs = Date.now() - dlStartMs;
     } else {
       await downloadRawChunkFromGcs({
@@ -2136,73 +2120,30 @@ app.get("/healthz", (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
-// shared secret so strangers cannot trigger pricey video jobs.
-// while the secret is missing we only warn, so local runs keep working.
-// once WORKER_SECRET is set on Cloud Run, requests without it get a 401.
+app.use("/artifacts", express.static(ARTIFACTS_DIR));
+
+// Processing routes require a shared bearer secret.
+// Missing WORKER_SECRET fails closed rather than exposing worker endpoints.
 const WORKER_SECRET = process.env.WORKER_SECRET || "";
 
-function isBlockedWorkerHost(hostname) {
-  const host = String(hostname || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\.+$/, "");
-  if (!host || host === "localhost") {
-    return true;
-  }
-  const bare = host.replace(/^\[|\]$/g, "");
-  if (bare.includes(":")) {
-    if (bare === "::1") {
-      return true;
-    }
-    const first = bare.split(":")[0] === "" ? "0" : bare.split(":")[0];
-    const value = parseInt(first, 16);
-    if (Number.isFinite(value)) {
-      if (value >= 0xfc00 && value <= 0xfdff) {
-        return true;
-      }
-      if (value >= 0xfe80 && value <= 0xfebf) {
-        return true;
-      }
-    }
-    return false;
-  }
-  const octets = bare.split(".").map((part) => {
-    if (/^0x[0-9a-f]+$/i.test(part)) {
-      return parseInt(part, 16);
-    }
-    if (/^0[0-7]+$/.test(part)) {
-      return parseInt(part, 8);
-    }
-    if (/^\d+$/.test(part)) {
-      return parseInt(part, 10);
-    }
-    return NaN;
-  });
-  if (octets.length !== 4 || octets.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) {
-    return !bare.includes(".");
-  }
-  const [a, b] = octets;
-  return (
-    a === 10 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    a === 0
-  );
-}
 
 function requireWorkerAuth(req, res, next) {
-  if (!WORKER_SECRET) {
-    console.warn("[worker] WORKER_SECRET not set, auth skipped");
-    return next();
+  const authResult = authorizeWorkerRequest(
+    WORKER_SECRET,
+    req.headers.authorization
+  );
+
+  if (!authResult.ok) {
+    if (authResult.reason) {
+      console.error(`[worker] ${authResult.reason}`);
+    }
+
+    return res.status(authResult.status).json({
+      ok: false,
+      error: authResult.error,
+    });
   }
-  const token = String(req.headers.authorization || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  if (!token || token !== WORKER_SECRET) {
-    return res.status(401).json({ ok: false, error: "Unauthorized" });
-  }
+
   return next();
 }
 
@@ -2441,21 +2382,11 @@ app.post("/merge", async (req, res) => {
       sourcePath: finalPath,
     });
 
-    const fileRef = storage.bucket(processedBucket).file(finalFilename);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced */
-    }
+    const publicUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: finalFilename });
 
-    const publicUrl = `https://storage.googleapis.com/${processedBucket}/${finalFilename}`;
-
-    for (let i = 0; i < chunkFilenames.length; i++) {
-      storage
-        .bucket(processedBucket)
-        .file(chunkFilenames[i])
-        .delete()
-        .catch(() => {});
+    // Asynchronously clean up the per-chunk objects from storage.
+    for (const chunkKey of chunkFilenames) {
+      storageLib.deleteObject(processedBucket, chunkKey).catch(() => {});
     }
 
     return res.status(200).json({

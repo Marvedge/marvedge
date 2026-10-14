@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -24,11 +25,16 @@ export async function POST(req: Request) {
   }
 
   // slow down guessing: 5 tries per 15 minutes per ip and email
-  if (await isRateLimited(clientKey(req, email), 5, 900)) {
+  if (await isRateLimited(clientKey(req, email), 5, 900, true)) {
     return NextResponse.json(
       { error: "Too many attempts, please try again later" },
       { status: 429 }
     );
+  }
+
+  // Reject absurd input before hashing so huge bodies cannot burn CPU.
+  if (otp.length < 4 || otp.length > 10) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
   }
 
   // keep weak and absurd inputs out before touching crypto
@@ -39,10 +45,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Password is too long" }, { status: 400 });
   }
 
+  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+
   const resetRequest = await prisma.passwordReset.findFirst({
     where: {
       email,
-      otp,
+      otp: otpHash,
       expiresAt: { gt: new Date() },
     },
   });
@@ -51,14 +59,46 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
   }
 
+  // Check the account still exists before update so a stale code cannot throw.
+  const account = await prisma.user.findUnique({ where: { email } });
+  if (!account) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
+
   const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  await prisma.user.update({
-    where: { email },
-    data: { password: hashedPassword },
+  const resetCompleted = await prisma.$transaction(async (tx) => {
+    const consumedReset = await tx.passwordReset.deleteMany({
+      where: {
+        id: resetRequest.id,
+        email,
+        otp: otpHash,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (consumedReset.count !== 1) {
+      return false;
+    }
+
+    await tx.user.update({
+      where: { id: account.id },
+      data: {
+        password: hashedPassword,
+        sessionVersion: { increment: 1 },
+      },
+    });
+
+    await tx.passwordReset.deleteMany({
+      where: { email },
+    });
+
+    return true;
   });
 
-  await prisma.passwordReset.deleteMany({ where: { email } }); // cleanup
+  if (!resetCompleted) {
+    return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+  }
 
   return NextResponse.json({ message: "Password has been reset" });
 }

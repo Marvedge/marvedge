@@ -6,6 +6,7 @@ import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpSync } from "@/app/lib/gcpWorker";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 import type { Step, StepTiming } from "@/app/types/avs";
 
 // The worker downloads, re-encodes per step, concats and muxes with ffmpeg, so
@@ -172,8 +173,15 @@ export async function POST(req: NextRequest) {
   }
   const videoUrl = toHttpUrl(rawVideoUrl);
 
+  if (!isSafeUrl(videoUrl)) {
+    return NextResponse.json({ error: "Unsafe videoUrl" }, { status: 400 });
+  }
+
   const rawAudioUrl = typeof body.audioUrl === "string" ? body.audioUrl : "";
   const audioUrl = rawAudioUrl ? toHttpUrl(rawAudioUrl) : "";
+  if (audioUrl && !isSafeUrl(audioUrl)) {
+    return NextResponse.json({ error: "Unsafe audioUrl" }, { status: 400 });
+  }
   const steps = parseSteps(body.steps);
   const stepTimings = parseStepTimings(body.stepTimings);
   const sourceDuration = typeof body.duration === "number" ? body.duration : 0;

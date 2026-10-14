@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import { invokeGcpSubtitles } from "@/app/lib/gcpWorker";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 import {
   isSttOffered,
   normalizeCues,
@@ -159,7 +160,12 @@ async function dispatchSubtitleJob(
           error: err instanceof Error ? err.message : "Subtitle generation failed",
         },
       })
-      .catch(() => {});
+      .catch((persistError: unknown) => {
+        console.error(
+          `[subtitles] Failed to persist FAILED status for job ${jobId}:`,
+          persistError
+        );
+      });
   }
 }
 
@@ -177,6 +183,11 @@ export async function POST(req: NextRequest) {
 
     if (!videoUrl) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
+    }
+
+    // The worker fetches this URL, so internal addresses stop here.
+    if (!isSafeUrl(videoUrl)) {
+      return NextResponse.json({ error: "Unsafe videoUrl" }, { status: 400 });
     }
 
     // PRD §13 — an explicit ceiling with a message that names the actual length,
@@ -277,9 +288,6 @@ export async function POST(req: NextRequest) {
         })
         .catch(() => {});
     }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

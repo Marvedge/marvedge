@@ -76,8 +76,13 @@ export default function SubtitleOverlay({ text, style, language }: SubtitleOverl
   const rtl = React.useMemo(() => (language ? isRtlLanguage(language) : false), [language]);
 
   const css = React.useMemo(() => {
-    const frameHeight = exportFrameHeight(box.height > 0 ? box.width / box.height : 16 / 9);
-    return toCssStyle(style ?? undefined, frameHeight, box.height || undefined, { rtl });
+    const ratio = box.height > 0 ? box.width / box.height : 16 / 9;
+    const frameHeight = exportFrameHeight(ratio);
+    const frameWidth = Math.max(2, 2 * Math.round((frameHeight * ratio) / 2));
+    return toCssStyle(style ?? undefined, frameHeight, box.height || undefined, {
+      rtl,
+      frameWidth,
+    });
   }, [style, box.width, box.height, rtl]);
 
   const animation = React.useMemo(() => toCssAnimation(style ?? undefined), [style]);

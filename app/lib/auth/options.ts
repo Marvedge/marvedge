@@ -1,22 +1,122 @@
+import { prisma } from "@/app/lib/prisma";
+import { isLoginRateLimited, type LoginRequestHeaders } from "@/app/lib/auth/loginProtection";
+import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { NextAuthOptions } from "next-auth";
-import { prisma } from "@/app/lib/prisma";
+import bcrypt from "bcrypt";
 
+const DUMMY_PASSWORD_HASH = "$2b$12$i4krTZOz2MpeU7SRmliVOuVWic5MtVADHyf2L4yhRVylEt3tX2T1C";
+const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
+const AUTH_SERVICE_ERROR = "Unable to sign in. Please try again later.";
+
+type LoginCredentials = {
+  email?: string;
+  password?: string;
+};
+
+export async function authorizeCredentials(
+  credentials: LoginCredentials | undefined,
+  headers: LoginRequestHeaders = ({} = {})
+) {
+  try {
+    if (!credentials?.email || !credentials?.password) {
+      throw new Error(INVALID_CREDENTIALS_ERROR);
+    }
+
+    const cleanEmail = credentials.email.trim();
+
+    if (await isLoginRateLimited(cleanEmail, headers)) {
+      throw new Error(INVALID_CREDENTIALS_ERROR);
+    }
+
+    const exactUser = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    let user = exactUser;
+
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: cleanEmail,
+            mode: "insensitive",
+          },
+        },
+      });
+    }
+
+    const passwordHash = user?.password || DUMMY_PASSWORD_HASH;
+
+    const valid = await bcrypt.compare(credentials.password, passwordHash);
+
+    if (!user || !user.password || !valid) {
+      throw new Error(INVALID_CREDENTIALS_ERROR);
+    }
+
+    return user;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === INVALID_CREDENTIALS_ERROR) {
+      throw err;
+    }
+
+    console.error("Credentials authentication failed:", err);
+
+    throw new Error(AUTH_SERVICE_ERROR);
+  }
+}
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      email: string;
+      name: string | null;
+      image: string | null;
+    };
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id?: string;
+    sessionVersion?: number;
+    sessionInvalid?: boolean;
+  }
+}
+
+// Single shared NextAuth config. The [...nextauth] route handler and every
+// getServerSession call use this same object, so sign-in and session checks
+// can never drift apart again.
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
+    // Google OAuth
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+
+    // Email/Password Credentials
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials, req) {
+        return authorizeCredentials(credentials, req.headers);
+      },
+    }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
-  pages: {
-    signIn: "/auth/signin",
-  },
   session: {
     strategy: "jwt",
+  },
+  // Remove the unused directive
+  pages: {
+    signIn: "/auth/signin",
   },
   callbacks: {
     async jwt({ token, user, trigger, session }) {
@@ -29,31 +129,83 @@ export const authOptions: NextAuthOptions = {
             token.name = session.user.name;
           }
         }
+
         if (user) {
           token.id = user.id;
           token.email = user.email;
           token.name = user.name;
           token.picture = user.image || null;
         }
+
+        const userId =
+          user?.id || (typeof token.id === "string" ? token.id : undefined) || token.sub;
+
+        if (!userId) {
+          token.sessionInvalid = true;
+          return token;
+        }
+
+        const currentUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { sessionVersion: true },
+        });
+
+        if (!currentUser) {
+          token.sessionInvalid = true;
+          return token;
+        }
+
+        if (user) {
+          token.sessionVersion = currentUser.sessionVersion;
+        }
+
+        token.sessionInvalid =
+          typeof token.sessionVersion !== "number" ||
+          token.sessionVersion !== currentUser.sessionVersion;
+
         return token;
       } catch (error) {
         console.error("JWT callback error:", error);
+        token.sessionInvalid = true;
         return token;
       }
     },
     async session({ session, token }) {
       try {
+        if (token.sessionInvalid) {
+          delete (session as { user?: unknown }).user;
+          return session;
+        }
+
         if (session?.user) {
-          session.user.id = (token.id as string) || (token.sub as string);
+          session.user.id = (token.id as string) || (token.sub as string) || "";
           session.user.email = (token.email as string) || "";
           session.user.name = (token.name as string) || "";
           session.user.image = (token.picture as string | null) || null;
         }
+
         return session;
       } catch (error) {
         console.error("Session callback error:", error);
+        delete (session as { user?: unknown }).user;
         return session;
       }
     },
+    async redirect({ url, baseUrl }) {
+      try {
+        if (url === baseUrl || url === "/") {
+          return "/dashboard";
+        }
+        if (url.includes("/dashboard")) {
+          return "/dashboard";
+        }
+        return baseUrl;
+      } catch (error) {
+        console.error("Redirect callback error:", error);
+        return baseUrl;
+      }
+    },
   },
+  // Optional: debug mode
+  debug: process.env.NODE_ENV !== "production",
 };

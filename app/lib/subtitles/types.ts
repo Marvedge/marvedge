@@ -7,17 +7,65 @@
 // This module is isomorphic: no env, no fs, no DOM. It is imported by a React
 // component, by a route handler, and (serialized) by the render worker alike.
 
-import type { SubtitleCue } from "@/app/(signed)/editor/types";
+import type { SubtitleCue, SubtitleWord } from "@/app/(signed)/editor/types";
 
 /**
- * A single subtitle: `text` shown from `start` to `end` (both in seconds).
+ * A single subtitle: `text` shown from `start` to `end` (both in seconds),
+ * with optional word-level timestamps (`words`).
  *
  * Re-exported rather than redeclared. The editor, the autosave draft
  * (`editing.subtitles`), the export recipe and the worker all already speak this
  * exact shape; a second, subtly different declaration is how the two halves of a
  * feature drift apart.
+ *
+ * `fontSizePct` is an OPTIONAL per-cue override (Task-00061). Present only on
+ * translated cues whose text is long enough to need a smaller font; absent on
+ * every other cue so the default style applies unchanged. The worker reads it to
+ * emit a `{\fs<n>}` ASS override tag; the CSS preview reads it via
+ * `subtitleMetrics`. Omitting it on a new cue is not a breaking change — the
+ * field did not exist in any persisted draft, so its absence there is expected.
  */
-export type { SubtitleCue };
+export type { SubtitleCue, SubtitleWord };
+
+/** Word timestamp returned by Whisper / speech recognition. */
+export interface WhisperWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
+/** Segment timestamp returned by Whisper verbose_json. */
+export interface WhisperSegment {
+  id?: number;
+  seek?: number;
+  start: number;
+  end: number;
+  text: string;
+  tokens?: number[];
+  temperature?: number;
+  avg_logprob?: number;
+  compression_ratio?: number;
+  no_speech_prob?: number;
+}
+
+/** Raw verbose_json structure from OpenAI Whisper API. */
+export interface WhisperVerboseJsonResponse {
+  text: string;
+  task?: string;
+  language?: string;
+  duration?: number;
+  words?: WhisperWord[];
+  segments?: WhisperSegment[];
+}
+
+/** Normalized Whisper transcription result with preserved word-level timestamps. */
+export interface WhisperTranscript {
+  text: string;
+  language?: string;
+  duration?: number;
+  words: SubtitleWord[];
+  segments: WhisperSegment[];
+}
 
 /**
  * Where a track's cues came from.

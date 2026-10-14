@@ -174,3 +174,49 @@ describe("plan gate", () => {
     expect(isSubtitleTranslateAllowed("pro")).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task-00079: localized caption / subtitle edge cases
+// ---------------------------------------------------------------------------
+
+import { MIN_TRANSLATED_CUE_SECONDS } from "./translate";
+
+describe("applyTranslations — timing drift (Task-00079)", () => {
+  it("stretches a very short cue to MIN_TRANSLATED_CUE_SECONDS", () => {
+    // Tamil and German cues are often just one word — their source duration can
+    // be as short as 150 ms. After retiming by the localization engine the cue
+    // may be shorter still. Without a floor this produces a flicker.
+    const shortCues: SubtitleCue[] = [
+      { start: 0.0, end: 0.15, text: "Hi" }, // 150 ms — below the 300 ms floor
+      { start: 0.5, end: 1.8, text: "there" }, // 1.3 s — above the floor
+    ];
+    const out = applyTranslations(shortCues, ["Hola", "allí"]);
+    expect(out[0].end - out[0].start).toBeGreaterThanOrEqual(MIN_TRANSLATED_CUE_SECONDS);
+    expect(out[0].start).toBe(0.0); // start is never moved backward
+    expect(out[1].end).toBe(1.8);   // normal cue is untouched
+  });
+
+  it("does not stretch a cue that is already at or above the floor", () => {
+    const cues: SubtitleCue[] = [
+      { start: 0, end: 0.3, text: "Exactly at floor" },
+      { start: 1, end: 2.5, text: "Well above floor" },
+    ];
+    const out = applyTranslations(cues, ["Justo", "Muy"]);
+    expect(out[0].end).toBe(0.3);
+    expect(out[1].end).toBe(2.5);
+  });
+
+  it("preserves source text ordering after stretching", () => {
+    // Stretching must not shift any later cue's start, creating an overlap.
+    const cues: SubtitleCue[] = [
+      { start: 0.0, end: 0.1, text: "A" },
+      { start: 0.2, end: 1.0, text: "B" },
+    ];
+    const out = applyTranslations(cues, ["X", "Y"]);
+    // out[0].end is stretched to 0.3, but out[1].start is NOT moved — they
+    // may technically overlap for 100 ms. The caller (normalizeCues) is
+    // responsible for resolving overlaps; applyTranslations only stops flicker.
+    expect(out[0].end).toBeGreaterThanOrEqual(MIN_TRANSLATED_CUE_SECONDS);
+    expect(out[1].start).toBe(0.2);
+  });
+});

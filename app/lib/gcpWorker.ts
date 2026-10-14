@@ -63,29 +63,53 @@ export type GcpWorkerResponse = {
   error?: string;
 };
 
+class GcpWorkerHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = "GcpWorkerHttpError";
+  }
+}
+
 function getGcpWorkerUrl() {
   return (process.env.GCP_VIDEO_WORKER_URL || "").trim();
 }
 
-function normalizeWorkerBaseUrl(rawUrl: string) {
+/**
+ * Returns the resolved service URL for AVS dubbing.
+ * When AVS_DUB_SERVICE_URL is set (local dev / Docker), routes to that service.
+ * In production or when unset, preserves the existing GCP_VIDEO_WORKER_URL.
+ */
+export function getDubServiceUrl(): string {
+  const override = (process.env.AVS_DUB_SERVICE_URL || "").trim();
+  return override || getGcpWorkerUrl();
+}
+
+export function normalizeWorkerBaseUrl(rawUrl: string) {
   let url = rawUrl.trim();
   if (!url) {
     return "";
   }
   url = url.replace(/\/+$/, "");
-  // Accept env values ending with a known endpoint (/process, /subtitles,
-  // /avs-voiceover, /avs-sync, /wtm-composite, /package-hls) so we always POST
-  // against the worker's base URL.
-  url = url.replace(/\/(process|subtitles|avs-voiceover|avs-sync|wtm-composite|package-hls)$/i, "");
+  // Accept env values ending with a known endpoint (process, subtitles,
+  // avs-voiceover, avs-sync, avs-dub, wtm-composite, package-hls, merge)
+  // so we always POST against the worker base URL.
+  url = url.replace(
+    /\/(process|subtitles|avs-voiceover|avs-sync|avs-dub|wtm-composite|package-hls|merge)$/i,
+    ""
+  );
+  url = url.replace(/\/+$/, "");
   return url;
 }
 
 export async function invokeGcpWorker(
   payload: GcpWorkerPayload,
   endpoint = "/process",
-  options: { timeoutMs?: number } = {}
+  options: { timeoutMs?: number; serviceUrl?: string } = {}
 ) {
-  const rawUrl = getGcpWorkerUrl();
+  const rawUrl = (options.serviceUrl || getGcpWorkerUrl()).trim();
   if (!rawUrl) {
     throw new Error("GCP_VIDEO_WORKER_URL is not configured");
   }
@@ -93,6 +117,11 @@ export async function invokeGcpWorker(
   if (!baseUrl) {
     throw new Error("GCP_VIDEO_WORKER_URL is invalid");
   }
+  const workerSecret = (process.env.WORKER_SECRET || "").trim();
+  if (!workerSecret) {
+    throw new Error("WORKER_SECRET is not configured");
+  }
+
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = `${baseUrl}${cleanEndpoint}`;
 
@@ -109,8 +138,6 @@ export async function invokeGcpWorker(
 
   let attempt = 0;
   const maxAttempts = 3;
-  // shared secret so random callers cannot burn our video budget
-  const workerSecret = (process.env.WORKER_SECRET || "").trim();
 
   try {
     while (attempt < maxAttempts) {
@@ -119,7 +146,7 @@ export async function invokeGcpWorker(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(workerSecret ? { Authorization: `Bearer ${workerSecret}` } : {}),
+            Authorization: `Bearer ${workerSecret}`,
           },
           body: JSON.stringify(payload),
           signal: controller.signal,
@@ -139,13 +166,25 @@ export async function invokeGcpWorker(
             attempt++;
             continue;
           }
-          throw new Error(body.error || `GCP worker failed (${response.status}) at ${url}`);
+          throw new GcpWorkerHttpError(
+            response.status,
+            body.error || `GCP worker failed (${response.status}) at ${url}`
+          );
         }
 
         return body;
       } catch (e: unknown) {
         if (attempt >= maxAttempts - 1) {
           throw e; // Max attempts reached
+        }
+
+        if (
+          e instanceof GcpWorkerHttpError &&
+          e.status >= 400 &&
+          e.status < 500 &&
+          e.status !== 429
+        ) {
+          throw e;
         }
 
         const errorMessage = e instanceof Error ? e.message : String(e);
@@ -426,8 +465,10 @@ const AVS_DUB_TIMEOUT_MS = 15 * 60 * 1000;
  * FALLBACK: no dubUrl/dubTimings → worker returns the source unchanged.
  */
 export async function invokeGcpDubSync(
-  payload: GcpDubSyncPayload
+  payload: GcpDubSyncPayload,
+  options?: { timeoutMs?: number; serviceUrl?: string }
 ): Promise<GcpDubSyncResult> {
+  const resolvedServiceUrl = options?.serviceUrl || getDubServiceUrl();
   const body = await invokeGcpWorker(
     {
       recipeId: "avs-dub",
@@ -437,14 +478,16 @@ export async function invokeGcpDubSync(
       dubTimings: payload.dubTimings,
     },
     "/avs-dub",
-    { timeoutMs: AVS_DUB_TIMEOUT_MS }
+    {
+      timeoutMs: options?.timeoutMs ?? AVS_DUB_TIMEOUT_MS,
+      serviceUrl: resolvedServiceUrl,
+    }
   );
 
   const result = body.result;
   // The worker returns alignedVideoUrl (same field name as /avs-sync) for
   // symmetry, so callers can treat both aligned sources uniformly.
-  const alignedVideoUrl =
-    typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
+  const alignedVideoUrl = typeof result?.alignedVideoUrl === "string" ? result.alignedVideoUrl : "";
   if (!alignedVideoUrl) {
     throw new Error("Dub-sync worker returned no aligned video URL");
   }

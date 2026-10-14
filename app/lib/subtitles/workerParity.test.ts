@@ -55,11 +55,12 @@ const NEWLINE = String.fromCharCode(10);
 const RLE = String.fromCharCode(0x202b);
 const PDF = String.fromCharCode(0x202c);
 
-/** Every frame size computeTargetSizeForRatio() can produce, and then some. */
+/** Every frame size computeTargetSizeForRatio() can produce, plus real cropped targets. */
 const FRAMES: [number, number][] = [
   [1920, 1080],
   [1280, 720],
   [1080, 1920],
+  [404, 720],
   [1920, 1920],
   [960, 960],
   [1920, 1440],
@@ -191,10 +192,10 @@ describe("worker byte-identity with master", () => {
     }
   });
 
-  it("writes the default style's file identically to the no-style file", () => {
+  it("writes the default style's file identically to the no-style file on landscape frames", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sub-parity-"));
     try {
-      for (const [w, h] of FRAMES) {
+      for (const [w, h] of FRAMES.filter(([w]) => w >= 1200)) {
         const bare = fs.readFileSync(worker.writeAssSubtitles(dir, CUES, w, h), "utf8");
         const defaulted = fs.readFileSync(
           worker.writeAssSubtitles(dir, CUES, w, h, DEFAULT_SUBTITLE_STYLE),
@@ -207,24 +208,67 @@ describe("worker byte-identity with master", () => {
     }
   });
 
+  it("produces identical default style lines between worker and library across all frames including portrait and cropped", () => {
+    for (const [w, h] of FRAMES) {
+      expect(
+        worker.subtitleAssStyleLine(DEFAULT_SUBTITLE_STYLE, w, h),
+        `DEFAULT_SUBTITLE_STYLE @ ${w}x${h}`
+      ).toBe(toAssStyleLine(DEFAULT_SUBTITLE_STYLE, w, h));
+    }
+  });
+
+  it("produces identical style lines between worker and library for background box styles across all frames", () => {
+    const boxStyles: SubtitleStyle[] = [
+      { backgroundColor: "#000000", backgroundOpacity: 0.6 },
+      { backgroundColor: "#112233", backgroundOpacity: 0.8, outlineWidth: 0 },
+      { backgroundColor: "#FF0000", backgroundOpacity: 1.0, outlineWidth: 0.15, fontSizePct: 6 },
+    ];
+    for (const [w, h] of FRAMES) {
+      for (const style of boxStyles) {
+        expect(
+          worker.subtitleAssStyleLine(style, w, h),
+          `boxStyle @ ${w}x${h} outline=${style.outlineWidth}`
+        ).toBe(toAssStyleLine(style, w, h));
+      }
+    }
+  });
+
   /**
-   * SUB PR 5 added a `language` parameter for right-to-left text. Every existing
-   * caller passes nothing, so the absent case must stay byte-identical — the
-   * assertions above already cover that by calling with five arguments; this
-   * pins the LTR language case too, since a demo that picks English must not
-   * start emitting bidi marks.
+   * An absent language must preserve the legacy byte-identical output. When a
+   * language is supplied, translated tracks use WrapStyle 1, while LTR
+   * Dialogue text must remain unchanged and must not gain bidi marks.
    */
   it("leaves Dialogue text untouched for a left-to-right language", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sub-parity-"));
     try {
       for (const [w, h] of FRAMES) {
         const bare = fs.readFileSync(worker.writeAssSubtitles(dir, CUES, w, h), "utf8");
-        for (const language of [null, undefined, "en", "ja", "multi"]) {
+        const bareDialogue = bare
+          .split(/\r?\n/)
+          .filter((line: string) => line.startsWith("Dialogue:"));
+
+        expect(bare).toContain("WrapStyle: 2");
+
+        for (const language of [null, undefined]) {
           const withLang = fs.readFileSync(
             worker.writeAssSubtitles(dir, CUES, w, h, null, language),
             "utf8"
           );
+
           expect(withLang, `${w}x${h} ${String(language)}`).toBe(bare);
+        }
+
+        for (const language of ["en", "ja", "multi"]) {
+          const withLang = fs.readFileSync(
+            worker.writeAssSubtitles(dir, CUES, w, h, null, language),
+            "utf8"
+          );
+          const withLangDialogue = withLang
+            .split(/\r?\n/)
+            .filter((line: string) => line.startsWith("Dialogue:"));
+
+          expect(withLang, `${w}x${h} ${language}`).toContain("WrapStyle: 1");
+          expect(withLangDialogue, `${w}x${h} ${language}`).toEqual(bareDialogue);
         }
       }
     } finally {
