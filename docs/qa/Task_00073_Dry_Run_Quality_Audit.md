@@ -42,6 +42,7 @@
 ## C. Audit findings
 
 ### Finding 00073-01: Benchmark failure reports were not reliable
+
 - Severity: High
 - Classification: Confirmed defect (fixed)
 - File/path: scripts/benchmark/gpu_benchmark.py, scripts/benchmark/benchmark_runner.sh
@@ -66,6 +67,7 @@
   - End-to-end execution of `benchmark_runner.sh` remains impractical in this environment because it depends on external media and service prerequisites outside the repo, as well as Linux/Colab Python alias conventions.
 
 ### Finding 00073-02: Stale outputs could be mistaken for current results
+
 - Severity: Medium
 - Classification: Confirmed defect (fixed)
 - File/path: scripts/benchmark/benchmark_runner.sh
@@ -105,6 +107,7 @@
 ## F. Validation results
 
 ### Unit tests
+
 - Command 1 (Benchmark regression): `npx vitest run scripts/benchmark/dry_run_regression.test.ts`
   - Result: **PASS** (1 test file passed, **34 tests passed**).
 - Command 2 (AVS cleanup & dubbing): `npx vitest run app/lib/avs/dubbingProcessor.cleanup.test.ts app/lib/avs/dubbingProcessor.test.ts app/lib/elevenlabs/dubbing.test.ts`
@@ -113,10 +116,12 @@
   - Result: **PASS** (5 test files passed, **70 tests passed**).
 
 ### git diff --check
+
 - Command: `git diff --check`
 - Result: **PASS** — exit 0, no whitespace or patch errors.
 
 ### git diff --stat
+
 ```
  app/lib/avs/dubbingProcessor.ts              |  46 ++-
  scripts/benchmark/benchmark_runner.sh        |   8 +-
@@ -126,16 +131,19 @@
 ```
 
 ### Integration/benchmark validation
+
 - Command: `npx vitest run scripts/benchmark/dry_run_regression.test.ts`
 - Result: **PASS**
 - Evidence: all 34 benchmark regression tests pass, including cue timing invariants (12), ASS formatting (11), harness failure-reporting (1), stale-report overwrite (1), isolated runner behavior tests (2: stale-output removal and fail-fast), and duration validation (5).
 - Limitation: this is repo-level validation of the benchmark contract, input validation, and isolated runner control flow; it is not a live reframe or cloud ML validation run. Live AutoFlip/TalkNet execution and real-media quality remain unverified.
 
 ### Live-service validation
+
 - Not attempted and not claimed as passing. Live AutoFlip/TalkNet execution remains unverified.
 - Blocker: Task-00053 evidence shows missing model weights, unavailable service infrastructure, and external media dependencies.
 
 ### Real-media quality validation
+
 - Not attempted and not claimed as passing. Real-media quality remains unverified.
 - Blocker: unavailable ML stack and no representative media fixtures in the repository for end-to-end benchmark validation.
 
@@ -148,12 +156,15 @@
 ## H. benchmark_runner.sh runner-level behavior analysis
 
 ### Stale-output removal (line 66)
+
 ```bash
 rm -f "$OUT_DIR/${label}.json"
 ```
+
 This runs before `python3 "$HARNESS" …` on every stage. It ensures no prior JSON survives into a new benchmark pass. **Directly covered by isolated runner regression tests** in Vitest (`scripts/benchmark/dry_run_regression.test.ts` Suite 5b) using bash and synthetic harness fixtures, verifying that stale outputs are deleted prior to execution without requiring live media or ML services.
 
 ### Fail-fast on stage failure (lines 67-75)
+
 ```bash
 if ! python3 "$HARNESS" \
     --stage "$stage" \
@@ -165,23 +176,27 @@ if ! python3 "$HARNESS" \
     exit 1
 fi
 ```
+
 The `if ! …; then exit 1; fi` guard ensures the runner halts immediately when the harness exits non-zero. Combined with stale-output removal, a failed stage cannot be followed by a result-summary that reads a stale successful report. **Directly covered by isolated runner regression tests** in Vitest (`scripts/benchmark/dry_run_regression.test.ts` Suite 5b), verifying that runner execution exits non-zero and halts subsequent stages on failure. Note that while runner control flow is directly verified in isolation, the full live ML pipeline was not tested.
 
 ### Python portability and execution context analysis (lines 67, 89, 113-118)
 
 The production `benchmark_runner.sh` script invokes `python3` directly:
+
 - Line 67: `python3 "$HARNESS" ...`
 - Line 89: `"python3 $PREPROCESS_SCRIPT ..."`
 - Lines 113-118: `python3 -c "import json...; ..."` for JSON report collation.
 
 **Local Windows environment limitation:**
 In the tested Windows Git Bash environment:
+
 - `python` resolves to Python 3.11.0 (`python scripts/benchmark/gpu_benchmark.py --help` succeeds).
 - `python3` resolves to `C:\Users\Shambhavi\AppData\Local\Microsoft\WindowsApps\python3`, which triggers the Microsoft Store installation stub message instead of running Python.
 - As documented in the script header (`# Run this from the repo root after cloning on a Colab / Cloud Run GPU instance`), the production runner is designed for Colab and Linux Cloud Run GPU environments where `python3` is the standard Python interpreter.
 - Production code was intentionally not modified solely to accommodate this local Windows alias issue, preserving alignment with the intended Linux/Colab deployment target.
 
 **Test isolation and coverage boundaries:**
+
 - The isolated runner regression tests in Vitest (`scripts/benchmark/dry_run_regression.test.ts` Suite 5b) use `findPython()` to discover the working Python executable (`python`) and inject it into mini-runners reproducing lines 66–75.
 - **Verified:** Runner control flow — specifically stale-output removal (`rm -f`) and fail-fast termination (`if ! ...; then exit 1; fi`) — is directly verified in isolation.
 - **Not verified by runner tests:** The production runner's hardcoded `python3` executable resolution on Windows hosts is not verified by Vitest (and is known to fail under the local WindowsApps `python3` alias).
@@ -199,9 +214,9 @@ This task is complete for the in-scope benchmark harness, runner control flow, a
    - `benchmark_runner.sh` runner-level behaviors (stale-output removal before stage run and fail-fast termination on failure) are directly covered by isolated runner tests in Vitest.
    - `defaultUploadToCloudinary()` (`app/lib/avs/dubbingProcessor.ts`) cleans up its temporary directory on download or write failure inside `try...finally` (BUG-001, 1/1 test pass).
    - Test suites pass cleanly:
-     * `scripts/benchmark/dry_run_regression.test.ts`: 34 passed (34).
-     * `app/lib/avs/dubbingProcessor.cleanup.test.ts`, `dubbingProcessor.test.ts`, `elevenlabs/dubbing.test.ts`: 28 passed (28).
-     * Combined targeted suite (including `reframe/service.test.ts`): 70 passed (70) across 5 test files.
+     - `scripts/benchmark/dry_run_regression.test.ts`: 34 passed (34).
+     - `app/lib/avs/dubbingProcessor.cleanup.test.ts`, `dubbingProcessor.test.ts`, `elevenlabs/dubbing.test.ts`: 28 passed (28).
+     - Combined targeted suite (including `reframe/service.test.ts`): 70 passed (70) across 5 test files.
    - `git diff --check` exits 0 with no whitespace errors.
 
 2. **Local Windows environment limitation:**

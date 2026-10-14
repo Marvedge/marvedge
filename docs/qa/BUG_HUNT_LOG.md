@@ -11,8 +11,8 @@
 
 ## Bug Summary
 
-| ID | Component | Finding | Severity | Status |
-|---|---|---|---|---|
+| ID      | Component                       | Finding                                                             | Severity          | Status   |
+| ------- | ------------------------------- | ------------------------------------------------------------------- | ----------------- | -------- |
 | BUG-001 | AVS dubbing / Cloudinary upload | Temporary directory remained after a failed local-artifact download | Low — provisional | Verified |
 
 ---
