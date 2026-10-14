@@ -22,7 +22,8 @@ function errorResponse(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
   if (error instanceof CloudinaryUploadError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
+    console.error("[audio] cloudinary-upload failed:", error);
+    return NextResponse.json({ error: "Failed to store audio" }, { status: error.status });
   }
   console.error("[audio] cloudinary-upload failed:", error);
   return NextResponse.json({ error: "Failed to store audio" }, { status: 500 });
