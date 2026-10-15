@@ -3,8 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const http = require("node:http");
-const https = require("node:https");
+const { fetchSafeUrl, MAX_REDIRECTS } = require("./safe-download.cjs");
 const ffmpeg = require("fluent-ffmpeg");
 
 const FFMPEG_BIN =
@@ -884,26 +883,50 @@ function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
   return out;
 }
 
-function downloadFile(url, outputPath) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const transport = u.protocol === "https:" ? https : http;
-    const req = transport.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        downloadFile(res.headers.location, outputPath).then(resolve).catch(reject);
-        return;
+// Downloads a remote background/watermark asset to disk.
+//
+// Security: every URL (including each redirect hop) is validated with
+// fetchSafeUrl before any bytes are fetched — non-http(s) schemes, blocked
+// hosts, and hostnames resolving to private/link-local addresses are refused.
+// Redirects are capped at MAX_REDIRECTS (5) and the whole download is bounded
+// by DOWNLOAD_TIMEOUT_MS. `options` ({ timeoutMs, maxRedirects, fetchImpl,
+// lookupImpl }) exists for unit tests; production callers pass nothing.
+const DOWNLOAD_TIMEOUT_MS =
+  Number(process.env.DOWNLOAD_TIMEOUT_MS || 30000) || 30000;
+
+function downloadFile(url, outputPath, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
+  const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS ?? 5;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const doFetch = options.fetchImpl
+    ? (target, init) =>
+        options.fetchImpl(target, { ...(init || {}), signal: controller.signal })
+    : (target, init) =>
+        globalThis.fetch(target, { ...(init || {}), signal: controller.signal });
+  return (async () => {
+    try {
+      const response = await fetchSafeUrl(url, {
+        fetchImpl: doFetch,
+        lookupImpl: options.lookupImpl,
+        maxRedirects,
+      });
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
       }
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        reject(new Error(`Download failed: ${res.statusCode}`));
-        return;
+      const bytes = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(outputPath, bytes);
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(
+          `Download timed out after ${timeoutMs}ms: ${String(url).slice(0, 200)}`
+        );
       }
-      const ws = fs.createWriteStream(outputPath);
-      res.pipe(ws);
-      ws.on("finish", resolve);
-      ws.on("error", reject);
-    });
-    req.on("error", reject);
-  });
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
 }
 
 function pickCompression(recipe) {
@@ -1537,6 +1560,7 @@ async function renderChunkFromRecipe({
 
 module.exports = {
   renderChunkFromRecipe,
+  downloadFile,
   // Exported for app/lib/subtitles/workerParity.test.ts, which asserts this
   // file's ASS mapping stays byte-identical to app/lib/subtitles/style.ts.
   writeAssSubtitles,

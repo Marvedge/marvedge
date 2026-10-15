@@ -2329,6 +2329,8 @@ app.post("/package-hls", async (req, res) => {
   }
 });
 
+const { isSafeChunkFilename, resolveChunkPath } = require("./merge-validation.cjs");
+
 app.post("/merge", async (req, res) => {
   const { recipeId, chunkFilenames } = req.body || {};
   if (
@@ -2340,6 +2342,14 @@ app.post("/merge", async (req, res) => {
       ok: false,
       error: "recipeId and chunkFilenames array are required",
     });
+  }
+  for (const chunkName of chunkFilenames) {
+    if (!isSafeChunkFilename(chunkName)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid chunk filename",
+      });
+    }
   }
 
   const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
@@ -2354,7 +2364,13 @@ app.post("/merge", async (req, res) => {
     let concatLines = "";
     for (let i = 0; i < chunkFilenames.length; i++) {
       const chunkName = chunkFilenames[i];
-      const localChunkPath = path.join(workDir, chunkName);
+      const localChunkPath = resolveChunkPath(workDir, chunkName);
+      if (!localChunkPath) {
+        return res.status(400).json({
+          ok: false,
+          error: "Invalid chunk filename",
+        });
+      }
       await downloadRawChunkFromGcs({
         bucketName: processedBucket,
         objectName: chunkName,
@@ -2407,6 +2423,10 @@ app.post("/merge", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Cloud Run worker listening on :${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Cloud Run worker listening on :${PORT}`);
+  });
+}
+
+module.exports = { app, isSafeChunkFilename, resolveChunkPath };

@@ -12,6 +12,8 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import dns from "node:dns";
+import net from "node:net";
 import axios from "axios";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
@@ -44,25 +46,223 @@ export interface RenderReframedVideoDeps {
   ) => Promise<{ secure_url: string }>;
 }
 
+export const MAX_DOWNLOAD_REDIRECTS = 5;
+export const DOWNLOAD_TIMEOUT_MS = 60000;
+export const DEFAULT_MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+
+function parseIpv4(address: string): number[] | null {
+  const octets = address.split(".").map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)
+  ) {
+    return null;
+  }
+  return octets;
+}
+
+function isBlockedIpv4(address: string): boolean {
+  const octets = parseIpv4(address);
+  if (!octets) {
+    return true;
+  }
+  const [a, b] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+function isBlockedIpv6(address: string): boolean {
+  const normalized = address
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .split("%")[0];
+  if (normalized === "::" || normalized === "::1") {
+    return true;
+  }
+  const firstSegment = normalized.split(":")[0] || "0";
+  const firstValue = Number.parseInt(firstSegment, 16);
+  if (
+    Number.isFinite(firstValue) &&
+    ((firstValue >= 0xfc00 && firstValue <= 0xfdff) ||
+      (firstValue >= 0xfe80 && firstValue <= 0xfebf) ||
+      (firstValue >= 0xff00 && firstValue <= 0xffff))
+  ) {
+    return true;
+  }
+  const dottedIpv4 = normalized.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (dottedIpv4) {
+    return isBlockedIpv4(dottedIpv4[1]);
+  }
+  const mappedIpv4 = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedIpv4) {
+    const high = Number.parseInt(mappedIpv4[1], 16);
+    const low = Number.parseInt(mappedIpv4[2], 16);
+    const ipv4Address = [(high >>> 8) & 255, high & 255, (low >>> 8) & 255, low & 255].join(".");
+    return isBlockedIpv4(ipv4Address);
+  }
+  return false;
+}
+
+function isBlockedAddress(address: string): boolean {
+  const version = net.isIP(address);
+  if (version === 4) {
+    return isBlockedIpv4(address);
+  }
+  if (version === 6) {
+    return isBlockedIpv6(address);
+  }
+  return true;
+}
+
+function isBlockedHost(hostname: string): boolean {
+  const host = String(hostname || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.+$/, "");
+  if (
+    !host ||
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  ) {
+    return true;
+  }
+  const bare = host.replace(/^\[|\]$/g, "");
+  if (net.isIP(bare)) {
+    return isBlockedAddress(bare);
+  }
+  return !bare.includes(".");
+}
+
+/**
+ * Validate a source URL before any request is made: only http(s), no embedded
+ * credentials, no blocked hosts, and hostnames must not resolve to
+ * private/link-local addresses. Exported for unit tests.
+ */
+export async function assertSafeDownloadUrl(
+  rawUrl: string,
+  lookupImpl?: (hostname: string) => Promise<Array<{ address: string; family: number }>>
+): Promise<URL> {
+  let parsed: URL;
+  try {
+    parsed = new URL(String(rawUrl));
+  } catch {
+    throw new Error("Invalid source URL");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Refusing to fetch non-http(s) URL");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Refusing source URL containing credentials");
+  }
+  if (isBlockedHost(parsed.hostname)) {
+    throw new Error("Refusing to fetch blocked host");
+  }
+  const bareHostname = parsed.hostname.replace(/^\[|\]$/g, "");
+  if (net.isIP(bareHostname)) {
+    return parsed;
+  }
+  const lookup = lookupImpl ?? ((h: string) => dns.promises.lookup(h, { all: true, verbatim: true }) as Promise<Array<{ address: string; family: number }>>);
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await lookup(parsed.hostname);
+  } catch {
+    throw new Error("Unable to resolve source host");
+  }
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    throw new Error("Unable to resolve source host");
+  }
+  if (addresses.some(({ address }) => isBlockedAddress(address))) {
+    throw new Error("Refusing to fetch host resolving to a private address");
+  }
+  return parsed;
+}
+
+export function maxDownloadBytes(): number {
+  const raw = Number(process.env.REFRAME_DOWNLOAD_MAX_BYTES || "");
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_MAX_DOWNLOAD_BYTES;
+}
+
 /**
  * Downloads remote video stream over HTTP(S) into local destination path.
+ *
+ * The URL is validated pre-request (http(s) only, no private/file/gopher
+ * targets), redirects are capped, the request has a timeout, and bodies over
+ * the size limit abort mid-stream.
  */
-async function defaultDownloadVideo(url: string, destPath: string): Promise<void> {
+export async function defaultDownloadVideo(url: string, destPath: string): Promise<void> {
+  const safeUrl = await assertSafeDownloadUrl(url);
+  const maxBytes = maxDownloadBytes();
   const writer = fs.createWriteStream(destPath);
-  const response = await axios({
-    url,
-    method: "GET",
-    responseType: "stream",
-    timeout: 60000,
-  });
+  let response;
+  try {
+    response = await axios({
+      url: safeUrl.toString(),
+      method: "GET",
+      responseType: "stream",
+      timeout: DOWNLOAD_TIMEOUT_MS,
+      maxContentLength: maxBytes,
+      maxBodyLength: maxBytes,
+      maxRedirects: MAX_DOWNLOAD_REDIRECTS,
+    });
+  } catch (err) {
+    writer.destroy();
+    throw err;
+  }
+
+  const contentLength = Number(response.headers?.["content-length"]);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    writer.destroy();
+    throw new Error(
+      `Refusing download: content-length ${contentLength} exceeds limit of ${maxBytes} bytes`
+    );
+  }
 
   response.data.pipe(writer);
 
   return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", (err) => {
-      writer.close();
+    let received = 0;
+    let settled = false;
+    const fail = (err: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      try {
+        response.data.destroy();
+      } catch {
+        // Ignore destroy errors; the rejection below carries the failure.
+      }
+      writer.destroy();
       reject(err);
+    };
+    response.data.on("data", (chunk: Buffer) => {
+      received += chunk.length;
+      if (!settled && received > maxBytes) {
+        fail(new Error(`Download exceeds size limit of ${maxBytes} bytes`));
+      }
+    });
+    response.data.on("error", (err: Error) => {
+      fail(err);
+    });
+    writer.on("finish", () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    });
+    writer.on("error", (err: Error) => {
+      fail(err);
     });
   });
 }
