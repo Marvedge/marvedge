@@ -59,13 +59,22 @@ export async function POST(req: NextRequest) {
       if (!existing) {
         return NextResponse.json({ error: "View not found" }, { status: 404 });
       }
+      // A viewId alone proves nothing — it is returned to any visitor — so the
+      // caller must also claim the demo or video the row belongs to. Both ids
+      // are public on share pages, so anonymous heartbeats with the matching
+      // id keep working; a missing or mismatched claim is forbidden.
+      const claimedDemoId =
+        typeof demoId === "string" && demoId ? demoId : null;
+      const claimedVideoId =
+        typeof exportedVideoId === "string" && exportedVideoId ? exportedVideoId : null;
+      if (!claimedDemoId && !claimedVideoId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       if (
-        (typeof demoId === "string" && demoId && existing.demoId !== demoId) ||
-        (typeof exportedVideoId === "string" &&
-          exportedVideoId &&
-          existing.exportedVideoId !== exportedVideoId)
+        (claimedDemoId && existing.demoId !== claimedDemoId) ||
+        (claimedVideoId && existing.exportedVideoId !== claimedVideoId)
       ) {
-        return NextResponse.json({ error: "View not found" }, { status: 404 });
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       // Update existing view with new duration
       const updatedView = await prisma.view.update({

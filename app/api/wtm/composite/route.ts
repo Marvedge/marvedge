@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpComposite } from "@/app/lib/gcpWorker";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 import { isWtmAllowed } from "@/app/lib/wtm/access";
 import { isWtmEnabled } from "@/app/lib/wtm/flags";
 import { toHttpsUrl } from "@/app/lib/wtm/watermark";
@@ -39,6 +40,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let body: Record<string, unknown>;
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const rawVideoUrl = typeof body.videoUrl === "string" ? body.videoUrl.trim() : "";
+  if (!rawVideoUrl) {
+    return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
+  }
+  // gs:// isn't fetchable by the worker's http downloader.
+  const videoUrl = toHttpsUrl(rawVideoUrl);
+
+  // The worker fetches both inputs, so internal addresses stop here, before
+  // any DB read or dispatch (mirror app/api/jobs/create/route.ts).
+  if (!isSafeUrl(videoUrl)) {
+    return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+  }
+
+  // Whatever the client sends is only ever a request: re-validate and clamp it
+  // here, exactly like jobs/create does for the watermark.
+  const webcam = sanitizeWebcamConfig(body.webcam);
+
+  if (webcam?.sourceUrl && !isSafeUrl(webcam.sourceUrl)) {
+    return NextResponse.json({ error: "Webcam URL is not allowed" }, { status: 400 });
+  }
+
   const user = await prisma.user.findFirst({
     where: {
       OR: [
@@ -61,24 +90,6 @@ export async function POST(req: NextRequest) {
       { status: 403 }
     );
   }
-
-  let body: Record<string, unknown>;
-  try {
-    body = (await req.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const rawVideoUrl = typeof body.videoUrl === "string" ? body.videoUrl.trim() : "";
-  if (!rawVideoUrl) {
-    return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
-  }
-  // gs:// isn't fetchable by the worker's http downloader.
-  const videoUrl = toHttpsUrl(rawVideoUrl);
-
-  // Whatever the client sends is only ever a request: re-validate and clamp it
-  // here, exactly like jobs/create does for the watermark.
-  const webcam = sanitizeWebcamConfig(body.webcam);
 
   if (!webcam || !webcam.enabled || !webcam.sourceUrl) {
     return NextResponse.json({
