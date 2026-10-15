@@ -173,21 +173,28 @@ export async function POST(req: NextRequest) {
       }
       // Enforce the generic cap up front from the declared size, so an
       // oversized upload is refused before a signed URL exists. The verify
-      // step below re-checks the bytes that actually landed.
+      // step below re-checks the bytes that actually landed. A missing or
+      // non-finite size must also refuse: without a declared size there is no
+      // mint-time bound at all, and the caller uploads directly without ever
+      // calling /verify.
       const declaredSize = typeof body.size === "number" ? body.size : null;
-      if (typeof declaredSize === "number" && Number.isFinite(declaredSize)) {
-        if (declaredSize <= 0) {
-          return NextResponse.json(
-            { ok: false, error: "That file is empty. Choose a file with content in it." },
-            { status: 400 }
-          );
-        }
-        if (declaredSize > MAX_GENERIC_UPLOAD_BYTES) {
-          return NextResponse.json(
-            { ok: false, error: "That file is too large. Choose a smaller file." },
-            { status: 400 }
-          );
-        }
+      if (declaredSize === null || !Number.isFinite(declaredSize)) {
+        return NextResponse.json(
+          { ok: false, error: "File size is required before upload." },
+          { status: 400 }
+        );
+      }
+      if (declaredSize <= 0) {
+        return NextResponse.json(
+          { ok: false, error: "That file is empty. Choose a file with content in it." },
+          { status: 400 }
+        );
+      }
+      if (declaredSize > MAX_GENERIC_UPLOAD_BYTES) {
+        return NextResponse.json(
+          { ok: false, error: "That file is too large. Choose a smaller file." },
+          { status: 400 }
+        );
       }
     }
 

@@ -81,6 +81,22 @@ describe("POST /api/gcs/upload", () => {
     expect(getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
+  it("refuses to mint when size is omitted", async () => {
+    const res = await POST(makeRequest({ kind: "generic", contentType: "image/png" }));
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("refuses to mint when size is not finite", async () => {
+    const res = await POST(
+      makeRequest({ kind: "generic", contentType: "image/png", size: "huge" })
+    );
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-media contentType for a generic kind", async () => {
     const res = await POST(
       makeRequest({

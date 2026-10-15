@@ -888,15 +888,60 @@ function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
 // Security: every URL (including each redirect hop) is validated with
 // fetchSafeUrl before any bytes are fetched — non-http(s) schemes, blocked
 // hosts, and hostnames resolving to private/link-local addresses are refused.
-// Redirects are capped at MAX_REDIRECTS (5) and the whole download is bounded
-// by DOWNLOAD_TIMEOUT_MS. `options` ({ timeoutMs, maxRedirects, fetchImpl,
-// lookupImpl }) exists for unit tests; production callers pass nothing.
+// Redirects are capped at MAX_REDIRECTS (5), the whole download is bounded
+// by DOWNLOAD_TIMEOUT_MS, and the body is consumed incrementally (never
+// fully buffered) with an enforced MAX_DOWNLOAD_BYTES cap. `options`
+// ({ timeoutMs, maxRedirects, maxBytes, fetchImpl, lookupImpl }) exists for
+// unit tests; production callers pass nothing.
 const DOWNLOAD_TIMEOUT_MS =
   Number(process.env.DOWNLOAD_TIMEOUT_MS || 30000) || 30000;
+const MAX_DOWNLOAD_BYTES =
+  Number(process.env.DOWNLOAD_MAX_BYTES || 1073741824) || 1073741824;
+
+// Reads a fetch Response body with an enforced byte cap. Streaming bodies
+// are consumed chunk by chunk and cancelled the moment the cap is exceeded,
+// so a chunked or lying upstream cannot exhaust worker memory. Bodies
+// without a stream interface (test doubles) fall back to a single buffered
+// read that is still measured against the cap.
+async function readCappedBody(response, maxBytes) {
+  const body = response.body;
+  if (!body || typeof body.getReader !== "function") {
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > maxBytes) {
+      throw new Error(`Download exceeds size limit of ${maxBytes} bytes`);
+    }
+    return buf;
+  }
+  const reader = body.getReader();
+  const chunks = [];
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`Download exceeds size limit of ${maxBytes} bytes`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch (unused) {
+      // Reader already released via cancel; nothing to do.
+    }
+  }
+  return Buffer.concat(chunks);
+}
 
 function downloadFile(url, outputPath, options = {}) {
   const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
   const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS ?? 5;
+  const maxBytes = options.maxBytes ?? MAX_DOWNLOAD_BYTES;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const doFetch = options.fetchImpl
@@ -914,7 +959,7 @@ function downloadFile(url, outputPath, options = {}) {
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }
-      const bytes = Buffer.from(await response.arrayBuffer());
+      const bytes = await readCappedBody(response, maxBytes);
       fs.writeFileSync(outputPath, bytes);
     } catch (err) {
       if (controller.signal.aborted) {

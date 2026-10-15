@@ -104,4 +104,51 @@ describe("render downloadFile hardening", () => {
       })
     ).rejects.toThrow(/download failed: 404/i);
   });
+
+  it("streams a body without buffering it all first", async () => {
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(Buffer.from("chunk-one-"));
+        c.enqueue(Buffer.from("chunk-two"));
+        c.close();
+      },
+    });
+    const fetchImpl = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      body: stream,
+    }));
+    const dest = tmpPath("streamed.png");
+    await downloadFile("https://media.example.test/stream.png", dest, {
+      fetchImpl,
+      lookupImpl: publicLookup(),
+    });
+    expect(fs.readFileSync(dest, "utf8")).toBe("chunk-one-chunk-two");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a streamed body past the cap and writes nothing", async () => {
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(Buffer.alloc(16, 7));
+        c.close();
+      },
+    });
+    const fetchImpl = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      body: stream,
+    }));
+    const dest = tmpPath("too-big.png");
+    await expect(
+      downloadFile("https://media.example.test/big.png", dest, {
+        fetchImpl,
+        lookupImpl: publicLookup(),
+        maxBytes: 10,
+      })
+    ).rejects.toThrow(/size limit/i);
+    expect(fs.existsSync(dest)).toBe(false);
+  });
 });
