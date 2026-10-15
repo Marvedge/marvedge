@@ -33,6 +33,109 @@ export function isEditorCloudinaryUploadEnabled(): boolean {
 
 export type CloudinaryResourceType = "video" | "image" | "raw";
 
+export type SniffedMediaKind = "video" | "audio" | "image" | null;
+
+/**
+ * Sniff the real media kind from magic bytes — never trust the filename or
+ * the client-reported Content-Type. Returns `null` when the bytes do not
+ * look like a supported video, audio, or image container (e.g. an HTML file
+ * renamed to `.mp4`).
+ */
+export function sniffMediaKind(header: Uint8Array): SniffedMediaKind {
+  if (!header || header.length < 4) {
+    return null;
+  }
+  const ascii = (start: number, length: number): string => {
+    let out = "";
+    for (let i = start; i < start + length && i < header.length; i++) {
+      out += String.fromCharCode(header[i]);
+    }
+    return out;
+  };
+
+  // EBML: WebM / Matroska (the recorder's output and .mkv uploads).
+  if (header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3) {
+    return "video";
+  }
+  // ISO BMFF: MP4 / MOV / M4A (`ftyp` box at offset 4). M4A audio shares this
+  // container and uploads to Cloudinary's `video` resource type, so both map
+  // to "video" here — the point is rejecting non-media, not distinguishing.
+  if (header.length >= 8 && ascii(4, 4) === "ftyp") {
+    return "video";
+  }
+  // RIFF containers: AVI / WAV / WebP.
+  if (ascii(0, 4) === "RIFF" && header.length >= 12) {
+    const form = ascii(8, 4);
+    if (form === "AVI ") {
+      return "video";
+    }
+    if (form === "WAVE") {
+      return "audio";
+    }
+    if (form === "WEBP") {
+      return "image";
+    }
+    return null;
+  }
+  // Ogg (Vorbis / Opus audio).
+  if (ascii(0, 4) === "OggS") {
+    return "audio";
+  }
+  // MP3: ID3v2 tag or MPEG frame sync (also matches raw AAC ADTS frames).
+  if (ascii(0, 3) === "ID3") {
+    return "audio";
+  }
+  if (header[0] === 0xff && (header[1] & 0xe0) === 0xe0) {
+    return "audio";
+  }
+  // FLV video.
+  if (ascii(0, 3) === "FLV") {
+    return "video";
+  }
+  // Images (kept for the generic path; the video-only entry rejects them).
+  if (header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) {
+    return "image";
+  }
+  if (header[0] === 0x89 && ascii(1, 3) === "PNG") {
+    return "image";
+  }
+  if (ascii(0, 4) === "GIF8") {
+    return "image";
+  }
+  if (ascii(0, 2) === "BM") {
+    return "image";
+  }
+  return null;
+}
+
+const UPLOAD_HEADER_BYTES = 32;
+
+async function readUploadHeader(file: File | Blob | Buffer): Promise<Uint8Array> {
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(file)) {
+    return new Uint8Array((file as Buffer).subarray(0, UPLOAD_HEADER_BYTES));
+  }
+  const blob = file as Blob;
+  if (blob && typeof blob.slice === "function" && typeof blob.arrayBuffer === "function") {
+    return new Uint8Array(await blob.slice(0, UPLOAD_HEADER_BYTES).arrayBuffer());
+  }
+  throw new CloudinaryUploadError("Unable to inspect upload content", 400);
+}
+
+/** Reject anything that is not sniffed video/audio (plus image when allowed). */
+function assertAllowedMediaBytes(header: Uint8Array, opts: { allowImage: boolean }): void {
+  const kind = sniffMediaKind(header);
+  if (kind === "video" || kind === "audio") {
+    return;
+  }
+  if (kind === "image" && opts.allowImage) {
+    return;
+  }
+  throw new CloudinaryUploadError(
+    "Upload rejected: file content is not a supported video or audio file",
+    400
+  );
+}
+
 export function cloudinaryResourceTypeFor(
   contentType: string,
   filename?: string
@@ -128,6 +231,16 @@ export async function cloudinaryUpload(
   const resolvedContentType = contentType || file.type || "application/octet-stream";
   const resourceType = cloudinaryResourceTypeFor(resolvedContentType, filename);
 
+  // Neutralize the "raw" fallthrough: unsigned uploads only accept media.
+  // Audio legitimately maps to the "video" resource type, so audio callers
+  // are unaffected by this gate.
+  if (resourceType === "raw") {
+    throw new CloudinaryUploadError("Unsupported file type for upload", 400);
+  }
+  assertAllowedMediaBytes(await readUploadHeader(file as Blob | Buffer), {
+    allowImage: resourceType === "image",
+  });
+
   const form = new FormData();
   form.append("upload_preset", uploadPreset);
   if (folder) {
@@ -191,6 +304,14 @@ export async function uploadVideoToCloudinary(opts: {
   const filename = opts.filename || (opts.file instanceof File ? opts.file.name : "upload.mp4");
   const contentType = opts.file.type || "video/mp4";
   const resourceType = cloudinaryResourceTypeFor(contentType, filename);
+
+  // Video-only entry point: the "raw"/"image" fallthrough is neutralized here.
+  // `audio/*` maps to the "video" resource type above, so legit audio callers
+  // still pass this gate and are then verified by magic bytes below.
+  if (resourceType !== "video") {
+    throw new CloudinaryUploadError("Only video uploads are supported", 400);
+  }
+  assertAllowedMediaBytes(await readUploadHeader(opts.file), { allowImage: false });
 
   const form = new FormData();
   form.append("upload_preset", uploadPreset);

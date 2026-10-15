@@ -4,6 +4,7 @@
 // records, VideoJob record lifecycle, and queue dispatch onto the Marvedge BullMQ videoQueue.
 
 import { videoQueue } from "../queue";
+import { isSafeUrl } from "../safeUrl";
 import type { SubtitleCue } from "../subtitles/types";
 import { readCueList } from "../subtitles";
 import type { ClipScoringOptions } from "./types";
@@ -84,6 +85,10 @@ export function validateClipScoringInput(data: unknown): ValidatedClipScoringInp
       throw new ApiError(400, "videoUrl must be a non-empty string if provided");
     }
     videoUrl = record.videoUrl.trim();
+    // The worker fetches this URL, so internal addresses stop here.
+    if (!isSafeUrl(videoUrl)) {
+      throw new ApiError(400, "Video URL is not allowed");
+    }
   }
 
   let cues: SubtitleCue[] | undefined = undefined;

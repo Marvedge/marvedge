@@ -9,6 +9,7 @@ import {
   resolveTranscriptCues,
   validateClipScoringInput,
 } from "@/app/lib/clips/service";
+import { isSafeUrl } from "@/app/lib/safeUrl";
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,6 +61,18 @@ export async function POST(req: NextRequest) {
         suppliedCues: cues,
         suppliedDuration: duration,
       });
+
+    // The worker fetches this URL. The supplied videoUrl is gated in
+    // validateClipScoringInput; recheck here because the resolved URL can come
+    // from a stored row — poisoned rows fail closed before any DB write.
+    const effectiveVideoUrl = resolvedVideoUrl || videoUrl;
+    if (
+      typeof effectiveVideoUrl === "string" &&
+      effectiveVideoUrl &&
+      !isSafeUrl(effectiveVideoUrl)
+    ) {
+      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+    }
 
     // 1. Create a tracking VideoJob record in PostgreSQL
     const jobRecord = await prisma.videoJob.create({

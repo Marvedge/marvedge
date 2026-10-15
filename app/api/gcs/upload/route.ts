@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { isVideoUploadKind, MAX_UPLOAD_BYTES, validateVideoUpload } from "@/app/lib/subtitles";
 import {
   getSignedUploadUrl,
@@ -78,6 +79,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // Minting a signed URL hands out write access to the bucket — cap it per
+    // user like /api/upload does (10/min).
+    if (await isRateLimited(`gcs-upload:${userId}`, 10, 60)) {
+      return NextResponse.json(
+        { ok: false, error: "Too many uploads (max 10 per minute)" },
+        { status: 429 }
+      );
+    }
+
     // RAW_BUCKET is the AWS S3 bucket name; falls back to GCP_RAW_BUCKET for
     // backward compat when STORAGE_PROVIDER=gcs is active.
     const bucketName = (
@@ -145,6 +155,39 @@ export async function POST(req: NextRequest) {
       });
       if (!check.ok) {
         return NextResponse.json({ ok: false, error: check.error }, { status: 400 });
+      }
+    } else {
+      // Non-video kinds (watermark logo, background image, generic) still mint
+      // bucket writes, so only media types are allowed — never executables,
+      // HTML, or bare octet-streams.
+      const baseType = contentType.split(";")[0].trim().toLowerCase();
+      const isMediaType =
+        baseType.startsWith("video/") ||
+        baseType.startsWith("image/") ||
+        baseType.startsWith("audio/");
+      if (!isMediaType) {
+        return NextResponse.json(
+          { ok: false, error: "That file type is not supported for uploads." },
+          { status: 400 }
+        );
+      }
+      // Enforce the generic cap up front from the declared size, so an
+      // oversized upload is refused before a signed URL exists. The verify
+      // step below re-checks the bytes that actually landed.
+      const declaredSize = typeof body.size === "number" ? body.size : null;
+      if (typeof declaredSize === "number" && Number.isFinite(declaredSize)) {
+        if (declaredSize <= 0) {
+          return NextResponse.json(
+            { ok: false, error: "That file is empty. Choose a file with content in it." },
+            { status: 400 }
+          );
+        }
+        if (declaredSize > MAX_GENERIC_UPLOAD_BYTES) {
+          return NextResponse.json(
+            { ok: false, error: "That file is too large. Choose a smaller file." },
+            { status: 400 }
+          );
+        }
       }
     }
 

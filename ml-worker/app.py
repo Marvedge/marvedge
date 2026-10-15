@@ -136,5 +136,23 @@ with gr.Blocks(title="Marvedge Face Tracking Demo", theme=gr.themes.Soft()) as d
     btn.click(fn=process_video, inputs=video_in, outputs=[meta_out, video_out])
 
 if __name__ == "__main__":
+    # The Gradio port is published to the host (ml-worker/docker-compose.yml
+    # maps 8080:8080 and the README instructs opening http://localhost:8080 in
+    # a browser), so it is NOT internal-only: require login credentials.
+    # Credentials never live in code — they come from GRADIO_USERNAME /
+    # GRADIO_PASSWORD. When either is unset the UI stays open (local demo) and
+    # warns, so existing credential-less runs keep working.
+    _gradio_user = os.environ.get("GRADIO_USERNAME", "").strip()
+    _gradio_password = os.environ.get("GRADIO_PASSWORD", "").strip()
+    _gradio_auth = (
+        (_gradio_user, _gradio_password)
+        if (_gradio_user and _gradio_password)
+        else None
+    )
+    if _gradio_auth is None:
+        print(
+            "WARNING: GRADIO_USERNAME/GRADIO_PASSWORD are not set; "
+            "the demo UI is unauthenticated. Set both to require login."
+        )
     # Expose on 0.0.0.0:8080 for Docker / Cloud Run compatibility
-    demo.queue().launch(server_name="0.0.0.0", server_port=8080)
+    demo.queue().launch(server_name="0.0.0.0", server_port=8080, auth=_gradio_auth)
