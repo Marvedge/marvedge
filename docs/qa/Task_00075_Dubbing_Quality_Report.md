@@ -16,19 +16,20 @@
 
 ## 2. Sample Matrix & Objective Metrics
 
-| Case ID | Sample Title | Role | Duration | Media Decodable | Clipping Risk | Provider Status | Voice Identity |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **CASE-01** | Single-Speaker Baseline | `single_speaker_baseline` | 20.04s | **PASS** | LOW | **BLOCKED** | NOT_VERIFIED |
-| **CASE-02** | Longer Speech Excerpt (30s reproducible excerpt from col.mp4 [01:00-01:30]) | `long_form_excerpt` | 30.06s | **PASS** | LOW | **BLOCKED** | NOT_VERIFIED |
-| **CASE-03** | Speech with Background Noise (30s) | `noisy_speech` | 30.04s | **PASS** | LOW | **BLOCKED** | NOT_VERIFIED |
-| **CASE-04** | Short Clip Speech (8s public demo asset) | `short_speech_tail` | 8.00s | **PASS** | LOW | **BLOCKED** | NOT_VERIFIED |
-| **CASE-05** | Silent Video Negative Control (15.4s moving subject, no audio) | `silent_negative_control` | 15.45s | **PASS** | NOT_APPLICABLE | **NOT_APPLICABLE** | NOT_APPLICABLE |
+| Case ID     | Sample Title                                                                | Role                      | Duration | Media Decodable | Clipping Risk  | Provider Status    | Voice Identity |
+| :---------- | :-------------------------------------------------------------------------- | :------------------------ | :------- | :-------------- | :------------- | :----------------- | :------------- |
+| **CASE-01** | Single-Speaker Baseline                                                     | `single_speaker_baseline` | 20.04s   | **PASS**        | LOW            | **BLOCKED**        | NOT_VERIFIED   |
+| **CASE-02** | Longer Speech Excerpt (30s reproducible excerpt from col.mp4 [01:00-01:30]) | `long_form_excerpt`       | 30.06s   | **PASS**        | LOW            | **BLOCKED**        | NOT_VERIFIED   |
+| **CASE-03** | Speech with Background Noise (30s)                                          | `noisy_speech`            | 30.04s   | **PASS**        | LOW            | **BLOCKED**        | NOT_VERIFIED   |
+| **CASE-04** | Short Clip Speech (8s public demo asset)                                    | `short_speech_tail`       | 8.00s    | **PASS**        | LOW            | **BLOCKED**        | NOT_VERIFIED   |
+| **CASE-05** | Silent Video Negative Control (15.4s moving subject, no audio)              | `silent_negative_control` | 15.45s   | **PASS**        | NOT_APPLICABLE | **NOT_APPLICABLE** | NOT_APPLICABLE |
 
 ---
 
 ## 3. Sample Case Details & Probe Evidence
 
 ### CASE-01: Single-Speaker Baseline
+
 - **Sample Path**: `C:\marvedge-task53-media\02_single_speaker.avi`
 - **Role**: `single_speaker_baseline`
 - **Source Duration**: 20.04s
@@ -38,10 +39,11 @@
 - **Peak Volume (dBFS)**: `-0.2 dB` | **Mean Volume**: `-16.9 dB`
 - **0 dBFS Samples Count (Clipping Indicator)**: `813` (Saturation flag: LOW)
 - **Leading / Trailing Silence**: `0.00s` leading, `0.00s` trailing
-- **Provider Execution**: `BLOCKED` — *Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption).*
-- **Voice Consistency**: `NOT_VERIFIED` — *Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre.*
+- **Provider Execution**: `BLOCKED` — _Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption)._
+- **Voice Consistency**: `NOT_VERIFIED` — _Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre._
 
 ### CASE-02: Longer Speech Excerpt (30s reproducible excerpt from col.mp4 [01:00-01:30])
+
 - **Sample Path**: `C:\marvedge-task53-media\columbia\col_excerpt_30s.mp4`
 - **Role**: `long_form_excerpt`
 - **Source Duration**: 30.06s
@@ -50,10 +52,11 @@
 - **Audio Codec**: `opus` (48000 Hz, 2 ch)
 - **Peak Volume (dBFS)**: `-3.7 dB` | **Mean Volume**: `-26.4 dB`
 - **Leading / Trailing Silence**: `0.00s` leading, `0.00s` trailing
-- **Provider Execution**: `BLOCKED` — *Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption).*
-- **Voice Consistency**: `NOT_VERIFIED` — *Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre.*
+- **Provider Execution**: `BLOCKED` — _Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption)._
+- **Voice Consistency**: `NOT_VERIFIED` — _Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre._
 
 ### CASE-03: Speech with Background Noise (30s)
+
 - **Sample Path**: `C:\marvedge-task53-media\ava\noisy_sample.mp4`
 - **Role**: `noisy_speech`
 - **Source Duration**: 30.04s
@@ -62,10 +65,11 @@
 - **Audio Codec**: `aac` (44100 Hz, 2 ch)
 - **Peak Volume (dBFS)**: `-8.4 dB` | **Mean Volume**: `-28.5 dB`
 - **Leading / Trailing Silence**: `0.00s` leading, `0.00s` trailing
-- **Provider Execution**: `BLOCKED` — *Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption).*
-- **Voice Consistency**: `NOT_VERIFIED` — *Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre.*
+- **Provider Execution**: `BLOCKED` — _Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption)._
+- **Voice Consistency**: `NOT_VERIFIED` — _Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre._
 
 ### CASE-04: Short Clip Speech (8s public demo asset)
+
 - **Sample Path**: `C:\Users\Shambhavi\OneDrive\Desktop\marvedge\marvedge\public\icons\1.mp4`
 - **Role**: `short_speech_tail`
 - **Source Duration**: 8.00s
@@ -74,10 +78,11 @@
 - **Audio Codec**: `aac` (48000 Hz, 2 ch)
 - **Peak Volume (dBFS)**: `-6.7 dB` | **Mean Volume**: `-25.0 dB`
 - **Leading / Trailing Silence**: `0.00s` leading, `0.00s` trailing
-- **Provider Execution**: `BLOCKED` — *Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption).*
-- **Voice Consistency**: `NOT_VERIFIED` — *Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre.*
+- **Provider Execution**: `BLOCKED` — _Live ElevenLabs call skipped (ELEVENLABS_API_KEY is not configured in local environment; live calls require explicit opt-in to avoid paid provider consumption)._
+- **Voice Consistency**: `NOT_VERIFIED` — _Automated voice similarity metric not available in repo; requires human listening evaluation against source speaker timbre._
 
 ### CASE-05: Silent Video Negative Control (15.4s moving subject, no audio)
+
 - **Sample Path**: `C:\marvedge-task53-media\moving_subject\06_moving_subject.mp4`
 - **Role**: `silent_negative_control`
 - **Source Duration**: 15.45s
@@ -85,8 +90,8 @@
 - **Negative Control Status**: `PASS` (Verified absent audio stream)
 - **File Size**: 3.87 MB (4061421 bytes)
 - **Leading / Trailing Silence**: `0.00s` leading, `0.00s` trailing
-- **Provider Execution**: `NOT_APPLICABLE` — *Negative control correctly verified: audio stream is absent; skipped sending to dubbing provider.*
-- **Voice Consistency**: `NOT_APPLICABLE` — *No speech in silent media.*
+- **Provider Execution**: `NOT_APPLICABLE` — _Negative control correctly verified: audio stream is absent; skipped sending to dubbing provider._
+- **Voice Consistency**: `NOT_APPLICABLE` — _No speech in silent media._
 
 ---
 
