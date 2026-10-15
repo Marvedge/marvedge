@@ -495,3 +495,72 @@ async def test_talknet_malformed_downstream_response(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
     assert "Malformed response" in resp.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# Gateway token auth tests (ML_GATEWAY_TOKEN / X-Gateway-Token)
+# ---------------------------------------------------------------------------
+
+def _mock_downstream_ok(monkeypatch, body):
+    mock_transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=body)
+    )
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+
+def test_reframe_rejects_missing_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post("/reframe", json={"videoUrl": "https://example.com/video.mp4"})
+    assert resp.status_code == 401
+    assert resp.json()["ok"] is False
+
+
+def test_reframe_rejects_wrong_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_reframe_accepts_valid_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    _mock_downstream_ok(monkeypatch, {"ok": True, "crop_targets": {}})
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "secret-123"},
+    )
+    assert resp.status_code == 200
+
+
+def test_talknet_rejects_missing_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    assert resp.status_code == 401
+
+
+def test_talknet_accepts_valid_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    _mock_downstream_ok(monkeypatch, {"ok": True})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "secret-123"},
+    )
+    assert resp.status_code == 200
+
+
+def test_endpoints_stay_open_without_token(monkeypatch):
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    _mock_downstream_ok(monkeypatch, {"ok": True})
+    assert client.post("/reframe", json={"a": 1}).status_code == 200
+    assert client.post("/talknet", json={"a": 1}).status_code == 200

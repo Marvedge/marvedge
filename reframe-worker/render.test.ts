@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "fs";
 import { renderReframedVideo, type RenderReframedVideoDeps } from "./render";
+import { assertSafeDownloadUrl, defaultDownloadVideo } from "./render";
 import type { CropTargetData } from "../app/types/editor/crop-target";
 
 const validCropTargets: CropTargetData = {
@@ -247,6 +248,45 @@ describe("reframe-worker/render", () => {
 
       expect(res.status).toBe(0);
       expect(res.stderr).toBe("");
+    });
+  });
+
+  describe("defaultDownloadVideo URL validation", () => {
+    const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+
+    it.each([
+      "file:///etc/passwd",
+      "gopher://example.test/1",
+      "ftp://example.test/video.mp4",
+    ])("refuses non-http(s) URL %s", async (url) => {
+      await expect(assertSafeDownloadUrl(url, publicLookup)).rejects.toThrow(
+        /non-http/i
+      );
+    });
+
+    it.each([
+      "http://localhost/video.mp4",
+      "http://127.0.0.1/video.mp4",
+      "http://10.0.0.8/video.mp4",
+      "http://169.254.169.254/latest/meta-data",
+      "http://[::1]/video.mp4",
+    ])("refuses private/internal URL %s", async (url) => {
+      await expect(assertSafeDownloadUrl(url, publicLookup)).rejects.toThrow(
+        /blocked host|private address/i
+      );
+    });
+
+    it("refuses a public hostname resolving to a private address", async () => {
+      const privateLookup = async () => [{ address: "192.168.0.5", family: 4 }];
+      await expect(
+        assertSafeDownloadUrl("https://cdn.example.test/v.mp4", privateLookup)
+      ).rejects.toThrow(/private address/i);
+    });
+
+    it("defaultDownloadVideo rejects file:// without any request", async () => {
+      await expect(
+        defaultDownloadVideo("file:///etc/passwd", "/tmp/should-not-exist.mp4")
+      ).rejects.toThrow(/non-http/i);
     });
   });
 });

@@ -12,6 +12,7 @@ import os from "os";
 import { execFileSync } from "child_process";
 import axios from "axios";
 import { createDubbingJob, waitForDubbingCompletion } from "../app/lib/elevenlabs/dubbing";
+import { buildDrawtextFontOption, downloadUrlToFile } from "./safe-download";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
 import { postJobCallbackWithRetry, processDubbingJob } from "../app/lib/avs/dubbingProcessor";
 import { runSubtitleJobWithRetry } from "./subtitleRetry";
@@ -474,23 +475,11 @@ function writeTextOverlayFiles(
 }
 
 async function downloadVideo(url: string, outputPath: string): Promise<void> {
-  const writer = fs.createWriteStream(outputPath);
-  const response = await axios({ url, method: "GET", responseType: "stream" });
-  response.data.pipe(writer);
-  return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
+  await downloadUrlToFile(url, outputPath);
 }
 
 async function downloadFile(url: string, outputPath: string): Promise<void> {
-  const writer = fs.createWriteStream(outputPath);
-  const response = await axios({ url, method: "GET", responseType: "stream" });
-  response.data.pipe(writer);
-  return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
+  await downloadUrlToFile(url, outputPath);
 }
 
 function writeRoundedMaskPgm(
@@ -1324,7 +1313,7 @@ const worker = new Worker(
 
           let fontOpt = "";
           if (overlay.fontFamily) {
-            fontOpt = `font='${overlay.fontFamily}':`;
+            fontOpt = buildDrawtextFontOption(overlay.fontFamily);
           }
 
           filters.push(

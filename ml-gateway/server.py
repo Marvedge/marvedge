@@ -4,9 +4,10 @@ Lightweight routing and facade layer proxying requests to AutoFlip and TalkNet.
 """
 
 import asyncio
+import hmac
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -29,6 +30,41 @@ DOWNSTREAM_TIMEOUT_SEC = float(os.environ.get("GATEWAY_TIMEOUT_SEC", "180.0"))
 HEALTH_CHECK_TIMEOUT_SEC = float(
     os.environ.get("GATEWAY_HEALTH_TIMEOUT_SEC", "5.0")
 )
+
+# Shared-secret auth for /reframe + /talknet (mirrors the CALLBACK_SECRET
+# precedent: the reframe worker sends X-Gateway-Token from ML_GATEWAY_TOKEN).
+#
+# Reachability finding: docker-compose publishes the gateway as 8000:8000 and
+# the worker reaches it via REFRAME_ML_SERVICE_URL (default
+# http://localhost:8000), so it is NOT confined to the docker network — a
+# shared-secret header is required instead of a loopback bind. When
+# ML_GATEWAY_TOKEN is unset the endpoints stay open (least-breaking for local
+# dev without the env var).
+GATEWAY_TOKEN_HEADER = "x-gateway-token"
+
+
+def _expected_gateway_token() -> str:
+    return os.environ.get("ML_GATEWAY_TOKEN", "").strip()
+
+
+if not os.environ.get("ML_GATEWAY_TOKEN", "").strip():
+    logger.warning(
+        "ML_GATEWAY_TOKEN is not set; /reframe and /talknet are unauthenticated"
+    )
+
+
+async def require_gateway_auth(request: Request) -> Optional[JSONResponse]:
+    """Return a 401 response when the gateway token check fails, else None."""
+    expected = _expected_gateway_token()
+    if not expected:
+        return None
+    provided = request.headers.get(GATEWAY_TOKEN_HEADER, "")
+    if not provided or not hmac.compare_digest(provided, expected):
+        return JSONResponse(
+            status_code=401,
+            content={"ok": False, "error": "Unauthorized: invalid or missing gateway token"},
+        )
+    return None
 
 app = FastAPI(
     title="Marvedge Internal ML API Gateway",
@@ -104,6 +140,9 @@ async def health() -> JSONResponse:
 @app.post("/reframe")
 async def reframe(request: Request) -> JSONResponse:
     """Proxies reframe request unchanged to AutoFlip service /reframe."""
+    auth_error = await require_gateway_auth(request)
+    if auth_error is not None:
+        return auth_error
     try:
         body = await request.json()
     except Exception:
@@ -144,6 +183,9 @@ async def reframe(request: Request) -> JSONResponse:
 @app.post("/talknet")
 async def talknet(request: Request) -> JSONResponse:
     """Proxies active speaker detection request to TalkNet service /detect."""
+    auth_error = await require_gateway_auth(request)
+    if auth_error is not None:
+        return auth_error
     try:
         body = await request.json()
     except Exception:
