@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 import { Registry } from "@prometheus-io/client";
 
 const mocks = vi.hoisted(() => ({
@@ -25,6 +26,9 @@ vi.mock("../../../lib/monitoring/metrics", () => ({
 import { dubbingQueue, reframeQueue } from "../../../lib/queue";
 import { GET } from "./route";
 
+const TEST_SECRET = "test-rollup-secret";
+const SECRET_HEADER = "x-marvedge-rollup-secret";
+
 const metricsText = [
   "# HELP marvedge_reframe_inference_duration_seconds Time spent performing reframe ML inference.",
   "# TYPE marvedge_reframe_inference_duration_seconds histogram",
@@ -36,15 +40,27 @@ const metricsText = [
   "# TYPE marvedge_queue_depth gauge",
 ].join("\n");
 
+function makeRequest(secret: string | null = TEST_SECRET): NextRequest {
+  const headers: Record<string, string> = {};
+  if (secret !== null) {
+    headers[SECRET_HEADER] = secret;
+  }
+  return new NextRequest("http://localhost:3000/api/monitoring/metrics", {
+    method: "GET",
+    headers,
+  });
+}
+
 describe("GET /api/monitoring/metrics", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.OVERLAYS_ROLLUP_SECRET = TEST_SECRET;
     mocks.collectQueueMetrics.mockResolvedValue(undefined);
     mocks.serializeMetrics.mockResolvedValue(metricsText);
   });
 
   it("collects current queue counts and returns Prometheus exposition", async () => {
-    const response = await GET();
+    const response = await GET(makeRequest());
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe(Registry.PROMETHEUS_CONTENT_TYPE);
@@ -64,7 +80,7 @@ describe("GET /api/monitoring/metrics", () => {
     mocks.collectQueueMetrics.mockRejectedValue(new Error("Redis unavailable"));
     const logError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await GET();
+    const response = await GET(makeRequest());
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(metricsText);
@@ -78,7 +94,7 @@ describe("GET /api/monitoring/metrics", () => {
     mocks.serializeMetrics.mockRejectedValue(new Error("serialization failure"));
     const logError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await GET();
+    const response = await GET(makeRequest());
 
     expect(response.status).toBe(500);
     expect(await response.text()).toBe("Unable to serialize metrics");
@@ -86,5 +102,28 @@ describe("GET /api/monitoring/metrics", () => {
       "[monitoring] Metrics serialization failed:",
       expect.any(Error)
     );
+  });
+
+  it("returns 401 without the shared secret", async () => {
+    const response = await GET(makeRequest(null));
+
+    expect(response.status).toBe(401);
+    expect(mocks.collectQueueMetrics).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 with the wrong secret", async () => {
+    const response = await GET(makeRequest("wrong-secret"));
+
+    expect(response.status).toBe(401);
+    expect(mocks.collectQueueMetrics).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when the secret is not configured", async () => {
+    delete process.env.OVERLAYS_ROLLUP_SECRET;
+
+    const response = await GET(makeRequest());
+
+    expect(response.status).toBe(503);
+    expect(mocks.collectQueueMetrics).not.toHaveBeenCalled();
   });
 });

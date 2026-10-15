@@ -265,4 +265,93 @@ describe("GET /api/jobs/[id]/download", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toBe('attachment; filename="Final_Video.mp4"');
   });
+
+  it("sends a fixed video content type with nosniff instead of the upstream type", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("video-bytes", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      })
+    );
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("video/mp4");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await res.text()).toBe("video-bytes");
+  });
+
+  it("fetches the upstream with a timeout signal", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("video-bytes", {
+        status: 200,
+        headers: { "content-type": "video/mp4" },
+      })
+    );
+
+    const { req, context } = makeRequest("job-1");
+    await GET(req, context);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://example.com/exported.mp4",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it("rejects an upstream that declares more than the size cap", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("video-bytes", {
+        status: 200,
+        headers: {
+          "content-type": "video/mp4",
+          "content-length": String(600 * 1024 * 1024),
+        },
+      })
+    );
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Exported file is too large" });
+  });
+
+  it("returns 502 when the upstream fetch itself fails", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+
+    vi.spyOn(global, "fetch").mockRejectedValue(new Error("fetch failed"));
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(res.status).toBe(502);
+  });
 });
