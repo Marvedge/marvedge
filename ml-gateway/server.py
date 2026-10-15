@@ -7,7 +7,7 @@ import asyncio
 import hmac
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
