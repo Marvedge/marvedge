@@ -110,7 +110,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
 
     // Enforce the cap while streaming too — content-length is upstream-controlled
-    // and may be absent or a lie.
+    // and may be absent or a lie. The upstream reader is cancelled the moment
+    // the cap is exceeded so a chunked response stops consuming bandwidth
+    // instead of buffering behind a failed client stream.
     let streamedBytes = 0;
     const cappedBody = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -121,6 +123,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
             if (done) break;
             streamedBytes += value.byteLength;
             if (streamedBytes > MAX_DOWNLOAD_BYTES) {
+              try {
+                await reader.cancel();
+              } catch {
+                // Reader already closed/errored; the cap error below still applies.
+              }
               controller.error(new Error("Exported file exceeds size limit"));
               return;
             }

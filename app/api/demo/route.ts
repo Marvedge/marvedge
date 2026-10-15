@@ -16,7 +16,10 @@ function editingPayloadSize(editing: unknown): number {
     return 0;
   }
   try {
-    return JSON.stringify(editing)?.length ?? 0;
+    // Byte length, not string length: multibyte characters (e.g. emoji are
+    // 4 bytes but 2 UTF-16 code units) must count toward the cap.
+    const serialized = JSON.stringify(editing);
+    return serialized === undefined ? 0 : Buffer.byteLength(serialized);
   } catch {
     return 0;
   }

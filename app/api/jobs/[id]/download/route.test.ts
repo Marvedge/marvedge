@@ -339,6 +339,39 @@ describe("GET /api/jobs/[id]/download", () => {
     expect(await res.json()).toEqual({ error: "Exported file is too large" });
   });
 
+  it("cancels the upstream reader when the streamed body exceeds the cap", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+
+    let cancelCalled = false;
+    const hugeBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // 501MB with no content-length: only the streaming cap can catch this.
+        // Left open on purpose: the route must cancel us.
+        controller.enqueue(new Uint8Array(501 * 1024 * 1024));
+      },
+      cancel() {
+        cancelCalled = true;
+      },
+    });
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(hugeBody, {
+        status: 200,
+        headers: { "content-type": "video/mp4" },
+      })
+    );
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    await expect(res.arrayBuffer()).rejects.toThrow(/exceeds size limit/);
+    expect(cancelCalled).toBe(true);
+  });
+
   it("returns 502 when the upstream fetch itself fails", async () => {
     vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
       userId: "user-123",
