@@ -115,6 +115,7 @@ describe("Task-00075: Dubbing Quality Regression Validation", { timeout: 30000 }
       expect(silentCase).toBeDefined();
       expect(silentCase?.negativeControlVerdict).toBe("PASS");
       expect(silentCase?.providerExecutionVerdict).toBe("NOT_APPLICABLE");
+      expect(silentCase?.voiceConsistencyVerdict).toBe("NOT_APPLICABLE");
     });
   });
 

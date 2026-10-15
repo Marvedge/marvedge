@@ -70,9 +70,9 @@ export interface SampleCaseValidation {
   mediaDecodable: boolean;
   decodabilityVerdict: "PASS" | "FAIL" | "BLOCKED" | "NOT_APPLICABLE";
   negativeControlVerdict?: "PASS" | "FAIL" | "NOT_APPLICABLE";
-  providerExecutionVerdict: "PASS" | "FAIL" | "BLOCKED" | "NOT_VERIFIED";
+  providerExecutionVerdict: "PASS" | "FAIL" | "BLOCKED" | "NOT_VERIFIED" | "NOT_APPLICABLE";
   providerExecutionNote: string;
-  voiceConsistencyVerdict: "PASS" | "FAIL" | "BLOCKED" | "NOT_VERIFIED";
+  voiceConsistencyVerdict: "PASS" | "FAIL" | "BLOCKED" | "NOT_VERIFIED" | "NOT_APPLICABLE";
   voiceConsistencyNote: string;
   clippingRiskIndicator: "LOW" | "ELEVATED" | "NOT_APPLICABLE";
   probeDetails?: Partial<MediaProbeResult>;
