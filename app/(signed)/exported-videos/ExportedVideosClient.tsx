@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import ShareModal from "../../components/ShareModal";
+import { isSafePreviewUrl } from "@/app/preview/utils/previewHelpers";
 import { useExportedVideos } from "./hooks/useExportedVideos";
 import { filterAndSortVideos } from "./utils/videoHelpers";
 import VideosToolbar from "./components/VideosToolbar";
@@ -40,10 +41,10 @@ export default function ExportedVideosClient() {
   const filteredAndSortedVideos = filterAndSortVideos(videos, search, sortOption);
 
   const openVideo = (url: string) => {
-    if (!url) {
+    if (!isSafePreviewUrl(url)) {
       return;
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(url.trim(), "_blank", "noopener,noreferrer");
   };
 
   const handleDeleteVideo = (id: string) => {
