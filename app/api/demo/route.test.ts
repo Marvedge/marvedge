@@ -103,6 +103,20 @@ describe("/api/demo validation", () => {
     expect(prisma.demo.create).not.toHaveBeenCalled();
   });
 
+  it("POST measures multibyte editing in bytes, not string length", async () => {
+    // "😀" is 4 bytes but 2 UTF-16 code units: 300K units < 512KiB yet 600KB > 512KiB.
+    const res = await POST(
+      makeRequest({
+        title: "Demo",
+        videoUrl: "https://example.com/a.mp4",
+        editing: { blob: "😀".repeat(150 * 1024) },
+      })
+    );
+
+    expect(res.status).toBe(413);
+    expect(prisma.demo.create).not.toHaveBeenCalled();
+  });
+
   it("PATCH updates a demo for a valid request", async () => {
     const res = await PATCH(
       makeRequest({ id: "demo-1", exportedUrl: "https://example.com/out.mp4" })

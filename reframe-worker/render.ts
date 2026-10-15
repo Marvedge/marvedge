@@ -194,26 +194,57 @@ export function maxDownloadBytes(): number {
 }
 
 /**
+ * Resolve a redirect Location against the current URL and re-run the full
+ * SSRF validation on the result. Every hop is checked because axios follows
+ * redirects internally — validating only the initial URL would let a public
+ * source bounce the worker onto a private address. Exported for unit tests.
+ */
+export async function resolveRedirectTarget(
+  location: unknown,
+  currentUrl: string,
+  lookupImpl?: (hostname: string) => Promise<Array<{ address: string; family: number }>>
+): Promise<URL> {
+  if (typeof location !== "string" || location.length === 0) {
+    throw new Error("Refusing redirect without Location");
+  }
+  let resolved: URL;
+  try {
+    resolved = new URL(location, currentUrl);
+  } catch {
+    throw new Error("Refusing redirect with invalid Location");
+  }
+  return assertSafeDownloadUrl(resolved.toString(), lookupImpl);
+}
+
+/**
  * Downloads remote video stream over HTTP(S) into local destination path.
  *
  * The URL is validated pre-request (http(s) only, no private/file/gopher
- * targets), redirects are capped, the request has a timeout, and bodies over
- * the size limit abort mid-stream.
+ * targets), every redirect hop is re-validated, redirects are capped, the
+ * request has a timeout, and bodies over the size limit abort mid-stream.
  */
 export async function defaultDownloadVideo(url: string, destPath: string): Promise<void> {
   const safeUrl = await assertSafeDownloadUrl(url);
   const maxBytes = maxDownloadBytes();
   const writer = fs.createWriteStream(destPath);
+  let currentUrl = safeUrl.toString();
   let response;
   try {
     response = await axios({
-      url: safeUrl.toString(),
+      url: currentUrl,
       method: "GET",
       responseType: "stream",
       timeout: DOWNLOAD_TIMEOUT_MS,
       maxContentLength: maxBytes,
       maxBodyLength: maxBytes,
       maxRedirects: MAX_DOWNLOAD_REDIRECTS,
+      // Re-validate every redirect target: throwing here aborts the chain
+      // before axios requests the next hop.
+      beforeRedirect: async (_redirectOptions, redirectDetails) => {
+        currentUrl = (
+          await resolveRedirectTarget(redirectDetails?.headers?.location, currentUrl)
+        ).toString();
+      },
     });
   } catch (err) {
     writer.destroy();
