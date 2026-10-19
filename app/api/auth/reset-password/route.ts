@@ -1,21 +1,13 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { isPasswordResetRateLimited } from "@/app/lib/auth/passwordResetProtection";
 import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 import crypto from "crypto";
 
 const MAX_AUTH_BODY_BYTES = 8 * 1024;
 
 export const runtime = "nodejs";
-
-function clientKey(req: Request, email: string): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded
-    ? forwarded.split(",")[0].trim()
-    : req.headers.get("x-real-ip")?.trim() || "unknown";
-  return `reset-password:${ip}:${email.toLowerCase()}`;
-}
 
 export async function POST(req: Request) {
   const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
@@ -44,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   // slow down guessing: 5 tries per 15 minutes per ip and email
-  if (await isRateLimited(clientKey(req, email), 5, 900, true)) {
+  if (await isPasswordResetRateLimited(email, req.headers, "reset-attempt")) {
     return NextResponse.json(
       { error: "Too many attempts, please try again later" },
       { status: 429 }
