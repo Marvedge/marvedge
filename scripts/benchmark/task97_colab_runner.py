@@ -54,14 +54,13 @@ def install():
         import torch
         print(f"  torch  {torch.__version__}  cuda={torch.cuda.is_available()}")
     except ImportError:
+        # Optional: PyTorch not installed (TalkNet gates will be skipped)
         pass
     print("Setup complete.")
 
 install()
 
 # ─── Step 1: Import the full validation script ───────────────────────────────
-
-import os, sys
 
 # If running from Colab, the script lives in the same dir or can be fetched
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

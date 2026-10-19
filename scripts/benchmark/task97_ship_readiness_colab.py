@@ -53,15 +53,12 @@ import json
 import math
 import os
 import pickle
-import platform
 import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 # ─── Colour helpers ───────────────────────────────────────────────────────────
 def _c(code, text): return f"\033[{code}m{text}\033[0m"
@@ -255,6 +252,7 @@ def _stderr_reader(pipe, timestamps):
                     try:
                         timestamps.append(float(part.split(":")[1]))
                     except ValueError:
+                        # Skip malformed pts_time tokens from ffmpeg showinfo
                         pass
                     break
     pipe.close()
@@ -400,25 +398,26 @@ def stage_interpolate(sparse_dets: Dict, duration: float,
             if tf_e <= tf_s or (tf_e - tf_s) < 2:
                 continue
             xs = np.array([tf_s, tf_e], dtype=float)
-            for bi in range(4):
-                ys = np.array([ds["bbox"][bi], de["bbox"][bi]], dtype=float)
-                fn = interp1d(xs, ys, kind="linear", fill_value="extrapolate")
-                for tf in range(tf_s + 1, tf_e):
-                    if tf < total_frames and not dets[tf]:
-                        val = float(fn(tf))
-                        # Clone as minimal det
-                        dets[tf].append({
-                            "frame": tf,
-                            "timestamp": round(tf / TARGET_FPS, 4),
-                            "bbox": [
-                                dets[tf_s][0]["bbox"][0] if dets[tf_s] else 0,
-                                dets[tf_s][0]["bbox"][1] if dets[tf_s] else 0,
-                                dets[tf_s][0]["bbox"][2] if dets[tf_s] else native_w,
-                                dets[tf_s][0]["bbox"][3] if dets[tf_s] else native_h,
-                            ],
-                            "conf": 0.5,
-                        })
-                        break  # one det per frame from interpolation
+            b_s = ds["bbox"]
+            b_e = de["bbox"]
+            interps = [
+                interp1d(xs, [b_s[k], b_e[k]], kind="linear", fill_value="extrapolate")
+                for k in range(4)
+            ]
+            for tf in range(tf_s + 1, tf_e):
+                if tf < total_frames and not dets[tf]:
+                    bb = [float(interps[k](tf)) for k in range(4)]
+                    dets[tf].append({
+                        "frame": tf,
+                        "timestamp": round(tf / TARGET_FPS, 4),
+                        "bbox": [
+                            max(0, int(bb[0])),
+                            max(0, int(bb[1])),
+                            min(native_w, int(bb[2])),
+                            min(native_h, int(bb[3])),
+                        ],
+                        "conf": 0.5,
+                    })
 
     n_filled = sum(1 for d in dets if d)
     print(f"    [S4] {n_filled}/{total_frames} frames have detections after interpolation")
@@ -564,9 +563,6 @@ def stage_crop(
         med_y1 = int(np.median(bboxes_arr[:, 1]))
         med_x2 = int(np.median(bboxes_arr[:, 2]))
         med_y2 = int(np.median(bboxes_arr[:, 3]))
-
-        face_w = med_x2 - med_x1
-        face_h = med_y2 - med_y1
 
         # Production AutoFlip 9:16 vertical reframe
         crop_h = (native_h // 2) * 2
