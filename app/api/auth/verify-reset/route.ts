@@ -1,7 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { hash, compare } from "bcryptjs";
 import { NextResponse } from "next/server";
-import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { isPasswordResetRateLimited } from "@/app/lib/auth/passwordResetProtection";
 import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 import crypto from "crypto";
 
@@ -52,11 +52,7 @@ export async function POST(req: Request) {
     }
 
     // same guessing budget as the legacy reset route
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded
-      ? forwarded.split(",")[0].trim()
-      : req.headers.get("x-real-ip")?.trim() || "unknown";
-    if (await isRateLimited(`verify-reset:${ip}:${String(email).toLowerCase()}`, 5, 900, true)) {
+    if (await isPasswordResetRateLimited(email, req.headers, "reset-attempt")) {
       return NextResponse.json(
         { error: "Too many attempts, please try again later." },
         { status: 429 }

@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import crypto from "crypto";
-import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { isPasswordResetRateLimited } from "@/app/lib/auth/passwordResetProtection";
 import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 
 const MAX_AUTH_BODY_BYTES = 8 * 1024;
@@ -38,11 +38,7 @@ export async function POST(req: Request) {
     }
 
     // keep inbox spam and guessing cheap: 5 sends per 15 minutes
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded
-      ? forwarded.split(",")[0].trim()
-      : req.headers.get("x-real-ip")?.trim() || "unknown";
-    if (await isRateLimited(`request-reset:${ip}:${email.toLowerCase()}`, 5, 900, true)) {
+    if (await isPasswordResetRateLimited(email, req.headers, "request-link")) {
       return NextResponse.json(
         { error: "Too many attempts, please try again later" },
         { status: 429 }
