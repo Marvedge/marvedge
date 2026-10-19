@@ -1,0 +1,86 @@
+[
+  {
+    "label": "source_candidate_1",
+    "path": "public/icons/1.mp4",
+    "status": "READ_OK",
+    "bytes": 2481389,
+    "sha256": "7e460aa9a8d3f320dd8fad931dd282cc7d2ac9ce27bc33f1c12324f4f9285211",
+    "width": 1280,
+    "height": 720,
+    "fps": 24.0,
+    "frame_count": 192,
+    "duration_seconds": 8.0,
+    "aspect_ratio": 1.7777777777777777,
+    "sampled_frames_mean_luminance": [
+      {
+        "position_fraction": 0.1,
+        "mean_luminance_0_255": 167.59883138020834
+      },
+      {
+        "position_fraction": 0.5,
+        "mean_luminance_0_255": 170.15399739583333
+      },
+      {
+        "position_fraction": 0.9,
+        "mean_luminance_0_255": 153.78599500868054
+      }
+    ],
+    "note": "Luminance is a basic sampled-frame diagnostic, not a crop-quality score."
+  },
+  {
+    "label": "source_candidate_2",
+    "path": "public/icons/2.mp4",
+    "status": "READ_OK",
+    "bytes": 2645744,
+    "sha256": "eaa5e6a8622b11fd8d5086a234766d1e117448318cfc6b3d5028dc6ba997f850",
+    "width": 1280,
+    "height": 720,
+    "fps": 24.0,
+    "frame_count": 192,
+    "duration_seconds": 8.0,
+    "aspect_ratio": 1.7777777777777777,
+    "sampled_frames_mean_luminance": [
+      {
+        "position_fraction": 0.1,
+        "mean_luminance_0_255": 166.655673828125
+      },
+      {
+        "position_fraction": 0.5,
+        "mean_luminance_0_255": 177.065087890625
+      },
+      {
+        "position_fraction": 0.9,
+        "mean_luminance_0_255": 166.59569010416666
+      }
+    ],
+    "note": "Luminance is a basic sampled-frame diagnostic, not a crop-quality score."
+  },
+  {
+    "label": "existing_portrait_output",
+    "path": "task-70-demo/1_captioned_cropped_9x16.mp4",
+    "status": "READ_OK",
+    "bytes": 552418,
+    "sha256": "51ebe41d49fd867d59dfacbac515d919fc6f1bf332a872216e8a05107c7184e0",
+    "width": 404,
+    "height": 720,
+    "fps": 24.0,
+    "frame_count": 192,
+    "duration_seconds": 8.0,
+    "aspect_ratio": 0.5611111111111111,
+    "sampled_frames_mean_luminance": [
+      {
+        "position_fraction": 0.1,
+        "mean_luminance_0_255": 149.26882907040704
+      },
+      {
+        "position_fraction": 0.5,
+        "mean_luminance_0_255": 153.87766776677668
+      },
+      {
+        "position_fraction": 0.9,
+        "mean_luminance_0_255": 145.93271108360835
+      }
+    ],
+    "note": "Luminance is a basic sampled-frame diagnostic, not a crop-quality score."
+  }
+]
