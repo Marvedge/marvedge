@@ -23,6 +23,7 @@ The repository audit did not identify an end-to-end workflow in current HEAD tha
 The AutoFlip and TalkNet service implementations exist separately. A documented crop-coordinate contract does not by itself prove that the two outputs are integrated and consumed correctly by the rendering pipeline.
 
 **Required before release:**
+
 - Confirm the data contract between speaker detections and crop targets.
 - Demonstrate the complete flow from input video through tracking/crop generation to rendered output.
 - Add integration coverage for successful processing and failure handling.
@@ -39,6 +40,7 @@ At least five real long-form regression samples are not available for this valid
 Short clips or unit tests alone cannot establish performance on long recordings with speaker changes, pauses, camera movement, and changing scene composition.
 
 **Required before release:**
+
 - Run at least five representative real long-form samples through the combined pipeline.
 - Preserve input details, expected behavior, output artifacts, and observed failures.
 - Include cases with speaker changes, multiple people, movement, and difficult framing.
@@ -50,6 +52,7 @@ Short clips or unit tests alone cannot establish performance on long recordings 
 **Release impact:** Blocker if it repeatedly hides the intended subject
 
 Potential failure modes include:
+
 - The active speaker's face or head is clipped.
 - The crop follows a secondary person or irrelevant object.
 - Crop targets move too abruptly or oscillate.
@@ -66,6 +69,7 @@ These are validation targets, not claims that every failure has already been rep
 **Release impact:** Blocker when tracking failures cause unacceptable framing
 
 Potential difficult cases include:
+
 - The speaker is briefly occluded or leaves the frame.
 - Multiple people appear together.
 - Faces are small, turned away, or poorly lit.
@@ -89,6 +93,7 @@ The audited source defines these defaults:
 The values are configurable through environment variables. These limits may constrain large downloads, slow inputs, or long-form processing, but the audit alone does not prove that a particular video will time out.
 
 **Required before release:**
+
 - Measure download and processing duration on representative inputs.
 - Record timeouts and confirm that failures return a clear error.
 - Establish supported input-duration and file-size limits.
@@ -98,16 +103,16 @@ The values are configurable through environment variables. These limits may cons
 
 The combined pipeline should not be declared release-ready until all required gates below have evidence.
 
-| Gate | Minimum acceptance criterion |
-|---|---|
+| Gate                   | Minimum acceptance criterion                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | End-to-end integration | A reproducible test demonstrates TalkNet speaker tracking and AutoFlip crop targets working together through the intended rendering path. |
-| Regression coverage | At least five representative real long-form samples are processed and reviewed. |
-| Subject visibility | No unresolved critical failure that persistently crops out the intended speaker's face or head in the reviewed release set. |
-| Framing stability | No unresolved severe crop jumps, oscillation, or delayed reframing that makes the output unusable. |
-| Speaker transitions | Representative speaker changes and ambiguous/missing detections are tested; behavior and fallback are documented. |
-| Reliability | Failures and timeouts are surfaced clearly; no silent success is reported for incomplete processing. |
-| Performance | Download and processing durations are recorded against documented supported input limits. |
-| Reproducibility | Test inputs, results, known failures, and the tested code revision are recorded. |
+| Regression coverage    | At least five representative real long-form samples are processed and reviewed.                                                           |
+| Subject visibility     | No unresolved critical failure that persistently crops out the intended speaker's face or head in the reviewed release set.               |
+| Framing stability      | No unresolved severe crop jumps, oscillation, or delayed reframing that makes the output unusable.                                        |
+| Speaker transitions    | Representative speaker changes and ambiguous/missing detections are tested; behavior and fallback are documented.                         |
+| Reliability            | Failures and timeouts are surfaced clearly; no silent success is reported for incomplete processing.                                      |
+| Performance            | Download and processing durations are recorded against documented supported input limits.                                                 |
+| Reproducibility        | Test inputs, results, known failures, and the tested code revision are recorded.                                                          |
 
 These are proposed release criteria for this task, not a claim that the pipeline currently passes them. Any quantitative quality target should be agreed with the project owner and measured consistently before being used as a release threshold.
 
@@ -116,6 +121,7 @@ These are proposed release criteria for this task, not a claim that the pipeline
 **Current recommendation: Not yet validated for release as a combined AutoFlip + TalkNet crop pipeline.**
 
 The principal reasons are:
+
 1. End-to-end integration was not identified in the audited current HEAD.
 2. Five or more real long-form regression samples are not available for full combined-quality validation.
 3. Cropping, tracking, framing, and timeout behavior still require representative end-to-end evidence.
@@ -127,6 +133,7 @@ This decision does not mean the individual AutoFlip or TalkNet services are nece
 The audit inspected AutoFlip and TalkNet service configuration, repository references, and the current working-tree status.
 
 The configured timeout defaults are recorded from:
+
 - `autoflip/service.py`
 - `talknet/service.py`
 
