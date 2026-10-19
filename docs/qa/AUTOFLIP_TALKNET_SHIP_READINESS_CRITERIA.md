@@ -295,3 +295,65 @@ Task-00097 is complete when:
 3. Each gate has an owner assigned and a target completion date in the sprint backlog.
 
 The **ship decision itself** (all gates PASS) is a separate event and is not in scope for Task-00097.
+
+---
+
+## 10. Executable Validation Scripts
+
+Two Python scripts in `scripts/benchmark/` implement this document as runnable code:
+
+### `task97_ship_readiness_colab.py`
+
+The full validation pipeline. Self-contained, runs anywhere Python ≥ 3.8 is available.
+
+```bash
+# On your machine or Colab T4 instance:
+python scripts/benchmark/task97_ship_readiness_colab.py \
+    --videoPath  /path/to/test_video.mp4 \
+    --outputDir  /tmp/task97_output \
+    --installDeps
+
+# Produces: /tmp/task97_output/pywork/task97_gate_report.json
+```
+
+### `task97_colab_runner.py`
+
+Colab-optimised wrapper. Upload your video to `/content/`, then:
+
+```bash
+# In a Colab cell:
+!python scripts/benchmark/task97_colab_runner.py \
+    --videoPath /content/your_video.mp4
+
+# Downloads task97_gate_report.json to /content/ automatically.
+```
+
+### What the scripts validate automatically
+
+All 16 measurable gates from §3–§5 are evaluated end-to-end:
+
+- **AF-01** — Face bbox inside crop window (≥ 90 %)
+- **AF-02** — Crop trajectory stability (no jump > 15 % output width)
+- **AF-03** — Aspect-ratio correctness (100 %)
+- **AF-04** — Spatial boundary invariant (100 %)
+- **AF-05 / TN-04** — No crash on input video (any duration)
+- **AF-06 / TN-06** — Temp directory cleanup
+- **AF-07** — No silent success for empty output
+- **TN-01** — Speaker containment ≥ 85 %
+- **TN-02** — Confidence calibration (detection rate sanity)
+- **TN-03** — Identity stability (centroid drift check)
+- **TN-07** — Response contract compliance
+- **CP-01** — End-to-end integration demonstrated
+- **CP-02** — Throughput within tiered wall-clock limit
+- **CP-03** — Unit suite — 0 failures (subprocess pytest)
+
+### Optimisations active in the scripts
+
+| Optimisation | Flag/Setting | Effect |
+|---|---|---|
+| I-frame only decoding | `-skip_frame nokey -flags2 fast` | Decodes ~1200 of 108000 frames for a 60-min video (90× reduction) |
+| YuNet ONNX CPU detection | OpenCV `FaceDetectorYN` | Frees 100% of GPU VRAM for downstream TalkNet inference |
+| `detScale=0.25` | `--detScale 0.25` | Detects faces at ¼ native resolution (16× fewer pixels per frame) |
+| scipy interp1d interpolation | Stage 4 | Fills 25-fps timeline from sparse keyframe detections |
+| IoU tracker + spatial merge | Stage 5 | Collapses 1000s of raw tracks to 10–30 clean ones |
+| Single-command FFmpeg crop | Stage 6 | 1 subprocess call per track (vs 3 previously) |
