@@ -59,9 +59,7 @@ describe("POST /api/views updates", () => {
       exportedVideoId: null,
     } as never);
 
-    const res = await POST(
-      makeRequest({ viewId: "view-1", duration: 10, demoId: "demo-other" })
-    );
+    const res = await POST(makeRequest({ viewId: "view-1", duration: 10, demoId: "demo-other" }));
 
     expect(res.status).toBe(403);
     expect(prisma.view.update).not.toHaveBeenCalled();
@@ -75,9 +73,7 @@ describe("POST /api/views updates", () => {
     } as never);
     vi.mocked(prisma.view.update).mockResolvedValue({ id: "view-1" } as never);
 
-    const res = await POST(
-      makeRequest({ viewId: "view-1", duration: 10, demoId: "demo-1" })
-    );
+    const res = await POST(makeRequest({ viewId: "view-1", duration: 10, demoId: "demo-1" }));
 
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -107,11 +103,32 @@ describe("POST /api/views updates", () => {
   it("still returns 404 for an unknown viewId", async () => {
     vi.mocked(prisma.view.findUnique).mockResolvedValue(null);
 
-    const res = await POST(
-      makeRequest({ viewId: "view-missing", duration: 10, demoId: "demo-1" })
-    );
+    const res = await POST(makeRequest({ viewId: "view-missing", duration: 10, demoId: "demo-1" }));
 
     expect(res.status).toBe(404);
+    expect(prisma.view.update).not.toHaveBeenCalled();
+  });
+  it("rejects an oversized request before rate limiting or database work", async () => {
+    const request = new NextRequest("http://localhost:3000/api/views", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        padding: "a".repeat(9 * 1024),
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: "Request body too large",
+    });
+
+    expect(isRateLimited).not.toHaveBeenCalled();
+    expect(prisma.view.findUnique).not.toHaveBeenCalled();
+    expect(prisma.view.create).not.toHaveBeenCalled();
     expect(prisma.view.update).not.toHaveBeenCalled();
   });
 });

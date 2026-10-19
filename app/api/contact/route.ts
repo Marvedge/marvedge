@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
 import { Resend } from "resend";
 
 export const runtime = "nodejs";
+
+const MAX_BODY_BYTES = 16 * 1024;
 
 // escape user input before putting it into the notification email
 function escapeHtml(value: string): string {
@@ -35,7 +38,40 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { name, email, message, company, productUrl, turnstileToken } = await req.json();
+    const bodyResult = await readBoundedRequestJson(req, MAX_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error: bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request",
+        },
+        {
+          status: bodyResult.reason === "too_large" ? 413 : 400,
+        }
+      );
+    }
+
+    if (
+      typeof bodyResult.value !== "object" ||
+      bodyResult.value === null ||
+      Array.isArray(bodyResult.value)
+    ) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+
+    const body = bodyResult.value as Record<string, unknown>;
+
+    const name = typeof body.name === "string" ? body.name : "";
+
+    const email = typeof body.email === "string" ? body.email : "";
+
+    const message = typeof body.message === "string" ? body.message : "";
+
+    const company = typeof body.company === "string" ? body.company : "";
+
+    const productUrl = typeof body.productUrl === "string" ? body.productUrl : "";
+
+    const turnstileToken = typeof body.turnstileToken === "string" ? body.turnstileToken : "";
 
     if (!name || !email) {
       return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
