@@ -560,9 +560,7 @@ def stage_crop(
         # Compute representative crop from median bbox
         bboxes_arr = np.array(bboxes)
         med_x1 = int(np.median(bboxes_arr[:, 0]))
-        med_y1 = int(np.median(bboxes_arr[:, 1]))
         med_x2 = int(np.median(bboxes_arr[:, 2]))
-        med_y2 = int(np.median(bboxes_arr[:, 3]))
 
         # Production AutoFlip 9:16 vertical reframe
         crop_h = (native_h // 2) * 2
