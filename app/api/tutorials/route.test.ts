@@ -171,9 +171,7 @@ describe("/api/tutorials upload caps (#445)", () => {
   });
 
   it("rejects more than 30 slides without uploading", async () => {
-    const slides = Array.from({ length: 31 }, (_, i) =>
-      makeSlide({ title: `Slide ${i + 1}` })
-    );
+    const slides = Array.from({ length: 31 }, (_, i) => makeSlide({ title: `Slide ${i + 1}` }));
     const response = await POST(makeTutorialRequest(slides));
     expect(response.status).toBe(413);
     expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
@@ -217,16 +215,86 @@ describe("/api/tutorials upload caps (#445)", () => {
     expect(prisma.tutorial.create).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized body without a Content-Length header", async () => {
+    const request = new NextRequest("http://localhost:3000/api/tutorials", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        padding: "a".repeat(8 * 1024 * 1024),
+      }),
+    });
+
+    expect(request.headers.has("content-length")).toBe(false);
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: "Request body too large",
+    });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.tutorial.create).not.toHaveBeenCalled();
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
+  });
+
+  it.each(["{", "null", "[]"])("returns 400 for an invalid JSON object: %s", async (body) => {
+    const request = new NextRequest("http://localhost:3000/api/tutorials", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Invalid request body",
+    });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.tutorial.create).not.toHaveBeenCalled();
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
+  });
+
+  it("preserves the existing 5MiB decoded-image allowance", async () => {
+    const image = Buffer.alloc(5 * 1024 * 1024);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(image);
+
+    vi.mocked(prisma.tutorial.create).mockResolvedValueOnce({
+      id: "tutorial-1",
+    } as never);
+
+    const response = await POST(
+      makeTutorialRequest([
+        makeSlide({
+          imageData: `data:image/png;base64,${image.toString("base64")}`,
+        }),
+      ])
+    );
+
+    expect(response.status).toBe(200);
+    expect(cloudinary.uploader.upload_stream).toHaveBeenCalledTimes(1);
+    expect(prisma.tutorial.create).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 429 when the user exceeds 10 saves per minute", async () => {
     vi.mocked(isRateLimited).mockResolvedValueOnce(true);
     const response = await POST(makeTutorialRequest());
     expect(response.status).toBe(429);
     const body = await response.json();
     expect(body.error).toContain("Too many requests");
-    expect(isRateLimited).toHaveBeenCalledWith(
-      expect.stringContaining("tutorials:"),
+    expect(isRateLimited).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/^tutorials:account:[a-f0-9]{64}$/),
       10,
-      60
+      60,
+      true
+    );
+    expect(isRateLimited).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/^tutorials:ip:[a-f0-9]{64}$/),
+      20,
+      60,
+      true
     );
     expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
     expect(prisma.tutorial.create).not.toHaveBeenCalled();
