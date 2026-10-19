@@ -2,7 +2,10 @@ import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 import crypto from "crypto";
+
+const MAX_AUTH_BODY_BYTES = 8 * 1024;
 
 export const runtime = "nodejs";
 
@@ -15,8 +18,24 @@ function clientKey(req: Request, email: string): string {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
+
+  if (!bodyResult.ok) {
+    return NextResponse.json(
+      {
+        error:
+          bodyResult.reason === "too_large"
+            ? "Request body too large"
+            : "Email and OTP are required",
+      },
+      {
+        status: bodyResult.reason === "too_large" ? 413 : 400,
+      }
+    );
+  }
+
+  const body = bodyResult.value;
+  const email = typeof body.email === "string" ? body.email.trim() : "";
   const otp = typeof body?.otp === "string" ? body.otp : "";
   const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
 

@@ -2,7 +2,10 @@ import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 import { createHash } from "node:crypto";
+
+const MAX_AUTH_BODY_BYTES = 8 * 1024;
 
 const SIGNUP_SUCCESS_MESSAGE =
   "If this email is available, your account has been created. You can now sign in.";
@@ -20,12 +23,20 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 export async function POST(req: Request) {
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
+
+  if (!bodyResult.ok) {
+    return NextResponse.json(
+      {
+        error: bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request",
+      },
+      {
+        status: bodyResult.reason === "too_large" ? 413 : 400,
+      }
+    );
   }
+
+  const body = bodyResult.value;
 
   try {
     const { name, email, password } = body || {};

@@ -114,3 +114,25 @@ export async function readBoundedRequestJson(
     };
   }
 }
+export async function readBoundedRequestJsonObject(
+  request: Request,
+  maxBytes: number
+): Promise<BoundedBodyResult<Record<string, unknown>>> {
+  const result = await readBoundedRequestJson(request, maxBytes);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  if (typeof result.value !== "object" || result.value === null || Array.isArray(result.value)) {
+    return {
+      ok: false,
+      reason: "invalid_json",
+    };
+  }
+
+  return {
+    ok: true,
+    value: result.value as Record<string, unknown>,
+  };
+}

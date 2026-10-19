@@ -5,13 +5,24 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import crypto from "crypto";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
+
+const MAX_AUTH_BODY_BYTES = 8 * 1024;
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    let email = typeof body?.email === "string" ? body.email.trim() : "";
+    const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
+
+    if (!bodyResult.ok && bodyResult.reason === "too_large") {
+      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+    }
+
+    // Preserve the authenticated no-email fallback used by account settings.
+    const body = bodyResult.ok ? bodyResult.value : {};
+
+    let email = typeof body.email === "string" ? body.email.trim() : "";
     const authenticatedOnly = Boolean(body?.authenticatedOnly);
 
     if (!email) {
