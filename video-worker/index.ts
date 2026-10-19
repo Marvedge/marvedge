@@ -14,7 +14,7 @@ import axios from "axios";
 import { createDubbingJob, waitForDubbingCompletion } from "../app/lib/elevenlabs/dubbing";
 import { buildDrawtextFontOption, downloadUrlToFile } from "./safe-download";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
-import { postJobCallbackWithRetry, processDubbingJob } from "../app/lib/avs/dubbingProcessor";
+import { postJobCallbackWithRetry, processDubbingJob, defaultUploadToCloudinary } from "../app/lib/avs/dubbingProcessor";
 import { runSubtitleJobWithRetry } from "./subtitleRetry";
 import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
 import { updateCompletedJobProgress } from "./completedJobProgress";
@@ -478,8 +478,32 @@ async function downloadVideo(url: string, outputPath: string): Promise<void> {
   await downloadUrlToFile(url, outputPath);
 }
 
-async function downloadFile(url: string, outputPath: string): Promise<void> {
-  await downloadUrlToFile(url, outputPath);
+async function downloadFile(
+  url: string,
+  outputPath: string,
+  headers?: Record<string, string>
+): Promise<void> {
+  const writer = fs.createWriteStream(outputPath);
+
+  try {
+    const response = await axios({
+      url,
+      method: "GET",
+      responseType: "stream",
+      headers,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      response.data.on("error", reject);
+      writer.on("error", reject);
+      writer.on("finish", resolve);
+      response.data.pipe(writer);
+    });
+  } catch (error) {
+    writer.destroy();
+    await fs.promises.rm(outputPath, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 function writeRoundedMaskPgm(
@@ -1761,23 +1785,43 @@ export const dubbingWorker = new Worker(
         await job.updateProgress(25);
 
         const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
-        const audioEndpoint = `/api/dubbing/${jobId}/audio`;
-        await prisma.videoJob.update({
-          where: { id: jobId },
-          data: {
-            status: "COMPLETED",
-            progress: 100,
-            exportedUrl: audioEndpoint,
-            jobData: {
-              kind: "DUBBING",
-              sourceUrl,
-              targetLanguage,
-              dubbingId: completedJob.dubbingId,
-              providerStatus: completedJob.status,
-              audioEndpoint,
+        // Download the generated audio and persist it before marking the job complete.
+        const audioEndpoint = `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`;
+        const audioUrl = `https://api.elevenlabs.io${audioEndpoint}`;
+        const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-dub-audio-"));
+        try {
+          const tempFile = path.join(tempDir, "audio.mp3");
+          const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+          if (!apiKey) {
+            throw new Error("Missing ELEVENLABS_API_KEY");
+          }
+
+          await downloadFile(audioUrl, tempFile, {
+            "xi-api-key": apiKey,
+          });
+          const uploadResult = await defaultUploadToCloudinary(tempFile);
+          if (!uploadResult?.secure_url) {
+            throw new Error("Cloudinary upload returned no secure_url for audio");
+          }
+
+          await prisma.videoJob.update({
+            where: { id: jobId },
+            data: {
+              status: "COMPLETED",
+              progress: 100,
+              jobData: {
+                kind: "DUBBING",
+                sourceUrl,
+                targetLanguage,
+                dubbingId: completedJob.dubbingId,
+                providerStatus: completedJob.status,
+                audioEndpoint: uploadResult.secure_url,
+              },
             },
-          },
-        });
+          });
+        } finally {
+          await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        }
         await updateCompletedJobProgress(jobId, "Dubbing", () => job.updateProgress(100));
       },
       persistFailure: async (message) => {
