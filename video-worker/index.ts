@@ -1,3 +1,4 @@
+import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Worker, Job } from "bullmq";
 import { PrismaClient } from "@prisma/client";
@@ -58,7 +59,14 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
-const workerConcurrency = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || "1", 10) || 1);
+const workerConcurrency = validateWorkerConcurrency(
+  process.env.WORKER_CONCURRENCY,
+  "WORKER_CONCURRENCY",
+  {
+    isProduction: process.env.NODE_ENV === "production",
+    requireBenchmarkApproved: process.env.NODE_ENV === "production",
+  }
+);
 const prisma = new PrismaClient({
   datasourceUrl: (process.env.DATABASE_URL || "").replace(
     "?sslmode=require",

@@ -1,3 +1,5 @@
+import { resolveCallbackBaseUrl } from "../app/lib/jobs/callbackClient";
+import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 // Configuration loader for the lightweight Reframe Worker (Task-00023 / Task-00029).
 //
 // Reads and validates environment variables for BullMQ Redis, backend callback,
@@ -59,11 +61,7 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
 
   const redisUrl = process.env.REDIS_URL?.trim() || "redis://localhost:6379";
 
-  const rawBackendUrl =
-    process.env.BACKEND_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    "http://localhost:3000";
-  const backendUrl = rawBackendUrl.replace(/\/+$/, "");
+  const backendUrl = resolveCallbackBaseUrl();
 
   const callbackSecret = process.env.CALLBACK_SECRET?.trim() || "";
   if (!callbackSecret) {
@@ -87,14 +85,14 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
   const mlTimeoutMs =
     Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 180000;
 
-  const parsedConcurrency = Number.parseInt(
-    process.env.REFRAME_WORKER_CONCURRENCY || "1",
-    10
+  const workerConcurrency = validateWorkerConcurrency(
+    process.env.REFRAME_WORKER_CONCURRENCY,
+    "REFRAME_WORKER_CONCURRENCY",
+    {
+      isProduction: process.env.NODE_ENV === "production",
+      requireBenchmarkApproved: process.env.NODE_ENV === "production",
+    }
   );
-  const workerConcurrency =
-    Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
-      ? parsedConcurrency
-      : 1;
 
   const parsedCallbackRetries = Number.parseInt(
     process.env.REFRAME_CALLBACK_MAX_RETRIES || "3",

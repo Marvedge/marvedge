@@ -1,3 +1,4 @@
+import { resolveCallbackBaseUrl } from "../jobs/callbackClient";
 // Background dubbing processor for AVS dub-sync alignment (Task-00059).
 //
 // Runs in the BullMQ video-worker — never inline in the request/response cycle.
@@ -138,9 +139,9 @@ export async function postJobCallbackWithRetry(
     delayMs?: number;
   }
 ): Promise<void> {
-  const rawBaseUrl =
-    opts?.appUrl || process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
-  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const baseUrl = resolveCallbackBaseUrl({
+    explicitUrl: opts?.appUrl,
+  });
   const secret = (opts?.callbackSecret ?? process.env.CALLBACK_SECRET ?? "").trim();
 
   if (!secret) {

@@ -1,3 +1,8 @@
+export {
+  resolveCallbackBaseUrl,
+  isLoopbackHost,
+  type ResolveCallbackUrlOptions,
+} from "./callbackUrl";
 // Reusable HTTP client for delivering authenticated background job callbacks (Task-00026).
 //
 // Handles:
