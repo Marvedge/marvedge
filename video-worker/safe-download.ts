@@ -240,6 +240,29 @@ export function maxDownloadBytes(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_MAX_DOWNLOAD_BYTES;
 }
 
+/**
+ * Resolve a redirect Location against the current URL and re-run the full
+ * SSRF validation on the result. Every hop is checked because axios follows
+ * redirects internally — validating only the initial URL would let a public
+ * source bounce the worker onto a private address. Exported for unit tests.
+ */
+export async function resolveRedirectTarget(
+  location: unknown,
+  currentUrl: string,
+  lookupImpl?: DnsLookupFn
+): Promise<URL> {
+  if (typeof location !== "string" || location.length === 0) {
+    throw new Error("Refusing redirect without Location");
+  }
+  let resolved: URL;
+  try {
+    resolved = new URL(location, currentUrl);
+  } catch {
+    throw new Error("Refusing redirect with invalid Location");
+  }
+  return assertSafeDownloadUrl(resolved.toString(), lookupImpl);
+}
+
 export async function downloadUrlToFile(
   url: string,
   outputPath: string,
@@ -251,16 +274,24 @@ export async function downloadUrlToFile(
   const maxRedirects = options.maxRedirects ?? MAX_DOWNLOAD_REDIRECTS;
 
   const writer = fs.createWriteStream(outputPath);
+  let currentUrl = safeUrl.toString();
   let response: any;
   try {
     response = await axios({
-      url: safeUrl.toString(),
+      url: currentUrl,
       method: "GET",
       responseType: "stream",
       timeout: timeoutMs,
       maxContentLength: maxBytes,
       maxBodyLength: maxBytes,
       maxRedirects,
+      // Re-validate every redirect target: throwing here aborts the chain
+      // before axios requests the next hop.
+      beforeRedirect: async (_redirectOptions: any, redirectDetails: any) => {
+        currentUrl = (
+          await resolveRedirectTarget(redirectDetails?.headers?.location, currentUrl, options.lookupImpl)
+        ).toString();
+      },
     });
   } catch (err) {
     writer.destroy();

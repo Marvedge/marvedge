@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "fs";
 import { renderReframedVideo, type RenderReframedVideoDeps } from "./render";
-import { assertSafeDownloadUrl, defaultDownloadVideo } from "./render";
+import { assertSafeDownloadUrl, defaultDownloadVideo, resolveRedirectTarget } from "./render";
 import type { CropTargetData } from "../app/types/editor/crop-target";
 
 const validCropTargets: CropTargetData = {
@@ -287,6 +287,27 @@ describe("reframe-worker/render", () => {
       await expect(
         defaultDownloadVideo("file:///etc/passwd", "/tmp/should-not-exist.mp4")
       ).rejects.toThrow(/non-http/i);
+    });
+
+    it("refuses a redirect hop to a private address", async () => {
+      const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+      await expect(
+        resolveRedirectTarget(
+          "http://169.254.169.254/latest/meta-data",
+          "https://cdn.example.test/start.mp4",
+          publicLookup
+        )
+      ).rejects.toThrow(/blocked host/i);
+    });
+
+    it("follows a relative redirect on the same public host", async () => {
+      const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+      const resolved = await resolveRedirectTarget(
+        "/other/clip.mp4",
+        "https://cdn.example.test/start.mp4",
+        publicLookup
+      );
+      expect(resolved.toString()).toBe("https://cdn.example.test/other/clip.mp4");
     });
   });
 });

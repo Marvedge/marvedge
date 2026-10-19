@@ -10,6 +10,7 @@ import {
   downloadUrlToFile,
   escapeDrawtextFilterValue,
   resolveFontForDrawtext,
+  resolveRedirectTarget,
 } from "./safe-download";
 
 vi.mock("axios", () => ({ default: vi.fn() }));
@@ -175,5 +176,30 @@ describe("video-worker safe download URLs", () => {
       })
     ).rejects.toThrow(/blocked host/i);
     expect(axiosMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a redirect hop to a private address", async () => {
+    await expect(
+      resolveRedirectTarget(
+        "http://169.254.169.254/latest/meta-data",
+        "https://cdn.example.test/start.mp4",
+        publicLookup()
+      )
+    ).rejects.toThrow(/blocked host/i);
+  });
+
+  it("refuses a redirect without Location", async () => {
+    await expect(
+      resolveRedirectTarget(null, "https://cdn.example.test/start.mp4", publicLookup())
+    ).rejects.toThrow(/without Location/i);
+  });
+
+  it("follows a relative redirect on the same public host", async () => {
+    const resolved = await resolveRedirectTarget(
+      "/other/clip.mp4",
+      "https://cdn.example.test/start.mp4",
+      publicLookup()
+    );
+    expect(resolved.toString()).toBe("https://cdn.example.test/other/clip.mp4");
   });
 });
