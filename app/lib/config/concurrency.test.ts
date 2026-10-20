@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  INITIAL_VALIDATION_CONCURRENCY,
   BENCHMARK_APPROVED_CONCURRENCY,
+  APPROVED_CONCURRENCIES,
   validateWorkerConcurrency,
 } from "./concurrency";
 
@@ -13,7 +15,7 @@ describe("Worker Concurrency Configuration (Task-00094)", () => {
       expect(validateWorkerConcurrency(2, "TEST_CONCURRENCY", { isProduction: false })).toBe(2);
     });
 
-    it("defaults to 1 when omitted in non-production", () => {
+    it("defaults to initial validation concurrency 1 when omitted in non-production", () => {
       expect(validateWorkerConcurrency(undefined, "TEST_CONCURRENCY", { isProduction: false })).toBe(1);
       expect(validateWorkerConcurrency("", "TEST_CONCURRENCY", { isProduction: false })).toBe(1);
     });
@@ -49,26 +51,35 @@ describe("Worker Concurrency Configuration (Task-00094)", () => {
     });
   });
 
-  describe("Production benchmark-approved enforcement", () => {
+  describe("Production benchmark and validation enforcement", () => {
+    it("accepts initial validation concurrency 1 in production", () => {
+      const val = validateWorkerConcurrency("1", "REFRAME_WORKER_CONCURRENCY", {
+        isProduction: true,
+      });
+      expect(val).toBe(INITIAL_VALIDATION_CONCURRENCY);
+      expect(val).toBe(1);
+    });
+
     it("accepts benchmark-approved concurrency 4 in production", () => {
       const val = validateWorkerConcurrency("4", "REFRAME_WORKER_CONCURRENCY", {
         isProduction: true,
       });
       expect(val).toBe(BENCHMARK_APPROVED_CONCURRENCY);
+      expect(val).toBe(4);
     });
 
-    it("throws in production when concurrency is not 4", () => {
+    it("throws in production when concurrency is not an approved setting (1 or 4)", () => {
       expect(() =>
-        validateWorkerConcurrency("1", "REFRAME_WORKER_CONCURRENCY", {
+        validateWorkerConcurrency("2", "REFRAME_WORKER_CONCURRENCY", {
           isProduction: true,
         })
-      ).toThrowError(/Production concurrency misconfiguration for REFRAME_WORKER_CONCURRENCY.*received 1, but benchmark-approved setting is 4/);
+      ).toThrowError(/Production concurrency misconfiguration for REFRAME_WORKER_CONCURRENCY.*Approved settings are 1 \(initial validation\) or 4 \(benchmark-approved\)/);
 
       expect(() =>
         validateWorkerConcurrency("8", "WORKER_CONCURRENCY", {
           isProduction: true,
         })
-      ).toThrowError(/Production concurrency misconfiguration for WORKER_CONCURRENCY.*received 8, but benchmark-approved setting is 4/);
+      ).toThrowError(/Production concurrency misconfiguration for WORKER_CONCURRENCY.*Approved settings are 1 \(initial validation\) or 4 \(benchmark-approved\)/);
     });
 
     it("throws in production when concurrency is omitted", () => {

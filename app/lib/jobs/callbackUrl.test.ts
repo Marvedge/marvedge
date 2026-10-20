@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isLoopbackHost, resolveCallbackBaseUrl } from "./callbackUrl";
+import {
+  buildCallbackUrl,
+  isLoopbackHost,
+  resolveCallbackBaseUrl,
+} from "./callbackUrl";
 
 describe("Callback Base URL Resolution (Task-00094)", () => {
   describe("isLoopbackHost", () => {
@@ -17,6 +21,29 @@ describe("Callback Base URL Resolution (Task-00094)", () => {
       expect(isLoopbackHost("http://172.31.8.120:8080")).toBe(false);
       expect(isLoopbackHost("http://10.0.0.5:3000")).toBe(false);
       expect(isLoopbackHost("https://marvedge.internal")).toBe(false);
+    });
+  });
+
+  describe("buildCallbackUrl (Callback Construction)", () => {
+    it("constructs canonical callback URL from base URL", () => {
+      expect(buildCallbackUrl("https://api.marvedge.com")).toBe(
+        "https://api.marvedge.com/api/jobs/callback"
+      );
+    });
+
+    it("strips trailing slashes before appending /api/jobs/callback", () => {
+      expect(buildCallbackUrl("https://api.marvedge.com/")).toBe(
+        "https://api.marvedge.com/api/jobs/callback"
+      );
+      expect(buildCallbackUrl("https://api.marvedge.com///")).toBe(
+        "https://api.marvedge.com/api/jobs/callback"
+      );
+    });
+
+    it("handles URL with custom port", () => {
+      expect(buildCallbackUrl("http://172.31.8.120:3000")).toBe(
+        "http://172.31.8.120:3000/api/jobs/callback"
+      );
     });
   });
 
@@ -128,6 +155,28 @@ describe("Callback Base URL Resolution (Task-00094)", () => {
       ).toThrowError(/Accidental localhost callback target detected in production/);
     });
 
+    it("throws in production when resolved URL is 0.0.0.0", () => {
+      expect(() =>
+        resolveCallbackBaseUrl({
+          env: {
+            NODE_ENV: "production",
+            BACKEND_URL: "http://0.0.0.0:3000",
+          },
+        })
+      ).toThrowError(/Accidental localhost callback target detected in production/);
+    });
+
+    it("throws in production when protocol is non-http/https", () => {
+      expect(() =>
+        resolveCallbackBaseUrl({
+          env: {
+            NODE_ENV: "production",
+            BACKEND_URL: "ftp://files.marvedge.com",
+          },
+        })
+      ).toThrowError(/Invalid protocol in production callback URL: "ftp:"/);
+    });
+
     it("allows localhost in production when allowLocalhostInProduction option is true", () => {
       const url = resolveCallbackBaseUrl({
         allowLocalhostInProduction: true,
@@ -147,6 +196,16 @@ describe("Callback Base URL Resolution (Task-00094)", () => {
         },
       });
       expect(url).toBe("https://api.marvedge.com");
+    });
+
+    it("accepts valid production VPC private IP addresses", () => {
+      const url = resolveCallbackBaseUrl({
+        env: {
+          NODE_ENV: "production",
+          INTERNAL_API_URL: "http://172.31.8.120:3000",
+        },
+      });
+      expect(url).toBe("http://172.31.8.120:3000");
     });
   });
 });

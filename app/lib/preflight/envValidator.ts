@@ -1,10 +1,10 @@
 // Preflight Environment Validator (Task-00094).
 //
 // Validates deployment readiness across:
-// 1. "app"        â€” Next.js web application, NextAuth, database, storage, vendor APIs
-// 2. "worker"     â€” video-worker, reframe-worker, cloudrun-worker, Redis, concurrency
-// 3. "ml-gateway" â€” Internal FastAPI ML gateway, downstream service URLs, timeouts
-// 4. "all"        â€” Unified complete system check
+// 1. "app"        — Next.js web application, NextAuth, database, storage, vendor APIs, Redis
+// 2. "worker"     — video-worker, reframe-worker, cloudrun-worker, Redis, concurrency
+// 3. "ml-gateway" — Internal FastAPI ML gateway, downstream service URLs, timeouts
+// 4. "all"        — Unified complete system check
 //
 // SECURITY INVARIANT:
 // - NEVER prints secret values (database credentials, API keys, bearer tokens).
@@ -13,7 +13,10 @@
 // ZERO Prisma / Postgres imports.
 
 import { isLoopbackHost, resolveCallbackBaseUrl } from "../jobs/callbackUrl";
-import { BENCHMARK_APPROVED_CONCURRENCY } from "../config/concurrency";
+import {
+  INITIAL_VALIDATION_CONCURRENCY,
+  BENCHMARK_APPROVED_CONCURRENCY,
+} from "../config/concurrency";
 
 export type PreflightTarget = "app" | "worker" | "ml-gateway" | "all";
 
@@ -131,9 +134,63 @@ export function validatePreflightEnv(
     return val;
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function validateRedisConfig(scope: PreflightTarget, isRequiredInProd: boolean) {
+    const redisVal = env.REDIS_URL?.trim();
+    if (!redisVal) {
+      if (isRequiredInProd && isProduction) {
+        recordCheck(
+          "REDIS_URL",
+          scope,
+          "MISSING",
+          `REDIS_URL is required in production for ${scope === "app" ? "BullMQ queue dispatch" : "BullMQ workers"} to shared Redis (e.g. AWS ElastiCache).`
+        );
+      } else if (scope === "worker") {
+        recordCheck("REDIS_URL", scope, "MISSING", "Required environment variable REDIS_URL is missing.");
+      } else {
+        recordCheck("REDIS_URL", scope, "OK");
+      }
+      return;
+    }
+
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(redisVal);
+    const withProto = hasScheme ? redisVal : `redis://${redisVal}`;
+    try {
+      const parsed = new URL(withProto);
+      if (parsed.protocol !== "redis:" && parsed.protocol !== "rediss:") {
+        recordCheck(
+          "REDIS_URL",
+          scope,
+          "INVALID",
+          `Invalid Redis protocol: "${parsed.protocol}". Expected "redis:" or "rediss:".`
+        );
+        return;
+      }
+    } catch (err) {
+      recordCheck(
+        "REDIS_URL",
+        scope,
+        "INVALID",
+        `Invalid REDIS_URL format: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return;
+    }
+
+    if (isProduction && !options.allowLocalhostInProduction && isLoopbackHost(redisVal)) {
+      recordCheck(
+        "REDIS_URL",
+        scope,
+        "INVALID",
+        `Accidental localhost Redis target detected in production: "${redisVal}". Configure a shared production Redis URL (e.g. AWS ElastiCache).`
+      );
+      return;
+    }
+
+    recordCheck("REDIS_URL", scope, "OK");
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————
   // 1. APP SCOPE
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————
   if (target === "app" || target === "all") {
     // Database
     requireVar("DATABASE_URL", "app", "PostgreSQL database connection");
@@ -172,6 +229,9 @@ export function validatePreflightEnv(
       }
     }
 
+    // Redis validation for App (BullMQ queue dispatch)
+    validateRedisConfig("app", true);
+
     // In production
     if (isProduction) {
       // Cloudinary
@@ -184,7 +244,7 @@ export function validatePreflightEnv(
 
       // Callback URL validation in production
       try {
-        const callbackUrl = resolveCallbackBaseUrl({
+        resolveCallbackBaseUrl({
           env,
           isProduction,
           allowLocalhostInProduction: options.allowLocalhostInProduction,
@@ -201,12 +261,12 @@ export function validatePreflightEnv(
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————
   // 2. WORKER SCOPE
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————
   if (target === "worker" || target === "all") {
     // Redis for BullMQ queues
-    requireVar("REDIS_URL", "worker", "Redis instance for BullMQ queues");
+    validateRedisConfig("worker", true);
 
     // Callback Secret for workers reporting back
     requireVar("CALLBACK_SECRET", "worker", "Shared secret to authenticate callbacks to /api/jobs/callback");
@@ -225,51 +285,39 @@ export function validatePreflightEnv(
     }
 
     // Concurrency validation
-    const reframeConcurrency = env.REFRAME_WORKER_CONCURRENCY?.trim();
-    if (reframeConcurrency) {
-      if (!/^\d+$/.test(reframeConcurrency) || Number.parseInt(reframeConcurrency, 10) < 1) {
-        recordCheck("REFRAME_WORKER_CONCURRENCY", "worker", "INVALID", `Invalid REFRAME_WORKER_CONCURRENCY: "${reframeConcurrency}". Must be positive integer.`);
-      } else if (isProduction && Number.parseInt(reframeConcurrency, 10) !== BENCHMARK_APPROVED_CONCURRENCY) {
+    const validateConcurrencySetting = (name: string, rawVal: string | undefined) => {
+      if (rawVal) {
+        if (!/^\d+$/.test(rawVal) || Number.parseInt(rawVal, 10) < 1) {
+          recordCheck(name, "worker", "INVALID", `Invalid ${name}: "${rawVal}". Must be positive integer.`);
+        } else {
+          const parsed = Number.parseInt(rawVal, 10);
+          if (
+            isProduction &&
+            parsed !== INITIAL_VALIDATION_CONCURRENCY &&
+            parsed !== BENCHMARK_APPROVED_CONCURRENCY
+          ) {
+            recordCheck(
+              name,
+              "worker",
+              "INVALID",
+              `Production concurrency misconfiguration: ${name} is ${rawVal}. Approved settings are ${INITIAL_VALIDATION_CONCURRENCY} (initial validation) or ${BENCHMARK_APPROVED_CONCURRENCY} (benchmark-approved).`
+            );
+          } else {
+            recordCheck(name, "worker", "OK");
+          }
+        }
+      } else if (isProduction) {
         recordCheck(
-          "REFRAME_WORKER_CONCURRENCY",
+          name,
           "worker",
-          "INVALID",
-          `Production concurrency misconfiguration: REFRAME_WORKER_CONCURRENCY is ${reframeConcurrency}, expected benchmark-approved setting ${BENCHMARK_APPROVED_CONCURRENCY}.`
+          "MISSING",
+          `Missing required production setting: ${name} must be explicitly set to ${INITIAL_VALIDATION_CONCURRENCY} (initial validation) or ${BENCHMARK_APPROVED_CONCURRENCY} (benchmark-approved).`
         );
-      } else {
-        recordCheck("REFRAME_WORKER_CONCURRENCY", "worker", "OK");
       }
-    } else if (isProduction) {
-      recordCheck(
-        "REFRAME_WORKER_CONCURRENCY",
-        "worker",
-        "MISSING",
-        `Missing required production setting: REFRAME_WORKER_CONCURRENCY must be explicitly set to benchmark-approved value ${BENCHMARK_APPROVED_CONCURRENCY}.`
-      );
-    }
+    };
 
-    const workerConcurrency = env.WORKER_CONCURRENCY?.trim();
-    if (workerConcurrency) {
-      if (!/^\d+$/.test(workerConcurrency) || Number.parseInt(workerConcurrency, 10) < 1) {
-        recordCheck("WORKER_CONCURRENCY", "worker", "INVALID", `Invalid WORKER_CONCURRENCY: "${workerConcurrency}". Must be positive integer.`);
-      } else if (isProduction && Number.parseInt(workerConcurrency, 10) !== BENCHMARK_APPROVED_CONCURRENCY) {
-        recordCheck(
-          "WORKER_CONCURRENCY",
-          "worker",
-          "INVALID",
-          `Production concurrency misconfiguration: WORKER_CONCURRENCY is ${workerConcurrency}, expected benchmark-approved setting ${BENCHMARK_APPROVED_CONCURRENCY}.`
-        );
-      } else {
-        recordCheck("WORKER_CONCURRENCY", "worker", "OK");
-      }
-    } else if (isProduction) {
-      recordCheck(
-        "WORKER_CONCURRENCY",
-        "worker",
-        "MISSING",
-        `Missing required production setting: WORKER_CONCURRENCY must be explicitly set to benchmark-approved value ${BENCHMARK_APPROVED_CONCURRENCY}.`
-      );
-    }
+    validateConcurrencySetting("REFRAME_WORKER_CONCURRENCY", env.REFRAME_WORKER_CONCURRENCY?.trim());
+    validateConcurrencySetting("WORKER_CONCURRENCY", env.WORKER_CONCURRENCY?.trim());
 
     // Callback base URL non-loopback in production
     if (isProduction) {
@@ -291,9 +339,9 @@ export function validatePreflightEnv(
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————
   // 3. ML GATEWAY SCOPE
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————
   if (target === "ml-gateway" || target === "all") {
     const autoflipUrl = env.AUTOFILP_SERVICE_URL?.trim() || env.AUTOFILIP_SERVICE_URL?.trim();
     if (!autoflipUrl) {
@@ -351,29 +399,29 @@ export function validatePreflightEnv(
 export function formatPreflightReport(result: PreflightResult): string {
   const lines: string[] = [];
   lines.push("===============================================================================");
-  lines.push(` MARVEDGE PREFLIGHT VALIDATION REPORT â€” TARGET: ${result.target.toUpperCase()}`);
+  lines.push(` MARVEDGE PREFLIGHT VALIDATION REPORT — TARGET: ${result.target.toUpperCase()}`);
   lines.push(` ENVIRONMENT: ${result.isProduction ? "PRODUCTION" : "DEVELOPMENT/TEST"} | STATUS: ${result.valid ? "PASS" : "FAIL"}`);
   lines.push("===============================================================================");
 
   if (result.errors.length > 0) {
-    lines.push("\nâŒ ERRORS (Must be resolved before deployment):");
+    lines.push("\n[!] ERRORS (Must be resolved before deployment):");
     for (const err of result.errors) {
       lines.push(`  - [${err.scope.toUpperCase()}] ${err.variable}: ${err.message}`);
     }
   }
 
   if (result.warnings.length > 0) {
-    lines.push("\nâš ï¸ WARNINGS:");
+    lines.push("\n[*] WARNINGS:");
     for (const warn of result.warnings) {
       lines.push(`  - [${warn.scope.toUpperCase()}] ${warn.variable}: ${warn.message}`);
     }
   }
 
-  lines.push("\nğŸ“‹ VARIABLE CHECKS:");
+  lines.push("\n[+] VARIABLE CHECKS:");
   for (const c of result.checks) {
-    const icon = c.status === "OK" ? "âœ…" : "âŒ";
+    const icon = c.status === "OK" ? "[OK]" : "[FAIL]";
     const secretTag = c.isSecret ? " (SECRET)" : "";
-    const detail = c.message ? ` â€” ${c.message}` : "";
+    const detail = c.message ? ` — ${c.message}` : "";
     lines.push(`  ${icon} [${c.scope.toUpperCase()}] ${c.name}${secretTag}: ${c.status}${detail}`);
   }
 

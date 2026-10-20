@@ -1,13 +1,19 @@
 // Worker concurrency configuration and benchmark validation (Task-00094).
 //
-// Enforces that in production environments, concurrency must match the benchmark-approved
-// value of 4 (Sprint 1 / Task-00081 / docs/GPU_COST_CONCURRENCY.md) for safe GPU throughput
-// without VRAM collision.
+// Enforces that in production environments, concurrency must match an approved setting:
+// - Concurrency 1 for initial validation and safe startup (Sprint 1 / Task-00094)
+// - Concurrency 4 for full benchmark-approved throughput without VRAM collision
+//   (Sprint 1 / Task-00081 / docs/GPU_COST_CONCURRENCY.md)
 //
 // In development/test environments, does NOT silently raise defaults (defaults to 1).
-// Rejects invalid values (NaN, negative, zero, non-integer) across all environments.
+// Rejects invalid values (NaN, negative, zero, non-integer, >4) across all environments.
 
+export const INITIAL_VALIDATION_CONCURRENCY = 1;
 export const BENCHMARK_APPROVED_CONCURRENCY = 4;
+export const APPROVED_CONCURRENCIES = [
+  INITIAL_VALIDATION_CONCURRENCY,
+  BENCHMARK_APPROVED_CONCURRENCY,
+] as const;
 
 export interface ValidateConcurrencyOptions {
   isProduction?: boolean;
@@ -31,7 +37,7 @@ export function validateWorkerConcurrency(
     options.isProduction ?? (process.env.NODE_ENV === "production");
   const requireBenchmarkApproved =
     options.requireBenchmarkApproved ?? isProduction;
-  const defaultNonProd = options.defaultNonProd ?? 1;
+  const defaultNonProd = options.defaultNonProd ?? INITIAL_VALIDATION_CONCURRENCY;
 
   // If value is explicitly provided
   if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== "") {
@@ -50,9 +56,13 @@ export function validateWorkerConcurrency(
       );
     }
 
-    if (requireBenchmarkApproved && parsed !== BENCHMARK_APPROVED_CONCURRENCY) {
+    if (
+      requireBenchmarkApproved &&
+      parsed !== INITIAL_VALIDATION_CONCURRENCY &&
+      parsed !== BENCHMARK_APPROVED_CONCURRENCY
+    ) {
       throw new Error(
-        `Production concurrency misconfiguration for ${varName}: received ${parsed}, but benchmark-approved setting is ${BENCHMARK_APPROVED_CONCURRENCY}. (See docs/GPU_COST_CONCURRENCY.md)`
+        `Production concurrency misconfiguration for ${varName}: received ${parsed}. Approved settings are ${INITIAL_VALIDATION_CONCURRENCY} (initial validation) or ${BENCHMARK_APPROVED_CONCURRENCY} (benchmark-approved). (See docs/GPU_COST_CONCURRENCY.md)`
       );
     }
 
@@ -62,7 +72,7 @@ export function validateWorkerConcurrency(
   // Value is omitted / empty
   if (requireBenchmarkApproved) {
     throw new Error(
-      `Missing required production concurrency setting: ${varName} must be explicitly set to the benchmark-approved value ${BENCHMARK_APPROVED_CONCURRENCY}.`
+      `Missing required production concurrency setting: ${varName} must be explicitly set to an approved value (${INITIAL_VALIDATION_CONCURRENCY} for initial validation or ${BENCHMARK_APPROVED_CONCURRENCY} for benchmark load).`
     );
   }
 

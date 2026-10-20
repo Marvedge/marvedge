@@ -20,7 +20,8 @@ export function isLoopbackHost(urlStr: string): boolean {
   if (!urlStr || typeof urlStr !== "string") return false;
   try {
     const trimmed = urlStr.trim();
-    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed);
+    const withProto = hasScheme ? trimmed : `http://${trimmed}`;
     const parsed = new URL(withProto);
     const hostname = parsed.hostname.toLowerCase();
     return (
@@ -34,6 +35,14 @@ export function isLoopbackHost(urlStr: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Builds the canonical callback URL for POST /api/jobs/callback.
+ */
+export function buildCallbackUrl(backendUrl: string): string {
+  const normalized = (backendUrl || "").trim().replace(/\/+$/, "");
+  return `${normalized}/api/jobs/callback`;
 }
 
 /**
@@ -51,6 +60,7 @@ export function isLoopbackHost(urlStr: string): boolean {
  * In production:
  * - Throws if no URL is provided.
  * - Throws if the resolved URL points to localhost or loopback (unless explicitly allowed).
+ * - Throws if the URL uses an invalid protocol (non-http/https) or is malformed.
  */
 export function resolveCallbackBaseUrl(options: ResolveCallbackUrlOptions = {}): string {
   const env = options.env ?? process.env;
@@ -75,14 +85,37 @@ export function resolveCallbackBaseUrl(options: ResolveCallbackUrlOptions = {}):
 
   const normalized = candidate.replace(/\/+$/, "");
 
-  const allowLocalhost =
-    options.allowLocalhostInProduction ??
-    (env.ALLOW_LOCALHOST_CALLBACK_IN_PRODUCTION === "true");
-
-  if (isProduction && !allowLocalhost && isLoopbackHost(normalized)) {
+  // URL protocol and hostname validation
+  let parsed: URL;
+  try {
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalized);
+    const withProto = hasScheme ? normalized : `http://${normalized}`;
+    parsed = new URL(withProto);
+    if (!parsed.hostname) {
+      throw new Error("Hostname is empty");
+    }
+  } catch (err) {
     throw new Error(
-      `Accidental localhost callback target detected in production: "${normalized}". Configure a production backend URL (e.g. BACKEND_URL or APP_URL).`
+      `Invalid callback URL format: "${candidate}". ${err instanceof Error ? err.message : String(err)}`
     );
+  }
+
+  if (isProduction) {
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(
+        `Invalid protocol in production callback URL: "${parsed.protocol}". Must use http:// or https://.`
+      );
+    }
+
+    const allowLocalhost =
+      options.allowLocalhostInProduction ??
+      (env.ALLOW_LOCALHOST_CALLBACK_IN_PRODUCTION === "true");
+
+    if (!allowLocalhost && isLoopbackHost(normalized)) {
+      throw new Error(
+        `Accidental localhost callback target detected in production: "${normalized}". Configure a production backend URL (e.g. BACKEND_URL or APP_URL).`
+      );
+    }
   }
 
   return normalized;

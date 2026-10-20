@@ -63,7 +63,7 @@ describe("Preflight Environment Validator (Task-00094)", () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it("enforces production app requirements (Cloudinary, Deepgram, non-loopback callback)", () => {
+    it("enforces production app requirements (Cloudinary, Deepgram, Redis, non-loopback callback)", () => {
       const devEnv = {
         DATABASE_URL: "postgresql://rds/marvedge",
         NEXTAUTH_SECRET: "prod-auth-secret",
@@ -79,6 +79,29 @@ describe("Preflight Environment Validator (Task-00094)", () => {
       expect(errorVars).toContain("CLOUDINARY_CLOUD_NAME");
       expect(errorVars).toContain("DEEPGRAM_API_KEY");
       expect(errorVars).toContain("CALLBACK_BASE_URL");
+      expect(errorVars).toContain("REDIS_URL");
+    });
+
+    it("detects unsafe localhost Redis configuration in production", () => {
+      const prodEnvWithLocalhostRedis = {
+        DATABASE_URL: "postgresql://rds/marvedge",
+        NEXTAUTH_SECRET: "prod-auth-secret",
+        CALLBACK_SECRET: "prod-cb-secret",
+        STORAGE_PROVIDER: "aws",
+        AWS_REGION: "ap-southeast-2",
+        RAW_BUCKET: "marvedge-raw-ap2",
+        PROCESSED_BUCKET: "marvedge-processed-ap2",
+        CLOUDINARY_CLOUD_NAME: "demo",
+        CLOUDINARY_API_KEY: "key",
+        CLOUDINARY_API_SECRET: "sec",
+        DEEPGRAM_API_KEY: "dg-key",
+        BACKEND_URL: "https://api.marvedge.com",
+        REDIS_URL: "redis://localhost:6379",
+      };
+      const result = validatePreflightEnv("app", prodEnvWithLocalhostRedis, { isProduction: true });
+      expect(result.valid).toBe(false);
+      const redisErr = result.errors.find((e) => e.variable === "REDIS_URL");
+      expect(redisErr?.message).toContain("Accidental localhost Redis target detected in production");
     });
   });
 
@@ -93,22 +116,78 @@ describe("Preflight Environment Validator (Task-00094)", () => {
       expect(errorVars).toContain("DATABASE_URL");
     });
 
-    it("enforces benchmark-approved concurrency 4 in production for workers", () => {
+    it("accepts initial validation concurrency 1 in production for workers", () => {
       const workerEnv = {
-        REDIS_URL: "redis://elasticache:6379",
+        REDIS_URL: "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379",
         CALLBACK_SECRET: "cb-sec",
         WORKER_SECRET: "w-sec",
         DATABASE_URL: "postgresql://rds/marvedge",
+        STORAGE_PROVIDER: "aws",
         RAW_BUCKET: "marvedge-raw-ap2",
         PROCESSED_BUCKET: "marvedge-processed-ap2",
         BACKEND_URL: "https://api.marvedge.com",
-        WORKER_CONCURRENCY: "1", // Not 4!
+        WORKER_CONCURRENCY: "1",
+        REFRAME_WORKER_CONCURRENCY: "1",
+      };
+      const result = validatePreflightEnv("worker", workerEnv, { isProduction: true });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("accepts benchmark-approved concurrency 4 in production for workers", () => {
+      const workerEnv = {
+        REDIS_URL: "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379",
+        CALLBACK_SECRET: "cb-sec",
+        WORKER_SECRET: "w-sec",
+        DATABASE_URL: "postgresql://rds/marvedge",
+        STORAGE_PROVIDER: "aws",
+        RAW_BUCKET: "marvedge-raw-ap2",
+        PROCESSED_BUCKET: "marvedge-processed-ap2",
+        BACKEND_URL: "https://api.marvedge.com",
+        WORKER_CONCURRENCY: "4",
+        REFRAME_WORKER_CONCURRENCY: "4",
+      };
+      const result = validatePreflightEnv("worker", workerEnv, { isProduction: true });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("rejects unapproved concurrency in production for workers", () => {
+      const workerEnv = {
+        REDIS_URL: "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379",
+        CALLBACK_SECRET: "cb-sec",
+        WORKER_SECRET: "w-sec",
+        DATABASE_URL: "postgresql://rds/marvedge",
+        STORAGE_PROVIDER: "aws",
+        RAW_BUCKET: "marvedge-raw-ap2",
+        PROCESSED_BUCKET: "marvedge-processed-ap2",
+        BACKEND_URL: "https://api.marvedge.com",
+        WORKER_CONCURRENCY: "8", // Unapproved!
         REFRAME_WORKER_CONCURRENCY: "4",
       };
       const result = validatePreflightEnv("worker", workerEnv, { isProduction: true });
       expect(result.valid).toBe(false);
       const concurrencyErr = result.errors.find((e) => e.variable === "WORKER_CONCURRENCY");
-      expect(concurrencyErr?.message).toContain("benchmark-approved setting 4");
+      expect(concurrencyErr?.message).toContain("Approved settings are 1 (initial validation) or 4 (benchmark-approved)");
+    });
+
+    it("detects unsafe loopback Redis for worker in production", () => {
+      const workerEnv = {
+        REDIS_URL: "redis://127.0.0.1:6379",
+        CALLBACK_SECRET: "cb-sec",
+        WORKER_SECRET: "w-sec",
+        DATABASE_URL: "postgresql://rds/marvedge",
+        STORAGE_PROVIDER: "aws",
+        RAW_BUCKET: "marvedge-raw-ap2",
+        PROCESSED_BUCKET: "marvedge-processed-ap2",
+        BACKEND_URL: "https://api.marvedge.com",
+        WORKER_CONCURRENCY: "1",
+        REFRAME_WORKER_CONCURRENCY: "1",
+      };
+      const result = validatePreflightEnv("worker", workerEnv, { isProduction: true });
+      expect(result.valid).toBe(false);
+      const redisErr = result.errors.find((e) => e.variable === "REDIS_URL");
+      expect(redisErr?.message).toContain("Accidental localhost Redis target detected in production");
     });
   });
 
