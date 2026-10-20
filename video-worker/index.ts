@@ -1,3 +1,4 @@
+import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Worker, Job } from "bullmq";
 import { PrismaClient } from "@prisma/client";
@@ -12,6 +13,7 @@ import os from "os";
 import { execFileSync } from "child_process";
 import axios from "axios";
 import { createDubbingJob, waitForDubbingCompletion } from "../app/lib/elevenlabs/dubbing";
+import { buildDrawtextFontOption, downloadUrlToFile } from "./safe-download";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
 import { postJobCallbackWithRetry, processDubbingJob } from "../app/lib/avs/dubbingProcessor";
 import { runSubtitleJobWithRetry } from "./subtitleRetry";
@@ -22,6 +24,7 @@ import {
   getJobOutcomeMetricsObservationWindowSeconds,
 } from "../app/lib/monitoring/jobOutcomeMetrics";
 import { recordLatencyObservationBestEffort } from "../app/lib/monitoring/latencyWindowMetrics";
+import { recordCostObservationBestEffort } from "../app/lib/monitoring/costWindowMetrics";
 import { createWorkerMonitoringRedis } from "../app/lib/monitoring/workerRedis";
 import {
   recordDubbingJobCompleted,
@@ -57,7 +60,14 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
-const workerConcurrency = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || "1", 10) || 1);
+const workerConcurrency = validateWorkerConcurrency(
+  process.env.WORKER_CONCURRENCY,
+  "WORKER_CONCURRENCY",
+  {
+    isProduction: process.env.NODE_ENV === "production",
+    requireBenchmarkApproved: process.env.NODE_ENV === "production",
+  }
+);
 const prisma = new PrismaClient({
   datasourceUrl: (process.env.DATABASE_URL || "").replace(
     "?sslmode=require",
@@ -474,23 +484,11 @@ function writeTextOverlayFiles(
 }
 
 async function downloadVideo(url: string, outputPath: string): Promise<void> {
-  const writer = fs.createWriteStream(outputPath);
-  const response = await axios({ url, method: "GET", responseType: "stream" });
-  response.data.pipe(writer);
-  return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
+  await downloadUrlToFile(url, outputPath);
 }
 
 async function downloadFile(url: string, outputPath: string): Promise<void> {
-  const writer = fs.createWriteStream(outputPath);
-  const response = await axios({ url, method: "GET", responseType: "stream" });
-  response.data.pipe(writer);
-  return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
+  await downloadUrlToFile(url, outputPath);
 }
 
 function writeRoundedMaskPgm(
@@ -1324,7 +1322,7 @@ const worker = new Worker(
 
           let fontOpt = "";
           if (overlay.fontFamily) {
-            fontOpt = `font='${overlay.fontFamily}':`;
+            fontOpt = buildDrawtextFontOption(overlay.fontFamily);
           }
 
           filters.push(
@@ -1772,18 +1770,41 @@ export const dubbingWorker = new Worker(
         await job.updateProgress(25);
 
         const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
+        // Extension point: record billable usage if returned by vendor response payload
+        if (completedJob.charactersUsed !== undefined) {
+          recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
+            category: "dubbing",
+            provider: "elevenlabs",
+            unit: "characters",
+            amount: completedJob.charactersUsed,
+            windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
+            idempotencyKey: `${jobId}:${job.attemptsMade}`,
+          });
+        }
+        if (completedJob.durationSecs !== undefined) {
+          recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
+            category: "dubbing",
+            provider: "elevenlabs",
+            unit: "audio_seconds",
+            amount: completedJob.durationSecs,
+            windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
+            idempotencyKey: `${jobId}:${job.attemptsMade}`,
+          });
+        }
+        const audioEndpoint = `/api/dubbing/${jobId}/audio`;
         await prisma.videoJob.update({
           where: { id: jobId },
           data: {
             status: "COMPLETED",
             progress: 100,
+            exportedUrl: audioEndpoint,
             jobData: {
               kind: "DUBBING",
               sourceUrl,
               targetLanguage,
               dubbingId: completedJob.dubbingId,
               providerStatus: completedJob.status,
-              audioEndpoint: `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`,
+              audioEndpoint,
             },
           },
         });

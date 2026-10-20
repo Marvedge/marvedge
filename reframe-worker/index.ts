@@ -15,6 +15,7 @@ import {
   getJobOutcomeMetricsObservationWindowSeconds,
 } from "../app/lib/monitoring/jobOutcomeMetrics";
 import { recordLatencyObservationBestEffort } from "../app/lib/monitoring/latencyWindowMetrics";
+import { recordCostObservationBestEffort } from "../app/lib/monitoring/costWindowMetrics";
 import { createWorkerMonitoringRedis } from "../app/lib/monitoring/workerRedis";
 import { getReframeWorkerConfig, loadReframeWorkerEnv } from "./config";
 import { isFinalReframeJobFailure } from "./jobMetrics";
@@ -67,6 +68,15 @@ const worker = new Worker<ReframeJobPayload>(
             latencyObservationWindowSeconds
           );
         }
+        // Record GPU worker job processing duration (measures worker processing time on GPU host; not total EC2 running hours)
+        recordCostObservationBestEffort(monitoringRedisConnection, {
+          category: "gpu_worker",
+          provider: "reframe",
+          unit: "seconds",
+          amount: durationSeconds,
+          windowSeconds: latencyObservationWindowSeconds ?? 3600,
+          idempotencyKey: context.jobId ? `${context.jobId}:${context.attemptsMade}` : undefined,
+        });
       },
     };
     return await processReframeJob(job.data, context);
