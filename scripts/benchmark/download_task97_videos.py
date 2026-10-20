@@ -1,6 +1,5 @@
 import os
 import subprocess
-import json
 
 VIDEOS = [
     ("vid01_8MUfv497OSA", "https://www.youtube.com/watch?v=8MUfv497OSA"),

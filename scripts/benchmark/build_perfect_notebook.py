@@ -981,8 +981,9 @@ notebook = {
     ]
 }
 
-target_path = "/Users/aadityaagarwal/Downloads/marvedge/scripts/benchmark/Task97_ShipReadiness_Validator.ipynb"
-with open(target_path, "w") as f:
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+target_path = os.path.join(SCRIPT_DIR, "Task97_ShipReadiness_Validator.ipynb")
+with open(target_path, "w", encoding="utf-8") as f:
     json.dump(notebook, f, indent=1)
 
 print(f"Successfully generated perfect notebook at: {target_path}")

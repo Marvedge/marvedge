@@ -60,6 +60,8 @@ import threading
 import time
 from typing import Any, Dict, List, Tuple
 
+import numpy as np
+
 # ─── Colour helpers ───────────────────────────────────────────────────────────
 def _c(code, text): return f"\033[{code}m{text}\033[0m"
 GREEN  = lambda t: _c("92", t)
@@ -440,8 +442,6 @@ def stage_track(dets: List[List], min_track: int = 10,
     IoU-based greedy tracker + spatial merge.
     Returns a list of track dicts with 'frames', 'bboxes', 'is_fallback'.
     """
-    import numpy as np
-
     tracks = []
     active_tracks: List[Dict] = []
 

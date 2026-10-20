@@ -1,8 +1,11 @@
 import json
 import os
 
-nb_path = "/Users/aadityaagarwal/Downloads/marvedge/scripts/benchmark/Task97_ShipReadiness_Validator.ipynb"
-nb = json.load(open(nb_path))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+nb_path = os.path.join(SCRIPT_DIR, "Task97_ShipReadiness_Validator.ipynb")
+
+with open(nb_path, "r", encoding="utf-8") as f:
+    nb = json.load(f)
 
 batch_intro_md = {
     "cell_type": "markdown",
@@ -410,7 +413,7 @@ batch_code_cell = {
 nb["cells"].append(batch_intro_md)
 nb["cells"].append(batch_code_cell)
 
-with open(nb_path, "w") as f:
+with open(nb_path, "w", encoding="utf-8") as f:
     json.dump(nb, f, indent=1)
 
 print(f"Done! Notebook now has {len(nb['cells'])} cells (added batch mode)")
