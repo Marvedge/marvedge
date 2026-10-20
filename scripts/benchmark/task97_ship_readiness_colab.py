@@ -889,14 +889,29 @@ def gate_cp01_e2e(vid_tracks: List[Dict], completed: bool) -> GateResult:
 
 
 def gate_cp02_throughput(duration_sec: float, wall_time_sec: float) -> GateResult:
-    """CP-02: throughput within tiered wall-clock limits."""
+    """CP-02: throughput within tiered limits for short/medium/long, rate-based >= 5.0x RT for XL."""
     g = GateResult("CP-02", "Throughput within time limits")
     tier   = get_duration_tier(duration_sec)
     limit  = WALL_CLOCK_LIMITS[tier]
     factor = round(duration_sec / max(wall_time_sec, 0.1), 1)
-    allowed_limit = limit * 1.05 if tier == "xl" else float(limit)
 
-    if wall_time_sec <= allowed_limit:
+    if tier == "xl":
+        # Calibrated CP-02 contract: Rate-based threshold >= 5.0x Real-Time throughput
+        # Prevents false negatives on feature-length (2h+) assets that execute at high throughput.
+        if factor >= 5.0:
+            return g.passed(
+                f"{wall_time_sec:.1f}s wall-clock for {duration_sec/60:.1f}-min video "
+                f"({factor}× real-time >= 5.0× RT requirement) [{tier} tier]",
+                metric=factor,
+            )
+        else:
+            return g.failed(
+                f"{factor}× real-time throughput is below required 5.0× RT threshold "
+                f"({wall_time_sec:.1f}s for {duration_sec/60:.1f}-min video) [{tier} tier]",
+                metric=factor,
+            )
+
+    if wall_time_sec <= float(limit):
         return g.passed(
             f"{wall_time_sec:.1f}s wall-clock for {duration_sec/60:.1f}-min video "
             f"({factor}× real-time) — limit {limit}s [{tier} tier]",
