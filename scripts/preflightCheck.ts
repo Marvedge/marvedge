@@ -1,5 +1,9 @@
 #!/usr/bin/env tsx
-import { validatePreflightEnv, formatPreflightReport, type PreflightTarget } from "../app/lib/preflight/envValidator";
+import {
+  validatePreflightEnv,
+  formatPreflightReport,
+  type PreflightTarget,
+} from "../app/lib/preflight/envValidator";
 import * as dotenv from "dotenv";
 import * as path from "node:path";
 import * as fs from "node:fs";

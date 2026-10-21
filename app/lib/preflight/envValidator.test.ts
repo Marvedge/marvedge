@@ -101,7 +101,9 @@ describe("Preflight Environment Validator (Task-00094)", () => {
       const result = validatePreflightEnv("app", prodEnvWithLocalhostRedis, { isProduction: true });
       expect(result.valid).toBe(false);
       const redisErr = result.errors.find((e) => e.variable === "REDIS_URL");
-      expect(redisErr?.message).toContain("Accidental localhost Redis target detected in production");
+      expect(redisErr?.message).toContain(
+        "Accidental localhost Redis target detected in production"
+      );
     });
   });
 
@@ -168,7 +170,9 @@ describe("Preflight Environment Validator (Task-00094)", () => {
       const result = validatePreflightEnv("worker", workerEnv, { isProduction: true });
       expect(result.valid).toBe(false);
       const concurrencyErr = result.errors.find((e) => e.variable === "WORKER_CONCURRENCY");
-      expect(concurrencyErr?.message).toContain("Approved settings are 1 (initial validation) or 4 (benchmark-approved)");
+      expect(concurrencyErr?.message).toContain(
+        "Approved settings are 1 (initial validation) or 4 (benchmark-approved)"
+      );
     });
 
     it("detects unsafe loopback Redis for worker in production", () => {
@@ -187,7 +191,9 @@ describe("Preflight Environment Validator (Task-00094)", () => {
       const result = validatePreflightEnv("worker", workerEnv, { isProduction: true });
       expect(result.valid).toBe(false);
       const redisErr = result.errors.find((e) => e.variable === "REDIS_URL");
-      expect(redisErr?.message).toContain("Accidental localhost Redis target detected in production");
+      expect(redisErr?.message).toContain(
+        "Accidental localhost Redis target detected in production"
+      );
     });
   });
 

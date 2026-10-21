@@ -33,10 +33,8 @@ export function validateWorkerConcurrency(
   varName: string,
   options: ValidateConcurrencyOptions = {}
 ): number {
-  const isProduction =
-    options.isProduction ?? (process.env.NODE_ENV === "production");
-  const requireBenchmarkApproved =
-    options.requireBenchmarkApproved ?? isProduction;
+  const isProduction = options.isProduction ?? process.env.NODE_ENV === "production";
+  const requireBenchmarkApproved = options.requireBenchmarkApproved ?? isProduction;
   const defaultNonProd = options.defaultNonProd ?? INITIAL_VALIDATION_CONCURRENCY;
 
   // If value is explicitly provided
@@ -44,9 +42,7 @@ export function validateWorkerConcurrency(
     const str = String(rawVal).trim();
     // Validate integer format (reject floats like 1.5, scientific notation, strings like "abc")
     if (!/^-?\d+$/.test(str)) {
-      throw new Error(
-        `Invalid ${varName}: "${rawVal}". Concurrency must be a positive integer.`
-      );
+      throw new Error(`Invalid ${varName}: "${rawVal}". Concurrency must be a positive integer.`);
     }
 
     const parsed = Number.parseInt(str, 10);

@@ -28,9 +28,10 @@ export function resolveRedisConfig(
   options: { isProduction?: boolean; allowLocalhostInProduction?: boolean } = {}
 ): ResolvedRedisConfig {
   const url = (rawUrl || process.env.REDIS_URL || "redis://localhost:6379").trim();
-  const isProduction = options.isProduction ?? (process.env.NODE_ENV === "production");
+  const isProduction = options.isProduction ?? process.env.NODE_ENV === "production";
 
-  let parsed: URL;  try {
+  let parsed: URL;
+  try {
     parsed = new URL(url);
   } catch {
     throw new Error(`Invalid REDIS_URL format: "${url}"`);

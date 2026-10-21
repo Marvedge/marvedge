@@ -1,10 +1,10 @@
 // Preflight Environment Validator (Task-00094).
 //
 // Validates deployment readiness across:
-// 1. "app"        — Next.js web application, NextAuth, database, storage, vendor APIs, Redis
-// 2. "worker"     — video-worker, reframe-worker, cloudrun-worker, Redis, concurrency
-// 3. "ml-gateway" — Internal FastAPI ML gateway, downstream service URLs, timeouts
-// 4. "all"        — Unified complete system check
+// 1. "app"        ï¿½ Next.js web application, NextAuth, database, storage, vendor APIs, Redis
+// 2. "worker"     ï¿½ video-worker, reframe-worker, cloudrun-worker, Redis, concurrency
+// 3. "ml-gateway" ï¿½ Internal FastAPI ML gateway, downstream service URLs, timeouts
+// 4. "all"        ï¿½ Unified complete system check
 //
 // SECURITY INVARIANT:
 // - NEVER prints secret values (database credentials, API keys, bearer tokens).
@@ -63,7 +63,9 @@ const SECRET_PATTERNS = [
  * Returns true if the environment variable contains sensitive secret credentials.
  */
 export function isSecretVariable(varName: string): boolean {
-  if (!varName) return false;
+  if (!varName) {
+    return false;
+  }
   return SECRET_PATTERNS.some((pat) => pat.test(varName));
 }
 
@@ -89,7 +91,7 @@ export function validatePreflightEnv(
   env: Record<string, string | undefined> = process.env,
   options: PreflightOptions = {}
 ): PreflightResult {
-  const isProduction = options.isProduction ?? (env.NODE_ENV === "production");
+  const isProduction = options.isProduction ?? env.NODE_ENV === "production";
   const checks: EnvVariableCheck[] = [];
   const errors: PreflightIssue[] = [];
   const warnings: PreflightIssue[] = [];
@@ -103,7 +105,11 @@ export function validatePreflightEnv(
     const isSecret = isSecretVariable(name);
     checks.push({ name, scope, status, isSecret, message });
     if (status === "MISSING" || status === "INVALID") {
-      errors.push({ variable: name, scope, message: message || `${name} is ${status.toLowerCase()}` });
+      errors.push({
+        variable: name,
+        scope,
+        message: message || `${name} is ${status.toLowerCase()}`,
+      });
     }
   }
 
@@ -111,14 +117,23 @@ export function validatePreflightEnv(
     const val = env[name]?.trim();
     if (!val) {
       const desc = description ? ` (${description})` : "";
-      recordCheck(name, scope, "MISSING", `Required environment variable ${name} is missing${desc}.`);
+      recordCheck(
+        name,
+        scope,
+        "MISSING",
+        `Required environment variable ${name} is missing${desc}.`
+      );
       return undefined;
     }
     recordCheck(name, scope, "OK");
     return val;
   }
 
-  function optionalVar(name: string, scope: PreflightTarget, validator?: (val: string) => string | undefined) {
+  function optionalVar(
+    name: string,
+    scope: PreflightTarget,
+    validator?: (val: string) => string | undefined
+  ) {
     const val = env[name]?.trim();
     if (!val) {
       return undefined;
@@ -145,7 +160,12 @@ export function validatePreflightEnv(
           `REDIS_URL is required in production for ${scope === "app" ? "BullMQ queue dispatch" : "BullMQ workers"} to shared Redis (e.g. AWS ElastiCache).`
         );
       } else if (scope === "worker") {
-        recordCheck("REDIS_URL", scope, "MISSING", "Required environment variable REDIS_URL is missing.");
+        recordCheck(
+          "REDIS_URL",
+          scope,
+          "MISSING",
+          "Required environment variable REDIS_URL is missing."
+        );
       } else {
         recordCheck("REDIS_URL", scope, "OK");
       }
@@ -188,9 +208,9 @@ export function validatePreflightEnv(
     recordCheck("REDIS_URL", scope, "OK");
   }
 
-  // ——————————————————————————————————————————————————————————————————————————
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   // 1. APP SCOPE
-  // ——————————————————————————————————————————————————————————————————————————
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   if (target === "app" || target === "all") {
     // Database
     requireVar("DATABASE_URL", "app", "PostgreSQL database connection");
@@ -214,7 +234,12 @@ export function validatePreflightEnv(
       requireVar("GCP_RAW_BUCKET", "app", "GCS fallback raw bucket");
       requireVar("GCP_PROCESSED_BUCKET", "app", "GCS fallback processed bucket");
     } else {
-      recordCheck("STORAGE_PROVIDER", "app", "INVALID", `Invalid STORAGE_PROVIDER: "${storageProvider}". Must be "aws" or "gcs".`);
+      recordCheck(
+        "STORAGE_PROVIDER",
+        "app",
+        "INVALID",
+        `Invalid STORAGE_PROVIDER: "${storageProvider}". Must be "aws" or "gcs".`
+      );
     }
 
     // Video Worker routing
@@ -223,7 +248,12 @@ export function validatePreflightEnv(
       requireVar("WORKER_SECRET", "app", "Bearer secret for video worker /process endpoint");
       const workerUrl = env.VIDEO_WORKER_URL?.trim() || env.GCP_VIDEO_WORKER_URL?.trim();
       if (!workerUrl) {
-        recordCheck("VIDEO_WORKER_URL", "app", "MISSING", "VIDEO_WORKER_URL or GCP_VIDEO_WORKER_URL is required when USE_GCP_WORKER=true.");
+        recordCheck(
+          "VIDEO_WORKER_URL",
+          "app",
+          "MISSING",
+          "VIDEO_WORKER_URL or GCP_VIDEO_WORKER_URL is required when USE_GCP_WORKER=true."
+        );
       } else {
         recordCheck("VIDEO_WORKER_URL", "app", "OK");
       }
@@ -261,15 +291,19 @@ export function validatePreflightEnv(
     }
   }
 
-  // ——————————————————————————————————————————————————————————————————————————
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   // 2. WORKER SCOPE
-  // ——————————————————————————————————————————————————————————————————————————
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   if (target === "worker" || target === "all") {
     // Redis for BullMQ queues
     validateRedisConfig("worker", true);
 
     // Callback Secret for workers reporting back
-    requireVar("CALLBACK_SECRET", "worker", "Shared secret to authenticate callbacks to /api/jobs/callback");
+    requireVar(
+      "CALLBACK_SECRET",
+      "worker",
+      "Shared secret to authenticate callbacks to /api/jobs/callback"
+    );
 
     // Worker secret for cloudrun-worker endpoints
     requireVar("WORKER_SECRET", "worker", "Bearer secret for standalone worker HTTP endpoints");
@@ -288,7 +322,12 @@ export function validatePreflightEnv(
     const validateConcurrencySetting = (name: string, rawVal: string | undefined) => {
       if (rawVal) {
         if (!/^\d+$/.test(rawVal) || Number.parseInt(rawVal, 10) < 1) {
-          recordCheck(name, "worker", "INVALID", `Invalid ${name}: "${rawVal}". Must be positive integer.`);
+          recordCheck(
+            name,
+            "worker",
+            "INVALID",
+            `Invalid ${name}: "${rawVal}". Must be positive integer.`
+          );
         } else {
           const parsed = Number.parseInt(rawVal, 10);
           if (
@@ -316,7 +355,10 @@ export function validatePreflightEnv(
       }
     };
 
-    validateConcurrencySetting("REFRAME_WORKER_CONCURRENCY", env.REFRAME_WORKER_CONCURRENCY?.trim());
+    validateConcurrencySetting(
+      "REFRAME_WORKER_CONCURRENCY",
+      env.REFRAME_WORKER_CONCURRENCY?.trim()
+    );
     validateConcurrencySetting("WORKER_CONCURRENCY", env.WORKER_CONCURRENCY?.trim());
 
     // Callback base URL non-loopback in production
@@ -333,20 +375,27 @@ export function validatePreflightEnv(
           "WORKER_CALLBACK_TARGET",
           "worker",
           "INVALID",
-          err instanceof Error ? err.message : "Worker callback base URL misconfigured for production"
+          err instanceof Error
+            ? err.message
+            : "Worker callback base URL misconfigured for production"
         );
       }
     }
   }
 
-  // ——————————————————————————————————————————————————————————————————————————
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   // 3. ML GATEWAY SCOPE
-  // ——————————————————————————————————————————————————————————————————————————
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   if (target === "ml-gateway" || target === "all") {
     const autoflipUrl = env.AUTOFILP_SERVICE_URL?.trim() || env.AUTOFILIP_SERVICE_URL?.trim();
     if (!autoflipUrl) {
       if (isProduction) {
-        recordCheck("AUTOFILP_SERVICE_URL", "ml-gateway", "MISSING", "AUTOFILP_SERVICE_URL is required for ML Gateway downstream routing.");
+        recordCheck(
+          "AUTOFILP_SERVICE_URL",
+          "ml-gateway",
+          "MISSING",
+          "AUTOFILP_SERVICE_URL is required for ML Gateway downstream routing."
+        );
       } else {
         warnings.push({
           variable: "AUTOFILP_SERVICE_URL",
@@ -361,7 +410,12 @@ export function validatePreflightEnv(
     const talknetUrl = env.TALKNET_SERVICE_URL?.trim();
     if (!talknetUrl) {
       if (isProduction) {
-        recordCheck("TALKNET_SERVICE_URL", "ml-gateway", "MISSING", "TALKNET_SERVICE_URL is required for ML Gateway TalkNet routing.");
+        recordCheck(
+          "TALKNET_SERVICE_URL",
+          "ml-gateway",
+          "MISSING",
+          "TALKNET_SERVICE_URL is required for ML Gateway TalkNet routing."
+        );
       } else {
         warnings.push({
           variable: "TALKNET_SERVICE_URL",
@@ -399,8 +453,10 @@ export function validatePreflightEnv(
 export function formatPreflightReport(result: PreflightResult): string {
   const lines: string[] = [];
   lines.push("===============================================================================");
-  lines.push(` MARVEDGE PREFLIGHT VALIDATION REPORT — TARGET: ${result.target.toUpperCase()}`);
-  lines.push(` ENVIRONMENT: ${result.isProduction ? "PRODUCTION" : "DEVELOPMENT/TEST"} | STATUS: ${result.valid ? "PASS" : "FAIL"}`);
+  lines.push(` MARVEDGE PREFLIGHT VALIDATION REPORT ï¿½ TARGET: ${result.target.toUpperCase()}`);
+  lines.push(
+    ` ENVIRONMENT: ${result.isProduction ? "PRODUCTION" : "DEVELOPMENT/TEST"} | STATUS: ${result.valid ? "PASS" : "FAIL"}`
+  );
   lines.push("===============================================================================");
 
   if (result.errors.length > 0) {
@@ -421,7 +477,7 @@ export function formatPreflightReport(result: PreflightResult): string {
   for (const c of result.checks) {
     const icon = c.status === "OK" ? "[OK]" : "[FAIL]";
     const secretTag = c.isSecret ? " (SECRET)" : "";
-    const detail = c.message ? ` — ${c.message}` : "";
+    const detail = c.message ? ` ï¿½ ${c.message}` : "";
     lines.push(`  ${icon} [${c.scope.toUpperCase()}] ${c.name}${secretTag}: ${c.status}${detail}`);
   }
 

@@ -34,12 +34,7 @@ export function loadReframeWorkerEnv(): void {
   ];
 
   const envType = process.env.NODE_ENV || "development";
-  const envFileNames = [
-    `.env.${envType}.local`,
-    `.env.local`,
-    `.env.${envType}`,
-    `.env`,
-  ];
+  const envFileNames = [`.env.${envType}.local`, ".env.local", `.env.${envType}`, ".env"];
 
   for (const dir of rootDirs) {
     for (const fileName of envFileNames) {
@@ -91,16 +86,11 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
     );
   }
 
-  const rawMlUrl =
-    process.env.REFRAME_ML_SERVICE_URL?.trim() || "http://localhost:8000";
+  const rawMlUrl = process.env.REFRAME_ML_SERVICE_URL?.trim() || "http://localhost:8000";
   const mlServiceUrl = rawMlUrl.replace(/\/+$/, "");
 
-  const parsedTimeout = Number.parseInt(
-    process.env.REFRAME_ML_TIMEOUT_MS || "180000",
-    10
-  );
-  const mlTimeoutMs =
-    Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 180000;
+  const parsedTimeout = Number.parseInt(process.env.REFRAME_ML_TIMEOUT_MS || "180000", 10);
+  const mlTimeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 180000;
 
   const workerConcurrency = validateWorkerConcurrency(
     process.env.REFRAME_WORKER_CONCURRENCY,
@@ -125,9 +115,7 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
     10
   );
   const callbackRetryDelayMs =
-    Number.isFinite(parsedCallbackDelay) && parsedCallbackDelay > 0
-      ? parsedCallbackDelay
-      : 1000;
+    Number.isFinite(parsedCallbackDelay) && parsedCallbackDelay > 0 ? parsedCallbackDelay : 1000;
 
   return {
     redisUrl,

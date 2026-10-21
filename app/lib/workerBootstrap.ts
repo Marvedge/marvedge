@@ -63,9 +63,13 @@ export function updateEnvFileIdempotent(options: EnvFileUpdateOptions): void {
   const finalContent = newLines.join("\n") + "\n";
   const tmpPath = `${envFilePath}.tmp.${Date.now()}`;
   fs.writeFileSync(tmpPath, finalContent, { encoding: "utf-8", mode });
-  try { fs.chmodSync(tmpPath, mode); } catch {}
+  try {
+    fs.chmodSync(tmpPath, mode);
+  } catch {}
   fs.renameSync(tmpPath, envFilePath);
-  try { fs.chmodSync(envFilePath, mode); } catch {}
+  try {
+    fs.chmodSync(envFilePath, mode);
+  } catch {}
 }
 
 /**
@@ -105,7 +109,9 @@ export function parseSsmCliOutput(rawInput: unknown): Partial<SsmWorkerParameter
 
   const result: Record<string, string> = {};
   for (const param of params) {
-    if (!param.Name || param.Value === undefined) continue;
+    if (!param.Name || param.Value === undefined) {
+      continue;
+    }
     const parts = param.Name.split("/");
     const key = parts[parts.length - 1];
     if (key) {
@@ -133,15 +139,25 @@ export function bootstrapWorkerConfig(
   const missing: string[] = [];
 
   const workerSecret = parameters.WORKER_SECRET?.trim();
-  if (!workerSecret) missing.push("WORKER_SECRET");
+  if (!workerSecret) {
+    missing.push("WORKER_SECRET");
+  }
 
   const deepgramKey = parameters.DEEPGRAM_API_KEY?.trim();
-  if (!deepgramKey) missing.push("DEEPGRAM_API_KEY");
+  if (!deepgramKey) {
+    missing.push("DEEPGRAM_API_KEY");
+  }
 
   if (options.requireAllProdSecrets) {
-    if (!parameters.CALLBACK_SECRET?.trim()) missing.push("CALLBACK_SECRET");
-    if (!parameters.REDIS_URL?.trim()) missing.push("REDIS_URL");
-    if (!parameters.BACKEND_URL?.trim()) missing.push("BACKEND_URL");
+    if (!parameters.CALLBACK_SECRET?.trim()) {
+      missing.push("CALLBACK_SECRET");
+    }
+    if (!parameters.REDIS_URL?.trim()) {
+      missing.push("REDIS_URL");
+    }
+    if (!parameters.BACKEND_URL?.trim()) {
+      missing.push("BACKEND_URL");
+    }
   }
 
   if (missing.length > 0) {

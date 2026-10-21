@@ -17,7 +17,9 @@ export interface ResolveCallbackUrlOptions {
  * Detects whether a URL points to a loopback/localhost host.
  */
 export function isLoopbackHost(urlStr: string): boolean {
-  if (!urlStr || typeof urlStr !== "string") return false;
+  if (!urlStr || typeof urlStr !== "string") {
+    return false;
+  }
   try {
     const trimmed = urlStr.trim();
     const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed);
@@ -64,7 +66,7 @@ export function buildCallbackUrl(backendUrl: string): string {
  */
 export function resolveCallbackBaseUrl(options: ResolveCallbackUrlOptions = {}): string {
   const env = options.env ?? process.env;
-  const isProduction = options.isProduction ?? (env.NODE_ENV === "production");
+  const isProduction = options.isProduction ?? env.NODE_ENV === "production";
 
   const candidate =
     options.explicitUrl?.trim() ||
@@ -108,8 +110,7 @@ export function resolveCallbackBaseUrl(options: ResolveCallbackUrlOptions = {}):
     }
 
     const allowLocalhost =
-      options.allowLocalhostInProduction ??
-      (env.ALLOW_LOCALHOST_CALLBACK_IN_PRODUCTION === "true");
+      options.allowLocalhostInProduction ?? env.ALLOW_LOCALHOST_CALLBACK_IN_PRODUCTION === "true";
 
     if (!allowLocalhost && isLoopbackHost(normalized)) {
       throw new Error(
