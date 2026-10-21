@@ -101,10 +101,21 @@ if __name__ == "__main__":
     args = p.parse_args()
 
     if not os.path.isfile(args.videoPath):
-        print(f"\n[ERROR] Video not found: {args.videoPath}")
-        print("  Upload your test video to /content/ and set --videoPath accordingly.")
-        print("  Example: python task97_colab_runner.py --videoPath /content/my_video.mp4\n")
-        sys.exit(1)
+        # Auto-detect if user uploaded video directly into /content
+        v_exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+        found = [
+            os.path.join("/content", f) for f in os.listdir("/content")
+            if f.lower().endswith(v_exts) and os.path.isfile(os.path.join("/content", f))
+        ] if os.path.exists("/content") else []
+        if found:
+            found.sort(key=os.path.getmtime, reverse=True)
+            args.videoPath = found[0]
+            print(f"  🎯 Auto-detected uploaded video in /content: {args.videoPath}")
+        else:
+            print(f"\n[ERROR] Video not found: {args.videoPath}")
+            print("  Upload your test video to /content/ via Colab Files panel.")
+            print("  Example: python task97_colab_runner.py --videoPath /content/my_video.mp4\n")
+            sys.exit(1)
 
     report = run_full_validation(
         video_path  = args.videoPath,
