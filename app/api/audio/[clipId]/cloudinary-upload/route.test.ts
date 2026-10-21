@@ -119,4 +119,28 @@ describe("audio Cloudinary upload error privacy", () => {
       consoleErrorSpy.mockRestore();
     }
   });
+
+  it("rejects an oversized Content-Length before resolving or reading the clip", async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const request = {
+      headers: new Headers({
+        "content-length": String(50 * 1024 * 1024 + 1),
+      }),
+      arrayBuffer,
+    } as unknown as NextRequest;
+
+    const response = await PUT(request, {
+      params: Promise.resolve({
+        clipId: "clip-1",
+      }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: "File exceeds the 50MB limit",
+    });
+    expect(mocks.resolveOwnedClip).not.toHaveBeenCalled();
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(mocks.cloudinaryUploadBuffer).not.toHaveBeenCalled();
+  });
 });

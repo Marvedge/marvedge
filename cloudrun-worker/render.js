@@ -3,7 +3,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const { fetchSafeUrl, MAX_REDIRECTS } = require("./safe-download.cjs");
+const {
+  fetchSafeUrl,
+  MAX_REDIRECTS,
+  readPositiveIntEnv,
+  writeCappedResponseBody,
+} = require("./safe-download.cjs");
 const ffmpeg = require("fluent-ffmpeg");
 
 const FFMPEG_BIN =
@@ -893,50 +898,11 @@ function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
 // fully buffered) with an enforced MAX_DOWNLOAD_BYTES cap. `options`
 // ({ timeoutMs, maxRedirects, maxBytes, fetchImpl, lookupImpl }) exists for
 // unit tests; production callers pass nothing.
-const DOWNLOAD_TIMEOUT_MS =
-  Number(process.env.DOWNLOAD_TIMEOUT_MS || 30000) || 30000;
-const MAX_DOWNLOAD_BYTES =
-  Number(process.env.DOWNLOAD_MAX_BYTES || 1073741824) || 1073741824;
-
-// Reads a fetch Response body with an enforced byte cap. Streaming bodies
-// are consumed chunk by chunk and cancelled the moment the cap is exceeded,
-// so a chunked or lying upstream cannot exhaust worker memory. Bodies
-// without a stream interface (test doubles) fall back to a single buffered
-// read that is still measured against the cap.
-async function readCappedBody(response, maxBytes) {
-  const body = response.body;
-  if (!body || typeof body.getReader !== "function") {
-    const buf = Buffer.from(await response.arrayBuffer());
-    if (buf.length > maxBytes) {
-      throw new Error(`Download exceeds size limit of ${maxBytes} bytes`);
-    }
-    return buf;
-  }
-  const reader = body.getReader();
-  const chunks = [];
-  let received = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      received += value.byteLength;
-      if (received > maxBytes) {
-        await reader.cancel().catch(() => {});
-        throw new Error(`Download exceeds size limit of ${maxBytes} bytes`);
-      }
-      chunks.push(Buffer.from(value));
-    }
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch (unused) {
-      // Reader already released via cancel; nothing to do.
-    }
-  }
-  return Buffer.concat(chunks);
-}
+const DOWNLOAD_TIMEOUT_MS = readPositiveIntEnv("DOWNLOAD_TIMEOUT_MS", 30000);
+const MAX_DOWNLOAD_BYTES = readPositiveIntEnv(
+  "DOWNLOAD_MAX_BYTES",
+  1073741824
+);
 
 function downloadFile(url, outputPath, options = {}) {
   const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
@@ -959,8 +925,7 @@ function downloadFile(url, outputPath, options = {}) {
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }
-      const bytes = await readCappedBody(response, maxBytes);
-      fs.writeFileSync(outputPath, bytes);
+      await writeCappedResponseBody(response, outputPath, maxBytes);
     } catch (err) {
       if (controller.signal.aborted) {
         throw new Error(

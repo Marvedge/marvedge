@@ -21,6 +21,9 @@ import cv2
 import numpy as np
 import requests
 import torch
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from models.s3fd import S3FD
 from models.talkNet import talkNet
@@ -50,6 +53,126 @@ BLOCKED_HOSTNAMES = {
     "ml-gateway",
     "redis",
 }
+
+
+class PeerBlockedError(ConnectionError):
+    """Raised when a connected peer IP is not publicly routable."""
+
+
+def _peer_ip(sock) -> str:
+    """
+    Returns the numeric peer address of a connected socket.
+
+    Raises PeerBlockedError when the peer is not publicly routable. This runs
+    before any HTTP request data is sent (after the TLS handshake for HTTPS), so
+    a DNS rebind between URL validation and connection cannot reach internal
+    addresses.
+    """
+    try:
+        peer = sock.getpeername()
+    except OSError as exc:
+        raise PeerBlockedError("Unable to determine remote peer address") from exc
+
+    if not isinstance(peer, tuple) or not peer:
+        raise PeerBlockedError("Unable to determine remote peer address")
+
+    address = str(peer[0])
+    if not is_ip_allowed(address.split("%", 1)[0]):
+        raise PeerBlockedError(
+            f"Refusing connection to non-public peer address {address}"
+        )
+    return address
+
+
+class _PeerValidationMixin:
+    """Validates the actual peer IP before any request bytes are sent."""
+
+    def _new_conn(self):
+        sock = super()._new_conn()
+        try:
+            _peer_ip(sock)
+        except BaseException:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            raise
+        return sock
+
+
+class _PeerValidatingHTTPConnection(_PeerValidationMixin, HTTPConnection):
+    pass
+
+
+class _PeerValidatingHTTPSConnection(_PeerValidationMixin, HTTPSConnection):
+    pass
+
+
+class _PeerValidatingHTTPConnectionPool(HTTPConnectionPool):
+    ConnectionCls = _PeerValidatingHTTPConnection
+
+
+class _PeerValidatingHTTPSConnectionPool(HTTPSConnectionPool):
+    ConnectionCls = _PeerValidatingHTTPSConnection
+
+
+class _PeerValidatingHTTPAdapter(HTTPAdapter):
+    """requests adapter that installs peer-IP-validating urllib3 pools."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {
+            "http": _PeerValidatingHTTPConnectionPool,
+            "https": _PeerValidatingHTTPSConnectionPool,
+        }
+
+
+def _build_safe_session() -> requests.Session:
+    """Builds a requests session with connection-sink peer validation."""
+    session = requests.Session()
+    # Ignore proxy environment variables: a proxy's public peer IP would not
+    # represent the actual destination and would bypass the peer check.
+    session.trust_env = False
+    adapter = _PeerValidatingHTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+def _is_peer_blocked_error(exc: BaseException) -> bool:
+    """Walks requests/urllib3 exception chains looking for PeerBlockedError."""
+    seen = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, PeerBlockedError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _remove_partial_file(path: str) -> None:
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Could not remove partial download %s: %s", path, exc)
+
+
+def _declared_content_length(resp) -> Optional[int]:
+    raw = resp.headers.get("Content-Length")
+    if raw is None or not isinstance(raw, str):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise DownloadError(
+            "Remote server returned an invalid Content-Length"
+        ) from exc
+    if value < 0:
+        raise DownloadError("Remote server returned a negative Content-Length")
+    return value
 
 
 class TalkNetError(Exception):
@@ -116,9 +239,10 @@ def check_weights_available(
 def is_ip_allowed(ip_str: str) -> bool:
     """Returns True if an IP address is a public routable address."""
     try:
-        ip = ipaddress.ip_address(ip_str)
+        ip = ipaddress.ip_address(str(ip_str).split("%", 1)[0])
         if (
-            ip.is_private
+            not ip.is_global
+            or ip.is_private
             or ip.is_loopback
             or ip.is_link_local
             or ip.is_unspecified
@@ -208,65 +332,95 @@ def download_video(
 ) -> None:
     """
     Downloads remote video into dest_path via streaming chunks.
-    Validates redirect targets explicitly to prevent SSRF bypass.
+
+    Security properties:
+    - Every redirect target is re-validated before the next request.
+    - The actual connected peer IP is validated at the connection sink, before
+      TLS/data exchange, closing the DNS-rebinding TOCTOU window.
+    - Content-Length (when present) and a running byte count are both capped.
+    - Partial files are removed on errors and size violations.
     """
     current_url = url
     redirect_count = 0
+    session = _build_safe_session()
 
-    while True:
-        # Validate URL target on initial request and on every redirect hop
-        validate_url_target(current_url)
+    try:
+        while True:
+            # Validate URL target on initial request and on every redirect hop
+            validate_url_target(current_url)
 
-        try:
-            resp = requests.get(
-                current_url,
-                stream=True,
-                timeout=timeout_sec,
-                allow_redirects=False,
-            )
-        except requests.Timeout:
-            raise TimeoutError(
-                f"Video download timed out after {timeout_sec}s from {current_url}"
-            )
-        except ValidationError:
-            raise
-        except Exception as e:
-            raise DownloadError(f"Failed to connect to remote video host")
+            try:
+                resp = session.get(
+                    current_url,
+                    stream=True,
+                    timeout=timeout_sec,
+                    allow_redirects=False,
+                )
+            except requests.Timeout:
+                _remove_partial_file(dest_path)
+                raise TimeoutError(
+                    f"Video download timed out after {timeout_sec}s from {current_url}"
+                )
+            except requests.ConnectionError as e:
+                _remove_partial_file(dest_path)
+                if _is_peer_blocked_error(e):
+                    raise ValidationError(
+                        "videoUrl host resolves to a non-permitted address"
+                    ) from e
+                raise DownloadError("Failed to connect to remote video host")
+            except requests.RequestException:
+                _remove_partial_file(dest_path)
+                raise DownloadError("Failed to connect to remote video host")
+            except ValidationError:
+                raise
 
-        if resp.status_code in (301, 302, 303, 307, 308):
-            redirect_count += 1
-            if redirect_count > MAX_REDIRECTS:
+            if resp.status_code in (301, 302, 303, 307, 308):
+                redirect_count += 1
+                if redirect_count > MAX_REDIRECTS:
+                    resp.close()
+                    raise DownloadError("Too many redirects while downloading video")
+
+                location = resp.headers.get("Location")
+                if not location:
+                    resp.close()
+                    raise DownloadError("Redirect response missing Location header")
+
+                current_url = urllib.parse.urljoin(current_url, location)
                 resp.close()
-                raise DownloadError("Too many redirects while downloading video")
+                continue
 
-            location = resp.headers.get("Location")
-            if not location:
+            if resp.status_code != 200:
                 resp.close()
-                raise DownloadError("Redirect response missing Location header")
+                raise DownloadError(
+                    f"Remote video download failed with HTTP status {resp.status_code}"
+                )
 
-            current_url = urllib.parse.urljoin(current_url, location)
-            resp.close()
-            continue
+            try:
+                declared_length = _declared_content_length(resp)
+                if declared_length is not None and declared_length > max_bytes:
+                    raise DownloadError(
+                        f"Video exceeds maximum allowed download size ({max_bytes} bytes)"
+                    )
 
-        if resp.status_code != 200:
-            resp.close()
-            raise DownloadError(
-                f"Remote video download failed with HTTP status {resp.status_code}"
-            )
-
-        bytes_written = 0
-        with open(dest_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1024 * 64):
-                if chunk:
-                    bytes_written += len(chunk)
-                    if bytes_written > max_bytes:
-                        resp.close()
-                        raise DownloadError(
-                            f"Video exceeds maximum allowed download size ({max_bytes} bytes)"
-                        )
-                    f.write(chunk)
-        resp.close()
-        break
+                bytes_written = 0
+                with open(dest_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=1024 * 64):
+                        if chunk:
+                            bytes_written += len(chunk)
+                            if bytes_written > max_bytes:
+                                raise DownloadError(
+                                    "Video exceeds maximum allowed download size "
+                                    f"({max_bytes} bytes)"
+                                )
+                            f.write(chunk)
+            except BaseException:
+                _remove_partial_file(dest_path)
+                raise
+            finally:
+                resp.close()
+            break
+    finally:
+        session.close()
 
 
 def check_deadline(deadline: float, timeout_sec: int, stage_name: str) -> float:

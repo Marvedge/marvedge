@@ -312,6 +312,38 @@ describe("GET /api/jobs/[id]/download", () => {
       "https://example.com/exported.mp4",
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://example.com/exported.mp4",
+      expect.objectContaining({ redirect: "manual" })
+    );
+  });
+
+  it("does not follow an upstream redirect", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("redirecting", {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data" },
+      })
+    );
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://example.com/exported.mp4",
+      expect.objectContaining({ redirect: "manual" })
+    );
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: "Failed to fetch exported file (302)",
+    });
   });
 
   it("rejects an upstream that declares more than the size cap", async () => {

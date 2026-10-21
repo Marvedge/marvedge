@@ -73,6 +73,10 @@ export async function deliverToWebhook(
         "User-Agent": "Marvedge-Webhook/1",
       },
       body: rawBody,
+      // Never follow a redirect: a 30x lets the receiver point the signed POST
+      // at an internal address, and 307/308 replay the body there. We already
+      // resolved the host once above; following a hop would bypass that check.
+      redirect: "manual",
       signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
     });
   } catch (error) {
@@ -83,6 +87,18 @@ export async function deliverToWebhook(
       ok: false,
       retryable: true,
       error: `Webhook request failed: ${error instanceof Error ? error.message : "network error"}`,
+    };
+  }
+
+  // With redirect: "manual", any 3xx is the completed answer. It is not a
+  // success and not retryable, and the response body is never read: a redirect
+  // body is not the receiver's delivery report, and trusting it would reopen the
+  // read-back half of the SSRF.
+  if (response.status >= 300 && response.status < 400) {
+    return {
+      ok: false,
+      retryable: false,
+      error: `Receiver responded ${response.status} (redirects are not followed)`,
     };
   }
 

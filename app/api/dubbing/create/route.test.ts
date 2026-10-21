@@ -23,9 +23,14 @@ vi.mock("@/app/lib/queue", () => ({
   },
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { dubbingQueue } from "@/app/lib/queue";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { POST } from "./route";
 
 function makeRequest(body: Record<string, unknown>): NextRequest {
@@ -54,6 +59,7 @@ describe("POST /api/dubbing/create URL security", () => {
     } as never);
 
     vi.mocked(dubbingQueue.add).mockResolvedValue(undefined as never);
+    vi.mocked(isRateLimited).mockResolvedValue(false);
   });
 
   it("returns 401 when the user is not authenticated", async () => {
@@ -256,5 +262,24 @@ describe("POST /api/dubbing/create URL security", () => {
         removeOnFail: 100,
       }
     );
+  });
+
+  it("returns 429 before reading the body, creating a job, or queueing", async () => {
+    vi.mocked(isRateLimited).mockResolvedValue(true);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "fr",
+      })
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error: "Too many dubbing requests. Please try again shortly.",
+    });
+    expect(isRateLimited).toHaveBeenCalledWith("dubbing-create:user-1", 5, 60 * 60, true);
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
 });

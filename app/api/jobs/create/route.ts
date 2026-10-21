@@ -2,6 +2,8 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpWorker } from "@/app/lib/gcpWorker";
 import { parseStorageUri, getPresignedUrl } from "@/app/lib/storage/index";
+import { mayResolveObject } from "@/app/lib/storage/access";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { normalizeLanguage, sanitizeSubtitleStyle } from "@/app/lib/subtitles";
@@ -11,6 +13,14 @@ import { isWtmAllowed } from "@/app/lib/wtm/access";
 import { resolveWatermarkForPlan as resolveWatermarkForIsPro } from "@/app/lib/wtm/watermark";
 import type { WatermarkConfig } from "@/app/types/wtm";
 export const maxDuration = 300;
+
+// A demo export chunks the source every 10 seconds and dispatches every chunk to
+// a GPU worker. Six hours is deliberately generous (long webinars) while still
+// giving the loop a finite ceiling; the per-chunk cap below is the second line of
+// defence if this ever changes.
+const MAX_DEMO_SECONDS = 6 * 60 * 60;
+const CHUNK_DURATION_SECONDS = 10;
+const MAX_CHUNKS = Math.ceil(MAX_DEMO_SECONDS / CHUNK_DURATION_SECONDS);
 
 const EXEMPT_EMAILS = [
   "aryaanandpathak30@gmail.com",
@@ -107,8 +117,8 @@ async function dispatchVideoJob(
       },
     });
 
-    const chunkDuration = 10;
-    const chunksCount = Math.ceil(duration / chunkDuration);
+    const chunkDuration = CHUNK_DURATION_SECONDS;
+    const chunksCount = Math.min(MAX_CHUNKS, Math.max(1, Math.ceil(duration / chunkDuration)));
     const chunkFilenames: string[] = [];
     const fetchTasks = [];
 
@@ -278,20 +288,25 @@ export async function POST(req: NextRequest) {
     const sanitizedDemoId =
       typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
 
-    // Resolve native storage URIs (s3:// or gs://) to short-lived HTTPS URLs
-    // so the worker can fetch the source without needing its own credentials.
-    // Plain HTTPS URLs are passed through unchanged.
-    if (parseStorageUri(videoUrl)) {
-      videoUrl = await getPresignedUrl(videoUrl);
-    }
+    // Parse native storage URIs up front, but do NOT sign them until the caller
+    // is known: signing is what needs the ownership check below.
+    const videoStorageUri = parseStorageUri(videoUrl);
+    const customBackgroundStorageUri =
+      customBackgroundUrl && parseStorageUri(customBackgroundUrl)
+        ? parseStorageUri(customBackgroundUrl)
+        : null;
 
-    if (customBackgroundUrl && parseStorageUri(customBackgroundUrl)) {
-      customBackgroundUrl = await getPresignedUrl(customBackgroundUrl);
-    }
-
-    // Accept a string number from the client by coercing it. NaN stays invalid.
+    // Accept a string number from the client by coercing it. Number.isFinite
+    // rejects NaN, Infinity, and JSON `1e400` (which parses to Infinity), all of
+    // which used to pass the truthiness check and drive Math.ceil(Infinity/10)
+    // as an unbounded dispatch loop.
     const coercedDuration = typeof duration === "string" ? Number(duration) : duration;
-    if (!coercedDuration || typeof coercedDuration !== "number" || Number.isNaN(coercedDuration)) {
+    if (
+      typeof coercedDuration !== "number" ||
+      !Number.isFinite(coercedDuration) ||
+      coercedDuration <= 0 ||
+      coercedDuration > MAX_DEMO_SECONDS
+    ) {
       return NextResponse.json({ error: "Missing or invalid duration" }, { status: 400 });
     }
 
@@ -313,6 +328,46 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id;
+
+    // GPU dispatches are the most expensive action in the product. Limit per
+    // authenticated user before signing anything or creating a job.
+    if (await isRateLimited(`jobs-create:${userId}`, 20, 10 * 60, true)) {
+      return NextResponse.json(
+        { error: "Too many export jobs. Please try again shortly." },
+        { status: 429 }
+      );
+    }
+
+    // Resolve native storage URIs (s3:// or gs://) to short-lived HTTPS URLs
+    // so the worker can fetch the source without needing its own credentials.
+    // Plain HTTPS URLs are passed through unchanged. A storage URI may only be
+    // signed if it is the caller's own upload or already referenced by a row
+    // they own — otherwise this is a confused deputy for any bucket/key.
+    if (videoStorageUri) {
+      const allowed = await mayResolveObject(
+        videoUrl,
+        videoStorageUri.bucket,
+        videoStorageUri.key,
+        userId
+      );
+      if (!allowed) {
+        return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+      }
+      videoUrl = await getPresignedUrl(videoUrl);
+    }
+
+    if (customBackgroundUrl && customBackgroundStorageUri) {
+      const allowed = await mayResolveObject(
+        customBackgroundUrl,
+        customBackgroundStorageUri.bucket,
+        customBackgroundStorageUri.key,
+        userId
+      );
+      if (!allowed) {
+        return NextResponse.json({ error: "Background URL is not allowed" }, { status: 400 });
+      }
+      customBackgroundUrl = await getPresignedUrl(customBackgroundUrl);
+    }
 
     // the job may float free, but a demoId must be the caller's own demo
     if (sanitizedDemoId) {

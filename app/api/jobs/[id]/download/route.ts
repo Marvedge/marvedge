@@ -93,6 +93,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     const upstream = await fetch(job.exportedUrl, {
       cache: "no-store",
+      // The stored URL passed isSafeUrl, but a 30x would move the fetch to a new
+      // host after that check. Do not follow redirects; 3xx is a failed fetch.
+      redirect: "manual",
       // Bound a hung upstream so one slow object store can't hold the route open.
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     }).catch(() => null);

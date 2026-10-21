@@ -9,6 +9,7 @@ import {
   buildDrawtextFontOption,
   downloadUrlToFile,
   escapeDrawtextFilterValue,
+  MAX_DOWNLOAD_REDIRECTS,
   resolveFontForDrawtext,
   resolveRedirectTarget,
 } from "./safe-download";
@@ -23,6 +24,18 @@ function publicLookup() {
 
 function tmpDest(name: string): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vw-dl-")), name);
+}
+
+function axiosResponse(status: number, location: string | null, body = "") {
+  const stream = new PassThrough();
+  stream.end(body);
+  return {
+    status,
+    headers: {
+      location: location ?? undefined,
+    },
+    data: stream,
+  };
 }
 
 describe("video-worker drawtext font handling", () => {
@@ -138,7 +151,7 @@ describe("video-worker safe download URLs", () => {
       responseType: "stream",
       timeout: 60000,
       maxContentLength: 1024,
-      maxRedirects: 5,
+      maxRedirects: 0,
     });
     expect(fs.readFileSync(dest, "utf8")).toBe("hello");
   });
@@ -167,6 +180,79 @@ describe("video-worker safe download URLs", () => {
         maxBytes: 1024,
       })
     ).rejects.toThrow(/size limit/i);
+  });
+
+  it.each([
+    "http://169.254.169.254/latest/meta-data",
+    "http://10.0.0.8/internal",
+    "http://localhost/admin",
+    "http://[::1]/admin",
+  ])("does not follow a 302 redirect to %s", async (location) => {
+    axiosMock.mockResolvedValueOnce(axiosResponse(302, location));
+    const dest = tmpDest("v.mp4");
+
+    await expect(
+      downloadUrlToFile("https://cdn.example.test/start.mp4", dest, {
+        lookupImpl: publicLookup(),
+      })
+    ).rejects.toThrow(/blocked host|private address/i);
+
+    expect(axiosMock).toHaveBeenCalledTimes(1);
+    expect(axiosMock.mock.calls[0][0]).toMatchObject({ maxRedirects: 0 });
+    expect(fs.existsSync(dest)).toBe(false);
+  });
+
+  it("follows a public 302 hop and writes the final body", async () => {
+    axiosMock
+      .mockResolvedValueOnce(axiosResponse(302, "/final/clip.mp4"))
+      .mockResolvedValueOnce(axiosResponse(200, null, "final-bytes"));
+    const dest = tmpDest("v.mp4");
+
+    await downloadUrlToFile("https://cdn.example.test/start.mp4", dest, {
+      lookupImpl: publicLookup(),
+    });
+
+    expect(axiosMock).toHaveBeenCalledTimes(2);
+    expect(axiosMock.mock.calls[1][0]).toMatchObject({
+      url: "https://cdn.example.test/final/clip.mp4",
+      method: "GET",
+      maxRedirects: 0,
+    });
+    expect(fs.readFileSync(dest, "utf8")).toBe("final-bytes");
+  });
+
+  it("stops after the redirect hop cap", async () => {
+    axiosMock.mockImplementation(async () =>
+      axiosResponse(302, "https://cdn.example.test/again")
+    );
+    const dest = tmpDest("v.mp4");
+
+    await expect(
+      downloadUrlToFile("https://cdn.example.test/start.mp4", dest, {
+        lookupImpl: publicLookup(),
+      })
+    ).rejects.toThrow(/too many source URL redirects/i);
+    expect(axiosMock).toHaveBeenCalledTimes(MAX_DOWNLOAD_REDIRECTS + 1);
+    expect(fs.existsSync(dest)).toBe(false);
+  });
+
+  it("refuses a redirect to a non-http(s) scheme or credentialed URL", async () => {
+    for (const location of [
+      "file:///etc/passwd",
+      "https://user:pass@cdn.example.test/video.mp4",
+    ]) {
+      axiosMock.mockReset();
+      axiosMock.mockResolvedValueOnce(axiosResponse(302, location));
+      const dest = tmpDest("v.mp4");
+
+      await expect(
+        downloadUrlToFile("https://cdn.example.test/start.mp4", dest, {
+          lookupImpl: publicLookup(),
+        })
+      ).rejects.toThrow(/non-http|credentials/i);
+      expect(axiosMock).toHaveBeenCalledTimes(1);
+      expect(fs.existsSync(dest)).toBe(false);
+    }
   });
 
   it("never calls axios for a blocked URL", async () => {

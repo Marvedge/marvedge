@@ -7,7 +7,12 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { createHash, randomUUID } = require("node:crypto");
 const { createReadStream } = require("node:fs");
-const { fetchSafeUrl } = require("./safe-download.cjs");
+const {
+  fetchSafeUrl,
+  isSafeRecipeId,
+  readPositiveIntEnv,
+  writeCappedResponseBody,
+} = require("./safe-download.cjs");
 const { prepareChunkInput } = require("./chunk-input.cjs");
 const express = require("express");
 // Storage: AWS S3 (primary) with GCS cold-standby — provider controlled by STORAGE_PROVIDER env.
@@ -17,14 +22,14 @@ const jobstore   = require("./jobstore.cjs");
 const { renderChunkFromRecipe } = require("./render");
 const { authorizeWorkerRequest } = require("./worker-auth.cjs");
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = readPositiveIntEnv("PORT", 8080);
 const RAW_BUCKET = process.env.RAW_BUCKET || "";
 const PROCESSED_BUCKET = process.env.PROCESSED_BUCKET || "";
 const RAW_PREFIX = process.env.RAW_PREFIX || "";
 const PROCESSED_PREFIX = process.env.PROCESSED_PREFIX || "";
 const RECIPES_COLLECTION = process.env.RECIPES_COLLECTION || "recipes";
 const CHUNKS_COLLECTION = process.env.CHUNKS_COLLECTION || "chunks";
-const CHUNK_DURATION_SECS = Number(process.env.CHUNK_DURATION_SECS || 10);
+const CHUNK_DURATION_SECS = readPositiveIntEnv("CHUNK_DURATION_SECS", 10);
 // GCS object prefix for AVS voiceover MP3s (in the processed bucket).
 const AVS_VOICEOVER_PREFIX = process.env.AVS_VOICEOVER_PREFIX || "avs-voiceover/";
 // GCS object prefix for AVS time-aligned MP4s (in the processed bucket).
@@ -32,13 +37,13 @@ const AVS_ALIGNED_PREFIX = process.env.AVS_ALIGNED_PREFIX || "avs-aligned/";
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(os.tmpdir(), "marvedge-artifacts");
 fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => {});
 // Frame rate the aligned segments are normalized to so they concat with -c copy.
-const AVS_SYNC_FPS = Number(process.env.AVS_SYNC_FPS || 30);
+const AVS_SYNC_FPS = readPositiveIntEnv("AVS_SYNC_FPS", 30);
 // GCS object prefix for WTM webcam-bubble composited MP4s (processed bucket).
 const WTM_COMPOSITE_PREFIX = process.env.WTM_COMPOSITE_PREFIX || "wtm-composite/";
 // BOTH compositor inputs are normalized to this frame rate first: a 60 FPS
 // screen capture overlaid with a 24 FPS webcam otherwise drifts apart over a
 // long recording (PRD Â§6.4 edge case).
-const WTM_COMPOSITE_FPS = Number(process.env.WTM_COMPOSITE_FPS || 30);
+const WTM_COMPOSITE_FPS = readPositiveIntEnv("WTM_COMPOSITE_FPS", 30);
 // Bubble inset from its corner, in px at 1080p and scaled with the source
 // height â€” mirrors the watermark margin logic in render.js.
 const WTM_BUBBLE_MARGIN_PX = 25;
@@ -51,7 +56,7 @@ const WTM_BUBBLE_SIZE_DEFAULT = 0.28;
 const WTM_POSITIONS = ["br", "bl", "tr", "tl"];
 // Deepgram Aura per-request text cap. The API rejects very long text, so we
 // split a step's narration at sentence boundaries to stay comfortably under it.
-const AURA_CHAR_LIMIT = Number(process.env.AURA_CHAR_LIMIT || 1800);
+const AURA_CHAR_LIMIT = readPositiveIntEnv("AURA_CHAR_LIMIT", 1800);
 // Deepgram Aura English voices exposed by the panel; anything else falls back.
 const AVS_DEFAULT_VOICE = "aura-2-thalia-en";
 const AVS_ALLOWED_VOICES = new Set([
@@ -77,11 +82,15 @@ const HLS_LADDER = [
 // Segment length in seconds. Also the GOP length â€” see the keyframe comment in
 // packageHlsJob(). Four is the usual compromise: shorter means more requests and
 // more playlist, longer means a slower first frame and coarser ABR reactions.
-const HLS_SEGMENT_SECONDS = Number(process.env.HLS_SEGMENT_SECONDS || 4);
+const HLS_SEGMENT_SECONDS = readPositiveIntEnv("HLS_SEGMENT_SECONDS", 4);
 // Frame rate every rendition is normalized to. A CONSTANT frame rate is what
 // makes `-g` a fixed number of SECONDS rather than a fixed number of frames that
 // means something different per rendition.
-const HLS_FPS = Number(process.env.HLS_FPS || 30);
+const HLS_FPS = readPositiveIntEnv("HLS_FPS", 30);
+
+// Hard cap for remote response bodies fetched by the worker (source videos,
+// TTS audio, etc.). Infinity/zero/negative/NaN env values fall back to 1 GiB.
+const DOWNLOAD_MAX_BYTES = readPositiveIntEnv("DOWNLOAD_MAX_BYTES", 1073741824);
 
 const execFileAsync = promisify(execFile);
 
@@ -153,8 +162,7 @@ async function downloadFromUrl({ url, destinationPath }) {
     throw new Error(`Failed to download source video: ${response.status}`);
   }
 
-  const bytes = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(destinationPath, bytes);
+  await writeCappedResponseBody(response, destinationPath, DOWNLOAD_MAX_BYTES);
 }
 
 /**
@@ -537,8 +545,7 @@ async function synthesizeAuraChunk(text, voiceId, outputPath) {
     throw new Error(`ElevenLabs TTS failed (${resp.status}): ${errBody}`);
   }
 
-  const bytes = Buffer.from(await resp.arrayBuffer());
-  await fs.writeFile(outputPath, bytes);
+  await writeCappedResponseBody(resp, outputPath, DOWNLOAD_MAX_BYTES);
 }
 
 /** Probe an audio file's duration (seconds) via ffprobe. */
@@ -971,8 +978,12 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
 //
 // Constants (overridable via env):
 const AVS_DUB_PREFIX = process.env.AVS_DUB_PREFIX || "avs-dub/";
-const AVS_DUB_STRETCH_MIN = Number(process.env.AVS_DUB_STRETCH_MIN || 0.8);  // fastest video / slowest audio allowed
-const AVS_DUB_STRETCH_MAX = Number(process.env.AVS_DUB_STRETCH_MAX || 1.25); // slowest video / fastest audio allowed
+const AVS_DUB_STRETCH_MIN = readPositiveIntEnv("AVS_DUB_STRETCH_MIN", 0.8, {
+  allowFraction: true,
+}); // fastest video / slowest audio allowed
+const AVS_DUB_STRETCH_MAX = readPositiveIntEnv("AVS_DUB_STRETCH_MAX", 1.25, {
+  allowFraction: true,
+}); // slowest video / fastest audio allowed
 
 /**
  * Validate + sort dubTimings entries, dropping malformed ones.
@@ -2343,6 +2354,12 @@ app.post("/merge", async (req, res) => {
       error: "recipeId and chunkFilenames array are required",
     });
   }
+  if (!isSafeRecipeId(recipeId)) {
+    return res.status(400).json({
+      ok: false,
+      error: "Invalid recipeId",
+    });
+  }
   for (const chunkName of chunkFilenames) {
     if (!isSafeChunkFilename(chunkName)) {
       return res.status(400).json({
@@ -2356,11 +2373,20 @@ app.post("/merge", async (req, res) => {
   const workDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "marvedge-gcp-merge-"),
   );
-  const finalFilename = `${recipeId}.mp4`;
-  const finalPath = path.join(workDir, finalFilename);
-  const concatTextPath = path.join(workDir, "concat.txt");
 
   try {
+    const finalFilename = `${recipeId}.mp4`;
+    // Defense in depth: even an allowlisted id must resolve inside workDir
+    // before ffmpeg writes the merged MP4.
+    const finalPath = resolveChunkPath(workDir, finalFilename);
+    if (!finalPath) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid recipeId",
+      });
+    }
+    const concatTextPath = path.join(workDir, "concat.txt");
+
     let concatLines = "";
     for (let i = 0; i < chunkFilenames.length; i++) {
       const chunkName = chunkFilenames[i];
@@ -2429,4 +2455,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, isSafeChunkFilename, resolveChunkPath };
+module.exports = { app, downloadFromUrl, isSafeChunkFilename, resolveChunkPath };

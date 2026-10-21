@@ -20,6 +20,41 @@ export const MAX_DOWNLOAD_REDIRECTS = 5;
 export const DOWNLOAD_TIMEOUT_MS = 60_000;
 export const DEFAULT_MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Read a header from either an AxiosHeaders instance or a plain object. Axios
+ * normalizes names to lower case, but tests and alternate transports may not.
+ */
+function readResponseHeader(headers: unknown, name: string): string | null {
+  if (!headers || typeof headers !== "object") {
+    return null;
+  }
+  const record = headers as Record<string, unknown> & {
+    get?: (headerName: string) => unknown;
+  };
+  if (typeof record.get === "function") {
+    const value = record.get(name);
+    if (value !== undefined && value !== null && String(value).length > 0) {
+      return String(value);
+    }
+  }
+  const target = name.toLowerCase();
+  for (const key of Object.keys(record)) {
+    if (key.toLowerCase() !== target) {
+      continue;
+    }
+    const value = record[key];
+    if (typeof value === "string" || typeof value === "number") {
+      return String(value);
+    }
+    if (Array.isArray(value) && value.length > 0) {
+      return String(value[0]);
+    }
+  }
+  return null;
+}
+
 export type DnsLookupResult = Array<{ address: string; family: number }>;
 export type DnsLookupFn = (hostname: string) => Promise<DnsLookupResult>;
 
@@ -263,48 +298,90 @@ export async function resolveRedirectTarget(
   return assertSafeDownloadUrl(resolved.toString(), lookupImpl);
 }
 
+/**
+ * Issue a GET and follow redirects manually so every hop is validated before
+ * the next request. axios/follow-redirects does not await async beforeRedirect
+ * hooks, so maxRedirects is forced to 0 and the hop loop lives here.
+ */
+async function requestFollowingSafeRedirects(
+  url: string,
+  options: {
+    timeoutMs: number;
+    maxBytes: number;
+    maxRedirects: number;
+    lookupImpl?: DnsLookupFn;
+  }
+): Promise<any> {
+  let currentUrl = String(url);
+
+  for (let redirectCount = 0; ; redirectCount += 1) {
+    // Validate immediately before every request, including the first.
+    const safeUrl = await assertSafeDownloadUrl(currentUrl, options.lookupImpl);
+    currentUrl = safeUrl.toString();
+
+    const response = await axios({
+      url: currentUrl,
+      method: "GET",
+      responseType: "stream",
+      timeout: options.timeoutMs,
+      maxContentLength: options.maxBytes,
+      maxBodyLength: options.maxBytes,
+      maxRedirects: 0,
+      validateStatus: (status: number) =>
+        (status >= 200 && status < 300) || REDIRECT_STATUSES.has(status),
+    });
+
+    if (!REDIRECT_STATUSES.has(response.status)) {
+      return response;
+    }
+
+    try {
+      response.data?.destroy?.();
+    } catch {
+      // Ignore destroy errors; redirect responses carry no usable body.
+    }
+
+    if (redirectCount >= options.maxRedirects) {
+      throw new Error(`Too many source URL redirects (max ${options.maxRedirects})`);
+    }
+
+    const location = readResponseHeader(response.headers, "location");
+    currentUrl = (await resolveRedirectTarget(location, currentUrl, options.lookupImpl)).toString();
+  }
+}
+
 export async function downloadUrlToFile(
   url: string,
   outputPath: string,
   options: DownloadToFileOptions = {}
 ): Promise<void> {
-  const safeUrl = await assertSafeDownloadUrl(url, options.lookupImpl);
   const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? maxDownloadBytes();
-  const maxRedirects = options.maxRedirects ?? MAX_DOWNLOAD_REDIRECTS;
+  const maxRedirects =
+    Number.isInteger(options.maxRedirects) && (options.maxRedirects as number) >= 0
+      ? (options.maxRedirects as number)
+      : MAX_DOWNLOAD_REDIRECTS;
 
-  const writer = fs.createWriteStream(outputPath);
-  let currentUrl = safeUrl.toString();
-  let response: any;
-  try {
-    response = await axios({
-      url: currentUrl,
-      method: "GET",
-      responseType: "stream",
-      timeout: timeoutMs,
-      maxContentLength: maxBytes,
-      maxBodyLength: maxBytes,
-      maxRedirects,
-      // Re-validate every redirect target: throwing here aborts the chain
-      // before axios requests the next hop.
-      beforeRedirect: async (_redirectOptions: any, redirectDetails: any) => {
-        currentUrl = (
-          await resolveRedirectTarget(redirectDetails?.headers?.location, currentUrl, options.lookupImpl)
-        ).toString();
-      },
-    });
-  } catch (err) {
-    writer.destroy();
-    throw err;
-  }
+  const response = await requestFollowingSafeRedirects(url, {
+    timeoutMs,
+    maxBytes,
+    maxRedirects,
+    lookupImpl: options.lookupImpl,
+  });
 
-  const contentLength = Number(response.headers?.["content-length"]);
+  const contentLength = Number(readResponseHeader(response.headers, "content-length"));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-    writer.destroy();
+    try {
+      response.data?.destroy?.();
+    } catch {
+      // Ignore destroy errors; the rejection below carries the failure.
+    }
     throw new Error(
       `Refusing download: content-length ${contentLength} exceeds limit of ${maxBytes} bytes`
     );
   }
+
+  const writer = fs.createWriteStream(outputPath);
 
   return new Promise<void>((resolve, reject) => {
     let received = 0;

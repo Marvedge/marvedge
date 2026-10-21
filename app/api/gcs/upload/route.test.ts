@@ -37,6 +37,7 @@ import {
   getSignedUploadUrl,
   toPublicUri,
 } from "@/app/lib/storage";
+import { MAX_UPLOAD_BYTES } from "@/app/lib/subtitles/limits";
 import { POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -44,6 +45,14 @@ function makeRequest(body: unknown): NextRequest {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+function makeRawRequest(body: string): NextRequest {
+  return new NextRequest("http://localhost:3000/api/gcs/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
   });
 }
 
@@ -133,6 +142,88 @@ describe("POST /api/gcs/upload", () => {
         contentType: "image/png",
         size: 200 * 1024 * 1024,
       })
+    );
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("refuses a video upload with no declared size before minting", async () => {
+    const res = await POST(
+      makeRequest({
+        kind: "demo-source",
+        filename: "x.mp4",
+        contentType: "video/mp4",
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("refuses a video upload whose size parses to Infinity (1e400) before minting", async () => {
+    const res = await POST(
+      makeRawRequest(
+        '{"kind":"demo-source","filename":"x.mp4","contentType":"video/mp4","size":1e400}'
+      )
+    );
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, "NaN", "Infinity"])(
+    "refuses a video upload with invalid size %s before minting",
+    async (size) => {
+      const res = await POST(
+        makeRequest({
+          kind: "demo-source",
+          filename: "x.mp4",
+          contentType: "video/mp4",
+          size,
+        })
+      );
+
+      expect(res.status).toBe(400);
+      expect(getSignedUploadUrl).not.toHaveBeenCalled();
+    }
+  );
+
+  it("refuses a video upload over the 2 GB cap at mint time", async () => {
+    const res = await POST(
+      makeRequest({
+        kind: "demo-source",
+        filename: "x.mp4",
+        contentType: "video/mp4",
+        size: MAX_UPLOAD_BYTES + 1,
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("mints a video URL with the video cap passed to the signer", async () => {
+    const res = await POST(
+      makeRequest({
+        kind: "demo-source",
+        filename: "x.mp4",
+        contentType: "video/mp4",
+        size: 1024,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(getSignedUploadUrl).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(getSignedUploadUrl).mock.calls[0];
+    expect(call[4]).toBe(MAX_UPLOAD_BYTES);
+  });
+
+  it("refuses a non-video upload whose size parses to Infinity (1e400)", async () => {
+    const res = await POST(
+      makeRawRequest(
+        '{"kind":"generic","filename":"x.png","contentType":"image/png","size":1e400}'
+      )
     );
 
     expect(res.status).toBe(400);

@@ -237,6 +237,27 @@ describe("/api/tutorials upload caps (#445)", () => {
     expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized Content-Length before reading the body", async () => {
+    const request = {
+      headers: new Headers({
+        "content-length": String(8 * 1024 * 1024 + 1),
+      }),
+      get body(): ReadableStream<Uint8Array> | null {
+        throw new Error("body must not be read for an oversized declared length");
+      },
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: "Request body too large",
+    });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.tutorial.create).not.toHaveBeenCalled();
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
+  });
+
   it.each(["{", "null", "[]"])("returns 400 for an invalid JSON object: %s", async (body) => {
     const request = new NextRequest("http://localhost:3000/api/tutorials", {
       method: "POST",

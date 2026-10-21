@@ -29,6 +29,10 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpSubtitles: vi.fn(),
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
 vi.mock("groq-sdk", () => ({
   default: class MockGroq {},
 }));
@@ -44,6 +48,7 @@ vi.mock("next/server", async (importOriginal) => {
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpSubtitles } from "@/app/lib/gcpWorker";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { after } from "next/server";
 import { POST } from "./route";
 
@@ -63,6 +68,7 @@ describe("POST /api/subtitles/create URL security", () => {
     } as never);
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1" } as never);
     vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-1" } as never);
+    vi.mocked(isRateLimited).mockResolvedValue(false);
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -97,6 +103,21 @@ describe("POST /api/subtitles/create URL security", () => {
     expect(json).toMatchObject({ success: true, jobId: "job-1" });
     expect(prisma.videoJob.create).toHaveBeenCalledTimes(1);
     expect(after).toHaveBeenCalledTimes(1);
+    expect(invokeGcpSubtitles).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 before creating a job or dispatching transcription", async () => {
+    vi.mocked(isRateLimited).mockResolvedValue(true);
+
+    const res = await POST(makePostRequest({ videoUrl: "https://example.com/v.mp4" }));
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Too many subtitle requests. Please try again shortly.",
+    });
+    expect(isRateLimited).toHaveBeenCalledWith("subtitles-create:u-1", 10, 10 * 60, true);
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
     expect(invokeGcpSubtitles).not.toHaveBeenCalled();
   });
 });
