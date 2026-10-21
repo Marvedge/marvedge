@@ -1,18 +1,24 @@
 "use client";
 import AnalyticsMain from "@/app/components/AnalyticsMain";
 import type { OverlayFunnelPanelProps } from "@/app/components/analytics/OverlayFunnelPanel";
+import type { Trend } from "@/app/lib/analytics/metrics";
+
+export type AnalyticsTrends = {
+  views: Trend;
+  completion: Trend;
+  duration: Trend;
+  ctr: Trend;
+};
 
 type AnalyticsClientProps = {
   totalViews: number;
   avgDuration: string;
   completionRate: string;
-  activeShares: number;
   topDemos: { title: string; views: number; ctaClicks: number; hasCta: boolean }[];
   viewsOverTime: { date: string; views: number }[];
-  totalCtaClicks: number;
-  uniqueCtaClicks: number;
   ctaClickRate: string;
-  topCtas: { label: string; clicks: number }[];
+  /** Real month-over-month deltas for the stat cards, computed on the server. */
+  trends: AnalyticsTrends;
   /** Null when OVERLAYS_ENABLED is off — the page then renders as it always has. */
   overlayFunnel: OverlayFunnelPanelProps | null;
 };

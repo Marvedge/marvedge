@@ -1,13 +1,32 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
-import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { isPasswordResetRateLimited } from "@/app/lib/auth/passwordResetProtection";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 import crypto from "crypto";
+
+const MAX_AUTH_BODY_BYTES = 8 * 1024;
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
+
+  if (!bodyResult.ok) {
+    return NextResponse.json(
+      {
+        error:
+          bodyResult.reason === "too_large"
+            ? "Request body too large"
+            : "Email and OTP are required",
+      },
+      {
+        status: bodyResult.reason === "too_large" ? 413 : 400,
+      }
+    );
+  }
+
+  const body = bodyResult.value;
+  const email = typeof body.email === "string" ? body.email.trim() : "";
   const otp = typeof body?.otp === "string" ? body.otp : "";
 
   if (!email || !otp) {
@@ -15,11 +34,7 @@ export async function POST(req: Request) {
   }
 
   // same guessing budget as the reset itself
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded
-    ? forwarded.split(",")[0].trim()
-    : req.headers.get("x-real-ip")?.trim() || "unknown";
-  if (await isRateLimited(`verify-otp:${ip}:${email.toLowerCase()}`, 5, 900, true)) {
+  if (await isPasswordResetRateLimited(email, req.headers, "reset-attempt")) {
     return NextResponse.json(
       { error: "Too many attempts, please try again later" },
       { status: 429 }

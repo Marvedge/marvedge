@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/app/lib/prisma";
+import { isCrmActionRateLimited } from "@/app/lib/crm/abuseProtection";
 import { resolveConnection } from "@/app/lib/crm/connection";
 import { deliver } from "@/app/lib/crm";
 import { normalizeLead } from "@/app/lib/crm/normalize";
@@ -69,6 +70,13 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   });
   if (!row) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 });
+  }
+
+  if (await isCrmActionRateLimited(resolved.owner.userId, "connection-test")) {
+    return NextResponse.json(
+      { error: "Too many CRM actions. Please try again later." },
+      { status: 429 }
+    );
   }
 
   const connection = resolveConnection(row);

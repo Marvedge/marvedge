@@ -1,18 +1,37 @@
 import { prisma } from "@/app/lib/prisma";
 import { hash, compare } from "bcryptjs";
 import { NextResponse } from "next/server";
-import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { isPasswordResetRateLimited } from "@/app/lib/auth/passwordResetProtection";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 import crypto from "crypto";
+
+const MAX_AUTH_BODY_BYTES = 8 * 1024;
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { email: rawEmail, otp, token, password, confirmPassword } = await req.json();
+    const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error:
+            bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request body.",
+        },
+        {
+          status: bodyResult.reason === "too_large" ? 413 : 400,
+        }
+      );
+    }
+
+    const { email: rawEmail, otp, token, password, confirmPassword } = bodyResult.value;
+
     // Trim spaces so lookup, update, and cleanup use the same address the
     // other reset routes use. Case is left alone so existing accounts keep working.
-    const email = typeof rawEmail === "string" ? rawEmail.trim() : rawEmail;
-    const resetToken = token || otp;
+    const email = typeof rawEmail === "string" ? rawEmail.trim() : "";
+
+    const resetToken = typeof token === "string" ? token : typeof otp === "string" ? otp : "";
 
     if (!email || !resetToken || !password || !confirmPassword) {
       return NextResponse.json({ error: "All fields are required." }, { status: 400 });
@@ -33,11 +52,7 @@ export async function POST(req: Request) {
     }
 
     // same guessing budget as the legacy reset route
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded
-      ? forwarded.split(",")[0].trim()
-      : req.headers.get("x-real-ip")?.trim() || "unknown";
-    if (await isRateLimited(`verify-reset:${ip}:${String(email).toLowerCase()}`, 5, 900, true)) {
+    if (await isPasswordResetRateLimited(email, req.headers, "reset-attempt")) {
       return NextResponse.json(
         { error: "Too many attempts, please try again later." },
         { status: 429 }
