@@ -78,6 +78,32 @@ describe("Clip Scoring Service (Task-00050)", () => {
         })
       ).toThrow("options.platform must be one of: tiktok, reels, shorts, general");
     });
+
+    it("accepts the supported scoring model", () => {
+      const res = validateClipScoringInput({
+        demoId: "demo-1",
+        options: { model: "gpt-4o" },
+      });
+      expect(res.options?.model).toBe("gpt-4o");
+    });
+
+    it("rejects a client-supplied scoring model outside the allowlist", () => {
+      expect(() =>
+        validateClipScoringInput({
+          demoId: "demo-1",
+          options: { model: "o1-preview" },
+        })
+      ).toThrow("options.model must be one of: gpt-4o");
+    });
+
+    it("rejects a non-string scoring model", () => {
+      expect(() =>
+        validateClipScoringInput({
+          demoId: "demo-1",
+          options: { model: 123 as any },
+        })
+      ).toThrow("options.model must be a string");
+    });
   });
 
   describe("resolveTranscriptCues", () => {

@@ -12,6 +12,11 @@ services:
       - TALKNET_SERVICE_URL=http://talknet:8000
       - GATEWAY_TIMEOUT_SEC=180.0
       - GATEWAY_HEALTH_TIMEOUT_SEC=5.0
+      # Required in production: the gateway fails closed without it. Set in
+      # your shell or .env file; both the worker and gateway must share it.
+      - ML_GATEWAY_TOKEN=${ML_GATEWAY_TOKEN:-}
+      # Local development only; never set this on an exposed deployment.
+      - ML_GATEWAY_ALLOW_INSECURE=${ML_GATEWAY_ALLOW_INSECURE:-}
     depends_on:
       - autoflip
       - talknet

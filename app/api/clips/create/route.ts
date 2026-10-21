@@ -10,6 +10,7 @@ import {
   validateClipScoringInput,
 } from "@/app/lib/clips/service";
 import { isSafeUrl } from "@/app/lib/safeUrl";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,6 +34,15 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id;
+
+    // OpenAI scoring is billed per request. Cap per authenticated user before
+    // validating/queueing the job.
+    if (await isRateLimited(`clips-create:${userId}`, 10, 10 * 60, true)) {
+      return NextResponse.json(
+        { error: "Too many clip requests. Please try again shortly." },
+        { status: 429 }
+      );
+    }
 
     let body: unknown;
     try {

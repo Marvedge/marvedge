@@ -40,6 +40,13 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ clipId:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Reject an oversized declared body before request.arrayBuffer() buffers it.
+  // Missing/invalid Content-Length falls through to the post-read check below.
+  const declaredBytes = Number.parseInt(request.headers.get("content-length") || "", 10);
+  if (Number.isFinite(declaredBytes) && declaredBytes > MAX_BYTES) {
+    return NextResponse.json({ error: "File exceeds the 50MB limit" }, { status: 413 });
+  }
+
   const { clipId } = await ctx.params;
   const db = asAudioClipDb(prisma);
 

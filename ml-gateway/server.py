@@ -37,29 +37,84 @@ HEALTH_CHECK_TIMEOUT_SEC = float(
 # Reachability finding: docker-compose publishes the gateway as 8000:8000 and
 # the worker reaches it via REFRAME_ML_SERVICE_URL (default
 # http://localhost:8000), so it is NOT confined to the docker network — a
-# shared-secret header is required instead of a loopback bind. When
-# ML_GATEWAY_TOKEN is unset the endpoints stay open (least-breaking for local
-# dev without the env var).
+# shared-secret header is required instead of a loopback bind.
+#
+# Authentication fails CLOSED. If ML_GATEWAY_TOKEN is unset, /reframe and
+# /talknet return 503 until the operator configures a token. The only
+# exception is the explicit ML_GATEWAY_ALLOW_INSECURE=1 (or "true") local-dev
+# escape hatch, which logs a loud warning.
 GATEWAY_TOKEN_HEADER = "x-gateway-token"
+GATEWAY_TOKEN_ENV = "ML_GATEWAY_TOKEN"
+GATEWAY_ALLOW_INSECURE_ENV = "ML_GATEWAY_ALLOW_INSECURE"
+_INSECURE_TRUE_VALUES = {"1", "true"}
 
 
 def _expected_gateway_token() -> str:
-    return os.environ.get("ML_GATEWAY_TOKEN", "").strip()
+    return os.environ.get(GATEWAY_TOKEN_ENV, "").strip()
 
 
-if not os.environ.get("ML_GATEWAY_TOKEN", "").strip():
-    logger.warning(
-        "ML_GATEWAY_TOKEN is not set; /reframe and /talknet are unauthenticated"
+def _insecure_gateway_allowed() -> bool:
+    return (
+        os.environ.get(GATEWAY_ALLOW_INSECURE_ENV, "").strip().lower()
+        in _INSECURE_TRUE_VALUES
     )
 
 
+def _log_auth_startup() -> None:
+    """Logs the effective authentication mode at process startup."""
+    if _expected_gateway_token():
+        logger.info(
+            "%s is set; /reframe and /talknet require X-Gateway-Token",
+            GATEWAY_TOKEN_ENV,
+        )
+    elif _insecure_gateway_allowed():
+        logger.warning(
+            "SECURITY WARNING: %s is unset and %s is enabled; "
+            "/reframe and /talknet are UNAUTHENTICATED. Local development only — "
+            "never expose this gateway to an untrusted network.",
+            GATEWAY_TOKEN_ENV,
+            GATEWAY_ALLOW_INSECURE_ENV,
+        )
+    else:
+        logger.error(
+            "SECURITY: %s is not set; failing closed. /reframe and /talknet will "
+            "return 503 until it is configured. For local development only, set "
+            "%s=1 to explicitly allow unauthenticated access.",
+            GATEWAY_TOKEN_ENV,
+            GATEWAY_ALLOW_INSECURE_ENV,
+        )
+
+
+_log_auth_startup()
+
+
 async def require_gateway_auth(request: Request) -> Optional[JSONResponse]:
-    """Return a 401 response when the gateway token check fails, else None."""
+    """Return an error response when the gateway token check fails, else None.
+
+    Fail-closed: a missing server token is a configuration error (503) unless
+    the explicit insecure dev flag is set. A configured token must match the
+    supplied header in constant time (401 otherwise).
+    """
     expected = _expected_gateway_token()
     if not expected:
-        return None
+        if _insecure_gateway_allowed():
+            return None
+        return JSONResponse(
+            status_code=503,
+            content={
+                "ok": False,
+                "error": (
+                    "Gateway authentication is not configured; refusing request"
+                ),
+            },
+        )
+
     provided = request.headers.get(GATEWAY_TOKEN_HEADER, "")
-    if not provided or not hmac.compare_digest(provided, expected):
+    # Encode before comparing: hmac.compare_digest rejects non-ASCII str
+    # values, and a client-controlled header can contain them.
+    if not provided or not hmac.compare_digest(
+        provided.encode("utf-8"), expected.encode("utf-8")
+    ):
         return JSONResponse(
             status_code=401,
             content={"ok": False, "error": "Unauthorized: invalid or missing gateway token"},

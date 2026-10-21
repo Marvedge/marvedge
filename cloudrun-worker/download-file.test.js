@@ -128,6 +128,66 @@ describe("render downloadFile hardening", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("streams many unknown-length chunks to a temp file without Buffer.concat (no 2x peak)", async () => {
+    const chunkCount = 200;
+    const stream = new ReadableStream({
+      start(c) {
+        for (let i = 0; i < chunkCount; i += 1) {
+          c.enqueue(Buffer.alloc(100, 7));
+        }
+        c.close();
+      },
+    });
+    const fetchImpl = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      body: stream,
+    }));
+    const dest = tmpPath("many.bin");
+    const concatSpy = vi.spyOn(Buffer, "concat");
+
+    await downloadFile("https://media.example.test/many.bin", dest, {
+      fetchImpl,
+      lookupImpl: publicLookup(),
+      maxBytes: 100_000,
+    });
+
+    expect(fs.statSync(dest).size).toBe(chunkCount * 100);
+    expect(concatSpy).not.toHaveBeenCalled();
+    concatSpy.mockRestore();
+    expect(fs.readdirSync(path.dirname(dest))).toEqual([path.basename(dest)]);
+  });
+
+  it("rejects an oversized Content-Length before reading the body", async () => {
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(Buffer.alloc(16, 7));
+        c.close();
+      },
+    });
+    const fetchImpl = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: {
+        get(name) {
+          return String(name).toLowerCase() === "content-length" ? "5000" : null;
+        },
+      },
+      body: stream,
+    }));
+    const dest = tmpPath("too-big.png");
+
+    await expect(
+      downloadFile("https://media.example.test/big.png", dest, {
+        fetchImpl,
+        lookupImpl: publicLookup(),
+        maxBytes: 10,
+      })
+    ).rejects.toThrow(/content-length/i);
+    expect(fs.existsSync(dest)).toBe(false);
+  });
+
   it("aborts a streamed body past the cap and writes nothing", async () => {
     const stream = new ReadableStream({
       start(c) {

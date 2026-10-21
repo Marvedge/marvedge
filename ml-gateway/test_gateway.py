@@ -3,6 +3,7 @@ Unit tests for the Internal ML API Gateway (Task-00029).
 Tests routing, aggregate health, error translation, and timeouts with mocked downstreams.
 """
 
+import logging
 import os
 import sys
 from unittest.mock import patch
@@ -19,6 +20,16 @@ if CURRENT_DIR not in sys.path:
 from server import app
 
 client = TestClient(app)
+
+TEST_GATEWAY_TOKEN = "test-gateway-token"
+AUTH_HEADERS = {"x-gateway-token": TEST_GATEWAY_TOKEN}
+
+
+@pytest.fixture(autouse=True)
+def _default_gateway_token(monkeypatch):
+    """Run every test with a configured token; auth-specific tests override this."""
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", TEST_GATEWAY_TOKEN)
+    monkeypatch.delenv("ML_GATEWAY_ALLOW_INSECURE", raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +301,7 @@ async def test_reframe_success(monkeypatch):
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
     payload = {"videoUrl": "https://example.com/video.mp4", "targetAspectRatio": "9:16"}
-    resp = client.post("/reframe", json=payload)
+    resp = client.post("/reframe", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json() == fake_crop_targets
 
@@ -309,7 +320,11 @@ async def test_reframe_timeout(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/reframe", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 504
     data = resp.json()
     assert data["ok"] is False
@@ -330,7 +345,11 @@ async def test_reframe_connection_failure(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/reframe", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 502
     data = resp.json()
     assert data["ok"] is False
@@ -351,7 +370,11 @@ async def test_reframe_downstream_error_forwarded(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/reframe", json={"videoUrl": "https://example.com/video.mp4", "targetAspectRatio": "invalid"})
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4", "targetAspectRatio": "invalid"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 400
     assert resp.json()["ok"] is False
     assert resp.json()["error"] == "Invalid aspect ratio"
@@ -371,7 +394,11 @@ async def test_reframe_malformed_downstream_response(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/reframe", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
     assert "Malformed response" in resp.json()["error"]
@@ -410,7 +437,11 @@ async def test_talknet_success(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 200
     assert resp.json() == fake_talknet_resp
 
@@ -429,7 +460,11 @@ async def test_talknet_timeout(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 504
     data = resp.json()
     assert data["ok"] is False
@@ -450,7 +485,11 @@ async def test_talknet_connection_failure(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 502
     data = resp.json()
     assert data["ok"] is False
@@ -471,7 +510,11 @@ async def test_talknet_downstream_error_forwarded(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 503
     assert resp.json()["ok"] is False
     assert resp.json()["error"] == "Model weights missing"
@@ -491,7 +534,11 @@ async def test_talknet_malformed_downstream_response(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", custom_client)
 
-    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
     assert "Malformed response" in resp.json()["error"]
@@ -559,8 +606,103 @@ def test_talknet_accepts_valid_token_when_configured(monkeypatch):
     assert resp.status_code == 200
 
 
-def test_endpoints_stay_open_without_token(monkeypatch):
+def test_endpoints_fail_closed_without_token(monkeypatch):
+    """No token and no explicit dev flag: both proxy endpoints must refuse."""
     monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.delenv("ML_GATEWAY_ALLOW_INSECURE", raising=False)
     _mock_downstream_ok(monkeypatch, {"ok": True})
+
+    for path in ("/reframe", "/talknet"):
+        resp = client.post(path, json={"a": 1})
+        assert resp.status_code == 503
+        assert resp.json()["ok"] is False
+        assert "not configured" in resp.json()["error"]
+
+
+@pytest.mark.parametrize("flag", ["1", "true", "TRUE", "True"])
+def test_endpoints_open_with_explicit_insecure_flag(monkeypatch, flag):
+    """The explicit ML_GATEWAY_ALLOW_INSECURE escape hatch allows local dev."""
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", flag)
+    _mock_downstream_ok(monkeypatch, {"ok": True})
+
     assert client.post("/reframe", json={"a": 1}).status_code == 200
     assert client.post("/talknet", json={"a": 1}).status_code == 200
+
+
+@pytest.mark.parametrize("flag", ["0", "false", "yes", "", "  "])
+def test_endpoints_fail_closed_with_non_accepting_flag(monkeypatch, flag):
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", flag)
+
+    resp = client.post("/reframe", json={"a": 1})
+    assert resp.status_code == 503
+
+
+def test_insecure_flag_does_not_override_configured_token(monkeypatch):
+    """A configured token always wins; the dev flag cannot disable auth."""
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", "1")
+
+    resp = client.post("/reframe", json={"a": 1})
+    assert resp.status_code == 401
+
+
+def test_talknet_rejects_wrong_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_non_ascii_token_header_is_rejected_without_crashing(monkeypatch):
+    import asyncio
+
+    from starlette.requests import Request
+
+    import server
+
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    # httpx refuses to encode non-ASCII header values client-side, so build the
+    # ASGI request directly with raw bytes. Starlette decodes headers as
+    # latin-1; the gateway must still compare safely instead of raising.
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/reframe",
+            "headers": [(b"x-gateway-token", b"s\xebcret")],
+        }
+    )
+    response = asyncio.run(server.require_gateway_auth(request))
+    assert response is not None
+    assert response.status_code == 401
+
+
+def test_startup_log_fails_closed_without_token(monkeypatch, caplog):
+    import server
+
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.delenv("ML_GATEWAY_ALLOW_INSECURE", raising=False)
+    with caplog.at_level(logging.ERROR, logger="ml-gateway"):
+        server._log_auth_startup()
+
+    assert any(
+        "failing closed" in record.getMessage() for record in caplog.records
+    )
+
+
+def test_startup_log_warns_loudly_for_insecure_mode(monkeypatch, caplog):
+    import server
+
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", "1")
+    with caplog.at_level(logging.WARNING, logger="ml-gateway"):
+        server._log_auth_startup()
+
+    assert any(
+        "UNAUTHENTICATED" in record.getMessage() for record in caplog.records
+    )

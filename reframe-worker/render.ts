@@ -14,7 +14,7 @@ import path from "path";
 import os from "os";
 import dns from "node:dns";
 import net from "node:net";
-import axios from "axios";
+import axios, { type AxiosResponse } from "axios";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 import { buildFfmpegCropFilter, type CropTargetData } from "../app/types/editor/crop-target";
@@ -49,6 +49,41 @@ export interface RenderReframedVideoDeps {
 export const MAX_DOWNLOAD_REDIRECTS = 5;
 export const DOWNLOAD_TIMEOUT_MS = 60000;
 export const DEFAULT_MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Read a header from either an AxiosHeaders instance or a plain object. Axios
+ * normalizes names to lower case, but tests and alternate transports may not.
+ */
+function readResponseHeader(headers: unknown, name: string): string | null {
+  if (!headers || typeof headers !== "object") {
+    return null;
+  }
+  const record = headers as Record<string, unknown> & {
+    get?: (headerName: string) => unknown;
+  };
+  if (typeof record.get === "function") {
+    const value = record.get(name);
+    if (value !== undefined && value !== null && String(value).length > 0) {
+      return String(value);
+    }
+  }
+  const target = name.toLowerCase();
+  for (const key of Object.keys(record)) {
+    if (key.toLowerCase() !== target) {
+      continue;
+    }
+    const value = record[key];
+    if (typeof value === "string" || typeof value === "number") {
+      return String(value);
+    }
+    if (Array.isArray(value) && value.length > 0) {
+      return String(value[0]);
+    }
+  }
+  return null;
+}
 
 function parseIpv4(address: string): number[] | null {
   const octets = address.split(".").map(Number);
@@ -217,6 +252,57 @@ export async function resolveRedirectTarget(
 }
 
 /**
+ * Issue a GET and follow redirects manually so every hop is validated before
+ * the next request. axios/follow-redirects does not await async beforeRedirect
+ * hooks, so maxRedirects is forced to 0 and the hop loop lives here.
+ */
+async function requestFollowingSafeRedirects(
+  url: string,
+  options: {
+    timeoutMs: number;
+    maxBytes: number;
+    maxRedirects: number;
+    lookupImpl?: (hostname: string) => Promise<Array<{ address: string; family: number }>>;
+  }
+): Promise<AxiosResponse> {
+  let currentUrl = String(url);
+
+  for (let redirectCount = 0; ; redirectCount += 1) {
+    // Validate immediately before every request, including the first.
+    const safeUrl = await assertSafeDownloadUrl(currentUrl, options.lookupImpl);
+    currentUrl = safeUrl.toString();
+
+    const response = await axios({
+      url: currentUrl,
+      method: "GET",
+      responseType: "stream",
+      timeout: options.timeoutMs,
+      maxContentLength: options.maxBytes,
+      maxBodyLength: options.maxBytes,
+      maxRedirects: 0,
+      validateStatus: (status) =>
+        (status >= 200 && status < 300) || REDIRECT_STATUSES.has(status),
+    });
+
+    if (!REDIRECT_STATUSES.has(response.status)) {
+      return response;
+    }
+
+    try {
+      response.data?.destroy?.();
+    } catch {
+      // Ignore destroy errors; redirect responses carry no usable body.
+    }
+
+    if (redirectCount >= options.maxRedirects) {
+      throw new Error(`Too many source URL redirects (max ${options.maxRedirects})`);
+    }
+
+    const location = readResponseHeader(response.headers, "location");
+    currentUrl = (await resolveRedirectTarget(location, currentUrl, options.lookupImpl)).toString();
+  }
+}
+/**
  * Downloads remote video stream over HTTP(S) into local destination path.
  *
  * The URL is validated pre-request (http(s) only, no private/file/gopher
@@ -224,41 +310,26 @@ export async function resolveRedirectTarget(
  * request has a timeout, and bodies over the size limit abort mid-stream.
  */
 export async function defaultDownloadVideo(url: string, destPath: string): Promise<void> {
-  const safeUrl = await assertSafeDownloadUrl(url);
   const maxBytes = maxDownloadBytes();
-  const writer = fs.createWriteStream(destPath);
-  let currentUrl = safeUrl.toString();
-  let response;
-  try {
-    response = await axios({
-      url: currentUrl,
-      method: "GET",
-      responseType: "stream",
-      timeout: DOWNLOAD_TIMEOUT_MS,
-      maxContentLength: maxBytes,
-      maxBodyLength: maxBytes,
-      maxRedirects: MAX_DOWNLOAD_REDIRECTS,
-      // Re-validate every redirect target: throwing here aborts the chain
-      // before axios requests the next hop.
-      beforeRedirect: async (_redirectOptions, redirectDetails) => {
-        currentUrl = (
-          await resolveRedirectTarget(redirectDetails?.headers?.location, currentUrl)
-        ).toString();
-      },
-    });
-  } catch (err) {
-    writer.destroy();
-    throw err;
-  }
+  const response = await requestFollowingSafeRedirects(url, {
+    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    maxBytes,
+    maxRedirects: MAX_DOWNLOAD_REDIRECTS,
+  });
 
-  const contentLength = Number(response.headers?.["content-length"]);
+  const contentLength = Number(readResponseHeader(response.headers, "content-length"));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-    writer.destroy();
+    try {
+      response.data?.destroy?.();
+    } catch {
+      // Ignore destroy errors; the rejection below carries the failure.
+    }
     throw new Error(
       `Refusing download: content-length ${contentLength} exceeds limit of ${maxBytes} bytes`
     );
   }
 
+  const writer = fs.createWriteStream(destPath);
   response.data.pipe(writer);
 
   return new Promise((resolve, reject) => {

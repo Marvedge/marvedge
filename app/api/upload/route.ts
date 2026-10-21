@@ -9,6 +9,12 @@ export const runtime = "nodejs";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
+// A multipart body carries the file plus boundaries and small form fields, so
+// the header can legitimately exceed MAX_SIZE by a little. This ceiling only
+// exists to reject an obviously oversized body before req.formData() buffers it;
+// the exact file.size check below remains the real cap.
+const MAX_MULTIPART_BODY_BYTES = MAX_SIZE + 1024 * 1024;
+
 // FIX: allow only safe image types including GIF
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
@@ -58,6 +64,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Reject an oversized declared body before req.formData() buffers it. A
+    // missing or invalid Content-Length falls through to the capped checks below.
+    const declaredBytes = Number.parseInt(req.headers.get("content-length") || "", 10);
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_MULTIPART_BODY_BYTES) {
+      return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 413 });
+    }
+
     const formData = await req.formData();
     const entry = formData.get("file");
 

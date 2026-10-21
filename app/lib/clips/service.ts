@@ -38,6 +38,16 @@ export class ApiError extends Error {
 }
 
 /**
+ * The only OpenAI models clip scoring supports. Scoring defaults to gpt-4o and
+ * that is the model the rest of the product already uses; accepting an arbitrary
+ * client-supplied model would let a caller pick the most expensive model the
+ * server key can reach. Extend this list deliberately when a model is tested.
+ */
+export const SUPPORTED_CLIP_SCORING_MODELS = ["gpt-4o"] as const;
+
+const SUPPORTED_CLIP_SCORING_MODEL_SET = new Set<string>(SUPPORTED_CLIP_SCORING_MODELS);
+
+/**
  * Default queue dispatcher using BullMQ "video-processing" queue with job name "clip-scoring".
  * Adheres to Marvedge worker retry conventions (3 attempts, exponential backoff).
  */
@@ -158,8 +168,17 @@ export function validateClipScoringInput(data: unknown): ValidatedClipScoringInp
     ) {
       throw new ApiError(400, "options.platform must be one of: tiktok, reels, shorts, general");
     }
-    if (opt.model !== undefined && (typeof opt.model !== "string" || !opt.model.trim())) {
-      throw new ApiError(400, "options.model must be a string");
+    if (opt.model !== undefined) {
+      if (typeof opt.model !== "string" || !opt.model.trim()) {
+        throw new ApiError(400, "options.model must be a string");
+      }
+      const model = opt.model.trim();
+      if (!SUPPORTED_CLIP_SCORING_MODEL_SET.has(model)) {
+        throw new ApiError(
+          400,
+          `options.model must be one of: ${SUPPORTED_CLIP_SCORING_MODELS.join(", ")}`
+        );
+      }
     }
     if (
       opt.temperature !== undefined &&

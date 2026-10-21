@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { prisma } from "@/app/lib/prisma";
 import { dubbingQueue } from "@/app/lib/queue";
 import { isSafeUrl } from "@/app/lib/safeUrl";
@@ -16,6 +17,15 @@ export async function POST(req: NextRequest) {
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // ElevenLabs charges per dubbed minute. Cap per authenticated user before
+    // reading the body or creating a job.
+    if (await isRateLimited(`dubbing-create:${session.user.id}`, 5, 60 * 60, true)) {
+      return NextResponse.json(
+        { error: "Too many dubbing requests. Please try again shortly." },
+        { status: 429 }
+      );
     }
 
     let body: Record<string, unknown>;
