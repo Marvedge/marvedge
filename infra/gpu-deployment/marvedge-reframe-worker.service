@@ -1,0 +1,24 @@
+[Unit]
+Description=Marvedge BullMQ Reframe Worker
+After=network.target marvedge-ml-gateway.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/marvedge
+EnvironmentFile=/etc/marvedge/worker.env
+ExecStart=/usr/bin/node node_modules/tsx/dist/cli.mjs reframe-worker/index.ts
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=marvedge-reframe-worker
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
