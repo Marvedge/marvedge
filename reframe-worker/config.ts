@@ -1,3 +1,5 @@
+import { resolveCallbackBaseUrl, isLoopbackHost } from "../app/lib/jobs/callbackClient";
+import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 // Configuration loader for the lightweight Reframe Worker (Task-00023 / Task-00029).
 //
 // Reads and validates environment variables for BullMQ Redis, backend callback,
@@ -32,12 +34,7 @@ export function loadReframeWorkerEnv(): void {
   ];
 
   const envType = process.env.NODE_ENV || "development";
-  const envFileNames = [
-    `.env.${envType}.local`,
-    `.env.local`,
-    `.env.${envType}`,
-    `.env`,
-  ];
+  const envFileNames = [`.env.${envType}.local`, ".env.local", `.env.${envType}`, ".env"];
 
   for (const dir of rootDirs) {
     for (const fileName of envFileNames) {
@@ -57,13 +54,26 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
     loadReframeWorkerEnv();
   }
 
-  const redisUrl = process.env.REDIS_URL?.trim() || "redis://localhost:6379";
+  const isProduction = process.env.NODE_ENV === "production";
+  const rawRedis = process.env.REDIS_URL?.trim();
 
-  const rawBackendUrl =
-    process.env.BACKEND_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    "http://localhost:3000";
-  const backendUrl = rawBackendUrl.replace(/\/+$/, "");
+  if (isProduction) {
+    if (!rawRedis) {
+      throw new Error(
+        "Missing required production setting: REDIS_URL must point to the shared production Redis instance (e.g. AWS ElastiCache)."
+      );
+    }
+    const allowLocalhostRedis = process.env.ALLOW_LOCALHOST_REDIS_IN_PRODUCTION === "true";
+    if (!allowLocalhostRedis && isLoopbackHost(rawRedis)) {
+      throw new Error(
+        `Accidental localhost Redis target detected in production: "${rawRedis}". Configure a shared production Redis URL (e.g. AWS ElastiCache).`
+      );
+    }
+  }
+
+  const redisUrl = rawRedis || "redis://localhost:6379";
+
+  const backendUrl = resolveCallbackBaseUrl();
 
   const callbackSecret = process.env.CALLBACK_SECRET?.trim() || "";
   if (!callbackSecret) {
@@ -76,25 +86,20 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
     );
   }
 
-  const rawMlUrl =
-    process.env.REFRAME_ML_SERVICE_URL?.trim() || "http://localhost:8000";
+  const rawMlUrl = process.env.REFRAME_ML_SERVICE_URL?.trim() || "http://localhost:8000";
   const mlServiceUrl = rawMlUrl.replace(/\/+$/, "");
 
-  const parsedTimeout = Number.parseInt(
-    process.env.REFRAME_ML_TIMEOUT_MS || "180000",
-    10
-  );
-  const mlTimeoutMs =
-    Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 180000;
+  const parsedTimeout = Number.parseInt(process.env.REFRAME_ML_TIMEOUT_MS || "180000", 10);
+  const mlTimeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 180000;
 
-  const parsedConcurrency = Number.parseInt(
-    process.env.REFRAME_WORKER_CONCURRENCY || "1",
-    10
+  const workerConcurrency = validateWorkerConcurrency(
+    process.env.REFRAME_WORKER_CONCURRENCY,
+    "REFRAME_WORKER_CONCURRENCY",
+    {
+      isProduction,
+      requireBenchmarkApproved: isProduction,
+    }
   );
-  const workerConcurrency =
-    Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
-      ? parsedConcurrency
-      : 1;
 
   const parsedCallbackRetries = Number.parseInt(
     process.env.REFRAME_CALLBACK_MAX_RETRIES || "3",
@@ -110,9 +115,7 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
     10
   );
   const callbackRetryDelayMs =
-    Number.isFinite(parsedCallbackDelay) && parsedCallbackDelay > 0
-      ? parsedCallbackDelay
-      : 1000;
+    Number.isFinite(parsedCallbackDelay) && parsedCallbackDelay > 0 ? parsedCallbackDelay : 1000;
 
   return {
     redisUrl,
