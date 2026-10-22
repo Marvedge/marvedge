@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
@@ -59,13 +59,18 @@ describe("POST /api/upload declared body limit (L1)", () => {
   });
 
   it("still parses a body that is within the multipart allowance", async () => {
-    const formData = vi.fn(async () => new FormData());
+    const form = new FormData();
+    form.set("description", "A small multipart request");
 
-    const res = await POST(requestWithDeclaredLength(1024, formData));
+    const res = await POST(
+      new NextRequest("http://localhost/api/upload", {
+        method: "POST",
+        body: form,
+      })
+    );
 
-    expect(formData).toHaveBeenCalledTimes(1);
-    // No file in the form: the post-parse validation is reached and rejects it.
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "No file provided" });
+    expect(cloudinary.uploader.upload_stream).not.toHaveBeenCalled();
   });
 });
