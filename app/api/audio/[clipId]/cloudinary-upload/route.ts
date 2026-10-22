@@ -13,6 +13,8 @@ import { ApiError, resolveOwnedClip } from "@/app/lib/audio/service";
 import { isAudioUploadEnabled } from "@/app/lib/audio/flags";
 import { CloudinaryUploadError, cloudinaryUploadBuffer } from "@/app/lib/cloudinaryUpload";
 
+import { readBoundedRequestBytes } from "@/app/lib/http/boundedBytes";
+
 export const runtime = "nodejs";
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -40,8 +42,8 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ clipId:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Reject an oversized declared body before request.arrayBuffer() buffers it.
-  // Missing/invalid Content-Length falls through to the post-read check below.
+  // Reject oversized declarations immediately. The bounded reader also counts
+  // actual incoming bytes when Content-Length is absent or understated.
   const declaredBytes = Number.parseInt(request.headers.get("content-length") || "", 10);
   if (Number.isFinite(declaredBytes) && declaredBytes > MAX_BYTES) {
     return NextResponse.json({ error: "File exceeds the 50MB limit" }, { status: 413 });
@@ -56,7 +58,23 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ clipId:
       return NextResponse.json({ error: "Clip already uploaded" }, { status: 409 });
     }
 
-    const body = await request.arrayBuffer();
+    const bodyResult = await readBoundedRequestBytes(request, MAX_BYTES);
+
+    if (!bodyResult.ok) {
+      const error =
+        bodyResult.reason === "too_large"
+          ? "File exceeds the 50MB limit"
+          : bodyResult.reason === "empty"
+            ? "Empty request body"
+            : "Invalid request body";
+
+      return NextResponse.json(
+        { error },
+        { status: bodyResult.reason === "too_large" ? 413 : 400 }
+      );
+    }
+
+    const body = bodyResult.value;
     if (!body || body.byteLength === 0) {
       return NextResponse.json({ error: "Empty request body" }, { status: 400 });
     }
