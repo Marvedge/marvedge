@@ -3,11 +3,14 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
 import { prisma } from "@/app/lib/prisma";
 import { dubbingQueue } from "@/app/lib/queue";
 import { isSafeUrl } from "@/app/lib/safeUrl";
 
 export const maxDuration = 300;
+
+const MAX_BODY_BYTES = 8 * 1024;
 
 // Frontend always sends an explicit targetLanguage — no guessing here,
 // so a dropped field fails loudly instead of dubbing into the wrong language.
@@ -28,18 +31,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: Record<string, unknown>;
-    try {
-      const parsed: unknown = await req.json();
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+    // This endpoint accepts JSON metadata, not the source media itself.
+    // Count actual streamed bytes even when Content-Length is absent or false.
+    const bodyResult = await readBoundedRequestJson(req, MAX_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      if (bodyResult.reason === "too_large") {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
       }
-      body = parsed as Record<string, unknown>;
-    } catch {
-      // Truncated / hand-edited JSON shouldn't surface as a 500 alarm.
+
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
+    const parsed = bodyResult.value;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+    }
+
+    const body = parsed as Record<string, unknown>;
     const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
 
     const rawTargetLanguage =
