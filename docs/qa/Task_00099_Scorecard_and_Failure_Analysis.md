@@ -104,17 +104,21 @@ $$\Delta x_{max} = \min(0.12 \cdot W_{output}, \max(20.0, 0.6 \cdot s_{face}))$$
 For each frame $t \in [1, N-1]$:
 $$\delta_t = x_{median}(t) - x_{smooth}(t-1)$$
 
-$$ x_{smooth}(t) = \begin{cases}
+$$
+x_{smooth}(t) = \begin{cases}
 x_{smooth}(t-1) + \Delta x_{max} & \text{if } \delta_t > \Delta x_{max} \\
 x_{smooth}(t-1) - \Delta x_{max} & \text{if } \delta_t < -\Delta x_{max} \\
 x_{median}(t) & \text{otherwise}
-\end{cases}$$
+\end{cases}
+$$
 
 #### Invariant Theorem
+
 $$\forall t \ge 1, \quad |x_{smooth}(t) - x_{smooth}(t-1)| \le \Delta x_{max} \le 0.12 \cdot W_{output} < 0.15 \cdot W_{output}$$
 **Proof:** By case analysis, if $|\delta_t| \le \Delta x_{max}$, the delta is unchanged and $\le \Delta x_{max}$. If $|\delta_t| > \Delta x_{max}$, the new coordinate is assigned $x_{smooth}(t-1) \pm \Delta x_{max}$, so $|x_{smooth}(t) - x_{smooth}(t-1)| = \Delta x_{max}$. Since $\Delta x_{max} \le 0.12 \cdot W_{output}$, no frame delta can ever exceed $0.15 \cdot W_{output}$. $\blacksquare$
 
 #### Code Hardening Implemented
+
 - [scripts/ml/preprocess_faces.py](file:///Users/aadityaagarwal/Downloads/marvedge/scripts/ml/preprocess_faces.py#L317-L330): Slew-rate limiter added to `crop_video()`.
 - [ml-worker/preprocess_faces.py](file:///Users/aadityaagarwal/Downloads/marvedge/ml-worker/preprocess_faces.py#L317-L330): Mirrored in production worker.
 - [talknet/service.py](file:///Users/aadityaagarwal/Downloads/marvedge/talknet/service.py#L380-L393): Integrated in `crop_video_track()`.
@@ -125,11 +129,13 @@ $$\forall t \ge 1, \quad |x_{smooth}(t) - x_{smooth}(t-1)| \le \Delta x_{max} \l
 ### Root Cause 2: Multi-Speaker Identity Swaps & Phantom Bbox Interpolation (TN-03, EC-03, EC-04)
 
 #### Mathematical Flaw
+
 1. **Unbounded Gap Interpolation:** When a speaker leaves the scene at frame $t_s$ and another speaker appears at frame $t_e$ (e.g. $t_e - t_s = 60$ frames = 2.4s):
    Linear interpolation across $t \in (t_s, t_e)$ constructs synthetic bounding boxes that slide continuously across the frame through empty air.
 2. **Serial Greedy Association with Buggy Early Break:** `talknet/service.py` previously executed a serial `while True` loop with an `else: break` inside the frame loop. When IoU dropped below $0.5$, remaining detections in that frame were skipped, dropping tracks prematurely and causing track fragmentation.
 
 #### Mathematical Formulation of Robust Association
+
 1. **Temporal Gap & Velocity Invariant:**
    Interpolation between keyframe detections $d_s$ and $d_e$ is permitted if and only if:
    $$t_e - t_s \le \text{MAX\_INTERP\_GAP} = 25 \text{ frames (1.0 sec)}$$
@@ -141,6 +147,7 @@ $$\forall t \ge 1, \quad |x_{smooth}(t) - x_{smooth}(t-1)| \le \Delta x_{max} \l
    Matches are resolved greedily in descending order of IoU, ensuring one-to-one exclusive assignment.
 
 #### Code Hardening Implemented
+
 - [talknet/service.py](file:///Users/aadityaagarwal/Downloads/marvedge/talknet/service.py#L298-L375): Refactored `track_shot()` with simultaneous multi-track bipartite matching, duplicate frame guard, and occlusion retirement.
 - [scripts/benchmark/task97_ship_readiness_colab.py](file:///Users/aadityaagarwal/Downloads/marvedge/scripts/benchmark/task97_ship_readiness_colab.py#L400-L420): Added gap and velocity constraints to `stage_interpolate()`.
 - [talknet/test_service.py](file:///Users/aadityaagarwal/Downloads/marvedge/talknet/test_service.py#L300-L338): Added regression tests `test_track_shot_multispeaker_separation` and `test_track_shot_occlusion_gap_retirement`.
@@ -150,6 +157,7 @@ $$\forall t \ge 1, \quad |x_{smooth}(t) - x_{smooth}(t-1)| \le \Delta x_{max} \l
 ### Root Cause 3: Spatial Boundary Clamping Discontinuity & Contract Validation (AF-04, AF-03, AF-07)
 
 #### Mathematical Flaw
+
 1. **Aspect Ratio Roundoff:**
    For a 1080p landscape canvas ($1920 \times 1080$), ideal 9:16 crop width is:
    $$w_{ideal} = 1080 \times \frac{9}{16} = 607.5\text{ px}$$
@@ -163,6 +171,7 @@ $$\forall t \ge 1, \quad |x_{smooth}(t) - x_{smooth}(t-1)| \le \Delta x_{max} \l
    `parse_and_validate_json_output()` only checked timestamps, silently passing empty or corrupt crop boxes.
 
 #### Mathematical Parity & Clamping Solution
+
 ```python
 target_ratio = 9.0 / 16.0
 if source_w / max(source_h, 1) >= target_ratio:
@@ -187,6 +196,7 @@ crop_y = max(0, (source_h - crop_h) // 2)
 ```
 
 #### Code Hardening Implemented
+
 - [autoflip/service.py](file:///Users/aadityaagarwal/Downloads/marvedge/autoflip/service.py#L285-L355): Added complete validation in `parse_and_validate_json_output()` checking crop object presence, spatial boundaries, positive dimensions, aspect ratio tolerance ($\le 1\%$), and rejecting empty targets (AF-07).
 - [autoflip/test_service.py](file:///Users/aadityaagarwal/Downloads/marvedge/autoflip/test_service.py#L42-L50): Fixed test fixture mock coordinates to valid 9:16 values inside 1920x1080.
 - [autoflip/test_service.py](file:///Users/aadityaagarwal/Downloads/marvedge/autoflip/test_service.py#L324-L425): Added unit tests for empty targets, missing crop object, out-of-bounds width/height, negative coordinates, and aspect ratio deviation.
@@ -217,6 +227,7 @@ TOTAL                                                 111        0        0     
 ### 6.2 Raw Test Output Snippets
 
 #### AutoFlip Service Tests (`autoflip/test_service.py`):
+
 ```text
 test_service.py::TestValidation::test_valid_requests PASSED              [  2%]
 test_service.py::TestValidation::test_missing_or_empty_video_url PASSED  [  5%]
@@ -234,6 +245,7 @@ test_service.py::TestHttpServerEndpoints::test_post_reframe_success PASSED [ 97%
 ```
 
 #### TalkNet Service Tests (`talknet/test_service.py`):
+
 ```text
 test_service.py::test_health_endpoint PASSED                             [  4%]
 test_service.py::test_missing_weights_raises_503 PASSED                  [ 64%]
@@ -248,6 +260,7 @@ test_service.py::test_post_detect_timeout_returns_504 PASSED             [100%]
 ```
 
 #### Smoothing & Boundary Tests (`scripts/ml/test_smoothing_boundaries.py`):
+
 ```text
 PASS: input=[1], output=[1.0]
 PASS: input=[1, 2], output=[1.0, 2.0]
@@ -260,6 +273,7 @@ PASS: Noisy input max delta = 15.00 <= 15.0
 ```
 
 #### Face Preprocessing Unit Suite (`scripts/ml/test_preprocess_faces.py --unit`):
+
 ```text
 ============================================================
   TalkNet Face-Crop Preprocessing Unit Test Suite
@@ -293,4 +307,4 @@ PASS: Noisy input max delta = 15.00 <= 15.0
   3. Spatial boundary invariants, aspect ratio even parity, and empty output contract hardened (AF-04, AF-03, AF-07).
 - [x] **Regression Suite Zero Failures:** 111 tests passing across `autoflip`, `talknet`, and `scripts/ml`.
 - [x] **PR Ready:** Conventional commit history prepared for code review and merge.
-$$
+      $$

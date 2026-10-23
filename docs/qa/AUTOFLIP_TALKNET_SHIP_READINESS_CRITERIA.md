@@ -59,13 +59,13 @@ Test videos must include:
 
 ### AF-02 — Crop Trajectory Stability (No Jump / Oscillation)
 
-| Field | Detail |
+| Field                  | Detail                                                                                                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
-| **What is measured** | Frame-to-frame delta of the crop `x` coordinate between consecutive crop targets. |
-| **Pass threshold** | No single frame-to-frame crop-x delta exceeds **15 % of output width** on the medium + long corpus. |
+| **What is measured**   | Frame-to-frame delta of the crop `x` coordinate between consecutive crop targets.                                                                                     |
+| **Pass threshold**     | No single frame-to-frame crop-x delta exceeds **15 % of output width** on the medium + long corpus.                                                                   |
 | **Failure definition** | Any timestamp pair where `                                                                                                                                            | Δcrop_x | / output_width > 0.15` is a crop jump. A video fails if it has ≥ 3 crop jumps. Gate fails if ≥ 2 videos fail. |
-| **Rationale** | Output width for 9:16 on 720 px source ≈ 405 px. A 15 % delta ≈ 60 px — detectable as a jerk but not catastrophic. Values above this feel like a hard cut, not a pan. |
-| **Evidence required** | Delta histogram (PNG) per medium/long video; failing timestamps with before/after frame screenshots. |
+| **Rationale**          | Output width for 9:16 on 720 px source ≈ 405 px. A 15 % delta ≈ 60 px — detectable as a jerk but not catastrophic. Values above this feel like a hard cut, not a pan. |
+| **Evidence required**  | Delta histogram (PNG) per medium/long video; failing timestamps with before/after frame screenshots.                                                                  |
 
 ---
 
