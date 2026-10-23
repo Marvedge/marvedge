@@ -285,14 +285,37 @@ def parse_and_validate_json_output(output_json_path: str) -> Dict[str, Any]:
             "Output JSON missing 'crop_targets' array"
         )
 
-    # Defensive contract validation: verify timestamps are non-negative, monotonic,
-    # and do not exceed source duration (preventing corrupted payloads from returning HTTP 200).
+    if len(data["crop_targets"]) == 0:
+        raise ExecutionError(
+            "Output JSON produced an empty 'crop_targets' array (no valid frames processed)"
+        )
+
+    # Validate output aspect ratio contract if specified
+    expected_ratio = None
+    output_meta = data.get("output")
+    if isinstance(output_meta, dict):
+        ar_str = output_meta.get("aspect_ratio")
+        if isinstance(ar_str, str) and ASPECT_RATIO_REGEX.match(ar_str.strip()):
+            parts = ar_str.strip().split(":")
+            w_part, h_part = float(parts[0]), float(parts[1])
+            if h_part > 0:
+                expected_ratio = w_part / h_part
+
+    # Defensive contract validation: verify timestamps and crop geometries
     source = data.get("source")
     duration_sec = None
+    source_width = None
+    source_height = None
     if isinstance(source, dict):
         raw_dur = source.get("duration_sec")
         if isinstance(raw_dur, (int, float)) and raw_dur > 0:
             duration_sec = float(raw_dur)
+        raw_w = source.get("width")
+        if isinstance(raw_w, (int, float)) and raw_w > 0:
+            source_width = float(raw_w)
+        raw_h = source.get("height")
+        if isinstance(raw_h, (int, float)) and raw_h > 0:
+            source_height = float(raw_h)
 
     max_allowed_ts = (duration_sec + 0.5) if duration_sec is not None else None
     prev_ts = -1.0
@@ -318,6 +341,47 @@ def parse_and_validate_json_output(output_json_path: str) -> Dict[str, Any]:
                 f"crop_targets[{idx}].timestamp_sec ({ts_float}) is not strictly increasing (prev: {prev_ts})"
             )
         prev_ts = ts_float
+
+        # AF-04 / AF-03 validation: Validate crop bounding box
+        crop = target.get("crop")
+        if not isinstance(crop, dict):
+            raise ExecutionError(f"crop_targets[{idx}] missing 'crop' object")
+
+        for key in ("x", "y", "width", "height"):
+            val = crop.get(key)
+            if val is None or not isinstance(val, (int, float)):
+                raise ExecutionError(f"crop_targets[{idx}].crop.{key} is missing or non-numeric")
+
+        cx = float(crop["x"])
+        cy = float(crop["y"])
+        cw = float(crop["width"])
+        ch = float(crop["height"])
+
+        if cw <= 0.0 or ch <= 0.0:
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop dimensions must be positive (got width={cw}, height={ch})"
+            )
+        if cx < -0.5 or cy < -0.5:
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop coordinates cannot be negative (got x={cx}, y={cy})"
+            )
+
+        if source_width is not None and (cx + cw) > (source_width + 0.5):
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop exceeds source width ({cx} + {cw} > {source_width})"
+            )
+        if source_height is not None and (cy + ch) > (source_height + 0.5):
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop exceeds source height ({cy} + {ch} > {source_height})"
+            )
+
+        if expected_ratio is not None:
+            actual_ratio = cw / ch
+            ratio_err = abs(actual_ratio - expected_ratio) / expected_ratio
+            if ratio_err > 0.01:
+                raise ExecutionError(
+                    f"crop_targets[{idx}].crop aspect ratio {actual_ratio:.4f} deviates from target {expected_ratio:.4f} by {ratio_err*100:.2f}% (max 1%)"
+                )
 
     return data
 
