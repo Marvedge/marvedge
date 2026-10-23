@@ -131,6 +131,7 @@ async function dispatchVideoJob(
             recipe: normalizedPayload,
             startTime,
             duration: currentChunkDuration,
+            ...(speakerTracksUri ? { speakerTracksUri } : {}),
           },
           "/process"
         )
@@ -264,7 +265,13 @@ export async function POST(req: NextRequest) {
       settings,
       aspectRatio,
       browserFrame,
+      speakerTracksUri: rawSpeakerTracksUri,
     } = data;
+
+    const speakerTracksUri =
+      typeof rawSpeakerTracksUri === "string" && rawSpeakerTracksUri.trim()
+        ? rawSpeakerTracksUri.trim()
+        : undefined;
 
     if (typeof rawVideoUrl !== "string" || !rawVideoUrl.trim()) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
@@ -401,6 +408,7 @@ export async function POST(req: NextRequest) {
               ...(subtitleStyle ? { subtitleStyle: { ...subtitleStyle } } : {}),
               ...(subtitleLanguage ? { subtitleLanguage } : {}),
               ...(watermark ? { watermark: { ...watermark } } : {}),
+              ...(speakerTracksUri ? { speakerTracksUri } : {}),
             },
           },
         });
@@ -439,6 +447,7 @@ export async function POST(req: NextRequest) {
       ...(subtitleStyle ? { subtitleStyle } : {}),
       ...(subtitleLanguage ? { subtitleLanguage } : {}),
       ...(watermark ? { watermark } : {}),
+      ...(speakerTracksUri ? { speakerTracksUri } : {}),
     };
 
     // 2. Dispatch to GCP Cloud Run workers (Scatter-Gather)

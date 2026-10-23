@@ -1987,6 +1987,7 @@ async function processChunkJob({
   videoUrl,
   startTime,
   duration,
+  speakerTracksUri,
 }) {
   const totalStartMs = Date.now();
   const rawBucket = must("RAW_BUCKET", RAW_BUCKET);
@@ -2047,6 +2048,7 @@ async function processChunkJob({
       chunkDurationSecs: CHUNK_DURATION_SECS,
       startTime,
       duration,
+      speakerTracksUri,
     });
     const renderMs = Date.now() - renderStartMs;
 
@@ -2162,6 +2164,7 @@ app.post("/process", async (req, res) => {
     videoUrl,
     startTime,
     duration,
+    speakerTracksUri,
   } = req.body || {};
   if (!chunkId || !recipeId) {
     return res.status(400).json({
@@ -2180,6 +2183,7 @@ app.post("/process", async (req, res) => {
       videoUrl,
       startTime,
       duration,
+      speakerTracksUri,
     });
     return res.status(200).json({ ok: true, result });
   } catch (err) {
