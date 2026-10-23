@@ -11,6 +11,9 @@ vi.mock("@/app/lib/auth/options", () => ({
 
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
+    user: {
+      findFirst: vi.fn(),
+    },
     videoJob: {
       create: vi.fn(),
     },
@@ -54,6 +57,11 @@ describe("POST /api/dubbing/create URL security", () => {
       },
     } as never);
 
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: "user-1",
+      plan: "PRO",
+    } as never);
+
     vi.mocked(prisma.videoJob.create).mockResolvedValue({
       id: "job-1",
     } as never);
@@ -73,6 +81,43 @@ describe("POST /api/dubbing/create URL security", () => {
     );
 
     expect(response.status).toBe(401);
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when user is not found in database", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "ta",
+      })
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "User not found" });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("rejects a FREE user with 403 (paywall)", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: "user-1",
+      plan: "FREE",
+    } as never);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "fr",
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Dubbing is available on PRO and ENTERPRISE plans",
+    });
     expect(prisma.videoJob.create).not.toHaveBeenCalled();
     expect(dubbingQueue.add).not.toHaveBeenCalled();
   });

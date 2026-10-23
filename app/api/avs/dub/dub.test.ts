@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { POST } from "./route";
-import { prisma } from "@/app/lib/prisma";
-import { getServerSession } from "next-auth";
-import { dubbingQueue } from "@/app/lib/queue";
+
+vi.mock("next-auth", () => ({
+  getServerSession: vi.fn(),
+}));
 
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
@@ -14,13 +14,19 @@ vi.mock("@/app/lib/prisma", () => ({
       findUnique: vi.fn(),
     },
     videoJob: {
+      findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
 
-vi.mock("next-auth", () => ({
-  getServerSession: vi.fn(),
+vi.mock("@/app/lib/redis", () => ({
+  default: {
+    on: vi.fn(),
+    status: "ready",
+  },
 }));
 
 vi.mock("@/app/lib/queue", () => ({
@@ -28,6 +34,11 @@ vi.mock("@/app/lib/queue", () => ({
     add: vi.fn().mockResolvedValue({ id: "bullmq-job-1" }),
   },
 }));
+
+import { getServerSession } from "next-auth";
+import { prisma } from "@/app/lib/prisma";
+import { dubbingQueue } from "@/app/lib/queue";
+import { POST } from "./route";
 
 function createDubRequest(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/avs/dub", {
