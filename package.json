@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
     "test:avs": "vitest run --config vitest.avs.config.ts",
-    "preflight": "tsx scripts/preflightCheck.ts"
+    "preflight": "tsx scripts/preflightCheck.ts",
+    "benchmark:cloud-cost": "tsx scripts/benchmark/cloudCostBenchmark.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
