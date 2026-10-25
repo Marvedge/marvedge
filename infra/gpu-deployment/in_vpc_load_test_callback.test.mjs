@@ -1,37 +1,47 @@
-﻿import test from "node:test";
-import assert from "node:assert/strict";
+﻿import { describe, expect, it } from "vitest";
 import { buildCallbackRecord } from "./callbackRecord.mjs";
 
-test("captures exportedUrl from a completed callback", () => {
-  const record = buildCallbackRecord({
-    status: "COMPLETED",
-    exportedUrl: "https://example.com/video.mp4",
-  }, 123);
+describe("buildCallbackRecord", () => {
+  it("captures exportedUrl from a completed callback", () => {
+    const record = buildCallbackRecord(
+      {
+        status: "COMPLETED",
+        exportedUrl: "https://example.com/video.mp4",
+      },
+      123
+    );
 
-  assert.equal(record.exportedUrl, "https://example.com/video.mp4");
-  assert.equal(record.timestamp, 123);
-  assert.equal(record.fallback, false);
-});
+    expect(record.exportedUrl).toBe("https://example.com/video.mp4");
+    expect(record.timestamp).toBe(123);
+    expect(record.fallback).toBe(false);
+  });
 
-test("records fallback metadata from the orchestrator payload", () => {
-  const record = buildCallbackRecord({
-    status: "COMPLETED",
-    exportedUrl: "https://example.com/fallback.mp4",
-    fallback: true,
-    fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
-  }, 456);
+  it("records fallback metadata from the orchestrator payload", () => {
+    const record = buildCallbackRecord(
+      {
+        status: "COMPLETED",
+        exportedUrl: "https://example.com/fallback.mp4",
+        fallback: true,
+        fallbackReason: "AUTOFLIP_EMPTY_CROP_TARGETS",
+      },
+      456
+    );
 
-  assert.equal(record.fallback, true);
-  assert.equal(record.fallbackReason, "AUTOFLIP_EMPTY_CROP_TARGETS");
-});
+    expect(record.fallback).toBe(true);
+    expect(record.fallbackReason).toBe("AUTOFLIP_EMPTY_CROP_TARGETS");
+  });
 
-test("does not treat the obsolete fallbackApplied field as a fallback", () => {
-  const record = buildCallbackRecord({
-    status: "COMPLETED",
-    fallbackApplied: true,
-  }, 789);
+  it("does not treat the obsolete fallbackApplied field as a fallback", () => {
+    const record = buildCallbackRecord(
+      {
+        status: "COMPLETED",
+        fallbackApplied: true,
+      },
+      789
+    );
 
-  assert.equal(record.fallback, false);
-  assert.equal(record.exportedUrl, undefined);
-  assert.equal(record.fallbackReason, null);
+    expect(record.fallback).toBe(false);
+    expect(record.exportedUrl).toBeUndefined();
+    expect(record.fallbackReason).toBeNull();
+  });
 });
