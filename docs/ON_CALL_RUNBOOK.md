@@ -64,7 +64,7 @@ Check the application response:
 
 Inspect the metrics endpoint:
 
-    curl -fsS http://localhost:3000/api/monitoring/metrics
+    curl -fsS -H "x-marvedge-rollup-secret: ${OVERLAYS_ROLLUP_SECRET}" http://localhost:3000/api/monitoring/metrics
 
 The metrics endpoint is useful only when the application is reachable from
 the host where the command runs. A non-200 response requires further diagnosis.
