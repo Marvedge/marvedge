@@ -55,23 +55,21 @@
 
 ---
 
-## 4. Previously Reported Vitest Regression Results
+## 4. Local Vitest Regression Results (Reverified 2026-10-25)
 
-The earlier report recorded 74 passing tests across the following suites:
+The following regression suites were rerun successfully in the isolated Task 95 worktree using Vitest 4.1.11.
 
-| Test Suite | Previously Reported Tests | Status in This Review |
+| Test Suite | Result | Verification Status |
 |---|---:|---|
-| `scripts/benchmark/concurrentLoadRunner.test.ts` | 8 passed | Not independently reverified |
-| `reframe-worker/config.test.ts` | 9 passed | Not independently reverified |
-| `reframe-worker/orchestrator.test.ts` | 57 passed | Not independently reverified |
+| `scripts/benchmark/concurrentLoadRunner.test.ts` | 8 passed | Reverified |
+| `reframe-worker/config.test.ts` | 9 passed | Reverified |
+| `reframe-worker/orchestrator.test.ts` | 57 passed | Reverified |
 
-**Previously reported total:** 74 passed, 0 failed.
+**Total: 74 passed, 0 failed.**
 
-**Verification limitation:** These results were recorded during earlier testing. They could not be independently reproduced in the current environment because of a Vitest dependency-version mismatch. Do not treat them as freshly verified results from this review.
+The callback mapping regression tests were run separately using Node's built-in test runner: **3 passed, 0 failed**.
 
-The callback mapping regression tests added during this review are separate: **3 passed, 0 failed**, using Node's built-in test runner.
-
----
+These are automated local regression results. They do not substitute for the pending real in-VPC GPU concurrent-load test.
 
 ## 5. Real In-VPC GPU Load Testing Status
 
