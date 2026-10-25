@@ -399,6 +399,18 @@ def stage_interpolate(sparse_dets: Dict, duration: float,
             tf_s, tf_e = ds["frame"], de["frame"]
             if tf_e <= tf_s or (tf_e - tf_s) < 2:
                 continue
+            # EC-03 / TN-03: Max interpolation gap guard
+            # Only interpolate between keyframes within 25 frames (1.0 sec) and within physical velocity limits
+            gap = tf_e - tf_s
+            if gap > 25:
+                continue
+            cx_s = (ds["bbox"][0] + ds["bbox"][2]) / 2.0
+            cx_e = (de["bbox"][0] + de["bbox"][2]) / 2.0
+            cy_s = (ds["bbox"][1] + ds["bbox"][3]) / 2.0
+            cy_e = (de["bbox"][1] + de["bbox"][3]) / 2.0
+            dist = math.sqrt((cx_e - cx_s) ** 2 + (cy_e - cy_s) ** 2)
+            if (dist / gap) > (native_w * 0.05):
+                continue
             xs = np.array([tf_s, tf_e], dtype=float)
             b_s = ds["bbox"]
             b_e = de["bbox"]
@@ -562,13 +574,28 @@ def stage_crop(
         med_x1 = int(np.median(bboxes_arr[:, 0]))
         med_x2 = int(np.median(bboxes_arr[:, 2]))
 
-        # Production AutoFlip 9:16 vertical reframe
-        crop_h = (native_h // 2) * 2
-        crop_w = int(crop_h * 9 / 16)
-        crop_w = (crop_w // 2) * 2
+        # Production AutoFlip 9:16 vertical reframe with strict parity and boundary preservation (AF-03 / AF-04)
+        target_ratio = 9.0 / 16.0
+        if native_w / max(native_h, 1) >= target_ratio:
+            # Source is wider than 9:16 (standard landscape)
+            crop_h = int(native_h // 2) * 2
+            ideal_w = crop_h * target_ratio
+            crop_w = int(round(ideal_w / 2.0)) * 2
+            if crop_w > native_w:
+                crop_w = int(native_w // 2) * 2
+                crop_h = int(round((crop_w / target_ratio) / 2.0)) * 2
+        else:
+            # Source is narrower than 9:16 (tall portrait)
+            crop_w = int(native_w // 2) * 2
+            ideal_h = crop_w / target_ratio
+            crop_h = int(round(ideal_h / 2.0)) * 2
+            if crop_h > native_h:
+                crop_h = int(native_h // 2) * 2
+                crop_w = int(round((crop_h * target_ratio) / 2.0)) * 2
+
         cx     = (med_x1 + med_x2) // 2
         crop_x = max(0, min(cx - crop_w // 2, native_w - crop_w))
-        crop_y = 0
+        crop_y = max(0, (native_h - crop_h) // 2)
 
         start_sec = frames[0]  / TARGET_FPS
         end_sec   = frames[-1] / TARGET_FPS
