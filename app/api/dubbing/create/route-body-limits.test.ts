@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   limited: vi.fn(),
   create: vi.fn(),
   enqueue: vi.fn(),
+  findUser: vi.fn(),
 }));
 
 vi.mock("next-auth", () => ({
@@ -18,7 +19,10 @@ vi.mock("@/app/lib/audio/rateLimit", () => ({
   isRateLimited: mocks.limited,
 }));
 vi.mock("@/app/lib/prisma", () => ({
-  prisma: { videoJob: { create: mocks.create } },
+  prisma: {
+    user: { findFirst: mocks.findUser },
+    videoJob: { create: mocks.create },
+  },
 }));
 vi.mock("@/app/lib/queue", () => ({
   dubbingQueue: { add: mocks.enqueue },
@@ -30,6 +34,10 @@ describe("dubbing creation request-body limits", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
+    mocks.findUser.mockResolvedValue({
+      id: "user-1",
+      plan: "PRO",
+    });
     mocks.limited.mockResolvedValue(false);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.enqueue.mockResolvedValue(undefined);
@@ -98,6 +106,10 @@ describe("dubbing JSON byte boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
+    mocks.findUser.mockResolvedValue({
+      id: "user-1",
+      plan: "PRO",
+    });
     mocks.limited.mockResolvedValue(false);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.enqueue.mockResolvedValue(undefined);
