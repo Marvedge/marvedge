@@ -17,6 +17,7 @@
 import http from "node:http";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
+import { buildCallbackRecord } from "./callbackRecord.mjs";
 import { Queue } from "bullmq";
 
 const args = process.argv.slice(2);
@@ -43,6 +44,15 @@ const redisHost = getArg(
 const redisPort = Number.parseInt(getArg("--redis-port", process.env.REDIS_PORT || "6379"), 10);
 const outputPath = getArg("--output-json", "/tmp/in_vpc_load_test_results.json");
 const callbackPort = Number.parseInt(getArg("--callback-port", "3001"), 10);
+// The reframe-worker must be configured to send callbacks to this harness.
+// Pass the same URL via --worker-callback-url so operator intent is explicit
+// and auditable in logs. The worker itself is configured separately via
+// BACKEND_URL + ALLOW_LOCALHOST_CALLBACK_IN_PRODUCTION=true (for production).
+// This flag does NOT modify the worker; it only records the expected URL.
+const workerCallbackUrl = getArg(
+  "--worker-callback-url",
+  process.env.BACKEND_URL || ""
+);
 const queueName = getArg("--queue-name", process.env.REFRAME_QUEUE_NAME || "reframe-benchmark-queue");
 
 console.log("=============================================================================");
@@ -56,6 +66,16 @@ console.log(`Redis Host:          ${redisHost}:${redisPort}`);
 console.log(`Video URL:           ${videoUrl.slice(0, 60)}...`);
 console.log(`Output Path:         ${outputPath}`);
 console.log(`Queue Name:          ${queueName}`);
+console.log(`Callback Listener:   http://127.0.0.1:${callbackPort}`);
+console.log(`Worker Callback URL: ${workerCallbackUrl || "(not set - configure BACKEND_URL on the worker)"}`);
+
+if (!workerCallbackUrl) {
+  console.warn("[WARN] --worker-callback-url is not set. The reframe-worker must be configured:");
+  console.warn(`  BACKEND_URL=http://127.0.0.1:${callbackPort}`);
+  console.warn("  ALLOW_LOCALHOST_CALLBACK_IN_PRODUCTION=true  # required if NODE_ENV=production");
+  console.warn("  Without this, the worker sends callbacks to the wrong address and all");
+  console.warn("  jobs will appear as TIMEOUT_NO_CALLBACK in this harness.");
+}
 console.log("=============================================================================");
 
 if (queueName === "reframe-processing") {
@@ -102,14 +122,8 @@ async function startCallbackListener() {
           const parsed = JSON.parse(body);
           const jobId = parsed.jobId || parsed.id;
           if (jobId) {
-            callbackRecords.set(jobId, {
-              status: parsed.status,
-              videoUrl: parsed.videoUrl,
-              fallbackApplied: parsed.fallbackApplied || false,
-              fallbackReason: parsed.fallbackReason || null,
-              timestamp: Date.now(),
-            });
-            console.log(`[CALLBACK] Job ${jobId} confirmed: status=${parsed.status}, fallback=${parsed.fallbackApplied}`);
+            callbackRecords.set(jobId, buildCallbackRecord(parsed));
+            console.log(`[CALLBACK] Job ${jobId} confirmed: status=${parsed.status}, fallback=${parsed.fallback}`);
           }
         } catch {
           // Non-JSON callback
@@ -218,12 +232,12 @@ async function run() {
       completedCount++;
       const latency = record.timestamp - runStartTime;
       jobLatencies.push(latency);
-      if (record.fallbackApplied) fallbackCount++;
+      if (record.fallback) fallbackCount++;
       jobResults.push({
         jobId: id,
         status: record.status,
         latencyMs: latency,
-        fallbackApplied: record.fallbackApplied,
+        fallback: record.fallback,
         fallbackReason: record.fallbackReason,
       });
     } else {
@@ -232,7 +246,7 @@ async function run() {
         jobId: id,
         status: "TIMEOUT_NO_CALLBACK",
         latencyMs: totalElapsedMs,
-        fallbackApplied: false,
+        fallback: false,
         fallbackReason: "TIMEOUT",
       });
     }
