@@ -117,6 +117,12 @@ async function dispatchVideoJob(
       },
     });
 
+    const speakerTracksUri =
+      typeof normalizedPayload.speakerTracksUri === "string" &&
+      normalizedPayload.speakerTracksUri.trim()
+        ? normalizedPayload.speakerTracksUri.trim()
+        : undefined;
+
     const chunkDuration = CHUNK_DURATION_SECONDS;
     const chunksCount = Math.min(MAX_CHUNKS, Math.max(1, Math.ceil(duration / chunkDuration)));
     const chunkFilenames: string[] = [];
