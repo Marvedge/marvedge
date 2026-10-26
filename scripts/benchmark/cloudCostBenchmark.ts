@@ -51,7 +51,11 @@ export function parseCliArgs(argv: string[]): {
   let reframeProvider: "fixture" | "autoflip" = "fixture";
   let avsProvider: "fixture" | "talknet" = "fixture";
   let transcriptionProvider: "fixture" | "whisper" | "groq" = "fixture";
-  let dubbingProvider: "fixture" | "elevenlabs" = "fixture";
+  let dubbingProvider: "fixture" | "elevenlabs" | "voicestudio" = "fixture";
+  let voiceStudioUrl: string | undefined;
+  let voiceStudioApiKey: string | undefined;
+  let voiceStudioModel: string | undefined;
+  let voiceStudioFallbackToPaid = false;
   let outputJsonPath = "benchmark_results/cloud_cost_report.json";
   let outputMarkdownPath = "benchmark_results/cloud_cost_report.md";
   let verbose = false;
@@ -107,6 +111,20 @@ export function parseCliArgs(argv: string[]): {
       dubbingProvider = args[++i] as NonNullable<BenchmarkConfig["dubbingProvider"]>;
     } else if (arg.startsWith("--provider-dubbing=")) {
       dubbingProvider = arg.split("=")[1] as NonNullable<BenchmarkConfig["dubbingProvider"]>;
+    } else if (arg === "--voicestudio-url" && i + 1 < args.length) {
+      voiceStudioUrl = args[++i];
+    } else if (arg.startsWith("--voicestudio-url=")) {
+      voiceStudioUrl = arg.split("=")[1];
+    } else if (arg === "--voicestudio-api-key" && i + 1 < args.length) {
+      voiceStudioApiKey = args[++i];
+    } else if (arg.startsWith("--voicestudio-api-key=")) {
+      voiceStudioApiKey = arg.split("=")[1];
+    } else if (arg === "--voicestudio-model" && i + 1 < args.length) {
+      voiceStudioModel = args[++i];
+    } else if (arg.startsWith("--voicestudio-model=")) {
+      voiceStudioModel = arg.split("=")[1];
+    } else if (arg === "--voicestudio-fallback-to-paid") {
+      voiceStudioFallbackToPaid = true;
     } else if (arg === "--output-json" && i + 1 < args.length) {
       outputJsonPath = args[++i];
     } else if (arg.startsWith("--output-json=")) {
@@ -133,6 +151,10 @@ export function parseCliArgs(argv: string[]): {
       avsProvider,
       transcriptionProvider,
       dubbingProvider,
+      voiceStudioUrl,
+      voiceStudioApiKey,
+      voiceStudioModel,
+      voiceStudioFallbackToPaid,
       outputJsonPath,
       outputMarkdownPath,
       verbose,
