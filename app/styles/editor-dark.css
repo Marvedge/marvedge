@@ -35,14 +35,6 @@
   color: #e2e1eb !important;
 }
 
-.dark .pill-slider {
-  background-color: #231e3d !important;
-}
-
-.dark .pill-slider::before {
-  background-color: white !important;
-}
-
 .dark .btn-mini-purple {
   color: white !important;
   background-color: var(--btn-purple) !important;
@@ -83,12 +75,8 @@
   background-color: var(--bg-sidebar);
 }
 
-.dark .editor-video-card {
-  box-shadow:
-    0 0 30px rgba(62, 47, 217, 0.25),
-    0 10px 40px rgba(0, 0, 0, 0.7) !important;
-  border: 1px solid #231c52 !important;
-}
+/* .editor-video-card border/shadow are set inline by EditorPreviewRegion from the
+   Browser Frame toggles (draw border / draw shadow) for both light and dark mode. */
 
 .dark .infinite-loop-outer-frame {
   border: 2px solid #231c52 !important;

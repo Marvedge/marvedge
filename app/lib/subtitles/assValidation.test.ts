@@ -20,6 +20,7 @@ import {
   segmentOnlyWhisperResponse,
 } from "./fixtures/whisperSample";
 import { isCloudinaryUploadConfigured } from "../cloudinaryUpload";
+import ffmpegPath from "ffmpeg-static";
 
 describe("Task-00067: ASS Generation Validation Suite", () => {
   let tempDirs: string[] = [];
@@ -31,8 +32,8 @@ describe("Task-00067: ASS Generation Validation Suite", () => {
   };
 
   beforeAll(() => {
-    // Assert FFmpeg and ffprobe are available in the test environment
-    expect(() => execSync("ffmpeg -version", { stdio: "ignore" })).not.toThrow();
+    // Assert FFmpeg and ffprobe are available in the test environment via statically linked binaries
+    expect(() => execSync(`"${ffmpegPath}" -version`, { stdio: "ignore" })).not.toThrow();
     expect(() => execSync("ffprobe -version", { stdio: "ignore" })).not.toThrow();
   });
 
@@ -199,7 +200,7 @@ describe("Task-00067: ASS Generation Validation Suite", () => {
 
       // Generate a 4-second synthetic test video and burn in subtitles with libass in one pass
       const ffmpegCmd = [
-        "ffmpeg",
+        `"${ffmpegPath}"`,
         "-y",
         "-f",
         "lavfi",
@@ -278,7 +279,7 @@ describe("Task-00067: ASS Generation Validation Suite", () => {
       const escapedPath = escapeFfmpegFilterPath(assPath);
       const mp4Path = path.join(tempDir, "fallback.mp4");
 
-      const cmd = `ffmpeg -y -f lavfi -i color=c=black:s=1280x720:r=25:d=2 -vf "subtitles=${escapedPath}" -c:v libx264 -pix_fmt yuv420p "${mp4Path}"`;
+      const cmd = `"${ffmpegPath}" -y -f lavfi -i color=c=black:s=1280x720:r=25:d=2 -vf "subtitles=${escapedPath}" -c:v libx264 -pix_fmt yuv420p "${mp4Path}"`;
       expect(() => execSync(cmd, { stdio: "ignore" })).not.toThrow();
 
       expect(fs.existsSync(mp4Path)).toBe(true);
@@ -313,7 +314,7 @@ describe("Task-00067: ASS Generation Validation Suite", () => {
       const escapedPath = escapeFfmpegFilterPath(assPath);
       const mp4Path = path.join(tempDir, "arabic.mp4");
 
-      const cmd = `ffmpeg -y -f lavfi -i color=c=black:s=1280x720:r=25:d=2 -vf "subtitles=${escapedPath}" -c:v libx264 -pix_fmt yuv420p "${mp4Path}"`;
+      const cmd = `"${ffmpegPath}" -y -f lavfi -i color=c=black:s=1280x720:r=25:d=2 -vf "subtitles=${escapedPath}" -c:v libx264 -pix_fmt yuv420p "${mp4Path}"`;
       expect(() => execSync(cmd, { stdio: "ignore" })).not.toThrow();
 
       expect(fs.existsSync(mp4Path)).toBe(true);
@@ -350,7 +351,7 @@ describe("Task-00067: ASS Generation Validation Suite", () => {
       const escapedPath = escapeFfmpegFilterPath(assPath);
       const mp4Path = path.join(tempDir, "styled.mp4");
 
-      const cmd = `ffmpeg -y -f lavfi -i color=c=black:s=1280x720:r=25:d=2 -vf "subtitles=${escapedPath}" -c:v libx264 -pix_fmt yuv420p "${mp4Path}"`;
+      const cmd = `"${ffmpegPath}" -y -f lavfi -i color=c=black:s=1280x720:r=25:d=2 -vf "subtitles=${escapedPath}" -c:v libx264 -pix_fmt yuv420p "${mp4Path}"`;
       expect(() => execSync(cmd, { stdio: "ignore" })).not.toThrow();
 
       expect(fs.existsSync(mp4Path)).toBe(true);

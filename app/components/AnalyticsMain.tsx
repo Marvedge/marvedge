@@ -5,21 +5,21 @@ import AnalyticsStatCards from "./analytics/AnalyticsStatCards";
 import ViewsOverTimePanel from "./analytics/ViewsOverTimePanel";
 import TopDemosPanel from "./analytics/TopDemosPanel";
 import OverlayFunnelPanel, { type OverlayFunnelPanelProps } from "./analytics/OverlayFunnelPanel";
+import type { Trend } from "@/app/lib/analytics/metrics";
 
 type AnalyticsMainProps = {
   totalViews?: number;
   avgDuration?: string;
   completionRate?: string;
-  activeShares?: number;
   topDemos?: { title: string; views: number; ctaClicks: number; hasCta: boolean }[];
   viewsOverTime?: { date: string; views: number }[];
-  totalCtaClicks?: number;
-  uniqueCtaClicks?: number;
   ctaClickRate?: string;
-  topCtas?: { label: string; clicks: number }[];
+  trends?: { views: Trend; completion: Trend; duration: Trend; ctr: Trend };
   /** Null or absent when OVERLAYS_ENABLED is off. */
   overlayFunnel?: OverlayFunnelPanelProps | null;
 };
+
+const NEUTRAL_TREND: Trend = { value: "—", direction: "none" };
 
 const AnalyticsMain = ({
   totalViews = 0,
@@ -28,6 +28,12 @@ const AnalyticsMain = ({
   topDemos = [],
   viewsOverTime = [],
   ctaClickRate = "0%",
+  trends = {
+    views: NEUTRAL_TREND,
+    completion: NEUTRAL_TREND,
+    duration: NEUTRAL_TREND,
+    ctr: NEUTRAL_TREND,
+  },
   overlayFunnel = null,
 }: AnalyticsMainProps) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -50,6 +56,7 @@ const AnalyticsMain = ({
         completionRate={completionRate}
         avgDuration={avgDuration}
         ctaClickRate={ctaClickRate}
+        trends={trends}
         isVisible={isVisible}
       />
 

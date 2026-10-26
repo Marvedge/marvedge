@@ -83,6 +83,41 @@ function viewerContentSecurityPolicy(): string {
   return directives.join("; ");
 }
 
+/**
+ * Baseline headers that are safe across public pages, signed-in pages, APIs,
+ * static assets, the FFmpeg editor, and customer-hosted share routes.
+ *
+ * CSP stays scoped to viewer routes because the editor requires workers and
+ * blob URLs. Frame blocking stays absent because customers embed share links.
+ */
+export function buildGlobalSecurityHeaders(nodeEnv: string | undefined = process.env.NODE_ENV) {
+  const headers = [
+    {
+      key: "X-Content-Type-Options",
+      value: "nosniff",
+    },
+    {
+      key: "Referrer-Policy",
+      value: "strict-origin-when-cross-origin",
+    },
+    {
+      key: "Permissions-Policy",
+      value: "camera=(self), microphone=(self), display-capture=(self), geolocation=()",
+    },
+  ];
+
+  // HSTS is emitted only by production builds. Omitting includeSubDomains and
+  // preload avoids imposing Marvedge's policy on customer-controlled subdomains.
+  if (nodeEnv === "production") {
+    headers.push({
+      key: "Strict-Transport-Security",
+      value: "max-age=31536000",
+    });
+  }
+
+  return headers;
+}
+
 const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -95,6 +130,7 @@ const nextConfig: NextConfig = {
   },
 
   async headers() {
+    const globalHeaders = buildGlobalSecurityHeaders();
     const editorHeaders = [
       {
         source: "/video-editor/(.*)", // Only apply these headers to pages that strictly need ffmpeg.wasm
@@ -113,6 +149,10 @@ const nextConfig: NextConfig = {
 
     const csp = viewerContentSecurityPolicy();
     return [
+      {
+        source: "/:path*",
+        headers: globalHeaders,
+      },
       ...editorHeaders,
       // BOTH PATHS, AND THAT IS THE CUSTOMER-DOMAIN CASE, NOT BELT AND BRACES.
       //

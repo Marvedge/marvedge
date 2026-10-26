@@ -3,8 +3,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const http = require("node:http");
-const https = require("node:https");
+const {
+  fetchSafeUrl,
+  MAX_REDIRECTS,
+  readPositiveIntEnv,
+  writeCappedResponseBody,
+} = require("./safe-download.cjs");
 const ffmpeg = require("fluent-ffmpeg");
 
 const FFMPEG_BIN =
@@ -30,6 +34,17 @@ const FFPROBE_BIN =
 
 ffmpeg.setFfmpegPath(FFMPEG_BIN);
 ffmpeg.setFfprobePath(FFPROBE_BIN);
+
+const {
+  buildSplitScreenBlurFilter,
+  buildSplitScreenFilterGraph,
+  evaluateSplitScreen,
+  getSplitScreenDecision,
+  loadSpeakerTracks,
+  parseSpeakerTracks,
+} = require("./split-screen-blur");
+
+const storageLib = require("./storage.cjs");
 
 const EPS = 0.001;
 
@@ -884,26 +899,55 @@ function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
   return out;
 }
 
-function downloadFile(url, outputPath) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const transport = u.protocol === "https:" ? https : http;
-    const req = transport.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        downloadFile(res.headers.location, outputPath).then(resolve).catch(reject);
-        return;
+// Downloads a remote background/watermark asset to disk.
+//
+// Security: every URL (including each redirect hop) is validated with
+// fetchSafeUrl before any bytes are fetched — non-http(s) schemes, blocked
+// hosts, and hostnames resolving to private/link-local addresses are refused.
+// Redirects are capped at MAX_REDIRECTS (5), the whole download is bounded
+// by DOWNLOAD_TIMEOUT_MS, and the body is consumed incrementally (never
+// fully buffered) with an enforced MAX_DOWNLOAD_BYTES cap. `options`
+// ({ timeoutMs, maxRedirects, maxBytes, fetchImpl, lookupImpl }) exists for
+// unit tests; production callers pass nothing.
+const DOWNLOAD_TIMEOUT_MS = readPositiveIntEnv("DOWNLOAD_TIMEOUT_MS", 30000);
+const MAX_DOWNLOAD_BYTES = readPositiveIntEnv(
+  "DOWNLOAD_MAX_BYTES",
+  1073741824
+);
+
+function downloadFile(url, outputPath, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
+  const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS ?? 5;
+  const maxBytes = options.maxBytes ?? MAX_DOWNLOAD_BYTES;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const doFetch = options.fetchImpl
+    ? (target, init) =>
+        options.fetchImpl(target, { ...(init || {}), signal: controller.signal })
+    : (target, init) =>
+        globalThis.fetch(target, { ...(init || {}), signal: controller.signal });
+  return (async () => {
+    try {
+      const response = await fetchSafeUrl(url, {
+        fetchImpl: doFetch,
+        lookupImpl: options.lookupImpl,
+        maxRedirects,
+      });
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
       }
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        reject(new Error(`Download failed: ${res.statusCode}`));
-        return;
+      await writeCappedResponseBody(response, outputPath, maxBytes);
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(
+          `Download timed out after ${timeoutMs}ms: ${String(url).slice(0, 200)}`
+        );
       }
-      const ws = fs.createWriteStream(outputPath);
-      res.pipe(ws);
-      ws.on("finish", resolve);
-      ws.on("error", reject);
-    });
-    req.on("error", reject);
-  });
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
 }
 
 function pickCompression(recipe) {
@@ -947,6 +991,7 @@ async function renderChunkFromRecipe({
   chunkDurationSecs,
   startTime,
   duration,
+  speakerTracksUri,
 }) {
   const renderStartMs = Date.now();
   const tempDir = path.dirname(outputPath);
@@ -1192,13 +1237,60 @@ async function renderChunkFromRecipe({
   const drawCardBorder = Boolean(recipe.browserFrame?.drawBorder);
   const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 
-  // Keep this exactly aligned with local video-worker behavior:
-  // always normalize into target canvas first, preserving full source frame.
-  filters.push(
-    `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-      `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+  // Task 36: Load speaker tracks and evaluate split-screen trigger.
+  const tracksUri = speakerTracksUri || recipe?.speakerTracksUri;
+  let tracksSource = tracksUri;
+
+  if (
+    typeof tracksUri === "string" &&
+    /^(gs|s3):\/\//i.test(tracksUri.trim())
+  ) {
+    const tracksPath = path.join(tempDir, "speaker-tracks.json");
+
+    try {
+      await storageLib.downloadFromUri({
+        uri: tracksUri.trim(),
+        destinationPath: tracksPath,
+      });
+      tracksSource = tracksPath;
+    } catch (error) {
+      console.warn(
+        "[split-screen] Unable to download speaker tracks; using normal crop:",
+        error?.message || error
+      );
+        tracksSource = null;
+    }
+  }
+
+  const splitDecision = evaluateSplitScreen(
+    tracksSource,
+    probe.sourceWidth
   );
-  videoOut = "[res]";
+
+  if (
+    splitDecision.splitScreen &&
+    splitDecision.speakers?.length >= 2
+  ) {
+    const splitGraph = buildSplitScreenFilterGraph({
+      sourceWidth: probe.sourceWidth,
+      sourceHeight: probe.sourceHeight,
+      targetWidth,
+      targetHeight,
+      speaker1: splitDecision.speakers[0],
+      speaker2: splitDecision.speakers[1],
+      blurStrength: recipe?.splitScreenBlurStrength || 20,
+    });
+
+    filters.push(splitGraph.filter);
+    videoOut = "[split_res]";
+  } else {
+    // Keep the existing normal single-speaker crop/pad code here unchanged.
+    filters.push(
+      `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+       `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+    );
+    videoOut = "[res]";
+  }
 
   if (remappedZoomEffects.length > 0) {
     const sortedZooms = [...remappedZoomEffects].sort((a, b) => a.startTime - b.startTime);
@@ -1537,6 +1629,12 @@ async function renderChunkFromRecipe({
 
 module.exports = {
   renderChunkFromRecipe,
+  downloadFile,
+  buildSplitScreenBlurFilter,
+  evaluateSplitScreen,
+  getSplitScreenDecision,
+  loadSpeakerTracks,
+  parseSpeakerTracks,
   // Exported for app/lib/subtitles/workerParity.test.ts, which asserts this
   // file's ASS mapping stays byte-identical to app/lib/subtitles/style.ts.
   writeAssSubtitles,

@@ -11,6 +11,9 @@ vi.mock("@/app/lib/auth/options", () => ({
 
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
+    user: {
+      findFirst: vi.fn(),
+    },
     videoJob: {
       create: vi.fn(),
     },
@@ -23,9 +26,14 @@ vi.mock("@/app/lib/queue", () => ({
   },
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { dubbingQueue } from "@/app/lib/queue";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { POST } from "./route";
 
 function makeRequest(body: Record<string, unknown>): NextRequest {
@@ -49,11 +57,17 @@ describe("POST /api/dubbing/create URL security", () => {
       },
     } as never);
 
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: "user-1",
+      plan: "PRO",
+    } as never);
+
     vi.mocked(prisma.videoJob.create).mockResolvedValue({
       id: "job-1",
     } as never);
 
     vi.mocked(dubbingQueue.add).mockResolvedValue(undefined as never);
+    vi.mocked(isRateLimited).mockResolvedValue(false);
   });
 
   it("returns 401 when the user is not authenticated", async () => {
@@ -67,6 +81,59 @@ describe("POST /api/dubbing/create URL security", () => {
     );
 
     expect(response.status).toBe(401);
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when user is not found in database", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "ta",
+      })
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "User not found" });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("rejects a FREE user with 403 (paywall)", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: "user-1",
+      plan: "FREE",
+    } as never);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "fr",
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Dubbing is available on PRO and ENTERPRISE plans",
+    });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for malformed JSON instead of a 500", async () => {
+    const bad = new NextRequest("http://localhost:3000/api/dubbing/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // Intentionally broken payload — used to bubble up as "Failed to create...".
+      body: "{not-json",
+    });
+
+    const response = await POST(bad);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid JSON body" });
     expect(prisma.videoJob.create).not.toHaveBeenCalled();
     expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
@@ -121,6 +188,22 @@ describe("POST /api/dubbing/create URL security", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: "Unsafe sourceUrl",
+    });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when targetLanguage is missing instead of guessing Tamil", async () => {
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+      })
+    );
+
+    // Silent "ta" fallback used to mislabel every non-Tamil dub — fail loud now.
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Missing targetLanguage",
     });
     expect(prisma.videoJob.create).not.toHaveBeenCalled();
     expect(dubbingQueue.add).not.toHaveBeenCalled();
@@ -182,5 +265,66 @@ describe("POST /api/dubbing/create URL security", () => {
         removeOnFail: 100,
       }
     );
+  });
+
+  it("normalizes uppercase and padded targetLanguage to lowercase", async () => {
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: " ES ",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      jobId: "job-1",
+      targetLanguage: "es",
+    });
+
+    expect(prisma.videoJob.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        videoUrl: "https://media.example.test/video.mp4",
+        status: "PENDING",
+        progress: 0,
+        jobData: {
+          kind: "DUBBING",
+          targetLanguage: "es",
+        },
+      },
+    });
+
+    expect(dubbingQueue.add).toHaveBeenCalledWith(
+      "dubbing",
+      {
+        jobId: "job-1",
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "es",
+      },
+      {
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      }
+    );
+  });
+
+  it("returns 429 before reading the body, creating a job, or queueing", async () => {
+    vi.mocked(isRateLimited).mockResolvedValue(true);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "fr",
+      })
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error: "Too many dubbing requests. Please try again shortly.",
+    });
+    expect(isRateLimited).toHaveBeenCalledWith("dubbing-create:user-1", 5, 60 * 60, true);
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
 });

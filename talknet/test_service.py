@@ -3,6 +3,7 @@ Unit tests for the TalkNet Active Speaker Detection Service (Task-00029).
 Executes without GPU or real model weights using mocks.
 """
 
+import io
 import os
 import shutil
 import sys
@@ -180,47 +181,48 @@ def test_post_detect_validation_error():
 # Download and Redirect tests
 # ---------------------------------------------------------------------------
 
-@patch("service.requests.get")
+@patch("service._build_safe_session")
 @patch("service.socket.getaddrinfo")
-def test_download_failure_http_error(mock_dns, mock_get):
+def test_download_failure_http_error(mock_dns, mock_session):
     mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
     mock_resp = MagicMock()
     mock_resp.status_code = 404
-    mock_get.return_value = mock_resp
+    mock_resp.headers = {}
+    mock_session.return_value.get.return_value = mock_resp
 
     with patch("service.check_weights_available", return_value={"all_ready": True, "s3fd": True, "model": True}):
         with pytest.raises(DownloadError, match="HTTP status 404"):
             process_detect("https://example.com/notfound.mp4")
 
 
-@patch("service.requests.get")
+@patch("service._build_safe_session")
 @patch("service.socket.getaddrinfo")
-def test_download_timeout_error(mock_dns, mock_get):
+def test_download_timeout_error(mock_dns, mock_session):
     import requests
     mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
-    mock_get.side_effect = requests.Timeout("Connection timed out")
+    mock_session.return_value.get.side_effect = requests.Timeout("Connection timed out")
 
     with patch("service.check_weights_available", return_value={"all_ready": True, "s3fd": True, "model": True}):
         with pytest.raises(TimeoutError, match="timed out"):
             process_detect("https://example.com/slow.mp4")
 
 
-@patch("service.requests.get")
+@patch("service._build_safe_session")
 @patch("service.socket.getaddrinfo")
-def test_download_redirect_to_private_ip_blocked(mock_dns, mock_get):
+def test_download_redirect_to_private_ip_blocked(mock_dns, mock_session):
     mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
     mock_resp = MagicMock()
     mock_resp.status_code = 302
     mock_resp.headers = {"Location": "http://127.0.0.1/secret.mp4"}
-    mock_get.return_value = mock_resp
+    mock_session.return_value.get.return_value = mock_resp
 
     with pytest.raises(ValidationError, match="host is not permitted"):
         download_video("http://example.com/video.mp4", "/tmp/dest.mp4")
 
 
-@patch("service.requests.get")
+@patch("service._build_safe_session")
 @patch("service.socket.getaddrinfo")
-def test_download_safe_redirect(mock_dns, mock_get, tmp_path):
+def test_download_safe_redirect(mock_dns, mock_session, tmp_path):
     mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
     # Hop 1: 302 redirect to valid public location
     resp1 = MagicMock()
@@ -230,25 +232,170 @@ def test_download_safe_redirect(mock_dns, mock_get, tmp_path):
     # Hop 2: 200 with video content
     resp2 = MagicMock()
     resp2.status_code = 200
+    resp2.headers = {}
     resp2.iter_content.return_value = [b"chunk1", b"chunk2"]
 
-    mock_get.side_effect = [resp1, resp2]
+    mock_session.return_value.get.side_effect = [resp1, resp2]
     dest = tmp_path / "out.mp4"
     download_video("http://example.com/video.mp4", str(dest))
     assert dest.read_bytes() == b"chunk1chunk2"
 
 
-@patch("service.requests.get")
+@patch("service._build_safe_session")
 @patch("service.socket.getaddrinfo")
-def test_download_too_many_redirects(mock_dns, mock_get):
+def test_download_too_many_redirects(mock_dns, mock_session):
     mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
     resp = MagicMock()
     resp.status_code = 302
     resp.headers = {"Location": "http://example.com/loop.mp4"}
-    mock_get.return_value = resp
+    mock_session.return_value.get.return_value = resp
 
     with pytest.raises(DownloadError, match="Too many redirects"):
         download_video("http://example.com/video.mp4", "/tmp/dest.mp4")
+
+
+# ---------------------------------------------------------------------------
+# Connection-sink peer validation (DNS-rebinding TOCTOU)
+# ---------------------------------------------------------------------------
+
+class _FakePeerSocket:
+    """Minimal socket double for exercising the connection-sink peer check."""
+
+    def __init__(self, peer, response=b""):
+        self._peer = (peer, 443)
+        self._response = response
+        self.closed = False
+
+    def getpeername(self):
+        return self._peer
+
+    def sendall(self, data):
+        pass
+
+    def makefile(self, mode="rb"):
+        return io.BytesIO(self._response)
+
+    def settimeout(self, timeout):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+def _patch_public_dns(monkeypatch):
+    monkeypatch.setattr(
+        "service.socket.getaddrinfo",
+        lambda *args, **kwargs: [
+            (2, 1, 6, "", ("93.184.216.34", 0))
+        ],
+    )
+
+
+class TestConnectionSinkPeerValidation:
+    @pytest.mark.parametrize(
+        "peer",
+        [
+            "169.254.169.254",
+            "10.0.0.5",
+            "127.0.0.1",
+            "192.168.1.10",
+            "0.0.0.0",
+        ],
+    )
+    def test_dns_rebind_to_private_peer_blocked_at_connect(
+        self, monkeypatch, tmp_path, peer
+    ):
+        # Validator sees a public DNS answer...
+        _patch_public_dns(monkeypatch)
+        # ...but the TCP connection lands on an internal peer.
+        fake = _FakePeerSocket(peer)
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPConnection._new_conn", lambda self: fake
+        )
+
+        dest = tmp_path / "out.mp4"
+        with pytest.raises(ValidationError, match="non-permitted address"):
+            download_video("http://rebind.example/video.mp4", str(dest))
+
+        assert not dest.exists()
+        assert fake.closed is True
+
+    def test_dns_rebind_to_link_local_blocked_before_tls(self, monkeypatch, tmp_path):
+        _patch_public_dns(monkeypatch)
+        fake = _FakePeerSocket("169.254.169.254")
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPSConnection._new_conn", lambda self: fake
+        )
+
+        dest = tmp_path / "out.mp4"
+        with pytest.raises(ValidationError, match="non-permitted address"):
+            download_video("https://rebind.example/video.mp4", str(dest))
+
+        assert not dest.exists()
+        assert fake.closed is True
+
+    def test_public_peer_is_allowed_and_body_is_written(self, monkeypatch, tmp_path):
+        _patch_public_dns(monkeypatch)
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Length: 5\r\n"
+            b"Content-Type: video/mp4\r\n"
+            b"\r\n"
+            b"hello"
+        )
+        fake = _FakePeerSocket("93.184.216.34", response=response)
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPConnection._new_conn", lambda self: fake
+        )
+
+        dest = tmp_path / "out.mp4"
+        download_video("http://public.example/video.mp4", str(dest))
+
+        assert dest.read_bytes() == b"hello"
+
+    def test_https_connection_accepts_public_peer(self, monkeypatch):
+        import service
+
+        fake = _FakePeerSocket("93.184.216.34")
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPSConnection._new_conn", lambda self: fake
+        )
+        connection = service._PeerValidatingHTTPSConnection("public.example", 443)
+        assert connection._new_conn() is fake
+        assert fake.closed is False
+
+    def test_redirect_hop_peer_is_validated_at_connect(self, monkeypatch, tmp_path):
+        _patch_public_dns(monkeypatch)
+        redirect_response = (
+            b"HTTP/1.1 302 Found\r\n"
+            b"Location: http://rebind.example/next.mp4\r\n"
+            b"Content-Length: 0\r\n"
+            b"\r\n"
+        )
+        first = _FakePeerSocket("93.184.216.34", response=redirect_response)
+        second = _FakePeerSocket("10.0.0.5")
+        sockets = iter([first, second])
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPConnection._new_conn",
+            lambda self: next(sockets),
+        )
+
+        dest = tmp_path / "out.mp4"
+        with pytest.raises(ValidationError, match="non-permitted address"):
+            download_video("http://public.example/video.mp4", str(dest))
+
+        assert not dest.exists()
+        assert second.closed is True
+
+    def test_safe_session_keeps_tls_verification_enabled(self):
+        import service
+
+        session = service._build_safe_session()
+        try:
+            assert session.verify is True
+            assert session.trust_env is False
+        finally:
+            session.close()
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +442,46 @@ def test_track_shot_grouping():
     assert len(tracks) == 1
     assert len(tracks[0]["frame"]) == 5
     assert tracks[0]["bbox"].shape == (5, 4)
+
+
+def test_track_shot_multispeaker_separation():
+    """Verify that two co-present speakers form two distinct non-overlapping tracks (EC-04 / TN-03)."""
+    shot_dets = []
+    for f in range(10):
+        # Speaker 1 on left (x: 50..150), Speaker 2 on right (x: 600..700)
+        shot_dets.append([
+            {"frame": f, "bbox": [50.0 + f, 100.0, 150.0 + f, 200.0], "conf": 0.95},
+            {"frame": f, "bbox": [600.0 - f, 100.0, 700.0 - f, 200.0], "conf": 0.95},
+        ])
+    tracks = track_shot(shot_dets, min_track=5, num_failed_det=2)
+    assert len(tracks) == 2, f"Expected 2 tracks, got {len(tracks)}"
+    # Check spatial separation: track 0 must be left, track 1 must be right
+    trk0_cx = np.mean(tracks[0]["bbox"][:, 0])
+    trk1_cx = np.mean(tracks[1]["bbox"][:, 0])
+    assert trk0_cx < 300.0
+    assert trk1_cx > 500.0
+
+
+def test_track_shot_occlusion_gap_retirement():
+    """Verify that when a speaker disappears for > num_failed_det frames, no phantom interpolation occurs (EC-03)."""
+    shot_dets = []
+    # Speaker appears frames 0..5
+    for f in range(6):
+        shot_dets.append([{"frame": f, "bbox": [100.0, 100.0, 200.0, 200.0], "conf": 0.95}])
+    # Absent frames 6..20 (15 empty frames, num_failed_det=3)
+    for f in range(6, 21):
+        shot_dets.append([])
+    # Speaker reappears frames 21..27
+    for f in range(21, 28):
+        shot_dets.append([{"frame": f, "bbox": [105.0, 100.0, 205.0, 200.0], "conf": 0.95}])
+
+    tracks = track_shot(shot_dets, min_track=4, num_failed_det=3)
+    assert len(tracks) == 2, f"Expected 2 separate tracks across occlusion, got {len(tracks)}"
+    # Verify no frames between 6 and 20 are contained in any track
+    all_frames = set(tracks[0]["frame"]).union(set(tracks[1]["frame"]))
+    for empty_f in range(7, 20):
+        assert empty_f not in all_frames, f"Frame {empty_f} was incorrectly interpolated across occlusion!"
+
 
 
 # ---------------------------------------------------------------------------

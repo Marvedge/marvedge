@@ -1,4 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const signupSuccessMessage =
+  "If this email is available, your account has been created. You can now sign in.";
+
+async function fillValidSignupForm(page: Page) {
+  await page.getByPlaceholder("Your First Name").fill("QA User");
+  await page.getByPlaceholder("Your Email").fill("qa@example.com");
+  await page.getByPlaceholder("Enter Password").fill("password123");
+  await page.getByPlaceholder("Enter Confirm Password").fill("password123");
+}
 
 test.describe("Signup UI", () => {
   test.beforeEach(async ({ page }) => {
@@ -153,26 +163,19 @@ test.describe("Signup UI", () => {
       });
 
       await route.fulfill({
-        status: 201,
+        status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          user: {
-            id: "qa-user",
-            name: "QA User",
-            email: "qa@example.com",
-          },
+          message: signupSuccessMessage,
         }),
       });
     });
 
-    await page.getByPlaceholder("Your First Name").fill("QA User");
-    await page.getByPlaceholder("Your Email").fill("qa@example.com");
-    await page.getByPlaceholder("Enter Password").fill("password123");
-    await page.getByPlaceholder("Enter Confirm Password").fill("password123");
+    await fillValidSignupForm(page);
 
     await page.getByRole("button", { name: "Sign Up", exact: true }).click();
 
-    await expect(page.getByText("Account created successfully!")).toBeVisible();
+    await expect(page.getByText(signupSuccessMessage)).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/signin/);
   });
 
@@ -188,10 +191,7 @@ test.describe("Signup UI", () => {
       });
     });
 
-    await page.getByPlaceholder("Your First Name").fill("QA User");
-    await page.getByPlaceholder("Your Email").fill("qa@example.com");
-    await page.getByPlaceholder("Enter Password").fill("password123");
-    await page.getByPlaceholder("Enter Confirm Password").fill("password123");
+    await fillValidSignupForm(page);
 
     await page.getByRole("button", { name: "Sign Up", exact: true }).click();
 

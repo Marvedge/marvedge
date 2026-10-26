@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/app/lib/prisma";
+import { isCrmActionRateLimited } from "@/app/lib/crm/abuseProtection";
 import { retryFailedDeliveries } from "@/app/lib/crm/deliverLead";
 import { resolveCrmOwner } from "@/app/lib/crm/owner";
 import { isOverlaysCrmEnabled } from "@/app/lib/overlays/flags";
@@ -45,6 +46,13 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   });
   if (!connection) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 });
+  }
+
+  if (await isCrmActionRateLimited(resolved.owner.userId, "retry-failed-deliveries")) {
+    return NextResponse.json(
+      { error: "Too many CRM actions. Please try again later." },
+      { status: 429 }
+    );
   }
 
   const summary = await retryFailedDeliveries({

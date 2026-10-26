@@ -82,11 +82,18 @@ export async function callMlInference(
   let status: "success" | "failure" = "failure";
 
   try {
+    // Shared-secret auth for the ML gateway (mirrors CALLBACK_SECRET): sent
+    // only when ML_GATEWAY_TOKEN is configured, so unset env keeps old behavior.
+    const gatewayToken = (process.env.ML_GATEWAY_TOKEN || "").trim();
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    if (gatewayToken) {
+      headers["x-gateway-token"] = gatewayToken;
+    }
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
+      headers,
       body: JSON.stringify(request),
       signal: controller.signal,
     });

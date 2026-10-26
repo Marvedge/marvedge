@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 import { withAuth } from "next-auth/middleware";
 
+// Edge-safe: no Prisma import here. The JWT callback already stamps
+// sessionInvalid on password-reset, so the token alone is enough to gate.
+// (A Prisma call in middleware forces nodejs + breaks the edge build.)
 const authMiddleware = withAuth({
   pages: {
     signIn: "/auth/signin",
+  },
+  callbacks: {
+    async authorized({ token }) {
+      // No token, or one the JWT callback already flagged — bounce to signin.
+      if (!token) {
+        return false;
+      }
+      if (token.sessionInvalid === true) {
+        return false;
+      }
+      // Legacy tokens from before sessionVersion shipped have no version stamp.
+      // Fail closed: force a fresh login so reset-revocation can't be dodged.
+      if (typeof token.sessionVersion !== "number") {
+        return false;
+      }
+      const hasIdentity =
+        typeof token.id === "string" || typeof token.sub === "string";
+      return hasIdentity;
+    },
   },
 });
 
@@ -155,3 +177,7 @@ export const config = {
     "/((?!api|_next/static|_next/image|favicon.ico|icons|images|solid|gradient|background-default-images).*)",
   ],
 };
+
+// Note: no `runtime: "nodejs"` here on purpose. Middleware runs on the
+// edge runtime — setting nodejs breaks the build/deploy, so this stays
+// edge-compatible and does its session check via withAuth, not Prisma.

@@ -54,7 +54,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
+    // Broken payloads are a client problem, not a server one.
+    let razorpay_order_id: unknown;
+    let razorpay_payment_id: unknown;
+    let razorpay_signature: unknown;
+    try {
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json(
+          { success: false, message: "Missing payment fields" },
+          { status: 400 }
+        );
+      }
+      const body = parsed as Record<string, unknown>;
+      razorpay_order_id = body.razorpay_order_id;
+      razorpay_payment_id = body.razorpay_payment_id;
+      razorpay_signature = body.razorpay_signature;
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Missing payment fields" },
+        { status: 400 }
+      );
+    }
 
     if (
       typeof razorpay_order_id !== "string" ||

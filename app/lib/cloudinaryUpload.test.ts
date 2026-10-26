@@ -4,9 +4,18 @@ import {
   cloudinaryResourceTypeFor,
   cloudinaryUpload,
   cloudinaryUploadBuffer,
+  sniffMediaKind,
   uploadVideoToCloudinary,
   CloudinaryUploadError,
 } from "./cloudinaryUpload";
+
+/** Minimal real container headers so magic-byte checks see genuine media. */
+const WEBM_HEADER = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x02, 0x03, 0x04]);
+const MP4_HEADER = new Uint8Array([
+  0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x00,
+  0x00,
+]);
+const MP3_HEADER = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]);
 
 describe("cloudinaryUpload helper", () => {
   const originalEnv = { ...process.env };
@@ -49,7 +58,7 @@ describe("cloudinaryUpload helper", () => {
       process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
       process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
 
-      const testBlob = new Blob(["video-data"], { type: "video/webm" });
+      const testBlob = new Blob([WEBM_HEADER], { type: "video/webm" });
       const expectedUrl = "https://res.cloudinary.com/test-cloud/video/upload/v12345/subtitles_source/test.webm";
 
       const fetchMock = vi.fn().mockResolvedValue({
@@ -79,7 +88,7 @@ describe("cloudinaryUpload helper", () => {
       process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
       process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
 
-      const testBlob = new Blob(["video-data"], { type: "video/webm" });
+      const testBlob = new Blob([WEBM_HEADER], { type: "video/webm" });
       const expectedUrl = "https://res.cloudinary.com/test-cloud/video/upload/sample.webm";
 
       vi.stubGlobal(
@@ -123,7 +132,7 @@ describe("cloudinaryUpload helper", () => {
         })
       );
 
-      const testBlob = new Blob(["data"]);
+      const testBlob = new Blob([WEBM_HEADER], { type: "video/webm" });
       await expect(cloudinaryUpload(testBlob)).rejects.toThrow("Invalid preset");
     });
   });
@@ -142,7 +151,7 @@ describe("cloudinaryUpload helper", () => {
       });
       globalThis.fetch = fetchMock;
 
-      const file = new File(["dummy-video-content"], "test-video.mp4", { type: "video/mp4" });
+      const file = new File([MP4_HEADER], "test-video.mp4", { type: "video/mp4" });
       const secureUrl = await uploadVideoToCloudinary({
         file,
         folder: "marvedge/test_folder",
@@ -180,7 +189,7 @@ describe("cloudinaryUpload helper", () => {
         json: async () => ({ error: { message: "Invalid file type" } }),
       });
 
-      const file = new File(["dummy"], "bad.mp4", { type: "video/mp4" });
+      const file = new File([MP4_HEADER], "bad.mp4", { type: "video/mp4" });
       await expect(uploadVideoToCloudinary({ file })).rejects.toThrow("Invalid file type");
     });
   });
@@ -199,7 +208,7 @@ describe("cloudinaryUpload helper", () => {
       });
       globalThis.fetch = fetchMock;
 
-      const buffer = Buffer.from("test buffer content");
+      const buffer = Buffer.from(MP4_HEADER);
       const secureUrl = await cloudinaryUploadBuffer({
         buffer,
         contentType: "video/mp4",
@@ -209,6 +218,86 @@ describe("cloudinaryUpload helper", () => {
 
       expect(secureUrl).toBe(dynamicSecureUrl);
       expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("sniffMediaKind", () => {
+    it("recognizes genuine video and audio containers", () => {
+      expect(sniffMediaKind(MP4_HEADER)).toBe("video");
+      expect(sniffMediaKind(WEBM_HEADER)).toBe("video");
+      expect(sniffMediaKind(MP3_HEADER)).toBe("audio");
+    });
+
+    it("returns null for HTML and other non-media bytes", () => {
+      const html = new TextEncoder().encode("<html><body>evil</body></html>");
+      expect(sniffMediaKind(html)).toBeNull();
+      expect(sniffMediaKind(new TextEncoder().encode("RIFF....XXXX"))).toBeNull();
+      expect(sniffMediaKind(new Uint8Array([0x00, 0x01]))).toBeNull();
+    });
+  });
+
+  describe("unsigned upload content guards", () => {
+    it("rejects evil.html renamed to evil.mp4 without hitting the network", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        const evil = new File(["<html><body><script>alert(1)</script></body></html>"], "evil.mp4", {
+          type: "video/mp4",
+        });
+        await expect(uploadVideoToCloudinary({ file: evil })).rejects.toThrow(
+          /not a supported video or audio/i
+        );
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("neutralizes the raw fallthrough for non-video bytes", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        const pdf = new Blob(["%PDF-1.4 fake"], { type: "application/pdf" });
+        await expect(
+          cloudinaryUpload(pdf, { folder: "uploads", filename: "doc.pdf" })
+        ).rejects.toThrow(/unsupported file type/i);
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("still uploads legit audio bytes (audio maps to the video resource)", async () => {
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME = "test-cloud";
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET = "test-preset";
+
+      const expectedUrl = "https://res.cloudinary.com/test-cloud/video/upload/clip.mp3";
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ secure_url: expectedUrl }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        const url = await cloudinaryUploadBuffer({
+          buffer: Buffer.from(MP3_HEADER),
+          contentType: "audio/mpeg",
+          folder: "marvedge/audio",
+          filename: "clip.mp3",
+        });
+        expect(url).toBe(expectedUrl);
+        expect(fetchMock.mock.calls[0][0]).toBe(
+          "https://api.cloudinary.com/v1_1/test-cloud/video/upload"
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });

@@ -56,6 +56,7 @@ const previousEnvironment = {
   GOOGLE_CLOUD_PRIVATE_KEY: process.env.GOOGLE_CLOUD_PRIVATE_KEY,
   GCP_RAW_BUCKET: process.env.GCP_RAW_BUCKET,
   RAW_BUCKET: process.env.RAW_BUCKET,
+  STORAGE_PROVIDER: process.env.STORAGE_PROVIDER,
 };
 
 function makeRequest(url: string): NextRequest {
@@ -80,6 +81,7 @@ describe("GET /api/gcs/resolve authorization", () => {
     process.env.GOOGLE_CLOUD_CLIENT_EMAIL = "qa-service-account@example.test";
     process.env.GOOGLE_CLOUD_PRIVATE_KEY = "qa-private-key";
     process.env.GCP_RAW_BUCKET = "raw-bucket";
+    process.env.STORAGE_PROVIDER = "gcs";
     delete process.env.RAW_BUCKET;
 
     mocks.getServerSession.mockResolvedValue({
@@ -113,6 +115,7 @@ describe("GET /api/gcs/resolve authorization", () => {
     restoreEnvironmentVariable("GOOGLE_CLOUD_PRIVATE_KEY");
     restoreEnvironmentVariable("GCP_RAW_BUCKET");
     restoreEnvironmentVariable("RAW_BUCKET");
+    restoreEnvironmentVariable("STORAGE_PROVIDER");
   });
 
   it("returns 401 when the user is not authenticated", async () => {
@@ -157,7 +160,7 @@ describe("GET /api/gcs/resolve authorization", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
       ok: false,
-      error: "Source video object not found in GCS",
+      error: "Source video object not found in storage",
     });
 
     expect(mocks.bucket).not.toHaveBeenCalled();

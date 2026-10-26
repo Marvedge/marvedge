@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -7,24 +7,29 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { createHash, randomUUID } = require("node:crypto");
 const { createReadStream } = require("node:fs");
-const { fetchSafeUrl } = require("./safe-download.cjs");
+const {
+  fetchSafeUrl,
+  isSafeRecipeId,
+  readPositiveIntEnv,
+  writeCappedResponseBody,
+} = require("./safe-download.cjs");
 const { prepareChunkInput } = require("./chunk-input.cjs");
 const express = require("express");
-const { Storage } = require("@google-cloud/storage");
-const { Firestore, FieldValue } = require("@google-cloud/firestore");
+// Storage: AWS S3 (primary) with GCS cold-standby — provider controlled by STORAGE_PROVIDER env.
+const storageLib = require("./storage.cjs");
+// Job state: AWS DynamoDB (primary) with Firestore cold-standby.
+const jobstore   = require("./jobstore.cjs");
 const { renderChunkFromRecipe } = require("./render");
 const { authorizeWorkerRequest } = require("./worker-auth.cjs");
-const storage = new Storage();
-const firestore = new Firestore();
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = readPositiveIntEnv("PORT", 8080);
 const RAW_BUCKET = process.env.RAW_BUCKET || "";
 const PROCESSED_BUCKET = process.env.PROCESSED_BUCKET || "";
 const RAW_PREFIX = process.env.RAW_PREFIX || "";
 const PROCESSED_PREFIX = process.env.PROCESSED_PREFIX || "";
 const RECIPES_COLLECTION = process.env.RECIPES_COLLECTION || "recipes";
 const CHUNKS_COLLECTION = process.env.CHUNKS_COLLECTION || "chunks";
-const CHUNK_DURATION_SECS = Number(process.env.CHUNK_DURATION_SECS || 10);
+const CHUNK_DURATION_SECS = readPositiveIntEnv("CHUNK_DURATION_SECS", 10);
 // GCS object prefix for AVS voiceover MP3s (in the processed bucket).
 const AVS_VOICEOVER_PREFIX = process.env.AVS_VOICEOVER_PREFIX || "avs-voiceover/";
 // GCS object prefix for AVS time-aligned MP4s (in the processed bucket).
@@ -32,13 +37,13 @@ const AVS_ALIGNED_PREFIX = process.env.AVS_ALIGNED_PREFIX || "avs-aligned/";
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(os.tmpdir(), "marvedge-artifacts");
 fs.mkdir(ARTIFACTS_DIR, { recursive: true }).catch(() => {});
 // Frame rate the aligned segments are normalized to so they concat with -c copy.
-const AVS_SYNC_FPS = Number(process.env.AVS_SYNC_FPS || 30);
+const AVS_SYNC_FPS = readPositiveIntEnv("AVS_SYNC_FPS", 30);
 // GCS object prefix for WTM webcam-bubble composited MP4s (processed bucket).
 const WTM_COMPOSITE_PREFIX = process.env.WTM_COMPOSITE_PREFIX || "wtm-composite/";
 // BOTH compositor inputs are normalized to this frame rate first: a 60 FPS
 // screen capture overlaid with a 24 FPS webcam otherwise drifts apart over a
 // long recording (PRD Â§6.4 edge case).
-const WTM_COMPOSITE_FPS = Number(process.env.WTM_COMPOSITE_FPS || 30);
+const WTM_COMPOSITE_FPS = readPositiveIntEnv("WTM_COMPOSITE_FPS", 30);
 // Bubble inset from its corner, in px at 1080p and scaled with the source
 // height â€” mirrors the watermark margin logic in render.js.
 const WTM_BUBBLE_MARGIN_PX = 25;
@@ -51,7 +56,7 @@ const WTM_BUBBLE_SIZE_DEFAULT = 0.28;
 const WTM_POSITIONS = ["br", "bl", "tr", "tl"];
 // Deepgram Aura per-request text cap. The API rejects very long text, so we
 // split a step's narration at sentence boundaries to stay comfortably under it.
-const AURA_CHAR_LIMIT = Number(process.env.AURA_CHAR_LIMIT || 1800);
+const AURA_CHAR_LIMIT = readPositiveIntEnv("AURA_CHAR_LIMIT", 1800);
 // Deepgram Aura English voices exposed by the panel; anything else falls back.
 const AVS_DEFAULT_VOICE = "aura-2-thalia-en";
 const AVS_ALLOWED_VOICES = new Set([
@@ -77,11 +82,15 @@ const HLS_LADDER = [
 // Segment length in seconds. Also the GOP length â€” see the keyframe comment in
 // packageHlsJob(). Four is the usual compromise: shorter means more requests and
 // more playlist, longer means a slower first frame and coarser ABR reactions.
-const HLS_SEGMENT_SECONDS = Number(process.env.HLS_SEGMENT_SECONDS || 4);
+const HLS_SEGMENT_SECONDS = readPositiveIntEnv("HLS_SEGMENT_SECONDS", 4);
 // Frame rate every rendition is normalized to. A CONSTANT frame rate is what
 // makes `-g` a fixed number of SECONDS rather than a fixed number of frames that
 // means something different per rendition.
-const HLS_FPS = Number(process.env.HLS_FPS || 30);
+const HLS_FPS = readPositiveIntEnv("HLS_FPS", 30);
+
+// Hard cap for remote response bodies fetched by the worker (source videos,
+// TTS audio, etc.). Infinity/zero/negative/NaN env values fall back to 1 GiB.
+const DOWNLOAD_MAX_BYTES = readPositiveIntEnv("DOWNLOAD_MAX_BYTES", 1073741824);
 
 const execFileAsync = promisify(execFile);
 
@@ -122,60 +131,28 @@ function must(name, value) {
   return value;
 }
 
-async function downloadRawChunkFromGcs({
-  bucketName,
-  objectName,
-  destinationPath,
-}) {
-  await storage
-    .bucket(bucketName)
-    .file(objectName)
-    .download({ destination: destinationPath });
+// ---------------------------------------------------------------------------
+// Storage helpers — delegate to storage.cjs (AWS S3 primary / GCS fallback)
+// ---------------------------------------------------------------------------
+
+async function downloadRawChunkFromGcs({ bucketName, objectName, destinationPath }) {
+  // Name kept for backwards compatibility — routes to S3 or GCS per STORAGE_PROVIDER.
+  await storageLib.downloadObject({ bucketName, objectName, destinationPath });
 }
 
 function parseGsUri(uri) {
-  if (typeof uri !== "string" || !uri.startsWith("gs://")) {
-    return null;
-  }
-  const trimmed = uri.slice("gs://".length);
-  const slashIndex = trimmed.indexOf("/");
-  if (slashIndex <= 0) {
-    return null;
-  }
-  const bucket = trimmed.slice(0, slashIndex);
-  const object = trimmed.slice(slashIndex + 1);
-  if (!bucket || !object) {
-    return null;
-  }
-  return { bucket, object };
+  // Supports both gs:// (legacy) and s3:// URIs stored in the database.
+  return storageLib.parseStorageUri(uri);
 }
 
 async function downloadFromGsUri({ uri, destinationPath }) {
-  const parsed = parseGsUri(uri);
-  if (!parsed) {
-    throw new Error(`Invalid gs:// uri: ${uri}`);
-  }
-  await downloadRawChunkFromGcs({
-    bucketName: parsed.bucket,
-    objectName: parsed.object,
-    destinationPath,
-  });
+  // Supports both gs:// and s3:// URIs.
+  await storageLib.downloadFromUri({ uri, destinationPath });
 }
 
 async function getSignedHttpUrlForGsUri(uri) {
-  const parsed = parseGsUri(uri);
-  if (!parsed) {
-    throw new Error(`Invalid gs:// uri: ${uri}`);
-  }
-  const [signedUrl] = await storage
-    .bucket(parsed.bucket)
-    .file(parsed.object)
-    .getSignedUrl({
-      version: "v4",
-      action: "read",
-      expires: Date.now() + 2 * 60 * 60 * 1000,
-    });
-  return signedUrl;
+  // Resolves gs:// or s3:// → short-lived HTTPS URL.
+  return storageLib.getSignedUrlForUri(uri);
 }
 
 async function downloadFromUrl({ url, destinationPath }) {
@@ -185,8 +162,7 @@ async function downloadFromUrl({ url, destinationPath }) {
     throw new Error(`Failed to download source video: ${response.status}`);
   }
 
-  const bytes = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(destinationPath, bytes);
+  await writeCappedResponseBody(response, destinationPath, DOWNLOAD_MAX_BYTES);
 }
 
 /**
@@ -451,16 +427,9 @@ async function processSubtitlesJob({ videoUrl, language }) {
   }
 }
 
-async function uploadProcessedChunkToGcs({
-  bucketName,
-  objectName,
-  sourcePath,
-}) {
-  await storage.bucket(bucketName).upload(sourcePath, {
-    destination: objectName,
-    contentType: "video/mp4",
-    resumable: false,
-  });
+async function uploadProcessedChunkToGcs({ bucketName, objectName, sourcePath }) {
+  // Name kept for backwards compatibility — routes to S3 or GCS per STORAGE_PROVIDER.
+  await storageLib.uploadObject({ bucketName, objectName, sourcePath, contentType: "video/mp4" });
 }
 
 // --- AVS voiceover (Deepgram Aura TTS) -------------------------------------
@@ -576,8 +545,7 @@ async function synthesizeAuraChunk(text, voiceId, outputPath) {
     throw new Error(`ElevenLabs TTS failed (${resp.status}): ${errBody}`);
   }
 
-  const bytes = Buffer.from(await resp.arrayBuffer());
-  await fs.writeFile(outputPath, bytes);
+  await writeCappedResponseBody(resp, outputPath, DOWNLOAD_MAX_BYTES);
 }
 
 /** Probe an audio file's duration (seconds) via ffprobe. */
@@ -621,11 +589,8 @@ async function concatMp3(inputPaths, outputPath, workDir, tag) {
 }
 
 async function uploadVoiceoverToGcs({ bucketName, objectName, sourcePath }) {
-  await storage.bucket(bucketName).upload(sourcePath, {
-    destination: objectName,
-    contentType: "audio/mpeg",
-    resumable: false,
-  });
+  // Routes to S3 or GCS per STORAGE_PROVIDER env — name kept for compatibility.
+  await storageLib.uploadObject({ bucketName, objectName, sourcePath, contentType: "audio/mpeg" });
 }
 
 const round3 = (n) => Math.round(n * 1000) / 1000;
@@ -704,13 +669,8 @@ async function processVoiceoverJob({ lines, voiceId, pronunciation }) {
       sourcePath: finalPath,
     });
 
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const audioUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const audioUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[avs-voiceover] steps=${stepTimings.length} duration=${duration}s ` +
@@ -860,10 +820,12 @@ async function concatByDemuxer(inputPaths, outputPath, workDir, tag) {
 }
 
 async function downloadToPath(url, destinationPath) {
-  if (String(url).startsWith("gs://")) {
-    await downloadFromGsUri({ uri: String(url), destinationPath });
+  const u = String(url);
+  // Handles s3:// (AWS primary), gs:// (GCS legacy/fallback), and plain HTTPS URLs.
+  if (u.startsWith("s3://") || u.startsWith("gs://")) {
+    await storageLib.downloadFromUri({ uri: u, destinationPath });
   } else {
-    await downloadFromUrl({ url: String(url), destinationPath });
+    await downloadFromUrl({ url: u, destinationPath });
   }
 }
 
@@ -979,13 +941,8 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
       objectName,
       sourcePath: alignedPath,
     });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const alignedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[avs-sync] steps=${videoSegments.length} frozen=${frozen} padded=${padded} ` +
@@ -1021,8 +978,12 @@ async function processSyncJob({ videoUrl, audioUrl, steps, stepTimings }) {
 //
 // Constants (overridable via env):
 const AVS_DUB_PREFIX = process.env.AVS_DUB_PREFIX || "avs-dub/";
-const AVS_DUB_STRETCH_MIN = Number(process.env.AVS_DUB_STRETCH_MIN || 0.8);  // fastest video / slowest audio allowed
-const AVS_DUB_STRETCH_MAX = Number(process.env.AVS_DUB_STRETCH_MAX || 1.25); // slowest video / fastest audio allowed
+const AVS_DUB_STRETCH_MIN = readPositiveIntEnv("AVS_DUB_STRETCH_MIN", 0.8, {
+  allowFraction: true,
+}); // fastest video / slowest audio allowed
+const AVS_DUB_STRETCH_MAX = readPositiveIntEnv("AVS_DUB_STRETCH_MAX", 1.25, {
+  allowFraction: true,
+}); // slowest video / fastest audio allowed
 
 /**
  * Validate + sort dubTimings entries, dropping malformed ones.
@@ -1321,16 +1282,11 @@ async function processDubSyncJob({ videoUrl, dubUrl, steps, dubTimings }) {
           objectName,
           sourcePath: alignedPath,
         });
-        const fileRef = storage.bucket(processedBucket).file(objectName);
-        try {
-          await fileRef.makePublic();
-        } catch (_e) {
-          /* Ignore if UBLA is enforced — signed URL still works. */
-        }
-        alignedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
-      } catch (gcsErr) {
+        // Generate a signed download URL — works for both private S3 and private GCS buckets.
+        alignedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
+      } catch (uploadErr) {
         console.warn(
-          `[avs-dub] GCS upload failed (${gcsErr.message}). Falling back to local artifact serving.`,
+          `[avs-dub] Storage upload failed (${uploadErr.message}). Falling back to local artifact serving.`,
         );
       }
     }
@@ -1539,13 +1495,8 @@ async function processCompositeJob({ videoUrl, webcamUrl, position, size, shape 
       objectName,
       sourcePath: compositedPath,
     });
-    const fileRef = storage.bucket(processedBucket).file(objectName);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced; a signed/authorized URL still works. */
-    }
-    const compositedVideoUrl = `https://storage.googleapis.com/${processedBucket}/${objectName}`;
+    // Generate a signed download URL — works for both private S3 and private GCS buckets.
+    const compositedVideoUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: objectName });
 
     console.log(
       `[wtm-composite] shape=${bubbleShape} corner=${corner} d=${diameter}px ` +
@@ -2047,6 +1998,7 @@ async function processChunkJob({
   videoUrl,
   startTime,
   duration,
+  speakerTracksUri,
 }) {
   const totalStartMs = Date.now();
   const rawBucket = must("RAW_BUCKET", RAW_BUCKET);
@@ -2107,6 +2059,7 @@ async function processChunkJob({
       chunkDurationSecs: CHUNK_DURATION_SECS,
       startTime,
       duration,
+      speakerTracksUri,
     });
     const renderMs = Date.now() - renderStartMs;
 
@@ -2222,6 +2175,7 @@ app.post("/process", async (req, res) => {
     videoUrl,
     startTime,
     duration,
+    speakerTracksUri,
   } = req.body || {};
   if (!chunkId || !recipeId) {
     return res.status(400).json({
@@ -2240,6 +2194,7 @@ app.post("/process", async (req, res) => {
       videoUrl,
       startTime,
       duration,
+      speakerTracksUri,
     });
     return res.status(200).json({ ok: true, result });
   } catch (err) {
@@ -2389,6 +2344,8 @@ app.post("/package-hls", async (req, res) => {
   }
 });
 
+const { isSafeChunkFilename, resolveChunkPath } = require("./merge-validation.cjs");
+
 app.post("/merge", async (req, res) => {
   const { recipeId, chunkFilenames } = req.body || {};
   if (
@@ -2401,20 +2358,49 @@ app.post("/merge", async (req, res) => {
       error: "recipeId and chunkFilenames array are required",
     });
   }
+  if (!isSafeRecipeId(recipeId)) {
+    return res.status(400).json({
+      ok: false,
+      error: "Invalid recipeId",
+    });
+  }
+  for (const chunkName of chunkFilenames) {
+    if (!isSafeChunkFilename(chunkName)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid chunk filename",
+      });
+    }
+  }
 
   const processedBucket = must("PROCESSED_BUCKET", PROCESSED_BUCKET);
   const workDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "marvedge-gcp-merge-"),
   );
-  const finalFilename = `${recipeId}.mp4`;
-  const finalPath = path.join(workDir, finalFilename);
-  const concatTextPath = path.join(workDir, "concat.txt");
 
   try {
+    const finalFilename = `${recipeId}.mp4`;
+    // Defense in depth: even an allowlisted id must resolve inside workDir
+    // before ffmpeg writes the merged MP4.
+    const finalPath = resolveChunkPath(workDir, finalFilename);
+    if (!finalPath) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid recipeId",
+      });
+    }
+    const concatTextPath = path.join(workDir, "concat.txt");
+
     let concatLines = "";
     for (let i = 0; i < chunkFilenames.length; i++) {
       const chunkName = chunkFilenames[i];
-      const localChunkPath = path.join(workDir, chunkName);
+      const localChunkPath = resolveChunkPath(workDir, chunkName);
+      if (!localChunkPath) {
+        return res.status(400).json({
+          ok: false,
+          error: "Invalid chunk filename",
+        });
+      }
       await downloadRawChunkFromGcs({
         bucketName: processedBucket,
         objectName: chunkName,
@@ -2442,21 +2428,11 @@ app.post("/merge", async (req, res) => {
       sourcePath: finalPath,
     });
 
-    const fileRef = storage.bucket(processedBucket).file(finalFilename);
-    try {
-      await fileRef.makePublic();
-    } catch (e) {
-      /* Ignore if UBLA is enforced */
-    }
+    const publicUrl = await storageLib.getSignedDownloadUrl({ bucket: processedBucket, key: finalFilename });
 
-    const publicUrl = `https://storage.googleapis.com/${processedBucket}/${finalFilename}`;
-
-    for (let i = 0; i < chunkFilenames.length; i++) {
-      storage
-        .bucket(processedBucket)
-        .file(chunkFilenames[i])
-        .delete()
-        .catch(() => {});
+    // Asynchronously clean up the per-chunk objects from storage.
+    for (const chunkKey of chunkFilenames) {
+      storageLib.deleteObject(processedBucket, chunkKey).catch(() => {});
     }
 
     return res.status(200).json({
@@ -2477,6 +2453,10 @@ app.post("/merge", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Cloud Run worker listening on :${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Cloud Run worker listening on :${PORT}`);
+  });
+}
+
+module.exports = { app, downloadFromUrl, isSafeChunkFilename, resolveChunkPath };

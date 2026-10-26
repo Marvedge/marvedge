@@ -61,11 +61,14 @@ export const useSignUp = () => {
       const validated = signUpSchema.parse(formData);
       const res = await axios.post("/api/auth/signup", validated);
       if (res.status === 201 || res.status === 200) {
-        toast.success("Account created successfully!");
+        const message =
+          typeof res.data?.message === "string" ? res.data.message : "Sign-up request processed.";
+
+        toast.success(message);
         router.push("/auth/signin");
       }
     } catch (err) {
-      // Show server message for duplicate email so user sees the real cause.
+      // Preserve useful validation errors without revealing account existence.
       if (err instanceof z.ZodError) {
         toast.error(err.errors[0].message);
       } else if (

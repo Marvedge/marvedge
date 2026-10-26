@@ -1,7 +1,43 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
-import { renderReframedVideo, type RenderReframedVideoDeps } from "./render";
+import dns from "node:dns";
+import os from "node:os";
+import path from "node:path";
+import { PassThrough } from "node:stream";
+import axios from "axios";
+import {
+  renderReframedVideo,
+  type RenderReframedVideoDeps,
+  MAX_DOWNLOAD_REDIRECTS,
+} from "./render";
+import { assertSafeDownloadUrl, defaultDownloadVideo, resolveRedirectTarget } from "./render";
 import type { CropTargetData } from "../app/types/editor/crop-target";
+
+vi.mock("axios", () => ({ default: vi.fn() }));
+
+const axiosMock = vi.mocked(axios as unknown as (...args: any[]) => Promise<any>);
+
+function publicDnsLookup() {
+  return vi
+    .spyOn(dns.promises, "lookup")
+    .mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as any);
+}
+
+function axiosResponse(status: number, location: string | null, body = "") {
+  const stream = new PassThrough();
+  stream.end(body);
+  return {
+    status,
+    headers: {
+      location: location ?? undefined,
+    },
+    data: stream,
+  };
+}
+
+function tmpDest(): string {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "reframe-dl-")), "out.mp4");
+}
 
 const validCropTargets: CropTargetData = {
   schema_version: 1,
@@ -247,6 +283,139 @@ describe("reframe-worker/render", () => {
 
       expect(res.status).toBe(0);
       expect(res.stderr).toBe("");
+    });
+  });
+
+  describe("defaultDownloadVideo URL validation", () => {
+    const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+
+    beforeEach(() => {
+      axiosMock.mockReset();
+      publicDnsLookup();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it.each([
+      "file:///etc/passwd",
+      "gopher://example.test/1",
+      "ftp://example.test/video.mp4",
+    ])("refuses non-http(s) URL %s", async (url) => {
+      await expect(assertSafeDownloadUrl(url, publicLookup)).rejects.toThrow(
+        /non-http/i
+      );
+    });
+
+    it.each([
+      "http://localhost/video.mp4",
+      "http://127.0.0.1/video.mp4",
+      "http://10.0.0.8/video.mp4",
+      "http://169.254.169.254/latest/meta-data",
+      "http://[::1]/video.mp4",
+    ])("refuses private/internal URL %s", async (url) => {
+      await expect(assertSafeDownloadUrl(url, publicLookup)).rejects.toThrow(
+        /blocked host|private address/i
+      );
+    });
+
+    it("refuses a public hostname resolving to a private address", async () => {
+      const privateLookup = async () => [{ address: "192.168.0.5", family: 4 }];
+      await expect(
+        assertSafeDownloadUrl("https://cdn.example.test/v.mp4", privateLookup)
+      ).rejects.toThrow(/private address/i);
+    });
+
+    it("defaultDownloadVideo rejects file:// without any request", async () => {
+      await expect(
+        defaultDownloadVideo("file:///etc/passwd", "/tmp/should-not-exist.mp4")
+      ).rejects.toThrow(/non-http/i);
+    });
+
+    it("refuses a redirect hop to a private address", async () => {
+      const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+      await expect(
+        resolveRedirectTarget(
+          "http://169.254.169.254/latest/meta-data",
+          "https://cdn.example.test/start.mp4",
+          publicLookup
+        )
+      ).rejects.toThrow(/blocked host/i);
+    });
+
+    it("follows a relative redirect on the same public host", async () => {
+      const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+      const resolved = await resolveRedirectTarget(
+        "/other/clip.mp4",
+        "https://cdn.example.test/start.mp4",
+        publicLookup
+      );
+      expect(resolved.toString()).toBe("https://cdn.example.test/other/clip.mp4");
+    });
+
+    it.each([
+      "http://169.254.169.254/latest/meta-data",
+      "http://10.0.0.8/internal",
+      "http://localhost/admin",
+      "http://[::1]/admin",
+    ])("does not follow a 302 redirect to %s", async (location) => {
+      axiosMock.mockResolvedValueOnce(axiosResponse(302, location));
+      const dest = tmpDest();
+
+      await expect(
+        defaultDownloadVideo("https://cdn.example.test/start.mp4", dest)
+      ).rejects.toThrow(/blocked host|private address/i);
+
+      expect(axiosMock).toHaveBeenCalledTimes(1);
+      expect(axiosMock.mock.calls[0][0]).toMatchObject({ maxRedirects: 0 });
+      expect(fs.existsSync(dest)).toBe(false);
+    });
+
+    it("follows a public 302 hop and writes the final body", async () => {
+      axiosMock
+        .mockResolvedValueOnce(axiosResponse(302, "/final/clip.mp4"))
+        .mockResolvedValueOnce(axiosResponse(200, null, "final-bytes"));
+      const dest = tmpDest();
+
+      await defaultDownloadVideo("https://cdn.example.test/start.mp4", dest);
+
+      expect(axiosMock).toHaveBeenCalledTimes(2);
+      expect(axiosMock.mock.calls[1][0]).toMatchObject({
+        url: "https://cdn.example.test/final/clip.mp4",
+        method: "GET",
+        maxRedirects: 0,
+      });
+      expect(fs.readFileSync(dest, "utf8")).toBe("final-bytes");
+    });
+
+    it("stops after the redirect hop cap", async () => {
+      axiosMock.mockImplementation(async () =>
+        axiosResponse(302, "https://cdn.example.test/again")
+      );
+      const dest = tmpDest();
+
+      await expect(
+        defaultDownloadVideo("https://cdn.example.test/start.mp4", dest)
+      ).rejects.toThrow(/too many source URL redirects/i);
+      expect(axiosMock).toHaveBeenCalledTimes(MAX_DOWNLOAD_REDIRECTS + 1);
+      expect(fs.existsSync(dest)).toBe(false);
+    });
+
+    it("refuses a redirect to a non-http(s) scheme or credentialed URL", async () => {
+      for (const location of [
+        "file:///etc/passwd",
+        "https://user:pass@cdn.example.test/video.mp4",
+      ]) {
+        axiosMock.mockReset();
+        axiosMock.mockResolvedValueOnce(axiosResponse(302, location));
+        const dest = tmpDest();
+
+        await expect(
+          defaultDownloadVideo("https://cdn.example.test/start.mp4", dest)
+        ).rejects.toThrow(/non-http|credentials/i);
+        expect(axiosMock).toHaveBeenCalledTimes(1);
+      }
     });
   });
 });

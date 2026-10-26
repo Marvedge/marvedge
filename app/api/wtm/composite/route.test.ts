@@ -86,4 +86,42 @@ describe("POST /api/wtm/composite 500 sanitization (#446)", () => {
       consoleErrorSpy.mockRestore();
     }
   });
+
+  it("returns 400 for an unsafe videoUrl before any DB read or dispatch", async () => {
+    const res = await POST(
+      makeRequest({
+        videoUrl: "http://127.0.0.1/internal.mp4",
+        webcam: {
+          enabled: true,
+          sourceUrl: "https://example.com/webcam.mp4",
+          position: "bl",
+          size: 0.28,
+        },
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Video URL is not allowed" });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(invokeGcpComposite).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an unsafe webcam sourceUrl", async () => {
+    const res = await POST(
+      makeRequest({
+        videoUrl: "https://example.com/source.mp4",
+        webcam: {
+          enabled: true,
+          sourceUrl: "http://169.254.169.254/webcam.mp4",
+          position: "bl",
+          size: 0.28,
+        },
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Webcam URL is not allowed" });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(invokeGcpComposite).not.toHaveBeenCalled();
+  });
 });

@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth";
 import OpenAI from "openai";
 
 import { authOptions } from "@/app/lib/auth/options";
+import {
+  MAX_TRANSLATION_CHARACTERS,
+  MAX_TRANSLATION_CUES,
+  exceedsTextLimits,
+  isAiActionRateLimited,
+  isRepeatedSubtitleTranslation,
+} from "@/app/lib/ai/abuseProtection";
 import { prisma } from "@/app/lib/prisma";
 import {
   TRANSLATION_SYSTEM_PROMPT,
@@ -53,6 +60,7 @@ const PROGRESS_DONE = 100;
 
 interface TranslateJobInput {
   jobId: string;
+  apiKey: string;
   demoId: string;
   cues: SubtitleCue[];
   sourceLanguage: string;
@@ -70,6 +78,7 @@ interface TranslateJobInput {
  */
 async function dispatchTranslateJob({
   jobId,
+  apiKey,
   demoId,
   cues,
   sourceLanguage,
@@ -83,7 +92,7 @@ async function dispatchTranslateJob({
       data: { status: "PROCESSING", progress: PROGRESS_TRANSLATING },
     });
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const openai = new OpenAI({ apiKey });
     const sourceLabel = languageLabel(sourceLanguage);
     const targetLabel = languageLabel(targetLanguage);
 
@@ -286,6 +295,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (
+    exceedsTextLimits(
+      cues.map((cue) => cue.text),
+      MAX_TRANSLATION_CUES,
+      MAX_TRANSLATION_CHARACTERS
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Subtitle track is too large to translate" },
+      { status: 413 }
+    );
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+
+  if (!apiKey) {
+    console.error("[subtitle-translate] OPENAI_API_KEY is not configured");
+
+    return NextResponse.json({ error: "Subtitle translation is not configured" }, { status: 503 });
+  }
+
+  if (await isAiActionRateLimited(user.id, "subtitle-translation")) {
+    return NextResponse.json({ error: "Too many subtitle translation requests" }, { status: 429 });
+  }
+
+  if (await isRepeatedSubtitleTranslation(user.id, demoId, targetLanguage)) {
+    return NextResponse.json(
+      {
+        error: "This subtitle translation is already processing. Please wait before trying again.",
+      },
+      { status: 409 }
+    );
+  }
+
   const jobRecord = await prisma.videoJob.create({
     data: {
       userId: user.id,
@@ -313,6 +356,7 @@ export async function POST(req: NextRequest) {
   after(() =>
     dispatchTranslateJob({
       jobId: jobRecord.id,
+      apiKey,
       demoId,
       cues,
       sourceLanguage,

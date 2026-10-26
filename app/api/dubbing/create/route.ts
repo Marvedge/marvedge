@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
+import { isAvsAllowed } from "@/app/lib/avs/access";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
 import { prisma } from "@/app/lib/prisma";
 import { dubbingQueue } from "@/app/lib/queue";
 import { isSafeUrl } from "@/app/lib/safeUrl";
 
 export const maxDuration = 300;
 
-const DEFAULT_TARGET_LANGUAGE = "ta";
+const MAX_BODY_BYTES = 8 * 1024;
 
+// Frontend always sends an explicit targetLanguage — no guessing here,
+// so a dropped field fails loudly instead of dubbing into the wrong language.
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,14 +23,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await req.json()) as Record<string, unknown>;
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          session.user.id ? { id: session.user.id as string } : undefined,
+          session.user.email ? { email: session.user.email } : undefined,
+        ].filter(Boolean) as Array<{
+          id?: string;
+          email?: string;
+        }>,
+      },
+      select: {
+        id: true,
+        plan: true,
+      },
+    });
 
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Paid feature — FREE users cannot trigger paid dubbing.
+    // Matches /api/avs/dub so all dubbing routes gate uniformly on PRO/ENTERPRISE.
+    if (!isAvsAllowed(user.plan)) {
+      return NextResponse.json(
+        { error: "Dubbing is available on PRO and ENTERPRISE plans" },
+        { status: 403 }
+      );
+    }
+
+    // ElevenLabs charges per dubbed minute. Cap per authenticated user before
+    // reading the body or creating a job.
+    if (await isRateLimited(`dubbing-create:${user.id}`, 5, 60 * 60, true)) {
+      return NextResponse.json(
+        { error: "Too many dubbing requests. Please try again shortly." },
+        { status: 429 }
+      );
+    }
+
+    // This endpoint accepts JSON metadata, not the source media itself.
+    // Count actual streamed bytes even when Content-Length is absent or false.
+    const bodyResult = await readBoundedRequestJson(req, MAX_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      if (bodyResult.reason === "too_large") {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      }
+
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const parsed = bodyResult.value;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+    }
+
+    const body = parsed as Record<string, unknown>;
     const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
 
-    const targetLanguage =
-      typeof body.targetLanguage === "string"
-        ? body.targetLanguage.trim()
-        : DEFAULT_TARGET_LANGUAGE;
+    const rawTargetLanguage =
+      typeof body.targetLanguage === "string" ? body.targetLanguage.trim() : "";
+
+    if (!rawTargetLanguage) {
+      return NextResponse.json({ error: "Missing targetLanguage" }, { status: 400 });
+    }
+
+    const targetLanguage = rawTargetLanguage.toLowerCase();
 
     if (!sourceUrl) {
       return NextResponse.json({ error: "Missing sourceUrl" }, { status: 400 });
@@ -42,13 +105,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unsafe sourceUrl" }, { status: 400 });
     }
 
-    if (!/^[a-z]{2,5}$/i.test(targetLanguage)) {
+    if (!/^[a-z]{2,5}$/.test(targetLanguage)) {
       return NextResponse.json({ error: "Invalid targetLanguage" }, { status: 400 });
     }
 
     const jobRecord = await prisma.videoJob.create({
       data: {
-        userId: session.user.id,
+        userId: user.id,
         videoUrl: sourceUrl,
         status: "PENDING",
         progress: 0,

@@ -67,7 +67,9 @@ describe("POST /api/avs/dub URL security", () => {
 
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: "user-1",
-      plan: "FREE",
+      // Gate runs before URL checks, so use a paid plan here —
+      // the paywall itself is covered in route.test.ts / dub.test.ts.
+      plan: "PRO",
     } as never);
 
     vi.mocked(prisma.videoJob.create).mockResolvedValue({

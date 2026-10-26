@@ -65,3 +65,18 @@ $py.class
 cursor_templates/
 playwright-report/
 test-results/
+# Local testing and scratch files
+benchmark_results/
+demo/
+*.ass
+*.ipynb
+model/
+preprocess_diff.txt
+resolve_conflict.py
+test_edges.py
+start_worker.sh
+scripts/test_*.ts
+scripts/test_*.mjs
+scripts/task_*.ts
+scripts/demo_*.ts
+infra/SLACK_ANNOUNCEMENT.md
