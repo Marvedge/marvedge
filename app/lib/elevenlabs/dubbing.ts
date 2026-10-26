@@ -115,21 +115,49 @@ export async function createDubbingJob(input: {
   };
 }
 
-export async function getDubbingStatus(dubbingId: string): Promise<{
+export interface DubbingStatusResult {
   status: string;
   dubbingId: string;
   error?: string;
+  /**
+   * Billable characters used, if exposed by provider payload.
+   * Note: The standard ElevenLabs GET /v1/dubbing/{id} status response does not currently
+   * include characters_used or credit consumption. This field serves as an extension point
+   * for webhooks or API updates without inferring units from word counts or audio duration.
+   */
+  charactersUsed?: number;
+  durationSecs?: number;
+}
+
+export async function getDubbingStatus(dubbingId: string): Promise<DubbingStatusResult> {
 }> {
   const response = await elevenLabsRequest<{
     status?: string;
     dubbing_id?: string;
     error?: string;
+    characters_used?: number;
+    billing_characters?: number;
+    character_count?: number;
+    duration_secs?: number;
+    duration_seconds?: number;
   }>(`/dubbing/${encodeURIComponent(dubbingId)}`);
+
+  const charactersUsed =
+    response.characters_used ?? response.billing_characters ?? response.character_count;
+  const durationSecs = response.duration_secs ?? response.duration_seconds;
 
   return {
     dubbingId: response.dubbing_id ?? dubbingId,
     status: response.status ?? "unknown",
     error: response.error,
+    charactersUsed:
+      typeof charactersUsed === "number" && Number.isFinite(charactersUsed) && charactersUsed >= 0
+        ? charactersUsed
+        : undefined,
+    durationSecs:
+      typeof durationSecs === "number" && Number.isFinite(durationSecs) && durationSecs >= 0
+        ? durationSecs
+        : undefined,
   };
 }
 
@@ -139,6 +167,7 @@ export async function waitForDubbingCompletion(
     intervalMs?: number;
     timeoutMs?: number;
   } = {}
+): Promise<DubbingStatusResult> {
 ): Promise<{ status: string; dubbingId: string; error?: string }> {
   const intervalMs = options.intervalMs ?? 5000;
   const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;

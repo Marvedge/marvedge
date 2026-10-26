@@ -24,6 +24,7 @@ import {
   getJobOutcomeMetricsObservationWindowSeconds,
 } from "../app/lib/monitoring/jobOutcomeMetrics";
 import { recordLatencyObservationBestEffort } from "../app/lib/monitoring/latencyWindowMetrics";
+import { recordCostObservationBestEffort } from "../app/lib/monitoring/costWindowMetrics";
 import { createWorkerMonitoringRedis } from "../app/lib/monitoring/workerRedis";
 import {
   recordDubbingJobCompleted,
@@ -486,6 +487,8 @@ async function downloadVideo(url: string, outputPath: string): Promise<void> {
   await downloadUrlToFile(url, outputPath);
 }
 
+async function downloadFile(url: string, outputPath: string): Promise<void> {
+  await downloadUrlToFile(url, outputPath);
 async function downloadFile(
   url: string,
   outputPath: string,
@@ -512,6 +515,7 @@ async function downloadFile(
     await fs.promises.rm(outputPath, { force: true }).catch(() => {});
     throw error;
   }
+
 }
 
 function writeRoundedMaskPgm(
@@ -1793,6 +1797,41 @@ export const dubbingWorker = new Worker(
         await job.updateProgress(25);
 
         const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
+        // Extension point: record billable usage if returned by vendor response payload
+        if (completedJob.charactersUsed !== undefined) {
+          recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
+            category: "dubbing",
+            provider: "elevenlabs",
+            unit: "characters",
+            amount: completedJob.charactersUsed,
+            windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
+            idempotencyKey: `${jobId}:${job.attemptsMade}`,
+          });
+        }
+        if (completedJob.durationSecs !== undefined) {
+          recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
+            category: "dubbing",
+            provider: "elevenlabs",
+            unit: "audio_seconds",
+            amount: completedJob.durationSecs,
+            windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
+            idempotencyKey: `${jobId}:${job.attemptsMade}`,
+          });
+        }
+        const audioEndpoint = `/api/dubbing/${jobId}/audio`;
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: {
+            status: "COMPLETED",
+            progress: 100,
+            exportedUrl: audioEndpoint,
+            jobData: {
+              kind: "DUBBING",
+              sourceUrl,
+              targetLanguage,
+              dubbingId: completedJob.dubbingId,
+              providerStatus: completedJob.status,
+              audioEndpoint,
         // Download the generated audio and persist it before marking the job complete.
         const audioEndpoint = `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`;
         const audioUrl = `https://api.elevenlabs.io${audioEndpoint}`;
