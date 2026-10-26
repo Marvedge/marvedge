@@ -4,9 +4,9 @@ import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   limited: vi.fn(),
-  findUser: vi.fn(),
   create: vi.fn(),
   enqueue: vi.fn(),
+  findUser: vi.fn(),
 }));
 
 vi.mock("next-auth", () => ({
@@ -34,7 +34,10 @@ describe("dubbing creation request-body limits", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
-    mocks.findUser.mockResolvedValue({ id: "user-1", plan: "PRO" });
+    mocks.findUser.mockResolvedValue({
+      id: "user-1",
+      plan: "PRO",
+    });
     mocks.limited.mockResolvedValue(false);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.enqueue.mockResolvedValue(undefined);
@@ -103,7 +106,10 @@ describe("dubbing JSON byte boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
-    mocks.findUser.mockResolvedValue({ id: "user-1", plan: "PRO" });
+    mocks.findUser.mockResolvedValue({
+      id: "user-1",
+      plan: "PRO",
+    });
     mocks.limited.mockResolvedValue(false);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.enqueue.mockResolvedValue(undefined);
