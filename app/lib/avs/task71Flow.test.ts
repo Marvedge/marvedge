@@ -57,7 +57,7 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       userId,
     } as any);
 
-    vi.mocked(prisma.videoJob.create).mockImplementation(async ({ data }: any) => {
+    (vi.mocked(prisma.videoJob.create) as any).mockImplementation(async ({ data }: any) => {
       currentJob = {
         id: jobId,
         ...data,
@@ -67,21 +67,23 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       return currentJob;
     });
 
-    vi.mocked(prisma.videoJob.findUnique).mockImplementation(async ({ where }: any) => {
+    (vi.mocked(prisma.videoJob.findUnique) as any).mockImplementation(async ({ where }: any) => {
       if (where.id === jobId) return currentJob;
       return null;
     });
 
-    vi.mocked(prisma.videoJob.updateMany).mockImplementation(async ({ where, data }: any) => {
-      if (where.id === jobId) {
-        if (where.status?.notIn && where.status.notIn.includes(currentJob.status)) {
-          return { count: 0 };
+    (vi.mocked(prisma.videoJob.updateMany) as any).mockImplementation(
+      async ({ where, data }: any) => {
+        if (where.id === jobId) {
+          if (where.status?.notIn && where.status.notIn.includes(currentJob.status)) {
+            return { count: 0 };
+          }
+          currentJob = { ...currentJob, ...data };
+          return { count: 1 };
         }
-        currentJob = { ...currentJob, ...data };
-        return { count: 1 };
+        return { count: 0 };
       }
-      return { count: 0 };
-    });
+    );
 
     let queuedPayload: any = null;
     vi.mocked(dubbingQueue.add).mockImplementation(async (name: string, data: any, opts: any) => {
@@ -121,7 +123,9 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
     expect(queuedPayload).not.toBeNull();
     expect(queuedPayload.name).toBe("avs-dub");
     expect(queuedPayload.data.jobId).toBe(jobId);
-    expect(queuedPayload.data.dubUrl).toBe("https://storage.googleapis.com/test-bucket/prerecorded-audio.mp3");
+    expect(queuedPayload.data.dubUrl).toBe(
+      "https://storage.googleapis.com/test-bucket/prerecorded-audio.mp3"
+    );
 
     // ── STEP 3: WORKER PROCESSOR EXECUTION (with stubbed Cloud Run /avs-dub) ──
     const progressList: number[] = [];
@@ -157,7 +161,9 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       invokeDubSync: stubbedInvokeDubSync,
       uploadToCloudinary: stubbedUploadToCloudinary,
       postCallback: deliverCallback,
-      updateProgress: (pct) => progressList.push(pct),
+      updateProgress: (pct) => {
+        progressList.push(pct);
+      },
     });
 
     expect(stubbedInvokeDubSync).toHaveBeenCalledWith({
