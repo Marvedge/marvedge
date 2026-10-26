@@ -100,6 +100,11 @@ async function dispatchVideoJob(
   duration: number,
   normalizedPayload: Record<string, unknown>
 ): Promise<void> {
+  const speakerTracksUri =
+    typeof normalizedPayload.speakerTracksUri === "string" && normalizedPayload.speakerTracksUri.trim()
+      ? normalizedPayload.speakerTracksUri.trim()
+      : undefined;
+
   try {
     // Do not overwrite a settled job. A COMPLETED or CANCELLED record is final.
     const existing = await prisma.videoJob
