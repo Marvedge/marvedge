@@ -6,6 +6,7 @@ import { processDubbingJob } from "@/app/lib/avs/dubbingProcessor";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { dubbingQueue } from "@/app/lib/queue";
+import type { Prisma, VideoJob } from "@prisma/client";
 
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
@@ -30,6 +31,25 @@ vi.mock("@/app/lib/queue", () => ({
   },
 }));
 
+function toPrismaJobClient<T>(promise: Promise<T>): Prisma.Prisma__VideoJobClient<T, never> {
+  Object.defineProperty(promise, Symbol.toStringTag, {
+    value: "PrismaPromise",
+    configurable: true,
+  });
+  return Object.assign(promise, {
+    demo: vi.fn(),
+    user: vi.fn(),
+  }) as unknown as Prisma.Prisma__VideoJobClient<T, never>;
+}
+
+function toPrismaPromise<T>(promise: Promise<T>): Prisma.PrismaPromise<T> {
+  Object.defineProperty(promise, Symbol.toStringTag, {
+    value: "PrismaPromise",
+    configurable: true,
+  });
+  return promise as Prisma.PrismaPromise<T>;
+}
+
 describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", () => {
   it("successfully passes complete end-to-end flow with stubbed dubbing and prerecorded audio", async () => {
     process.env.AVS_ENABLED = "true";
@@ -41,47 +61,74 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
     const jobId = "video-job-task71-999";
 
     // 1. In-memory database simulation for VideoJob
-    let currentJob: any = null;
+    let currentJob: VideoJob | null = null;
 
     vi.mocked(getServerSession).mockResolvedValue({
       user: { id: userId, email: "pro@example.com" },
-    } as any);
+    } as never);
 
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: userId,
       plan: "PRO",
-    } as any);
+    } as never);
 
     vi.mocked(prisma.demo.findUnique).mockResolvedValue({
       id: demoId,
       userId,
-    } as any);
+    } as never);
 
-    vi.mocked(prisma.videoJob.create).mockImplementation(async ({ data }: any) => {
-      currentJob = {
-        id: jobId,
-        ...data,
-        progress: 0,
-        createdAt: new Date(),
-      };
-      return currentJob;
-    });
+    vi.mocked(prisma.videoJob.create).mockImplementation(({ data }: Prisma.VideoJobCreateArgs) =>
+      toPrismaJobClient(
+        (async () => {
+          currentJob = {
+            id: jobId,
+            userId: (data as { userId: string }).userId ?? userId,
+            demoId: (data as { demoId?: string | null }).demoId ?? demoId,
+            status: data.status ?? "PENDING",
+            progress: data.progress ?? 0,
+            videoUrl: data.videoUrl,
+            jobData: (data.jobData as Prisma.JsonValue) ?? {},
+            exportedUrl: data.exportedUrl ?? null,
+            error: data.error ?? null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          return currentJob;
+        })()
+      )
+    );
 
-    vi.mocked(prisma.videoJob.findUnique).mockImplementation(async ({ where }: any) => {
-      if (where.id === jobId) return currentJob;
-      return null;
-    });
+    vi.mocked(prisma.videoJob.findUnique).mockImplementation(
+      ({ where }: Prisma.VideoJobFindUniqueArgs) =>
+        toPrismaJobClient(Promise.resolve(where.id === jobId ? currentJob : null))
+    );
 
-    vi.mocked(prisma.videoJob.updateMany).mockImplementation(async ({ where, data }: any) => {
-      if (where.id === jobId) {
-        if (where.status?.notIn && where.status.notIn.includes(currentJob.status)) {
-          return { count: 0 };
-        }
-        currentJob = { ...currentJob, ...data };
-        return { count: 1 };
-      }
-      return { count: 0 };
-    });
+    vi.mocked(prisma.videoJob.updateMany).mockImplementation(
+      ({ where, data }: Prisma.VideoJobUpdateManyArgs) =>
+        toPrismaPromise(
+          (async () => {
+            if (where?.id === jobId && currentJob) {
+              const notIn =
+                where.status && typeof where.status === "object" && "notIn" in where.status
+                  ? (where.status.notIn as string[])
+                  : undefined;
+              if (notIn && notIn.includes(currentJob.status)) {
+                return { count: 0 };
+              }
+              currentJob = {
+                ...currentJob,
+                ...(data as Partial<VideoJob>),
+                jobData: (data.jobData !== undefined
+                  ? data.jobData
+                  : currentJob.jobData) as Prisma.JsonValue,
+                updatedAt: new Date(),
+              };
+              return { count: 1 };
+            }
+            return { count: 0 };
+          })()
+        )
+    );
 
     let queuedPayload: any = null;
     vi.mocked(dubbingQueue.add).mockImplementation(async (name: string, data: any, opts: any) => {
@@ -116,12 +163,14 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
 
     // ── STEP 2: VERIFY DATABASE & QUEUE ──
     expect(currentJob).not.toBeNull();
-    expect(currentJob.status).toBe("PENDING");
-    expect(currentJob.jobData.kind).toBe("AVS_DUB");
+    expect(currentJob!.status).toBe("PENDING");
+    expect((currentJob!.jobData as Record<string, unknown>).kind).toBe("AVS_DUB");
     expect(queuedPayload).not.toBeNull();
     expect(queuedPayload.name).toBe("avs-dub");
     expect(queuedPayload.data.jobId).toBe(jobId);
-    expect(queuedPayload.data.dubUrl).toBe("https://storage.googleapis.com/test-bucket/prerecorded-audio.mp3");
+    expect(queuedPayload.data.dubUrl).toBe(
+      "https://storage.googleapis.com/test-bucket/prerecorded-audio.mp3"
+    );
 
     // ── STEP 3: WORKER PROCESSOR EXECUTION (with stubbed Cloud Run /avs-dub) ──
     const progressList: number[] = [];
@@ -157,7 +206,9 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       invokeDubSync: stubbedInvokeDubSync,
       uploadToCloudinary: stubbedUploadToCloudinary,
       postCallback: deliverCallback,
-      updateProgress: (pct) => progressList.push(pct),
+      updateProgress: (pct) => {
+        progressList.push(pct);
+      },
     });
 
     expect(stubbedInvokeDubSync).toHaveBeenCalledWith({
@@ -177,13 +228,13 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
     );
 
     // ── STEP 5: VERIFY FINAL DATABASE STATE ──
-    expect(currentJob.status).toBe("COMPLETED");
-    expect(currentJob.progress).toBe(100);
-    expect(currentJob.jobData.kind).toBe("AVS_DUB");
-    expect(currentJob.jobData.alignedVideoUrl).toBe(
+    expect(currentJob!.status).toBe("COMPLETED");
+    expect(currentJob!.progress).toBe(100);
+    expect((currentJob!.jobData as Record<string, unknown>).kind).toBe("AVS_DUB");
+    expect((currentJob!.jobData as Record<string, unknown>).alignedVideoUrl).toBe(
       "https://res.cloudinary.com/marvedge/video/upload/v12345/aligned-prerecorded.mp4"
     );
-    expect(currentJob.jobData.duration).toBe(10.5);
+    expect((currentJob!.jobData as Record<string, unknown>).duration).toBe(10.5);
     expect(progressList).toEqual([20, 40, 70, 90, 100]);
   });
 });
