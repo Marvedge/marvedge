@@ -91,12 +91,6 @@
   color: #c0bccd !important;
 }
 
-.dark .range-btn {
-  color: #ffffff !important;
-  border: 1px solid rgba(186, 180, 223, 0.2) !important;
-  background: rgba(15, 16, 34, 0.66) !important;
-}
-
 .dark .demo-item {
   border: 1px solid rgba(201, 196, 228, 0.12) !important;
   background: rgba(13, 15, 35, 0.72) !important;
@@ -107,7 +101,7 @@
   background: linear-gradient(135deg, #6f4add, #31166d) !important;
 }
 
-.dark .demo-name {
+.dark .panel .demo-name {
   color: #ffffff !important;
 }
 
@@ -130,7 +124,7 @@
 .dark .recharts-legend-item-text {
   color: #bdb7d1 !important;
 }
-.dark .recharts-line-path {
+.dark .recharts-line-curve {
   stroke: #8b55ff !important;
 }
 .dark .recharts-line-dot {
