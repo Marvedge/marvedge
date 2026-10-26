@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 // Mock dotenv so dotenv.config() never reads .env / .env.local from disk.
 // Without this, getReframeWorkerConfig() internally calls loadReframeWorkerEnv()
 // which repopulates process.env.CALLBACK_SECRET from .env.local even after the
-// test deletes it — silently preventing the throw-on-missing assertion from firing.
+// test deletes it ï¿½ silently preventing the throw-on-missing assertion from firing.
 vi.mock("dotenv", () => ({ default: { config: vi.fn() } }));
 
 import { getReframeWorkerConfig } from "./config";
@@ -109,6 +109,35 @@ describe("Reframe Worker Config", () => {
         "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379"
       );
       expect(config.workerConcurrency).toBe(1);
+    });
+  });
+  describe("Queue configuration", () => {
+    it("defaults queueName to production reframe-processing when REFRAME_QUEUE_NAME is unset", () => {
+      envMap.CALLBACK_SECRET = "test-secret";
+      delete envMap.REFRAME_QUEUE_NAME;
+
+      const config = getReframeWorkerConfig();
+      expect(config.queueName).toBe("reframe-processing");
+    });
+
+    it("uses isolated benchmark queue when REFRAME_QUEUE_NAME is explicitly set", () => {
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.REFRAME_QUEUE_NAME = "reframe-benchmark-queue";
+
+      const config = getReframeWorkerConfig();
+      expect(config.queueName).toBe("reframe-benchmark-queue");
+    });
+
+    it("trims whitespace and falls back to reframe-processing when empty", () => {
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.REFRAME_QUEUE_NAME = "   ";
+
+      const config = getReframeWorkerConfig();
+      expect(config.queueName).toBe("reframe-processing");
+
+      envMap.REFRAME_QUEUE_NAME = "  isolated-test-queue  ";
+      const config2 = getReframeWorkerConfig();
+      expect(config2.queueName).toBe("isolated-test-queue");
     });
   });
 });

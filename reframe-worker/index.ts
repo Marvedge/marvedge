@@ -18,7 +18,7 @@ import { recordLatencyObservationBestEffort } from "../app/lib/monitoring/latenc
 import { createWorkerMonitoringRedis } from "../app/lib/monitoring/workerRedis";
 import { getReframeWorkerConfig, loadReframeWorkerEnv } from "./config";
 import { isFinalReframeJobFailure } from "./jobMetrics";
-import { processReframeJob, type ReframeJobContext } from "./orchestrator";
+import { processReframeJob, type ReframeJobContext, type ReframeOrchestratorDeps } from "./orchestrator";
 
 // Load environment variables (.env.local, .env) following Next.js precedence
 loadReframeWorkerEnv();
@@ -38,6 +38,7 @@ console.log(`🤖 ML Service URL: ${config.mlServiceUrl}`);
 console.log(`🔑 Callback Secret configured: ${config.callbackSecret ? "yes" : "no"}`);
 console.log(`☁️  Cloudinary configured: ${process.env.CLOUDINARY_API_KEY ? "yes" : "no"}`);
 console.log(`⚙️  Concurrency: ${config.workerConcurrency}`);
+console.log(`Queue Name: ${config.queueName}`);
 
 const discardedJobs = new WeakSet<Job<ReframeJobPayload>>();
 
@@ -47,7 +48,7 @@ const redisConnection = new Redis(config.redisUrl, {
 const monitoringRedisConnection = createWorkerMonitoringRedis(config.redisUrl);
 
 const worker = new Worker<ReframeJobPayload>(
-  "reframe-processing",
+  config.queueName,
   async (job: Job<ReframeJobPayload>) => {
     const context: ReframeJobContext = {
       jobId: typeof job.data?.jobId === "string" ? job.data.jobId : "",
@@ -69,7 +70,16 @@ const worker = new Worker<ReframeJobPayload>(
         }
       },
     };
-    return await processReframeJob(job.data, context);
+    const deps: ReframeOrchestratorDeps = {};
+    if ((job.data as { testFaultMode?: string })?.testFaultMode === "autoflip_empty") {
+      deps.executeMl = async () => ({
+        schema_version: 1,
+        source: job.data.source ?? { width: 1280, height: 720 },
+        output: { aspect_ratio: job.data.targetAspectRatio },
+        crop_targets: [],
+      });
+    }
+    return await processReframeJob(job.data, context, deps);
   },
   {
     connection: redisConnection as unknown as ConnectionOptions,

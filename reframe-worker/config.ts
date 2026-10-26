@@ -12,6 +12,7 @@ import fs from "fs";
 
 export interface ReframeWorkerConfig {
   redisUrl: string;
+  queueName: string;
   backendUrl: string;
   callbackSecret: string;
   mlServiceUrl: string;
@@ -73,6 +74,9 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
 
   const redisUrl = rawRedis || "redis://localhost:6379";
 
+  // Queue name configuration: defaults to production "reframe-processing"
+  const queueName = process.env.REFRAME_QUEUE_NAME?.trim() || "reframe-processing";
+
   const backendUrl = resolveCallbackBaseUrl();
 
   const callbackSecret = process.env.CALLBACK_SECRET?.trim() || "";
@@ -119,6 +123,7 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
 
   return {
     redisUrl,
+    queueName,
     backendUrl,
     callbackSecret,
     mlServiceUrl,
