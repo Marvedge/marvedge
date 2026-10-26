@@ -366,9 +366,106 @@ export async function executeCaptionsStage(
  */
 export async function executeDubbingStage(
   media: InputMediaMetadata,
-  providerMode: "fixture" | "elevenlabs" | "real" = "fixture"
+  providerMode: "fixture" | "elevenlabs" | "voicestudio" | "real" = "fixture",
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config?: any
 ): Promise<StageExecutionOutput> {
   const notes: string[] = [];
+
+  if (providerMode === "voicestudio") {
+    const vsUrl =
+      config?.voiceStudioUrl || process.env.VOICESTUDIO_API_URL || "http://127.0.0.1:3900";
+    const vsApiKey = config?.voiceStudioApiKey || process.env.VOICESTUDIO_API_KEY;
+    const vsModel = config?.voiceStudioModel || process.env.VOICESTUDIO_MODEL || "omnivoice";
+
+    const { createVoiceStudioClient, assertValidAudio } =
+      await import("../../../app/lib/voicestudio");
+
+    const client = createVoiceStudioClient({
+      baseUrl: vsUrl,
+      apiKey: vsApiKey,
+      defaultModel: vsModel,
+      timeoutMs: 45000,
+      maxRetries: 1,
+    });
+
+    let health;
+    try {
+      health = await client.checkHealth({ timeoutMs: 5000 });
+      if (!health.isReady) {
+        return {
+          stage: "dubbing",
+          status: "blocked",
+          provider: "voicestudio",
+          notes: [
+            `VoiceStudio service is starting up: ${health.startupLabel || health.status}`,
+            "Retry once model loading completes.",
+          ],
+          error: "VOICESTUDIO_STARTING",
+        };
+      }
+    } catch (err: unknown) {
+      return {
+        stage: "dubbing",
+        status: "blocked",
+        provider: "voicestudio",
+        notes: [
+          `VoiceStudio health check failed at ${vsUrl}: ${(err as Error).message}`,
+          "Ensure VoiceStudio container is running on 127.0.0.1:3900.",
+        ],
+        error: "VOICESTUDIO_UNAVAILABLE",
+      };
+    }
+
+    try {
+      const benchmarkText =
+        "Marvedge cloud cost benchmark speech synthesis validation. Evaluating local GPU speech performance.";
+
+      const speechResult = await client.generateSpeech({
+        text: benchmarkText,
+        language: "es",
+        targetDurationSec: media.durationSec > 0 ? media.durationSec : 5.0,
+        responseFormat: "wav",
+      });
+
+      const artifactDir = path.resolve(process.cwd(), "benchmark_results", "artifacts");
+      fs.mkdirSync(artifactDir, { recursive: true });
+      const artifactName = `voicestudio_dubbing_${Date.now()}.${speechResult.format}`;
+      const artifactPath = path.join(artifactDir, artifactName);
+      fs.writeFileSync(artifactPath, speechResult.audio);
+
+      await assertValidAudio(speechResult.audio, speechResult.format);
+
+      notes.push(`VoiceStudio real inference successful via ${vsUrl}`);
+      notes.push(`Compute device: ${health.device} (CUDA: ${health.isGpu})`);
+      notes.push(`Saved audio artifact: ${artifactName} (${speechResult.fileSizeBytes} bytes)`);
+
+      return {
+        stage: "dubbing",
+        status: "real_inference",
+        provider: "voicestudio",
+        notes,
+        outputArtifacts: {
+          artifactPath,
+          format: speechResult.format,
+          fileSizeBytes: speechResult.fileSizeBytes,
+          durationSec: speechResult.durationSec || media.durationSec,
+          sampleRate: speechResult.sampleRate,
+          channels: speechResult.channels,
+          device: health.device,
+          isGpu: health.isGpu,
+        },
+      };
+    } catch (err: unknown) {
+      return {
+        stage: "dubbing",
+        status: "blocked",
+        provider: "voicestudio",
+        notes: [`VoiceStudio inference error: ${(err as Error).message}`],
+        error: (err as Error).message,
+      };
+    }
+  }
 
   if (providerMode === "elevenlabs" || providerMode === "real") {
     if (!process.env.ELEVENLABS_API_KEY) {

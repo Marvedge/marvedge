@@ -6,6 +6,30 @@ import { processDubbingJob } from "@/app/lib/avs/dubbingProcessor";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { dubbingQueue } from "@/app/lib/queue";
+import type { Prisma } from "@prisma/client";
+
+function mockVideoJobClient<T>(value: T): Prisma.Prisma__VideoJobClient<T> {
+  const p = Promise.resolve(value);
+  return {
+    then: p.then.bind(p),
+    catch: p.catch.bind(p),
+    finally: p.finally.bind(p),
+    demo: vi.fn(),
+    user: vi.fn(),
+    [Symbol.toStringTag]: "PrismaPromise" as const,
+  } as unknown as Prisma.Prisma__VideoJobClient<T>;
+}
+
+function mockPrismaPromise<T>(value: T): Prisma.PrismaPromise<T> {
+  const p = Promise.resolve(value);
+  return {
+    then: p.then.bind(p),
+    catch: p.catch.bind(p),
+    finally: p.finally.bind(p),
+    [Symbol.toStringTag]: "PrismaPromise" as const,
+  } as unknown as Prisma.PrismaPromise<T>;
+}
+
 
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
@@ -57,31 +81,31 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       userId,
     } as any);
 
-    vi.mocked(prisma.videoJob.create).mockImplementation(async ({ data }: any) => {
+    vi.mocked(prisma.videoJob.create).mockImplementation((({ data }: any) => {
       currentJob = {
         id: jobId,
         ...data,
         progress: 0,
         createdAt: new Date(),
       };
-      return currentJob;
-    });
+      return mockVideoJobClient(currentJob);
+    }) as any);
 
-    vi.mocked(prisma.videoJob.findUnique).mockImplementation(async ({ where }: any) => {
-      if (where.id === jobId) return currentJob;
-      return null;
-    });
+    vi.mocked(prisma.videoJob.findUnique).mockImplementation((({ where }: any) => {
+      if (where.id === jobId) return mockVideoJobClient(currentJob);
+      return mockVideoJobClient(null);
+    }) as any);
 
-    vi.mocked(prisma.videoJob.updateMany).mockImplementation(async ({ where, data }: any) => {
+    vi.mocked(prisma.videoJob.updateMany).mockImplementation((({ where, data }: any) => {
       if (where.id === jobId) {
         if (where.status?.notIn && where.status.notIn.includes(currentJob.status)) {
-          return { count: 0 };
+          return mockPrismaPromise({ count: 0 });
         }
         currentJob = { ...currentJob, ...data };
-        return { count: 1 };
+        return mockPrismaPromise({ count: 1 });
       }
-      return { count: 0 };
-    });
+      return mockPrismaPromise({ count: 0 });
+    }) as any);
 
     let queuedPayload: any = null;
     vi.mocked(dubbingQueue.add).mockImplementation(async (name: string, data: any, opts: any) => {
@@ -157,7 +181,9 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       invokeDubSync: stubbedInvokeDubSync,
       uploadToCloudinary: stubbedUploadToCloudinary,
       postCallback: deliverCallback,
-      updateProgress: (pct) => progressList.push(pct),
+      updateProgress: (pct) => {
+        progressList.push(pct);
+      },
     });
 
     expect(stubbedInvokeDubSync).toHaveBeenCalledWith({
