@@ -121,6 +121,11 @@ async function dispatchVideoJob(
     const chunksCount = Math.min(MAX_CHUNKS, Math.max(1, Math.ceil(duration / chunkDuration)));
     const chunkFilenames: string[] = [];
     const fetchTasks = [];
+    const speakerTracksUri =
+      typeof normalizedPayload.speakerTracksUri === "string" &&
+      normalizedPayload.speakerTracksUri.trim()
+        ? normalizedPayload.speakerTracksUri.trim()
+        : undefined;
 
     for (let i = 0; i < chunksCount; i++) {
       const startTime = i * chunkDuration;
@@ -292,8 +297,7 @@ export async function POST(req: NextRequest) {
       typeof rawCustomBackgroundUrl === "string" && rawCustomBackgroundUrl.trim()
         ? rawCustomBackgroundUrl.trim()
         : undefined;
-    const sanitizedDemoId =
-      typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
+    const sanitizedDemoId = typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
 
     // Parse native storage URIs up front, but do NOT sign them until the caller
     // is known: signing is what needs the ownership check below.
