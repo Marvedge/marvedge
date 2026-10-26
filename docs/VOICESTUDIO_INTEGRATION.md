@@ -292,4 +292,3 @@ Following execution, generated artifacts are verified:
 - **Verified Locally:** FFmpeg stream demuxing/muxing, VoiceStudio HTTP synthesis adapter, WAV header validation, and container GPU acceleration.
 - **Excluded / Blocked in Local Environment:** Whisper ASR, LLM translation, Cloudinary/GCS cloud storage upload, GCP Cloud Run `/avs-dub` lip-sync, MediaPipe AutoFlip, and BullMQ/Redis worker orchestration.
 - **Audio-Video Muxing Limitation:** The local muxing validation test used `-shortest` against `col_segment_10m.mp4` (600.09s), truncating the 999.32s audio stream at 600.07s. It proves container and audio/video muxing compatibility, but does not validate semantic synchronization, speaker lip alignment, or full audio preservation.
-
