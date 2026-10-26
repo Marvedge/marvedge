@@ -235,6 +235,100 @@ async def reframe(request: Request) -> JSONResponse:
         )
 
 
+
+
+@app.post("/reframe-combined")
+async def reframe_combined(request: Request) -> JSONResponse:
+    """Run AutoFlip and TalkNet together and fuse their crop targets."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={
+            "ok": False, "error": "Invalid JSON request body"
+        })
+
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={
+            "ok": False, "error": "Request body must be a JSON object"
+        })
+
+    video_url = body.get("videoUrl")
+    if not isinstance(video_url, str) or not video_url.strip():
+        return JSONResponse(status_code=400, content={
+            "ok": False, "error": "videoUrl is required"
+        })
+
+    talknet_body = {
+        "videoUrl": video_url,
+        "minTrackFrames": body.get("minTrackFrames", 10),
+        "confidenceThreshold": body.get("confidenceThreshold", 0.0),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=DOWNSTREAM_TIMEOUT_SEC) as client:
+            autoflip_task = client.post(
+                f"{AUTOFILP_SERVICE_URL}/reframe", json=body
+            )
+            talknet_task = client.post(
+                f"{TALKNET_SERVICE_URL}/detect", json=talknet_body
+            )
+            autoflip_resp, talknet_resp = await asyncio.gather(
+                autoflip_task, talknet_task
+            )
+
+        if autoflip_resp.status_code >= 400:
+            return JSONResponse(status_code=autoflip_resp.status_code, content={
+                "ok": False, "error": "AutoFlip processing failed"
+            })
+        if talknet_resp.status_code >= 400:
+            return JSONResponse(status_code=talknet_resp.status_code, content={
+                "ok": False, "error": "TalkNet processing failed"
+            })
+
+        try:
+            autoflip_data = autoflip_resp.json()
+            talknet_data = talknet_resp.json()
+        except Exception:
+            return JSONResponse(status_code=502, content={
+                "ok": False, "error": "Malformed downstream JSON response"
+            })
+
+        crop_data = autoflip_data.get("crop_targets") if isinstance(autoflip_data, dict) else None
+        if not isinstance(crop_data, dict):
+            return JSONResponse(status_code=502, content={
+                "ok": False, "error": "Invalid AutoFlip crop-target response"
+            })
+        if not isinstance(talknet_data, dict) or not isinstance(talknet_data.get("speakers"), list):
+            return JSONResponse(status_code=502, content={
+                "ok": False, "error": "Invalid TalkNet speaker response"
+            })
+
+        try:
+            from crop_fusion import fuse_crop_targets
+            fused = fuse_crop_targets(crop_data, talknet_data)
+        except (ValueError, TypeError) as exc:
+            logger.warning("Crop fusion rejected downstream data: %s", exc)
+            return JSONResponse(status_code=502, content={
+                "ok": False, "error": "Could not combine crop-target data"
+            })
+
+        return JSONResponse(status_code=200, content={
+            "ok": True,
+            "crop_targets": fused,
+            "processing": {"autoflip": True, "talknet": True},
+        })
+
+    except httpx.TimeoutException:
+        logger.error("Combined AutoFlip/TalkNet request timed out")
+        return JSONResponse(status_code=504, content={
+            "ok": False, "error": "Combined ML processing timed out"
+        })
+    except httpx.RequestError:
+        logger.exception("Combined AutoFlip/TalkNet downstream connection failed")
+        return JSONResponse(status_code=502, content={
+            "ok": False, "error": "Could not connect to ML services"
+        })
+
 @app.post("/talknet")
 async def talknet(request: Request) -> JSONResponse:
     """Proxies active speaker detection request to TalkNet service /detect."""
