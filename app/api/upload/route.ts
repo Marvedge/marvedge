@@ -3,11 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import cloudinary from "@/app/lib/cloudinary";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestFormData } from "@/app/lib/http/boundedFormData";
 import type { UploadApiOptions, UploadApiErrorResponse, UploadApiResponse } from "cloudinary";
 
 export const runtime = "nodejs";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+// Allow 1MB for multipart boundaries and additional form fields. Enforce this
+// ceiling against both declared and actual body bytes before multipart parsing.
+// The separate file.size check below preserves the 10MB file limit.
+const MAX_MULTIPART_BODY_BYTES = MAX_SIZE + 1024 * 1024;
 
 // FIX: allow only safe image types including GIF
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -58,7 +64,28 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const formData = await req.formData();
+    // Reject an oversized declaration immediately. The bounded reader below
+    // also counts actual bytes when Content-Length is absent or understated.
+    const declaredBytes = Number.parseInt(req.headers.get("content-length") || "", 10);
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_MULTIPART_BODY_BYTES) {
+      return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 413 });
+    }
+
+    const bodyResult = await readBoundedRequestFormData(req, MAX_MULTIPART_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error:
+            bodyResult.reason === "too_large"
+              ? "File too large (max 10MB)"
+              : "Invalid multipart request body",
+        },
+        { status: bodyResult.reason === "too_large" ? 413 : 400 }
+      );
+    }
+
+    const formData = bodyResult.value;
     const entry = formData.get("file");
 
     // FIX: FormData can carry a string — validate it is really a File/Blob
@@ -115,7 +142,6 @@ export async function POST(req: NextRequest) {
     const safeUserId = session.user.id.replace(/[^\w-]/g, "_");
     const publicId = `${safeUserId}/${Date.now()}`;
 
-
     let uploadResult: UploadApiResponse;
 
     try {
@@ -130,10 +156,7 @@ export async function POST(req: NextRequest) {
         cloudinary.uploader
           .upload_stream(
             uploadOptions,
-            (
-              error: UploadApiErrorResponse | undefined,
-              result: UploadApiResponse | undefined
-            ) => {
+            (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
               if (error || !result?.secure_url) {
                 reject(error ?? new Error("Upload failed"));
                 return;
@@ -166,7 +189,6 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
-
 
     // FIX: return minimal fields only — never leak api_key/signature/version_id
     return NextResponse.json({

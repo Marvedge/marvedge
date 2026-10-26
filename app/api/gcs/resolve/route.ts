@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
-import {
-  getSignedDownloadUrl,
-  objectExists,
-  parseStorageUri,
-} from "@/app/lib/storage";
+import { getSignedDownloadUrl, objectExists, parseStorageUri } from "@/app/lib/storage";
+import { mayResolveObject } from "@/app/lib/storage/access";
 
 /**
  * GET /api/gcs/resolve?url=<storage-uri>
@@ -23,21 +20,6 @@ import {
 
 const SOURCE_NOT_FOUND_ERROR = "Source video object not found in storage";
 
-function configuredUploadBucket(): string {
-  return (process.env.RAW_BUCKET || process.env.GCP_RAW_BUCKET || "").trim();
-}
-
-function isUserUploadObject(object: string, userId: string): boolean {
-  const parts = object.split("/");
-  return (
-    parts.length >= 4 &&
-    parts[0] === "uploads" &&
-    Boolean(parts[1]) &&
-    parts[2] === userId &&
-    parts.slice(3).some(Boolean)
-  );
-}
-
 async function getCurrentUserId(sessionUser: {
   id?: string;
   email?: string | null;
@@ -49,37 +31,6 @@ async function getCurrentUserId(sessionUser: {
     select: { id: true },
   });
   return user?.id ?? null;
-}
-
-async function isReferencedByUser(inputUrl: string, userId: string): Promise<boolean> {
-  const [demo, videoJob, exportedVideo] = await Promise.all([
-    prisma.demo.findFirst({
-      where: { userId, OR: [{ videoUrl: inputUrl }, { exportedUrl: inputUrl }] },
-      select: { id: true },
-    }),
-    prisma.videoJob.findFirst({
-      where: { userId, OR: [{ videoUrl: inputUrl }, { exportedUrl: inputUrl }] },
-      select: { id: true },
-    }),
-    prisma.exportedVideo.findFirst({
-      where: { userId, OR: [{ exportedUrl: inputUrl }, { sourceVideoUrl: inputUrl }] },
-      select: { id: true },
-    }),
-  ]);
-  return Boolean(demo || videoJob || exportedVideo);
-}
-
-async function mayResolveObject(
-  inputUrl: string,
-  bucket: string,
-  object: string,
-  userId: string
-): Promise<boolean> {
-  const uploadBucket = configuredUploadBucket();
-  if (uploadBucket && bucket === uploadBucket && isUserUploadObject(object, userId)) {
-    return true;
-  }
-  return isReferencedByUser(inputUrl, userId);
 }
 
 /**

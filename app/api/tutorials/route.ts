@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
-import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import cloudinary from "@/app/lib/cloudinary";
 import type { UploadApiOptions } from "cloudinary";
+import { isTutorialUploadRateLimited } from "@/app/lib/tutorials/abuseProtection";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
 
 const TUTORIAL_SAVE_ERROR = "Failed to save tutorial";
 const TUTORIAL_FETCH_ERROR = "Failed to fetch tutorials";
+
+// A 5MB decoded image requires roughly 7MB after base64 encoding. This
+// leaves room for JSON metadata while preventing an unbounded body read.
+const MAX_TUTORIAL_BODY_BYTES = 8 * 1024 * 1024;
 
 // Mirror the hardened app/api/upload/route.ts caps: tutorial slides are
 // Cloudinary uploads with resource_type auto, so without these an attacker
@@ -22,10 +27,6 @@ const ALLOWED_SLIDE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "im
 // BEFORE Buffer.from decodes them, so a giant base64 blob cannot force a
 // full in-memory decode before the 5MB cap fires.
 const MAX_IMAGE_DATA_CHARS = 7 * 1024 * 1024;
-
-// Same posture as POST /api/upload: max 10 tutorial saves per minute per user.
-const TUTORIAL_RATE_LIMIT = 10;
-const TUTORIAL_RATE_WINDOW_SECONDS = 60;
 
 // Sniff real content — data-URL prefixes and client MIME hints are not trusted.
 function detectSlideMime(buffer: Buffer): string | null {
@@ -87,24 +88,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Rate-limit before parsing the body: each accepted request can trigger up
-    // to 30 Cloudinary uploads, so repeated calls are a direct cost vector.
-    if (await isRateLimited(`tutorials:${session.user.email}`, TUTORIAL_RATE_LIMIT, TUTORIAL_RATE_WINDOW_SECONDS)) {
-      return NextResponse.json({ error: "Too many requests (max 10 per minute)" }, { status: 429 });
+    // Apply independent account and IP limits before reading the body. Each
+    // accepted request can trigger up to 30 paid Cloudinary operations.
+    if (await isTutorialUploadRateLimited(session.user.id || session.user.email, req.headers)) {
+      return NextResponse.json(
+        { error: "Too many requests, please try again shortly" },
+        { status: 429 }
+      );
     }
 
-    const body = (await req.json()) as TutorialPayload;
-    const { title, description, slides } = body;
+    const bodyResult = await readBoundedRequestJsonObject(req, MAX_TUTORIAL_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error:
+            bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request body",
+        },
+        {
+          status: bodyResult.reason === "too_large" ? 413 : 400,
+        }
+      );
+    }
+
+    const { title, description, slides } = bodyResult.value as unknown as TutorialPayload;
 
     if (!title || !slides || !Array.isArray(slides) || slides.length === 0) {
       return NextResponse.json({ error: "Title and slides are required" }, { status: 400 });
     }
 
     if (slides.length > MAX_SLIDES) {
-      return NextResponse.json(
-        { error: `Too many slides (max ${MAX_SLIDES})` },
-        { status: 413 }
-      );
+      return NextResponse.json({ error: `Too many slides (max ${MAX_SLIDES})` }, { status: 413 });
     }
 
     const user = await prisma.user.findUnique({

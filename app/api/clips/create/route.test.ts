@@ -15,6 +15,10 @@ vi.mock("@/app/lib/queue", () => ({
   },
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
     user: {
@@ -48,6 +52,7 @@ vi.mock("@/app/lib/clips/service", async () => {
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { clipJobQueue } from "@/app/lib/clips/service";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -61,6 +66,7 @@ function makeRequest(body: unknown): NextRequest {
 describe("POST /api/clips/create (Task-00050)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isRateLimited).mockResolvedValue(false);
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -210,5 +216,78 @@ describe("POST /api/clips/create (Task-00050)", () => {
       }),
       { jobId: "job-direct-456" }
     );
+  });
+
+  it("returns 400 for an unsafe videoUrl before creating a job or enqueueing", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "user-1" } as any);
+
+    const res = await POST(
+      makeRequest({
+        videoUrl: "http://169.254.169.254/latest/meta-data.mp4",
+        cues: [{ start: 0, end: 10, text: "Direct custom cues" }],
+        duration: 10,
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("Video URL is not allowed");
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(clipJobQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the resolved demo videoUrl is unsafe", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "user-1" } as any);
+    // Ownership check reads the demo by id/userId; transcript resolution reads
+    // subtitles/duration/videoUrl — same mock serves both.
+    vi.mocked(prisma.demo.findUnique).mockResolvedValue({
+      id: "demo-1",
+      userId: "user-1",
+      subtitles: [{ start: 0, end: 5, text: "Hello" }],
+      duration: 10,
+      videoUrl: "http://127.0.0.1/poisoned.mp4",
+    } as any);
+
+    const res = await POST(makeRequest({ demoId: "demo-1" }));
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("Video URL is not allowed");
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(clipJobQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 before validating the body, creating a job, or enqueueing", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "user-1" } as any);
+    vi.mocked(isRateLimited).mockResolvedValue(true);
+
+    const res = await POST(makeRequest({ demoId: "demo-1" }));
+
+    expect(res.status).toBe(429);
+    const data = await res.json();
+    expect(data.error).toBe("Too many clip requests. Please try again shortly.");
+    expect(isRateLimited).toHaveBeenCalledWith("clips-create:user-1", 10, 10 * 60, true);
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(clipJobQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported scoring model before creating a job", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "user-1" } as any);
+
+    const res = await POST(
+      makeRequest({
+        demoId: "demo-1",
+        options: { model: "o1-preview" },
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("options.model must be one of: gpt-4o");
+    expect(clipJobQueue.add).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,27 @@ import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { revalidatePath } from "next/cache";
+import { isSafeUrl } from "@/app/lib/safeUrl";
+
+const MAX_TITLE_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 2000;
+// The editing blob is persisted as JSON and re-broadcast to workers — cap it
+// so one oversized save can't fill the row or the downstream payload.
+const MAX_EDITING_BYTES = 512 * 1024;
+
+function editingPayloadSize(editing: unknown): number {
+  if (editing === undefined || editing === null) {
+    return 0;
+  }
+  try {
+    // Byte length, not string length: multibyte characters (e.g. emoji are
+    // 4 bytes but 2 UTF-16 code units) must count toward the cap.
+    const serialized = JSON.stringify(editing);
+    return serialized === undefined ? 0 : Buffer.byteLength(serialized);
+  } catch {
+    return 0;
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -82,6 +103,33 @@ export async function POST(req: NextRequest) {
 
     if (!title || !videoUrl) {
       return NextResponse.json({ error: "Title, videoUrl are required" }, { status: 400 });
+    }
+
+    if (typeof title !== "string" || typeof videoUrl !== "string") {
+      return NextResponse.json({ error: "Title and videoUrl must be strings" }, { status: 400 });
+    }
+
+    if (title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { error: `Title must be under ${MAX_TITLE_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    if (typeof description === "string" && description.length > MAX_DESCRIPTION_LENGTH) {
+      return NextResponse.json(
+        { error: `Description must be under ${MAX_DESCRIPTION_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    // Persisted and later fetched by workers/players — internal addresses stop here.
+    if (!isSafeUrl(videoUrl)) {
+      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+    }
+
+    if (editingPayloadSize(editing) > MAX_EDITING_BYTES) {
+      return NextResponse.json({ error: "Editing payload is too large" }, { status: 413 });
     }
 
     const userId = session.user.id as string;
@@ -166,6 +214,28 @@ export async function PATCH(req: NextRequest) {
       typeof featured !== "boolean"
     ) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    }
+
+    if (typeof exportedUrl === "string" && !isSafeUrl(exportedUrl)) {
+      return NextResponse.json({ error: "Exported URL is not allowed" }, { status: 400 });
+    }
+
+    if (typeof title === "string" && title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { error: `Title must be under ${MAX_TITLE_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    if (typeof description === "string" && description.length > MAX_DESCRIPTION_LENGTH) {
+      return NextResponse.json(
+        { error: `Description must be under ${MAX_DESCRIPTION_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    if (editingPayloadSize(editing) > MAX_EDITING_BYTES) {
+      return NextResponse.json({ error: "Editing payload is too large" }, { status: 413 });
     }
 
     // Use a single write to both enforce ownership and avoid extra round trips.

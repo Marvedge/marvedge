@@ -3,7 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
-import { isVideoUploadKind, MAX_UPLOAD_BYTES, validateVideoUpload } from "@/app/lib/subtitles";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import {
+  formatBytes,
+  isVideoUploadKind,
+  MAX_UPLOAD_BYTES,
+  validateVideoUpload,
+} from "@/app/lib/subtitles";
 import {
   getSignedUploadUrl,
   getSignedDownloadUrl,
@@ -78,6 +84,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // Minting a signed URL hands out write access to the bucket — cap it per
+    // user like /api/upload does (10/min).
+    if (await isRateLimited(`gcs-upload:${userId}`, 10, 60)) {
+      return NextResponse.json(
+        { ok: false, error: "Too many uploads (max 10 per minute)" },
+        { status: 429 }
+      );
+    }
+
     // RAW_BUCKET is the AWS S3 bucket name; falls back to GCP_RAW_BUCKET for
     // backward compat when STORAGE_PROVIDER=gcs is active.
     const bucketName = (
@@ -135,17 +150,73 @@ export async function POST(req: NextRequest) {
 
     const kind = toSafeKind(body.kind);
     const contentType = String(body.contentType || "application/octet-stream");
+    const videoKind = isVideoUploadKind(kind);
+
+    // A signed URL is the only thing bounding the bytes that will land in the
+    // bucket: the browser can PUT directly and skip /verify entirely. So the
+    // declared size must be present and finite on EVERY branch, not just the
+    // non-video one. JSON `1e400` parses to Infinity and NaN is reachable via a
+    // string, so Number.isFinite (not a truthiness check) is the gate.
+    const declaredSize = typeof body.size === "number" ? body.size : null;
+    if (declaredSize === null || !Number.isFinite(declaredSize)) {
+      return NextResponse.json(
+        { ok: false, error: "File size is required before upload." },
+        { status: 400 }
+      );
+    }
+    if (declaredSize <= 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: videoKind
+            ? "That file is empty. Choose a video with content in it."
+            : "That file is empty. Choose a file with content in it.",
+        },
+        { status: 400 }
+      );
+    }
+    const uploadCapBytes = videoKind ? MAX_UPLOAD_BYTES : MAX_GENERIC_UPLOAD_BYTES;
+    if (declaredSize > uploadCapBytes) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: videoKind
+            ? `That video is ${formatBytes(declaredSize)}. The limit is ${formatBytes(
+                MAX_UPLOAD_BYTES
+              )} — trim it or export it at a lower quality first.`
+            : "That file is too large. Choose a smaller file.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Container and size limits — enforced here, not just client-side.
-    if (isVideoUploadKind(kind)) {
+    if (videoKind) {
       const check = validateVideoUpload({
         filename: body.filename,
         contentType,
-        size: typeof body.size === "number" ? body.size : null,
+        size: declaredSize,
       });
       if (!check.ok) {
         return NextResponse.json({ ok: false, error: check.error }, { status: 400 });
       }
+    } else {
+      // Non-video kinds (watermark logo, background image, generic) still mint
+      // bucket writes, so only media types are allowed — never executables,
+      // HTML, or bare octet-streams.
+      const baseType = contentType.split(";")[0].trim().toLowerCase();
+      const isMediaType =
+        baseType.startsWith("video/") ||
+        baseType.startsWith("image/") ||
+        baseType.startsWith("audio/");
+      if (!isMediaType) {
+        return NextResponse.json(
+          { ok: false, error: "That file type is not supported for uploads." },
+          { status: 400 }
+        );
+      }
+      // The size was validated before the branch, so this only checks the
+      // media type now. The /verify step still re-checks the stored bytes.
     }
 
     const fallbackName = contentType.startsWith("video/") ? "upload.webm" : "upload.bin";
@@ -155,7 +226,16 @@ export async function POST(req: NextRequest) {
     const objectKey = `uploads/${kind}/${userId}/${Date.now()}-${randomUUID()}${suffix}`;
 
     // Presigned PUT URL for the browser to upload directly to S3 (or GCS).
-    const uploadUrl = await getSignedUploadUrl(bucketName, objectKey, contentType);
+    // Pass the size cap through so GCS can sign x-goog-content-length-range;
+    // AWS presigned PUT cannot enforce one, which is why the server-side reject
+    // above is mandatory rather than best-effort.
+    const uploadUrl = await getSignedUploadUrl(
+      bucketName,
+      objectKey,
+      contentType,
+      15 * 60 * 1000,
+      uploadCapBytes
+    );
 
     // Presigned GET URL for immediate playback (24 h).
     const signedReadUrl = await getSignedDownloadUrl(bucketName, objectKey, 24 * 60 * 60 * 1000);

@@ -1,10 +1,9 @@
 import { Redis } from "ioredis";
+import { resolveRedisConfig } from "./redisConfig";
 
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const redisConfig = resolveRedisConfig();
 
-const connection = new Redis(redisUrl, {
-  maxRetriesPerRequest: null,
-});
+const connection = new Redis(redisConfig.url, redisConfig.options);
 
 // Log connection errors without throwing so jobs stay queued.
 connection.on("error", (err) => {

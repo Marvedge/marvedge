@@ -4,6 +4,20 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 
+// Public profile fields, mirroring app/api/user/get/route.ts. password and
+// sessionVersion must never be read or returned here.
+const SAFE_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  image: true,
+  bio: true,
+  location: true,
+  website: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
@@ -96,6 +110,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      select: SAFE_USER_SELECT,
     });
 
     if (!user) {
@@ -123,6 +138,7 @@ export async function POST(req: NextRequest) {
           ? { image: typeof image === "string" && image.trim() ? image.trim() : null }
           : {}),
       },
+      select: SAFE_USER_SELECT,
     });
 
     return NextResponse.json({ success: true, user: updatedUser });

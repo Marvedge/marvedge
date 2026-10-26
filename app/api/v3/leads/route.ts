@@ -39,6 +39,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { deliverLead } from "@/app/lib/crm/deliverLead";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestText } from "@/app/lib/http/boundedBody";
 import { isOverlaysAllowed } from "@/app/lib/overlays/access";
 import { overlayConfigFromRow } from "@/app/lib/overlays/config";
 import { isValidEmail, isWorkEmail, normalizeEmail } from "@/app/lib/overlays/email";
@@ -110,17 +111,13 @@ export async function POST(req: NextRequest) {
   // Read the raw text and parse it ourselves, matching /api/v3/events — the
   // form sends a JSON content-type, but a bounded read is cheaper than trusting
   // one.
-  let rawBody: string;
-  try {
-    rawBody = await req.text();
-  } catch {
-    return fail("invalid", 400);
-  }
-  if (rawBody.length === 0 || Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+  const bodyResult = await readBoundedRequestText(req, MAX_BODY_BYTES);
+
+  if (!bodyResult.ok) {
     return fail("invalid", 400);
   }
 
-  const parsed = parseLeadSubmission(rawBody);
+  const parsed = parseLeadSubmission(bodyResult.value);
   if (!parsed.ok) {
     // `parsed` carries a reason literal and none of the submitted fields, which
     // is the whole point of parseLeadSubmission() returning it that way.

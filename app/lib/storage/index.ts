@@ -12,7 +12,7 @@
  * implementation in cloudrun-worker/storage.cjs.
  *
  * API surface:
- *   getSignedUploadUrl(bucket, key, contentType, expiresMs) → string
+ *   getSignedUploadUrl(bucket, key, contentType, expiresMs?, maxBytes?) → string
  *   getSignedDownloadUrl(bucket, key, expiresMs)             → string
  *   objectExists(bucket, key)                                → boolean
  *   deleteObject(bucket, key)                                → void
@@ -96,12 +96,18 @@ async function getGcsClient() {
 /**
  * Generate a presigned URL for a PUT upload.
  * Default expiry: 15 minutes.
+ *
+ * `maxBytes` is optional. On GCS it signs `x-goog-content-length-range`, which
+ * makes the object store reject an oversized PUT even when the caller skips the
+ * application's /verify step. AWS presigned PUT has no equivalent constraint, so
+ * callers must still reject an invalid declared size before signing.
  */
 export async function getSignedUploadUrl(
   bucket: string,
   key: string,
   contentType: string,
-  expiresMs = 15 * 60 * 1000
+  expiresMs = 15 * 60 * 1000,
+  maxBytes?: number
 ): Promise<string> {
   if (activeProvider() === "aws") {
     const client = getS3Client();
@@ -111,11 +117,18 @@ export async function getSignedUploadUrl(
 
   // GCS fallback
   const gcs = await getGcsClient();
+  const boundedMaxBytes =
+    typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes > 0
+      ? Math.floor(maxBytes)
+      : null;
   const [url] = await gcs.bucket(bucket).file(key).getSignedUrl({
     version: "v4",
     action: "write",
     expires: Date.now() + expiresMs,
     contentType,
+    ...(boundedMaxBytes !== null
+      ? { extensionHeaders: { "x-goog-content-length-range": `0,${boundedMaxBytes}` } }
+      : {}),
   });
   return url;
 }

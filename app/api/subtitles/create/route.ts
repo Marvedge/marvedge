@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import { invokeGcpSubtitles } from "@/app/lib/gcpWorker";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { isSafeUrl } from "@/app/lib/safeUrl";
 import {
   isSttOffered,
@@ -232,6 +233,15 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id;
+
+    // Deepgram is billed per minute of audio. Cap per authenticated user before
+    // creating a job or calling the worker.
+    if (await isRateLimited(`subtitles-create:${userId}`, 10, 10 * 60, true)) {
+      return NextResponse.json(
+        { error: "Too many subtitle requests. Please try again shortly." },
+        { status: 429 }
+      );
+    }
 
     if (demoId) {
       const demo = await prisma.demo.findUnique({

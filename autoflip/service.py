@@ -11,11 +11,14 @@ import shutil
 import subprocess
 import tempfile
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 import ipaddress
 import socket
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib.parse import urljoin, urlparse
 logger = logging.getLogger("reframe-service")
 
@@ -32,23 +35,153 @@ DEFAULT_DOWNLOAD_TIMEOUT_SEC = int(os.environ.get("DOWNLOAD_TIMEOUT_SEC", "60"))
 
 ASPECT_RATIO_REGEX = re.compile(r"^\d+:\d+$")
 MAX_REDIRECTS = 5
+DEFAULT_MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024  # 250 MB
+try:
+    MAX_DOWNLOAD_SIZE_BYTES = int(
+        os.environ.get("MAX_DOWNLOAD_SIZE_BYTES", str(DEFAULT_MAX_DOWNLOAD_BYTES))
+    )
+except (TypeError, ValueError):
+    MAX_DOWNLOAD_SIZE_BYTES = DEFAULT_MAX_DOWNLOAD_BYTES
+if MAX_DOWNLOAD_SIZE_BYTES <= 0:
+    MAX_DOWNLOAD_SIZE_BYTES = DEFAULT_MAX_DOWNLOAD_BYTES
+
+
+class PeerBlockedError(ConnectionError):
+    """Raised when a connected peer IP is not publicly routable."""
 
 
 def _is_unsafe_ip(address: str) -> bool:
     """Returns True when an IP belongs to a private or otherwise unsafe range."""
     try:
-        ip = ipaddress.ip_address(address)
+        ip = ipaddress.ip_address(str(address).split("%", 1)[0])
     except ValueError:
         return True
 
     return (
-        ip.is_loopback
+        not ip.is_global
+        or ip.is_loopback
         or ip.is_private
         or ip.is_link_local
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
     )
+
+
+def _peer_ip(sock) -> str:
+    """
+    Returns the numeric peer address of a connected socket.
+
+    Raises PeerBlockedError when the peer is not publicly routable. This is the
+    connection sink check that closes the DNS-rebinding TOCTOU window: it runs
+    before any HTTP request bytes are exchanged. For HTTPS this is after the TLS
+    handshake, so no request data can reach an internal peer.
+    """
+    try:
+        peer = sock.getpeername()
+    except OSError as exc:
+        raise PeerBlockedError("Unable to determine remote peer address") from exc
+
+    if not isinstance(peer, tuple) or not peer:
+        raise PeerBlockedError("Unable to determine remote peer address")
+
+    address = str(peer[0])
+    if _is_unsafe_ip(address):
+        raise PeerBlockedError(
+            f"Refusing connection to non-public peer address {address}"
+        )
+    return address
+
+
+class _PeerValidationMixin:
+    """Validates the actual peer IP before any request bytes are sent."""
+
+    def _new_conn(self):
+        sock = super()._new_conn()
+        try:
+            _peer_ip(sock)
+        except BaseException:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            raise
+        return sock
+
+
+class _PeerValidatingHTTPConnection(_PeerValidationMixin, HTTPConnection):
+    pass
+
+
+class _PeerValidatingHTTPSConnection(_PeerValidationMixin, HTTPSConnection):
+    pass
+
+
+class _PeerValidatingHTTPConnectionPool(HTTPConnectionPool):
+    ConnectionCls = _PeerValidatingHTTPConnection
+
+
+class _PeerValidatingHTTPSConnectionPool(HTTPSConnectionPool):
+    ConnectionCls = _PeerValidatingHTTPSConnection
+
+
+class _PeerValidatingHTTPAdapter(HTTPAdapter):
+    """requests adapter that installs peer-IP-validating urllib3 pools."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {
+            "http": _PeerValidatingHTTPConnectionPool,
+            "https": _PeerValidatingHTTPSConnectionPool,
+        }
+
+
+def _build_safe_session() -> requests.Session:
+    """Builds a requests session with connection-sink peer validation."""
+    session = requests.Session()
+    # Ignore proxy environment variables: a proxy's public peer IP would not
+    # represent the actual destination and would bypass the peer check.
+    session.trust_env = False
+    adapter = _PeerValidatingHTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+def _is_peer_blocked_error(exc: BaseException) -> bool:
+    """Walks requests/urllib3 exception chains looking for PeerBlockedError."""
+    seen = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, PeerBlockedError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _remove_partial_file(path: str) -> None:
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Could not remove partial download %s: %s", path, exc)
+
+
+def _declared_content_length(resp) -> Optional[int]:
+    raw = resp.headers.get("Content-Length")
+    if raw is None or not isinstance(raw, str):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise DownloadError(
+            "Remote server returned an invalid Content-Length"
+        ) from exc
+    if value < 0:
+        raise DownloadError("Remote server returned a negative Content-Length")
+    return value
 
 
 def _validate_remote_url(url: str) -> None:
@@ -148,53 +281,104 @@ def download_video(
     dest_path: str,
     timeout_sec: int = DEFAULT_DOWNLOAD_TIMEOUT_SEC,
 ) -> None:
-    """Downloads a validated public HTTP(S) video URL into dest_path."""
+    """
+    Downloads a validated public HTTP(S) video URL into dest_path.
+
+    Security properties:
+    - Every redirect hop is re-validated before the next request.
+    - The actual connected peer IP is validated at the connection sink, so a
+      DNS rebind between validation and fetch is rejected before request data.
+    - Content-Length (when present) and a running byte count are both capped.
+    - Partial files are removed on any failure or size violation.
+    """
     current_url = url
+    session = _build_safe_session()
 
-    for redirect_count in range(MAX_REDIRECTS + 1):
-        _validate_remote_url(current_url)
+    try:
+        for redirect_count in range(MAX_REDIRECTS + 1):
+            _validate_remote_url(current_url)
 
-        try:
-            with requests.get(
-                current_url,
-                stream=True,
-                timeout=timeout_sec,
-                allow_redirects=False,
-            ) as resp:
-                if resp.is_redirect or resp.is_permanent_redirect:
-                    location = resp.headers.get("Location")
-                    if not location:
+            try:
+                with session.get(
+                    current_url,
+                    stream=True,
+                    timeout=timeout_sec,
+                    allow_redirects=False,
+                ) as resp:
+                    if resp.is_redirect or resp.is_permanent_redirect:
+                        location = resp.headers.get("Location")
+                        if not location:
+                            raise DownloadError(
+                                "Video download returned a redirect without a Location header"
+                            )
+
+                        if redirect_count >= MAX_REDIRECTS:
+                            raise DownloadError(
+                                f"Video download exceeded the maximum of {MAX_REDIRECTS} redirects"
+                            )
+
+                        current_url = urljoin(current_url, location)
+                        continue
+
+                    resp.raise_for_status()
+
+                    declared_length = _declared_content_length(resp)
+                    if (
+                        declared_length is not None
+                        and declared_length > MAX_DOWNLOAD_SIZE_BYTES
+                    ):
                         raise DownloadError(
-                            "Video download returned a redirect without a Location header"
+                            "Video exceeds maximum allowed download size "
+                            f"({MAX_DOWNLOAD_SIZE_BYTES} bytes)"
                         )
 
-                    if redirect_count >= MAX_REDIRECTS:
-                        raise DownloadError(
-                            f"Video download exceeded the maximum of {MAX_REDIRECTS} redirects"
-                        )
-
-                    current_url = urljoin(current_url, location)
-                    continue
-
-                resp.raise_for_status()
-
-                with open(dest_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=65536):
-                        if chunk:
+                    bytes_written = 0
+                    with open(dest_path, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=65536):
+                            if not chunk:
+                                continue
+                            bytes_written += len(chunk)
+                            if bytes_written > MAX_DOWNLOAD_SIZE_BYTES:
+                                raise DownloadError(
+                                    "Video exceeds maximum allowed download size "
+                                    f"({MAX_DOWNLOAD_SIZE_BYTES} bytes)"
+                                )
                             f.write(chunk)
 
-                break
+                    break
 
-        except requests.exceptions.Timeout:
-            raise DownloadError(
-                f"Video download timed out after {timeout_sec} seconds"
-            )
-        except requests.exceptions.RequestException as e:
-            raise DownloadError(
-                f"Failed to download video from {current_url}: {str(e)}"
-            )
+            except requests.exceptions.Timeout:
+                _remove_partial_file(dest_path)
+                raise DownloadError(
+                    f"Video download timed out after {timeout_sec} seconds"
+                )
+            except requests.exceptions.ConnectionError as e:
+                _remove_partial_file(dest_path)
+                if _is_peer_blocked_error(e):
+                    raise ValidationError(
+                        "videoUrl must not target a private or internal network address"
+                    ) from e
+                raise DownloadError(
+                    f"Failed to download video from {current_url}: {str(e)}"
+                )
+            except requests.exceptions.RequestException as e:
+                _remove_partial_file(dest_path)
+                raise DownloadError(
+                    f"Failed to download video from {current_url}: {str(e)}"
+                )
+            except DownloadError:
+                _remove_partial_file(dest_path)
+                raise
+            except OSError as e:
+                _remove_partial_file(dest_path)
+                raise DownloadError(
+                    f"Failed to save downloaded video: {str(e)}"
+                ) from e
+    finally:
+        session.close()
 
     if not os.path.exists(dest_path) or os.path.getsize(dest_path) == 0:
+        _remove_partial_file(dest_path)
         raise DownloadError(f"Downloaded video is empty or missing: {dest_path}")
 
 def run_autoflip_subprocess(
@@ -285,14 +469,37 @@ def parse_and_validate_json_output(output_json_path: str) -> Dict[str, Any]:
             "Output JSON missing 'crop_targets' array"
         )
 
-    # Defensive contract validation: verify timestamps are non-negative, monotonic,
-    # and do not exceed source duration (preventing corrupted payloads from returning HTTP 200).
+    if len(data["crop_targets"]) == 0:
+        raise ExecutionError(
+            "Output JSON produced an empty 'crop_targets' array (no valid frames processed)"
+        )
+
+    # Validate output aspect ratio contract if specified
+    expected_ratio = None
+    output_meta = data.get("output")
+    if isinstance(output_meta, dict):
+        ar_str = output_meta.get("aspect_ratio")
+        if isinstance(ar_str, str) and ASPECT_RATIO_REGEX.match(ar_str.strip()):
+            parts = ar_str.strip().split(":")
+            w_part, h_part = float(parts[0]), float(parts[1])
+            if h_part > 0:
+                expected_ratio = w_part / h_part
+
+    # Defensive contract validation: verify timestamps and crop geometries
     source = data.get("source")
     duration_sec = None
+    source_width = None
+    source_height = None
     if isinstance(source, dict):
         raw_dur = source.get("duration_sec")
         if isinstance(raw_dur, (int, float)) and raw_dur > 0:
             duration_sec = float(raw_dur)
+        raw_w = source.get("width")
+        if isinstance(raw_w, (int, float)) and raw_w > 0:
+            source_width = float(raw_w)
+        raw_h = source.get("height")
+        if isinstance(raw_h, (int, float)) and raw_h > 0:
+            source_height = float(raw_h)
 
     max_allowed_ts = (duration_sec + 0.5) if duration_sec is not None else None
     prev_ts = -1.0
@@ -318,6 +525,47 @@ def parse_and_validate_json_output(output_json_path: str) -> Dict[str, Any]:
                 f"crop_targets[{idx}].timestamp_sec ({ts_float}) is not strictly increasing (prev: {prev_ts})"
             )
         prev_ts = ts_float
+
+        # AF-04 / AF-03 validation: Validate crop bounding box
+        crop = target.get("crop")
+        if not isinstance(crop, dict):
+            raise ExecutionError(f"crop_targets[{idx}] missing 'crop' object")
+
+        for key in ("x", "y", "width", "height"):
+            val = crop.get(key)
+            if val is None or not isinstance(val, (int, float)):
+                raise ExecutionError(f"crop_targets[{idx}].crop.{key} is missing or non-numeric")
+
+        cx = float(crop["x"])
+        cy = float(crop["y"])
+        cw = float(crop["width"])
+        ch = float(crop["height"])
+
+        if cw <= 0.0 or ch <= 0.0:
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop dimensions must be positive (got width={cw}, height={ch})"
+            )
+        if cx < -0.5 or cy < -0.5:
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop coordinates cannot be negative (got x={cx}, y={cy})"
+            )
+
+        if source_width is not None and (cx + cw) > (source_width + 0.5):
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop exceeds source width ({cx} + {cw} > {source_width})"
+            )
+        if source_height is not None and (cy + ch) > (source_height + 0.5):
+            raise ExecutionError(
+                f"crop_targets[{idx}].crop exceeds source height ({cy} + {ch} > {source_height})"
+            )
+
+        if expected_ratio is not None:
+            actual_ratio = cw / ch
+            ratio_err = abs(actual_ratio - expected_ratio) / expected_ratio
+            if ratio_err > 0.01:
+                raise ExecutionError(
+                    f"crop_targets[{idx}].crop aspect ratio {actual_ratio:.4f} deviates from target {expected_ratio:.4f} by {ratio_err*100:.2f}% (max 1%)"
+                )
 
     return data
 

@@ -3,9 +3,19 @@ services:
     build: .
     image: marvedge-ml-worker:latest
     ports:
-      - "8080:8080"
+      # Loopback-only host publication. The app also requires credentials
+      # unless GRADIO_ALLOW_INSECURE=1 is explicitly set for local dev.
+      - "127.0.0.1:8080:8080"
     environment:
       - PYTHONUNBUFFERED=1
+      # Bind inside the container so Docker's loopback-only host forwarding can
+      # reach it. Direct `python app.py` runs default to 127.0.0.1 instead.
+      - GRADIO_SERVER_NAME=0.0.0.0
+      # Required for startup. Supply these in your shell or a local .env file.
+      - GRADIO_USERNAME=${GRADIO_USERNAME:-}
+      - GRADIO_PASSWORD=${GRADIO_PASSWORD:-}
+      # Local development only; forces an unauthenticated 127.0.0.1 bind.
+      - GRADIO_ALLOW_INSECURE=${GRADIO_ALLOW_INSECURE:-}
     # Mount a local directory to persist processed outputs across restarts
     # volumes:
     #   - ./output:/tmp/gradio_out_*

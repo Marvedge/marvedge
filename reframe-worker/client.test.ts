@@ -109,4 +109,42 @@ describe("callMlInference latency metrics", () => {
     );
     expect(duration).toMatchObject({ labels: { status: "failure" }, value: 1.5 });
   });
+
+  it("sends the gateway token header when ML_GATEWAY_TOKEN is configured", async () => {
+    process.env.ML_GATEWAY_TOKEN = "secret-123";
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ ok: true, crop_targets: cropTargets }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await callMlInference("http://ml-service", {
+        videoUrl: "https://example.com/video.mp4",
+        targetAspectRatio: "9:16",
+      });
+    } finally {
+      delete process.env.ML_GATEWAY_TOKEN;
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      "x-gateway-token": "secret-123",
+    });
+  });
+
+  it("omits the gateway token header when ML_GATEWAY_TOKEN is unset", async () => {
+    delete process.env.ML_GATEWAY_TOKEN;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ ok: true, crop_targets: cropTargets }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callMlInference("http://ml-service", {
+      videoUrl: "https://example.com/video.mp4",
+      targetAspectRatio: "9:16",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty("x-gateway-token");
+  });
 });

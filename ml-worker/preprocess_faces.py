@@ -314,6 +314,20 @@ def crop_video(args, track, cropFile, flist=None):
         dets['x'] = signal.medfilt(dets['x'], kernel_size=k_size)
         dets['y'] = signal.medfilt(dets['y'], kernel_size=k_size)
 
+    # AF-02 Invariant: Slew-rate limiting to eliminate jump/jitter artifacts
+    if len(dets['x']) > 1:
+        mean_scale = float(numpy.median(dets['s'])) if len(dets['s']) > 0 else 50.0
+        max_delta = max(20.0, mean_scale * 0.6)
+        for dkey in ('x', 'y'):
+            arr = numpy.array(dets[dkey], dtype=float)
+            for t in range(1, len(arr)):
+                diff = arr[t] - arr[t - 1]
+                if diff > max_delta:
+                    arr[t] = arr[t - 1] + max_delta
+                elif diff < -max_delta:
+                    arr[t] = arr[t - 1] - max_delta
+            dets[dkey] = arr
+
     for fidx, frame in enumerate(track['frame']):
         cs = args.cropScale
         bs = dets['s'][fidx]

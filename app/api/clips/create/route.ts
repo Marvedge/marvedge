@@ -9,6 +9,8 @@ import {
   resolveTranscriptCues,
   validateClipScoringInput,
 } from "@/app/lib/clips/service";
+import { isSafeUrl } from "@/app/lib/safeUrl";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,6 +34,15 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id;
+
+    // OpenAI scoring is billed per request. Cap per authenticated user before
+    // validating/queueing the job.
+    if (await isRateLimited(`clips-create:${userId}`, 10, 10 * 60, true)) {
+      return NextResponse.json(
+        { error: "Too many clip requests. Please try again shortly." },
+        { status: 429 }
+      );
+    }
 
     let body: unknown;
     try {
@@ -60,6 +71,18 @@ export async function POST(req: NextRequest) {
         suppliedCues: cues,
         suppliedDuration: duration,
       });
+
+    // The worker fetches this URL. The supplied videoUrl is gated in
+    // validateClipScoringInput; recheck here because the resolved URL can come
+    // from a stored row — poisoned rows fail closed before any DB write.
+    const effectiveVideoUrl = resolvedVideoUrl || videoUrl;
+    if (
+      typeof effectiveVideoUrl === "string" &&
+      effectiveVideoUrl &&
+      !isSafeUrl(effectiveVideoUrl)
+    ) {
+      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+    }
 
     // 1. Create a tracking VideoJob record in PostgreSQL
     const jobRecord = await prisma.videoJob.create({

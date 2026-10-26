@@ -5,10 +5,16 @@ and directory cleanup using mocked execution boundaries.
 """
 
 import json
+import io
 import os
 import socket
+import sys
 import subprocess
 from unittest.mock import MagicMock, patch
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
 
 import pytest
 from fastapi.testclient import TestClient
@@ -43,7 +49,7 @@ SAMPLE_CROP_TARGET_DATA = {
         {
             "timestamp_sec": 0.0,
             "frame": 0,
-            "crop": {"x": 420.0, "y": 0.0, "width": 1080.0, "height": 1920.0},
+            "crop": {"x": 656.0, "y": 0.0, "width": 607.5, "height": 1080.0},
             "source": "autoflip",
         }
     ],
@@ -86,8 +92,8 @@ class TestValidation:
 
 
 class TestVideoDownload:
-    @patch("requests.get")
-    def test_download_success(self, mock_get, tmp_path):
+    @patch("service._build_safe_session")
+    def test_download_success(self, mock_session, tmp_path):
         mock_resp = MagicMock()
         mock_resp.iter_content.return_value = [b"mock_video_bytes"]
         mock_resp.raise_for_status = MagicMock()
@@ -95,7 +101,7 @@ class TestVideoDownload:
         mock_resp.is_redirect = False
         mock_resp.is_permanent_redirect = False
         mock_resp.headers = {}
-        mock_get.return_value = mock_resp
+        mock_session.return_value.get.return_value = mock_resp
 
         dest = os.path.join(tmp_path, "out.mp4")
         download_video("https://example.com/video.mp4", dest)
@@ -104,21 +110,25 @@ class TestVideoDownload:
         with open(dest, "rb") as f:
             assert f.read() == b"mock_video_bytes"
 
-    @patch("requests.get")
-    def test_download_failure(self, mock_get, tmp_path):
+    @patch("service._build_safe_session")
+    def test_download_failure(self, mock_session, tmp_path):
         import requests
 
-        mock_get.side_effect = requests.exceptions.HTTPError("404 Not Found")
+        mock_session.return_value.get.side_effect = requests.exceptions.HTTPError(
+            "404 Not Found"
+        )
         dest = os.path.join(tmp_path, "out.mp4")
 
         with pytest.raises(DownloadError, match="Failed to download video"):
             download_video("https://example.com/notfound.mp4", dest)
 
-    @patch("requests.get")
-    def test_download_timeout(self, mock_get, tmp_path):
+    @patch("service._build_safe_session")
+    def test_download_timeout(self, mock_session, tmp_path):
         import requests
 
-        mock_get.side_effect = requests.exceptions.Timeout("Connection timed out")
+        mock_session.return_value.get.side_effect = requests.exceptions.Timeout(
+            "Connection timed out"
+        )
         dest = os.path.join(tmp_path, "out.mp4")
 
         with pytest.raises(DownloadError, match="timed out"):
@@ -147,8 +157,8 @@ class TestVideoDownload:
         with pytest.raises(ValidationError, match="must use HTTP or HTTPS"):
             download_video("file:///tmp/video.mp4", dest)
 
-    @patch("requests.get")
-    def test_download_rejects_redirect_to_private_ip(self, mock_get, tmp_path):
+    @patch("service._build_safe_session")
+    def test_download_rejects_redirect_to_private_ip(self, mock_session, tmp_path):
         mock_resp = MagicMock()
         mock_resp.is_redirect = True
         mock_resp.is_permanent_redirect = False
@@ -156,7 +166,7 @@ class TestVideoDownload:
             "Location": "http://127.0.0.1/internal-video.mp4"
         }
         mock_resp.__enter__.return_value = mock_resp
-        mock_get.return_value = mock_resp
+        mock_session.return_value.get.return_value = mock_resp
 
         dest = os.path.join(tmp_path, "out.mp4")
 
@@ -187,6 +197,221 @@ class TestVideoDownload:
             match="private or internal network address",
         ):
             download_video("https://example.com/video.mp4", dest)
+
+
+class _FakePeerSocket:
+    """Minimal socket double for exercising the connection-sink peer check."""
+
+    def __init__(self, peer, response=b""):
+        self._peer = (peer, 443)
+        self._response = response
+        self.closed = False
+
+    def getpeername(self):
+        return self._peer
+
+    def sendall(self, data):
+        pass
+
+    def makefile(self, mode="rb"):
+        return io.BytesIO(self._response)
+
+    def settimeout(self, timeout):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+def _patch_public_dns(monkeypatch):
+    monkeypatch.setattr(
+        "service.socket.getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))
+        ],
+    )
+
+
+class TestConnectionSinkPeerValidation:
+    @pytest.mark.parametrize(
+        "peer",
+        [
+            "169.254.169.254",
+            "10.0.0.5",
+            "127.0.0.1",
+            "192.168.1.10",
+            "0.0.0.0",
+        ],
+    )
+    def test_dns_rebind_to_private_peer_blocked_at_connect(
+        self, monkeypatch, tmp_path, peer
+    ):
+        # The URL validator sees a public DNS answer...
+        _patch_public_dns(monkeypatch)
+        # ...but the TCP connection actually lands on an internal peer.
+        fake = _FakePeerSocket(peer)
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPConnection._new_conn", lambda self: fake
+        )
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        with pytest.raises(
+            ValidationError, match="private or internal network address"
+        ):
+            download_video("http://rebind.example/video.mp4", dest)
+
+        assert not os.path.exists(dest)
+        assert fake.closed is True
+
+    def test_dns_rebind_to_link_local_blocked_before_tls(self, monkeypatch, tmp_path):
+        _patch_public_dns(monkeypatch)
+        fake = _FakePeerSocket("169.254.169.254")
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPSConnection._new_conn", lambda self: fake
+        )
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        with pytest.raises(
+            ValidationError, match="private or internal network address"
+        ):
+            download_video("https://rebind.example/video.mp4", dest)
+
+        assert not os.path.exists(dest)
+        assert fake.closed is True
+
+    def test_public_peer_is_allowed_and_body_is_written(self, monkeypatch, tmp_path):
+        _patch_public_dns(monkeypatch)
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Length: 5\r\n"
+            b"Content-Type: video/mp4\r\n"
+            b"\r\n"
+            b"hello"
+        )
+        fake = _FakePeerSocket("93.184.216.34", response=response)
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPConnection._new_conn", lambda self: fake
+        )
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        download_video("http://public.example/video.mp4", dest)
+
+        with open(dest, "rb") as f:
+            assert f.read() == b"hello"
+
+    def test_https_connection_accepts_public_peer(self, monkeypatch):
+        import service
+
+        fake = _FakePeerSocket("93.184.216.34")
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPSConnection._new_conn", lambda self: fake
+        )
+        connection = service._PeerValidatingHTTPSConnection("public.example", 443)
+        assert connection._new_conn() is fake
+        assert fake.closed is False
+
+    def test_redirect_hop_peer_is_validated_at_connect(self, monkeypatch, tmp_path):
+        _patch_public_dns(monkeypatch)
+        redirect_response = (
+            b"HTTP/1.1 302 Found\r\n"
+            b"Location: http://rebind.example/next.mp4\r\n"
+            b"Content-Length: 0\r\n"
+            b"\r\n"
+        )
+        first = _FakePeerSocket("93.184.216.34", response=redirect_response)
+        second = _FakePeerSocket("10.0.0.5")
+        sockets = iter([first, second])
+        monkeypatch.setattr(
+            "urllib3.connection.HTTPConnection._new_conn",
+            lambda self: next(sockets),
+        )
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        with pytest.raises(
+            ValidationError, match="private or internal network address"
+        ):
+            download_video("http://public.example/video.mp4", dest)
+
+        assert not os.path.exists(dest)
+        assert second.closed is True
+
+    def test_safe_session_keeps_tls_verification_enabled(self):
+        import service
+
+        session = service._build_safe_session()
+        try:
+            assert session.verify is True
+            assert session.trust_env is False
+        finally:
+            session.close()
+
+
+class TestDownloadSizeCap:
+    @patch("service._build_safe_session")
+    def test_content_length_over_cap_aborts_before_writing(
+        self, mock_session, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr("service.MAX_DOWNLOAD_SIZE_BYTES", 10)
+        mock_resp = MagicMock()
+        mock_resp.is_redirect = False
+        mock_resp.is_permanent_redirect = False
+        mock_resp.headers = {"Content-Length": "11"}
+        mock_resp.__enter__.return_value = mock_resp
+        mock_session.return_value.get.return_value = mock_resp
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        with pytest.raises(DownloadError, match="exceeds maximum allowed"):
+            download_video("https://example.com/big.mp4", dest)
+
+        assert not os.path.exists(dest)
+
+    @patch("service._build_safe_session")
+    def test_endless_stream_is_aborted_and_partial_removed(
+        self, mock_session, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr("service.MAX_DOWNLOAD_SIZE_BYTES", 10)
+
+        def endless_chunks():
+            while True:
+                yield b"0123456789"
+
+        mock_resp = MagicMock()
+        mock_resp.is_redirect = False
+        mock_resp.is_permanent_redirect = False
+        mock_resp.headers = {}
+        mock_resp.iter_content.return_value = endless_chunks()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_session.return_value.get.return_value = mock_resp
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        with pytest.raises(DownloadError, match="exceeds maximum allowed"):
+            download_video("https://example.com/endless.mp4", dest)
+
+        assert not os.path.exists(dest)
+
+    @patch("service._build_safe_session")
+    def test_partial_file_removed_on_stream_error(
+        self, mock_session, tmp_path, monkeypatch
+    ):
+        import requests
+
+        def failing_chunks():
+            yield b"partial-data"
+            raise requests.exceptions.ConnectionError("connection reset")
+
+        mock_resp = MagicMock()
+        mock_resp.is_redirect = False
+        mock_resp.is_permanent_redirect = False
+        mock_resp.headers = {}
+        mock_resp.iter_content.return_value = failing_chunks()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_session.return_value.get.return_value = mock_resp
+
+        dest = os.path.join(tmp_path, "out.mp4")
+        with pytest.raises(DownloadError):
+            download_video("https://example.com/broken.mp4", dest)
+
+        assert not os.path.exists(dest)
 
 
 class TestAutoFlipExecution:
@@ -319,6 +544,110 @@ class TestJsonParsing:
             json.dump(negative_payload, f)
 
         with pytest.raises(ExecutionError, match="is negative"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_empty_crop_targets(self, tmp_path):
+        json_path = os.path.join(tmp_path, "empty_targets.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1920, "height": 1080, "duration_sec": 10.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="empty 'crop_targets' array"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_missing_crop_object(self, tmp_path):
+        json_path = os.path.join(tmp_path, "missing_crop.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1920, "height": 1080, "duration_sec": 10.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [{"timestamp_sec": 0.0, "frame": 0}],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="missing 'crop' object"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_out_of_bounds_width(self, tmp_path):
+        json_path = os.path.join(tmp_path, "oob_w.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1280, "height": 720, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": 1000.0, "y": 0.0, "width": 405.0, "height": 720.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="exceeds source width"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_out_of_bounds_height(self, tmp_path):
+        json_path = os.path.join(tmp_path, "oob_h.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1280, "height": 720, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": 0.0, "y": 100.0, "width": 405.0, "height": 720.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="exceeds source height"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_negative_coordinates(self, tmp_path):
+        json_path = os.path.join(tmp_path, "negative_coord.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1280, "height": 720, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": -10.0, "y": 0.0, "width": 405.0, "height": 720.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="coordinates cannot be negative"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_aspect_ratio_mismatch(self, tmp_path):
+        json_path = os.path.join(tmp_path, "ratio_mismatch.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1920, "height": 1080, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": 100.0, "y": 0.0, "width": 800.0, "height": 1080.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="deviates from target"):
             parse_and_validate_json_output(json_path)
 
 

@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestText } from "@/app/lib/http/boundedBody";
 import { isOverlaysEnabled } from "@/app/lib/overlays/flags";
 import { parsePlayerEventBatch, selectKnownEvents } from "@/app/lib/overlays/events";
 import { applySessionCookie, readOrMintSessionId } from "@/app/lib/overlays/session";
@@ -74,17 +75,13 @@ export async function POST(req: NextRequest) {
 
   // sendBeacon with a Blob does not reliably set application/json, and req.json()
   // is content-type sensitive. Read the raw text and parse it ourselves.
-  let rawBody: string;
-  try {
-    rawBody = await req.text();
-  } catch {
-    return respond();
-  }
-  if (rawBody.length === 0 || Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+  const bodyResult = await readBoundedRequestText(req, MAX_BODY_BYTES);
+
+  if (!bodyResult.ok) {
     return respond();
   }
 
-  const parsed = parsePlayerEventBatch(rawBody);
+  const parsed = parsePlayerEventBatch(bodyResult.value);
   if (!parsed.ok) {
     return respond();
   }
