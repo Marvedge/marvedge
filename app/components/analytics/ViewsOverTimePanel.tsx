@@ -59,14 +59,14 @@ const ViewsOverTimePanel = ({ viewsOverTime }: ViewsOverTimePanelProps) => {
               <Tooltip
                 contentStyle={{
                   borderRadius: "12px",
-                  border: "none",
                   boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
                   backgroundColor: "#101329",
                   border: "1px solid rgba(161, 153, 210, 0.25)",
                 }}
                 labelStyle={{ color: "#bdb7d1", fontWeight: 600, marginBottom: "4px" }}
                 labelFormatter={(dateStr) => formatTooltipDate(dateStr)}
-                formatter={(value: number) => [value.toLocaleString(), "views"]}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+formatter={(value: any, name: any) => [value?.toLocaleString?.() ?? "0", name]}
               />
               <Line
                 type="monotone"
