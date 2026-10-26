@@ -259,3 +259,37 @@ Following execution, generated artifacts are verified:
   aws ec2 describe-instances --instance-ids i-02aa4578f3790bae1 --region ap-southeast-2 --profile marvedge --query "Reservations[0].Instances[0].State.Name" --output text
   # Output must be: "stopped"
   ```
+
+---
+
+## 12. Empirical Tesla T4 Benchmark Reconciliation & Scope Boundaries
+
+### A. Measured Synthesis Performance (10-Step OmniVoice Narration)
+- **Model Checkpoint:** `k2-fsa/OmniVoice` on VoiceStudio `ghcr.io/debpalash/voicestudio:0.5.6`.
+- **Hardware Platform:** AWS EC2 `g4dn.xlarge` (`i-02aa4578f3790bae1`, 4 vCPUs, 16 GiB RAM, NVIDIA Tesla T4 16GB, `ap-southeast-2` Sydney).
+- **Execution:** 10 multi-paragraph educational lecture narration batches (1,385 words total).
+- **Audio Output:** 999.32 seconds (16m 39.3s) of 24 kHz 16-bit mono PCM WAV (47,967,264 bytes).
+- **GPU Wall-Clock Compute Time:** 380.305 seconds (6m 20.3s).
+- **Measured Real-Time Factor (RTF):** **`0.3806x`** (380.305 s compute / 999.32 s audio).
+- **Peak VRAM Allocated:** 9,837 MiB / 15,360 MiB (~64% capacity).
+- **Errors / Retries:** 0 errors, 0 retries.
+
+### B. Cost Accounting & Session Ceiling Overrun
+- **Conservative Sydney On-Demand Rate:** **`$0.7104 / hr`** ($0.000197333 / s).
+- **Marginal 10-Minute TTS Compute Cost:**
+  $$\text{Expected Compute for 600.09s Speech} = 600.09\text{ s} \times 0.380564 = 228.374\text{ s}$$
+  $$\text{Marginal TTS Compute Cost} = 228.374\text{ s} \times \$0.000197333/\text{s} = \mathbf{\$0.0451\text{ USD}}\quad (\$0.00451/\text{media min})$$
+  *(Note: Pure marginal compute for active GPU synthesis; excludes boot/warmup overhead and EBS retention).*
+- **Live Validation Session Runtime:** 14.18 minutes (851 seconds from cold start through SSM commands, model load, synthesis, and stop polling).
+- **Actual Validation Session Cost:** **`$0.1679 USD`** (14.18 min @ $0.7104/hr).
+- **Planning Ceiling Overrun ($0.1200 Ceiling):** **`+$0.0479 USD (+39.9% overrun)`**.
+  *Cause:* Synthesizing 999.32s across 10 batches (rather than exactly 600s) consumed 380.3s of compute, combined with SSM command polling and model initialization latency.
+- **Verified Persistent Storage Cost:** Root EBS volume `vol-0b359be0e21cf51c7` is verified at **100 GiB gp3** (3,000 IOPS, 125 MB/s). At the published `ap-southeast-2` gp3 rate of $0.096/GB-month, baseline persistent storage is **`$9.60/month`** (~$0.315/day). Retaining the 2.3 GB model on the persistent Docker volume incurs $0.00 incremental charges while saving ~8 minutes of download time per cold run.
+- **Full End-to-End 10-Minute Video Dubbing Cost:** **`Undetermined`** (external pipeline stages were not executed).
+- **Commercial ElevenLabs Comparison (Illustrative Only):** Standard pay-as-you-go commercial ElevenLabs character billing for 1,385 words (~9,000–10,000 characters) costs ~$1.98 to $3.00 USD. This comparison illustrates raw compute savings ($0.0451 vs. $2.00+) but does not represent total cost of ownership (TCO), as managed SaaS includes orchestration, storage, and maintenance overhead.
+
+### C. Production Pipeline Scope Boundaries
+- **Verified Locally:** FFmpeg stream demuxing/muxing, VoiceStudio HTTP synthesis adapter, WAV header validation, and container GPU acceleration.
+- **Excluded / Blocked in Local Environment:** Whisper ASR, LLM translation, Cloudinary/GCS cloud storage upload, GCP Cloud Run `/avs-dub` lip-sync, MediaPipe AutoFlip, and BullMQ/Redis worker orchestration.
+- **Audio-Video Muxing Limitation:** The local muxing validation test used `-shortest` against `col_segment_10m.mp4` (600.09s), truncating the 999.32s audio stream at 600.07s. It proves container and audio/video muxing compatibility, but does not validate semantic synchronization, speaker lip alignment, or full audio preservation.
+
