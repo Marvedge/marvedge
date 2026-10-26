@@ -8,8 +8,13 @@ import json
 import io
 import os
 import socket
+import sys
 import subprocess
 from unittest.mock import MagicMock, patch
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
 
 import pytest
 from fastapi.testclient import TestClient
@@ -44,7 +49,7 @@ SAMPLE_CROP_TARGET_DATA = {
         {
             "timestamp_sec": 0.0,
             "frame": 0,
-            "crop": {"x": 420.0, "y": 0.0, "width": 1080.0, "height": 1920.0},
+            "crop": {"x": 656.0, "y": 0.0, "width": 607.5, "height": 1080.0},
             "source": "autoflip",
         }
     ],
@@ -539,6 +544,110 @@ class TestJsonParsing:
             json.dump(negative_payload, f)
 
         with pytest.raises(ExecutionError, match="is negative"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_empty_crop_targets(self, tmp_path):
+        json_path = os.path.join(tmp_path, "empty_targets.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1920, "height": 1080, "duration_sec": 10.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="empty 'crop_targets' array"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_missing_crop_object(self, tmp_path):
+        json_path = os.path.join(tmp_path, "missing_crop.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1920, "height": 1080, "duration_sec": 10.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [{"timestamp_sec": 0.0, "frame": 0}],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="missing 'crop' object"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_out_of_bounds_width(self, tmp_path):
+        json_path = os.path.join(tmp_path, "oob_w.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1280, "height": 720, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": 1000.0, "y": 0.0, "width": 405.0, "height": 720.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="exceeds source width"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_out_of_bounds_height(self, tmp_path):
+        json_path = os.path.join(tmp_path, "oob_h.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1280, "height": 720, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": 0.0, "y": 100.0, "width": 405.0, "height": 720.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="exceeds source height"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_negative_coordinates(self, tmp_path):
+        json_path = os.path.join(tmp_path, "negative_coord.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1280, "height": 720, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": -10.0, "y": 0.0, "width": 405.0, "height": 720.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="coordinates cannot be negative"):
+            parse_and_validate_json_output(json_path)
+
+    def test_rejects_crop_aspect_ratio_mismatch(self, tmp_path):
+        json_path = os.path.join(tmp_path, "ratio_mismatch.json")
+        payload = {
+            "schema_version": 1,
+            "source": {"width": 1920, "height": 1080, "duration_sec": 5.0},
+            "output": {"aspect_ratio": "9:16"},
+            "crop_targets": [
+                {
+                    "timestamp_sec": 0.0,
+                    "crop": {"x": 100.0, "y": 0.0, "width": 800.0, "height": 1080.0},
+                }
+            ],
+        }
+        with open(json_path, "w") as f:
+            json.dump(payload, f)
+
+        with pytest.raises(ExecutionError, match="deviates from target"):
             parse_and_validate_json_output(json_path)
 
 

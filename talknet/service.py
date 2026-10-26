@@ -452,47 +452,107 @@ def bb_intersection_over_union(boxA, boxB):
 def track_shot(faces_in_shot, min_track: int = 10, num_failed_det: int = 10):
     """
     Groups frame face detections into continuous face tracks.
-    Derived from scripts/ml/preprocess_faces.py track_shot.
+    Robust against:
+    - Multi-speaker scenarios via simultaneous non-destructive bipartite association.
+    - Zero/degenerate bounding boxes via hardened bb_intersection_over_union.
+    - Interpolation crashes by enforcing len(unique_frames) >= 2 before interp1d.
+    - Occlusion gaps by retiring tracks after num_failed_det missed frames without phantom interpolation.
     """
     from scipy.interpolate import interp1d
 
     iou_thres = 0.5
-    tracks = []
-    # Make a copy of list of frame detections
-    scene_faces = [list(f) for f in faces_in_shot]
+    active_tracks = []
+    completed_tracks = []
 
-    while True:
-        track = []
-        for frame_faces in scene_faces:
-            for face in list(frame_faces):
-                if not track:
-                    track.append(face)
-                    frame_faces.remove(face)
-                elif face["frame"] - track[-1]["frame"] <= num_failed_det:
-                    iou = bb_intersection_over_union(face["bbox"], track[-1]["bbox"])
-                    if iou > iou_thres:
-                        track.append(face)
-                        frame_faces.remove(face)
-                        continue
-                else:
-                    break
-        if not track:
+    # Flatten or index scene faces by frame
+    base_frame = None
+    for f_idx, ffaces in enumerate(faces_in_shot):
+        if len(ffaces) > 0:
+            base_frame = ffaces[0].get("frame", f_idx) - f_idx
             break
-        elif len(track) >= min_track:
-            frame_num = np.array([f["frame"] for f in track])
-            bboxes = np.array([np.array(f["bbox"]) for f in track])
-            frame_i = np.arange(frame_num[0], frame_num[-1] + 1)
-            bboxes_i = []
-            for ij in range(4):
-                interpfn = interp1d(
-                    frame_num,
-                    bboxes[:, ij],
-                    kind="linear",
-                    fill_value="extrapolate",
-                )
-                bboxes_i.append(interpfn(frame_i))
-            bboxes_i = np.stack(bboxes_i, axis=1)
-            tracks.append({"frame": frame_i, "bbox": bboxes_i})
+
+    for f_idx, frame_faces in enumerate(faces_in_shot):
+        curr_frame = (base_frame + f_idx) if base_frame is not None else f_idx
+
+        # Retire tracks that haven't received a detection within num_failed_det frames
+        still_active = []
+        for trk in active_tracks:
+            if curr_frame - trk[-1]["frame"] > num_failed_det:
+                completed_tracks.append(trk)
+            else:
+                still_active.append(trk)
+        active_tracks = still_active
+
+        if len(frame_faces) == 0:
+            continue
+
+        # Compute IoU matches between active tracks and current frame faces
+        matches = []
+        for t_idx, trk in enumerate(active_tracks):
+            last_bbox = trk[-1]["bbox"]
+            for d_idx, face in enumerate(frame_faces):
+                iou = bb_intersection_over_union(face["bbox"], last_bbox)
+                # Dual criteria: strict IoU or relaxed IoU with tight centroid proximity
+                if iou > iou_thres:
+                    matches.append((iou, t_idx, d_idx))
+                elif iou > 0.25:
+                    c1x = (last_bbox[0] + last_bbox[2]) / 2.0
+                    c1y = (last_bbox[1] + last_bbox[3]) / 2.0
+                    c2x = (face["bbox"][0] + face["bbox"][2]) / 2.0
+                    c2y = (face["bbox"][1] + face["bbox"][3]) / 2.0
+                    dist = math.sqrt((c1x - c2x) ** 2 + (c1y - c2y) ** 2)
+                    diag = math.sqrt((last_bbox[2] - last_bbox[0]) ** 2 + (last_bbox[3] - last_bbox[1]) ** 2)
+                    if dist <= 0.40 * max(diag, 1.0):
+                        matches.append((iou, t_idx, d_idx))
+
+        matches.sort(key=lambda x: x[0], reverse=True)
+
+        assigned_tracks = set()
+        assigned_dets = set()
+
+        for iou, t_idx, d_idx in matches:
+            if t_idx not in assigned_tracks and d_idx not in assigned_dets:
+                active_tracks[t_idx].append(frame_faces[d_idx])
+                assigned_tracks.add(t_idx)
+                assigned_dets.add(d_idx)
+
+        # Start new tracks for unassigned detections
+        for d_idx, face in enumerate(frame_faces):
+            if d_idx not in assigned_dets:
+                active_tracks.append([face])
+
+    completed_tracks.extend(active_tracks)
+
+    tracks = []
+    for raw_track in completed_tracks:
+        if len(raw_track) < min_track or len(raw_track) < 2:
+            continue
+
+        frame_num = np.array([f["frame"] for f in raw_track])
+        bboxes = np.array([np.array(f["bbox"]) for f in raw_track])
+
+        # Guard against duplicate timestamps / frame indices
+        if len(np.unique(frame_num)) != len(frame_num):
+            unique_frames, unique_indices = np.unique(frame_num, return_index=True)
+            frame_num = unique_frames
+            bboxes = bboxes[unique_indices]
+            if len(frame_num) < min_track or len(frame_num) < 2:
+                continue
+
+        frame_i = np.arange(frame_num[0], frame_num[-1] + 1)
+        bboxes_i = []
+        for ij in range(4):
+            interpfn = interp1d(
+                frame_num,
+                bboxes[:, ij],
+                kind="linear",
+                fill_value="extrapolate",
+            )
+            bboxes_i.append(interpfn(frame_i))
+        bboxes_i = np.stack(bboxes_i, axis=1)
+        tracks.append({"frame": frame_i, "bbox": bboxes_i})
+
+    tracks.sort(key=lambda x: x["frame"][0])
     return tracks
 
 
@@ -533,10 +593,24 @@ def crop_video_track(
         dets["x"] = signal.medfilt(dets["x"], kernel_size=k_size)
         dets["y"] = signal.medfilt(dets["y"], kernel_size=k_size)
 
+    # AF-02 Invariant: Slew-rate limiting to eliminate jump/jitter artifacts
+    if len(dets["x"]) > 1:
+        mean_scale = float(np.median(dets["s"])) if len(dets["s"]) > 0 else 50.0
+        max_delta = max(20.0, mean_scale * 0.6)
+        for dkey in ("x", "y"):
+            arr = np.array(dets[dkey], dtype=float)
+            for t in range(1, len(arr)):
+                diff = arr[t] - arr[t - 1]
+                if diff > max_delta:
+                    arr[t] = arr[t - 1] + max_delta
+                elif diff < -max_delta:
+                    arr[t] = arr[t - 1] - max_delta
+            dets[dkey] = arr
+
     for fidx, frame_num in enumerate(track["frame"]):
         cs = crop_scale
         bs = dets["s"][fidx]
-        bsi = int(bs * (1 + 2 * cs))
+        bsi = max(1, int(bs * (1 + 2 * cs)))
         if frame_num < len(flist):
             image = cv2.imread(flist[frame_num])
         else:

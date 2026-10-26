@@ -10,6 +10,7 @@ export type GcpWorkerPayload = {
   startTime?: number;
   duration?: number;
   chunkFilenames?: string[];
+  speakerTracksUri?: string;
   // AVS voiceover (`/avs-voiceover`).
   lines?: Array<{ stepId: string; text: string }>;
   voiceId?: string;

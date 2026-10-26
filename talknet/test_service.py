@@ -444,6 +444,46 @@ def test_track_shot_grouping():
     assert tracks[0]["bbox"].shape == (5, 4)
 
 
+def test_track_shot_multispeaker_separation():
+    """Verify that two co-present speakers form two distinct non-overlapping tracks (EC-04 / TN-03)."""
+    shot_dets = []
+    for f in range(10):
+        # Speaker 1 on left (x: 50..150), Speaker 2 on right (x: 600..700)
+        shot_dets.append([
+            {"frame": f, "bbox": [50.0 + f, 100.0, 150.0 + f, 200.0], "conf": 0.95},
+            {"frame": f, "bbox": [600.0 - f, 100.0, 700.0 - f, 200.0], "conf": 0.95},
+        ])
+    tracks = track_shot(shot_dets, min_track=5, num_failed_det=2)
+    assert len(tracks) == 2, f"Expected 2 tracks, got {len(tracks)}"
+    # Check spatial separation: track 0 must be left, track 1 must be right
+    trk0_cx = np.mean(tracks[0]["bbox"][:, 0])
+    trk1_cx = np.mean(tracks[1]["bbox"][:, 0])
+    assert trk0_cx < 300.0
+    assert trk1_cx > 500.0
+
+
+def test_track_shot_occlusion_gap_retirement():
+    """Verify that when a speaker disappears for > num_failed_det frames, no phantom interpolation occurs (EC-03)."""
+    shot_dets = []
+    # Speaker appears frames 0..5
+    for f in range(6):
+        shot_dets.append([{"frame": f, "bbox": [100.0, 100.0, 200.0, 200.0], "conf": 0.95}])
+    # Absent frames 6..20 (15 empty frames, num_failed_det=3)
+    for f in range(6, 21):
+        shot_dets.append([])
+    # Speaker reappears frames 21..27
+    for f in range(21, 28):
+        shot_dets.append([{"frame": f, "bbox": [105.0, 100.0, 205.0, 200.0], "conf": 0.95}])
+
+    tracks = track_shot(shot_dets, min_track=4, num_failed_det=3)
+    assert len(tracks) == 2, f"Expected 2 separate tracks across occlusion, got {len(tracks)}"
+    # Verify no frames between 6 and 20 are contained in any track
+    all_frames = set(tracks[0]["frame"]).union(set(tracks[1]["frame"]))
+    for empty_f in range(7, 20):
+        assert empty_f not in all_frames, f"Frame {empty_f} was incorrectly interpolated across occlusion!"
+
+
+
 # ---------------------------------------------------------------------------
 # Output contract and mock pipeline tests
 # ---------------------------------------------------------------------------

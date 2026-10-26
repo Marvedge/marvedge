@@ -42,71 +42,58 @@ These are open issues that are **blocking or directly risky for production**. Th
 
 ---
 
-### BUG-M01 — `/api/avs/dub` accepts FREE-plan users with no error (Plan Gate Missing)
+### BUG-M01 — `/api/avs/dub` & `/api/dubbing/create` plan gate enforcement
 
 **Severity:** Critical  
 **Area:** Billing / Access Control  
-**Status:** Open — no fix branch exists
+**Status:** **Resolved (Task-00100)** — verified across all dubbing routes
 
 **Description:**  
-`/api/avs/dub` (Task-83) fetches `user.plan` from the database (`select: { id: true, plan: true }`) but never evaluates it. A FREE-plan user can successfully submit dubbing jobs, bypassing the PRO/ENTERPRISE paywall entirely. The `dub.test.ts` suite explicitly asserts a `403` response for FREE users with the message `"PRO and ENTERPRISE"`, but the route does not return this — it returns `200 OK`.
+Previously, `/api/avs/dub` fetched `user.plan` from the database but did not enforce it, and `/api/dubbing/create` omitted plan verification entirely, allowing FREE users to trigger paid ElevenLabs and AVS dubbing jobs.
 
-**Evidence:**
+**Resolution & Verification:**
+Enforced strict plan gates on both `/api/avs/dub/route.ts` and `/api/dubbing/create/route.ts` via `isAvsAllowed(user.plan)`. Unauthenticated requests return 401, non-existent users return 404, and users on FREE or non-paid plans receive HTTP 403:
 
-```
-route.ts:174  select: { id: true, plan: true }
-→ user.plan is fetched but never checked after this line
-→ dub.test.ts: expects 403 for FREE users → route returns 200
-```
-
-**Fix Required:**  
-Add a plan gate immediately after the `if (!user)` guard in `app/api/avs/dub/route.ts`:
-
-```ts
-if (!["PRO", "ENTERPRISE"].includes(user.plan ?? "")) {
-  return NextResponse.json(
-    { error: "Dubbing is available on PRO and ENTERPRISE plans" },
-    { status: 403 }
-  );
-}
+```json
+{ "error": "Dubbing is available on PRO and ENTERPRISE plans" }
 ```
 
-Also resolve the conflict between `dub.test.ts` and `route.test.ts` — the two test files currently hold opposite expectations for FREE-user behavior.
+Test suites `app/api/avs/dub/route.test.ts`, `app/api/avs/dub/dub.test.ts`, and `app/api/dubbing/create/route.test.ts` explicitly verify that FREE users are rejected with 403 and zero DB jobs or BullMQ queue tasks are spawned.
 
 ---
 
-### BUG-M02 — `route.test.ts`: 3 tests hanging on timeout (5000 ms)
+### BUG-M02 — `route.test.ts`: test timeouts & hanging promises
 
 **Severity:** High  
 **Area:** Testing / AVS Dubbing  
-**Status:** Open — affects CI
+**Status:** **Resolved (Task-00100)** — verified with 0 timeouts and zero hanging promises
 
 **Description:**  
-Three tests in `app/api/avs/dub/route.test.ts` hang until the 5-second Vitest timeout:
+Tests in `app/api/avs/dub/route.test.ts` and `dub.test.ts` previously hung on Vitest 5000ms timeout due to missing `prisma.videoJob.findUnique`, `updateMany`, and unmocked Redis connection retries in the test environment.
 
-1. `allows a signed-in FREE user to create a dubbing job`
-2. `creates a VideoJob with kind AVS_DUB and returns jobId on valid request`
-3. _(plan gate assertion failure)_
+**Resolution & Verification:**
 
-**Root Cause:**  
-`runDubAlignment` is called as a `void` fire-and-forget inside the POST handler, but the tests mock `prisma.videoJob.findUnique` which is called inside `runDubAlignment`. Because the mock is not set up in the test's Prisma mock object, the unresolved promise hangs indefinitely. The test suite's Prisma mock is missing `videoJob.findUnique`.
-
-**Fix Required:**  
-Add `videoJob.findUnique: vi.fn()` to the `vi.mock("@/app/lib/prisma")` block, and mock `dubbingQueue.add` to resolve immediately so the fire-and-forget path completes in the test environment.
+1. Added `findUnique: vi.fn()`, `update: vi.fn()`, and `updateMany: vi.fn()` to `vi.mock("@/app/lib/prisma")` across all AVS dub test files.
+2. Mocked `@/app/lib/redis` and `@/app/lib/queue` before route evaluation to prevent background socket connection attempts to `127.0.0.1:6379`.
+3. Verified all tests run cleanly and synchronously in under 250ms with zero timeouts.
 
 ---
 
-### BUG-M03 — `DEFAULT_TARGET_LANGUAGE` silently hardcoded to `"ta"` (Tamil)
+### BUG-M03 — `DEFAULT_TARGET_LANGUAGE` silent fallback removed
 
 **Severity:** High  
 **Area:** Dubbing / Localization  
-**Status:** Open — no fix branch exists
+**Status:** **Resolved (Task-00100)** — fail-loud contract enforced
 
 **Description:**  
-In `app/api/dubbing/create/route.ts`, when a caller omits `targetLanguage` from the request body, the API silently falls back to Tamil (`"ta"`). There is no validation error, no warning logged, and no client-side feedback. Any non-Tamil user who omits this field will receive a silently mislabeled dubbing job.
+In `app/api/dubbing/create/route.ts`, when a caller omitted `targetLanguage` from the request body, the API previously fell back silently to Tamil (`"ta"`), creating mislabeled dubbing jobs with no validation warning.
 
-**Fix Required:**  
-Either make `targetLanguage` a required field (return `400` if absent) or log a `console.warn` and document the fallback explicitly. The current silent fallback is a correctness bug for any non-Tamil workflow.
+**Resolution & Verification:**
+
+1. Completely eliminated `DEFAULT_TARGET_LANGUAGE = "ta"` fallback.
+2. `targetLanguage` is strictly required: missing or empty targetLanguage returns HTTP 400 `{ error: "Missing targetLanguage" }`.
+3. Malformed language strings (e.g. non-ISO codes, path traversal attempts) return HTTP 400 `{ error: "Invalid targetLanguage" }`.
+4. Comprehensive test coverage added in `app/api/dubbing/create/route.test.ts`.
 
 ---
 
@@ -144,10 +131,10 @@ The `track_shot` function in `scripts/ml/preprocess_faces.py` uses `iouThres = 0
 
 **Severity:** Medium (process)  
 **Area:** Product / Access Control  
-**Status:** Needs product sign-off, not a code bug
+**Status:** **Resolved (Task-00100)** — aligned across all test suites to expect 403
 
 **Description:**  
-`dub.test.ts` (legacy) expects FREE users → `403`. `route.test.ts` (week 5) expects FREE users → `200`. The team has not aligned on the product decision. Once BUG-M01 is resolved this will auto-close, but the product intent needs to be locked in Notion before the fix is merged.
+`dub.test.ts` (legacy) expected FREE users → `403`, while an early revision of `route.test.ts` expected FREE users → `200`. The product decision has been locked: paid dubbing is gated strictly to PRO and ENTERPRISE users. Both test suites now assert 403 on FREE plan requests.
 
 ---
 
@@ -175,16 +162,16 @@ There is no Playwright or integration test that verifies the dubbing paywall fro
 
 ## Summary Table
 
-| ID  | Title                                                                 | Category        | Severity    | Status         |
-| --- | --------------------------------------------------------------------- | --------------- | ----------- | -------------- |
-| M01 | `/api/avs/dub` — plan gate missing, FREE users bypass paywall         | Billing         | 🔴 Critical | **Open**       |
-| M02 | `route.test.ts` — 3 tests timing out (missing `findUnique` mock)      | Testing / CI    | 🔴 High     | **Open**       |
-| M03 | `DEFAULT_TARGET_LANGUAGE = "ta"` silent fallback in dubbing           | Localization    | 🔴 High     | **Open**       |
-| S01 | `iouThres = 0.1` in scripts/ml vs `0.5` in ml-worker                  | ML Quality      | 🟡 Medium   | Backlog        |
-| S02 | Dead `return` statement in `crop_video`                               | Code Quality    | 🟡 Low      | Backlog        |
-| S03 | Plan gate intent not locked between `dub.test.ts` and `route.test.ts` | Product Process | 🟡 Medium   | Needs sign-off |
-| S04 | `ml-worker` still uses deprecated scenedetect v3 API                  | MLOps / Deps    | 🟡 Low      | Backlog        |
-| S05 | No Playwright smoke test for dubbing paywall from UI                  | Testing Gap     | 🟡 Medium   | Backlog        |
+| ID  | Title                                                               | Category        | Severity    | Status                    |
+| --- | ------------------------------------------------------------------- | --------------- | ----------- | ------------------------- |
+| M01 | `/api/avs/dub` & `/api/dubbing/create` plan gate enforced           | Billing         | 🟢 Critical | **Resolved (Task-00100)** |
+| M02 | `route.test.ts` / `dub.test.ts` timeouts & Redis unhandled connects | Testing / CI    | 🟢 High     | **Resolved (Task-00100)** |
+| M03 | `DEFAULT_TARGET_LANGUAGE = "ta"` silent fallback eliminated         | Localization    | 🟢 High     | **Resolved (Task-00100)** |
+| S01 | `iouThres = 0.1` in scripts/ml vs `0.5` in ml-worker                | ML Quality      | 🟡 Medium   | Backlog                   |
+| S02 | Dead `return` statement in `crop_video`                             | Code Quality    | 🟡 Low      | Backlog                   |
+| S03 | Plan gate intent locked across `dub.test.ts` and `route.test.ts`    | Product Process | 🟢 Medium   | **Resolved (Task-00100)** |
+| S04 | `ml-worker` still uses deprecated scenedetect v3 API                | MLOps / Deps    | 🟡 Low      | Backlog                   |
+| S05 | No Playwright smoke test for dubbing paywall from UI                | Testing Gap     | 🟡 Medium   | Backlog                   |
 
-**Must fix before launch: 3 open items (M01, M02, M03)**  
-**Acceptable to ship and improve later: 5 items (S01–S05)**
+**Must fix before launch: 0 open items (M01, M02, M03 resolved in Task-00100)**<br/>
+**Acceptable to ship and improve later: 4 items (S01, S02, S04, S05)**
