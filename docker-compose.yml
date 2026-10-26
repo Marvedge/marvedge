@@ -55,6 +55,24 @@ services:
     networks:
       - marvedge-ml-net
 
+  benchmark:
+    profiles:
+      - benchmark
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    container_name: marvedge-benchmark
+    restart: "no"
+    environment:
+      - NODE_ENV=benchmark
+      - AUTOFILP_SERVICE_URL=http://autoflip:8000
+      - TALKNET_SERVICE_URL=http://talknet:8000
+      - ML_GATEWAY_URL=http://ml-gateway:8000
+    volumes:
+      - ./benchmark_results:/app/benchmark_results
+    networks:
+      - marvedge-ml-net
+
 networks:
   marvedge-ml-net:
     name: marvedge-ml-net
