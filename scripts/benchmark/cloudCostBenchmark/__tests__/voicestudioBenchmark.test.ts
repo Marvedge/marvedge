@@ -211,7 +211,7 @@ describe("VoiceStudio Benchmark Integration (Task-00103)", () => {
         iterations: 1,
         warmup: 0,
         transcriptionProvider: "fixture",
-            },
+      },
       inputMedia: mockMedia,
     });
 

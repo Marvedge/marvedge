@@ -17,7 +17,10 @@ const execFileAsync = promisify(execFile);
 /**
  * Validates audio magic bytes at the beginning of a buffer.
  */
-export function validateAudioMagicBytes(buffer: Buffer, formatHint?: string): {
+export function validateAudioMagicBytes(
+  buffer: Buffer,
+  formatHint?: string
+): {
   detectedFormat: string;
   isValid: boolean;
   error?: string;
@@ -42,9 +45,17 @@ export function validateAudioMagicBytes(buffer: Buffer, formatHint?: string): {
   }
 
   // 1. WAV Container check: 'RIFF' .... 'WAVE'
-  if (buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WAVE") {
+  if (
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WAVE"
+  ) {
     if (buffer.length < 44) {
-      return { detectedFormat: "wav", isValid: false, error: "Truncated WAV header (less than 44 bytes)" };
+      return {
+        detectedFormat: "wav",
+        isValid: false,
+        error: "Truncated WAV header (less than 44 bytes)",
+      };
     }
     return { detectedFormat: "wav", isValid: true };
   }
@@ -78,7 +89,9 @@ export function validateAudioMagicBytes(buffer: Buffer, formatHint?: string): {
   return {
     detectedFormat: "unknown",
     isValid: false,
-    error: `Unrecognized audio signature in first 16 bytes: [${Array.from(buffer.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join(" ")}]`,
+    error: `Unrecognized audio signature in first 16 bytes: [${Array.from(buffer.slice(0, 16))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(" ")}]`,
   };
 }
 
@@ -166,7 +179,10 @@ export async function probeAudioWithFfprobe(
 /**
  * Asserts audio buffer correctness. Throws VoiceStudioAudioValidationError if invalid.
  */
-export async function assertValidAudio(buffer: Buffer, formatHint: string = "wav"): Promise<AudioProbeResult> {
+export async function assertValidAudio(
+  buffer: Buffer,
+  formatHint: string = "wav"
+): Promise<AudioProbeResult> {
   const result = await probeAudioWithFfprobe(buffer, formatHint);
   if (!result.isValid) {
     throw new VoiceStudioAudioValidationError(result.error || "Audio validation failed");

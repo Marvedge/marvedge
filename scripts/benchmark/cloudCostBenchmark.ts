@@ -52,8 +52,8 @@ export function parseCliArgs(argv: string[]): {
   let avsProvider: "fixture" | "talknet" = "fixture";
   let transcriptionProvider: "fixture" | "whisper" | "groq" = "fixture";
   let dubbingProvider: "fixture" | "elevenlabs" | "voicestudio" = "fixture";
-  let voiceStudioUrl: string | undefined;
-  let voiceStudioApiKey: string | undefined;
+  let voiceStudioUrl: string | undefined = process.env.VOICESTUDIO_URL;
+  let voiceStudioApiKey: string | undefined = process.env.VOICESTUDIO_API_KEY;
   let voiceStudioModel: string | undefined;
   let voiceStudioFallbackToPaid = false;
   let outputJsonPath = "benchmark_results/cloud_cost_report.json";

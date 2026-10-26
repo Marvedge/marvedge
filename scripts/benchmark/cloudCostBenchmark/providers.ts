@@ -367,18 +367,19 @@ export async function executeCaptionsStage(
 export async function executeDubbingStage(
   media: InputMediaMetadata,
   providerMode: "fixture" | "elevenlabs" | "voicestudio" | "real" = "fixture",
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config?: any
 ): Promise<StageExecutionOutput> {
   const notes: string[] = [];
 
   if (providerMode === "voicestudio") {
-    const vsUrl = config?.voiceStudioUrl || process.env.VOICESTUDIO_API_URL || "http://127.0.0.1:3900";
+    const vsUrl =
+      config?.voiceStudioUrl || process.env.VOICESTUDIO_API_URL || "http://127.0.0.1:3900";
     const vsApiKey = config?.voiceStudioApiKey || process.env.VOICESTUDIO_API_KEY;
     const vsModel = config?.voiceStudioModel || process.env.VOICESTUDIO_MODEL || "omnivoice";
 
-    const { createVoiceStudioClient, assertValidAudio } = await import(
-      "../../../app/lib/voicestudio"
-    );
+    const { createVoiceStudioClient, assertValidAudio } =
+      await import("../../../app/lib/voicestudio");
 
     const client = createVoiceStudioClient({
       baseUrl: vsUrl,

@@ -4,11 +4,8 @@
  * Manages provider resolution, strict fallback semantics, and step-timed synthesis.
  */
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { VoiceStudioClient, createVoiceStudioClient } from "./client";
-import { VoiceStudioError, VoiceStudioUnavailableError } from "./errors";
+import { VoiceStudioError } from "./errors";
 import type { VoiceStudioConfig, VoiceStudioSpeechRequest } from "./types";
 
 export interface TimedStepNarration {
@@ -45,11 +42,7 @@ export function resolveDubbingProvider(options?: {
   configuredProvider?: string;
   fallbackToPaid?: boolean;
 }): "elevenlabs" | "voicestudio" {
-  const envChoice = (
-    options?.configuredProvider ||
-    process.env.DUBBING_PROVIDER ||
-    "elevenlabs"
-  )
+  const envChoice = (options?.configuredProvider || process.env.DUBBING_PROVIDER || "elevenlabs")
     .trim()
     .toLowerCase();
 
@@ -104,7 +97,10 @@ export class VoiceStudioDubbingAdapter {
       .filter((s) => s.stepId && s.text);
 
     if (cleanSteps.length === 0) {
-      throw new VoiceStudioError("INVALID_INPUT", "No valid steps provided for timed dubbing synthesis");
+      throw new VoiceStudioError(
+        "INVALID_INPUT",
+        "No valid steps provided for timed dubbing synthesis"
+      );
     }
 
     const stepTimings: Array<{

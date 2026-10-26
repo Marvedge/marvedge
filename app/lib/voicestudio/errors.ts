@@ -62,7 +62,11 @@ export class VoiceStudioAuthError extends VoiceStudioError {
 }
 
 export class VoiceStudioRateLimitError extends VoiceStudioError {
-  constructor(message: string, retryAfterSec: number = 30, sensitiveValues?: (string | undefined)[]) {
+  constructor(
+    message: string,
+    retryAfterSec: number = 30,
+    sensitiveValues?: (string | undefined)[]
+  ) {
     super("RATE_LIMITED", message, {
       statusCode: 429,
       retryAfterSec,
@@ -74,7 +78,11 @@ export class VoiceStudioRateLimitError extends VoiceStudioError {
 }
 
 export class VoiceStudioUnavailableError extends VoiceStudioError {
-  constructor(message: string, retryAfterSec: number = 5, sensitiveValues?: (string | undefined)[]) {
+  constructor(
+    message: string,
+    retryAfterSec: number = 5,
+    sensitiveValues?: (string | undefined)[]
+  ) {
     super("SERVICE_UNAVAILABLE", message, {
       statusCode: 503,
       retryAfterSec,

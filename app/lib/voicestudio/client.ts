@@ -93,10 +93,14 @@ export class VoiceStudioClient {
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
-        throw new VoiceStudioError("SERVICE_UNAVAILABLE", `Health check failed (${res.status}): ${errorText}`, {
-          statusCode: res.status,
-          sensitiveValues: [this.apiKey],
-        });
+        throw new VoiceStudioError(
+          "SERVICE_UNAVAILABLE",
+          `Health check failed (${res.status}): ${errorText}`,
+          {
+            statusCode: res.status,
+            sensitiveValues: [this.apiKey],
+          }
+        );
       }
 
       const body = (await res.json()) as Record<string, unknown>;
@@ -124,9 +128,11 @@ export class VoiceStudioClient {
         throw err;
       }
       const message = (err as Error).message || String(err);
-      throw new VoiceStudioUnavailableError(`VoiceStudio health probe unreachable at ${url}: ${message}`, 5, [
-        this.apiKey,
-      ]);
+      throw new VoiceStudioUnavailableError(
+        `VoiceStudio health probe unreachable at ${url}: ${message}`,
+        5,
+        [this.apiKey]
+      );
     }
   }
 
@@ -134,7 +140,10 @@ export class VoiceStudioClient {
    * Explicitly requests downloading and caching model weights before running inference.
    * Avoids cold-cache timeout on first generation call.
    */
-  public async installModel(repoId: string = "k2-fsa/OmniVoice", options?: { timeoutMs?: number }): Promise<void> {
+  public async installModel(
+    repoId: string = "k2-fsa/OmniVoice",
+    options?: { timeoutMs?: number }
+  ): Promise<void> {
     const timeout = options?.timeoutMs ?? 180000;
     const url = `${this.baseUrl}/models/install`;
 
@@ -149,16 +158,20 @@ export class VoiceStudioClient {
     });
 
     if (res.status === 401 || res.status === 403) {
-      throw new VoiceStudioAuthError(`Unauthorized model install on VoiceStudio (${res.status})`, res.status, [
-        this.apiKey,
-      ]);
+      throw new VoiceStudioAuthError(
+        `Unauthorized model install on VoiceStudio (${res.status})`,
+        res.status,
+        [this.apiKey]
+      );
     }
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      throw new VoiceStudioInferenceError(`Failed to install model ${repoId}: ${errText}`, res.status, [
-        this.apiKey,
-      ]);
+      throw new VoiceStudioInferenceError(
+        `Failed to install model ${repoId}: ${errText}`,
+        res.status,
+        [this.apiKey]
+      );
     }
   }
 
@@ -252,7 +265,7 @@ export class VoiceStudioClient {
             continue;
           }
           throw new VoiceStudioRateLimitError(
-            `VoiceStudio GPU inference queue is saturated (HTTP 429)`,
+            "VoiceStudio GPU inference queue is saturated (HTTP 429)",
             retrySec,
             [this.apiKey]
           );
@@ -266,7 +279,7 @@ export class VoiceStudioClient {
             continue;
           }
           throw new VoiceStudioUnavailableError(
-            `VoiceStudio engine is not ready or model is still loading (HTTP 503)`,
+            "VoiceStudio engine is not ready or model is still loading (HTTP 503)",
             retrySec,
             [this.apiKey]
           );
@@ -322,7 +335,9 @@ export class VoiceStudioClient {
         }
 
         const msg = (err as Error).message || String(err);
-        throw new VoiceStudioInferenceError(`VoiceStudio request failed: ${msg}`, 500, [this.apiKey]);
+        throw new VoiceStudioInferenceError(`VoiceStudio request failed: ${msg}`, 500, [
+          this.apiKey,
+        ]);
       }
     }
 

@@ -2,10 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VoiceStudioClient } from "../client";
 import {
   VoiceStudioAuthError,
-  VoiceStudioError,
   VoiceStudioRateLimitError,
   VoiceStudioTimeoutError,
-  VoiceStudioUnavailableError,
 } from "../errors";
 
 function createSyntheticWavBuffer(durationSec: number = 1.0, sampleRate: number = 16000): Buffer {
@@ -140,9 +138,7 @@ describe("VoiceStudioClient", () => {
   it("F. generateSpeech throws VoiceStudioAuthError on HTTP 401/403", async () => {
     const client = new VoiceStudioClient({ apiKey: "bad-key" });
 
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response("Invalid credentials", { status: 401 })
-    );
+    global.fetch = vi.fn().mockResolvedValue(new Response("Invalid credentials", { status: 401 }));
 
     await expect(client.generateSpeech({ text: "Test speech" })).rejects.toThrowError(
       VoiceStudioAuthError

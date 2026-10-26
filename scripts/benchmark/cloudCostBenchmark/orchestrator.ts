@@ -260,7 +260,11 @@ export class BenchmarkOrchestrator {
       if (stages.includes("captions") && this.config.transcriptionProvider !== "fixture") {
         externalCost += totalMediaMinutes * this.pricing.transcriptionPerMinuteUsd;
       }
-      if (stages.includes("dubbing") && this.config.dubbingProvider !== "fixture" && this.config.dubbingProvider !== "voicestudio") {
+      if (
+        stages.includes("dubbing") &&
+        this.config.dubbingProvider !== "fixture" &&
+        this.config.dubbingProvider !== "voicestudio"
+      ) {
         externalCost += totalMediaMinutes * this.pricing.dubbingPerMinuteUsd;
       }
     }
@@ -395,7 +399,11 @@ export class BenchmarkOrchestrator {
       case "captions":
         return executeCaptionsStage(this.media, this.config.transcriptionProvider || "fixture");
       case "dubbing":
-        return executeDubbingStage(this.media, this.config.dubbingProvider || "fixture", this.config);
+        return executeDubbingStage(
+          this.media,
+          this.config.dubbingProvider || "fixture",
+          this.config
+        );
       default:
         throw new Error(`Unknown stage: ${stage}`);
     }
