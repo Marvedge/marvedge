@@ -130,7 +130,6 @@ export interface DubbingStatusResult {
 }
 
 export async function getDubbingStatus(dubbingId: string): Promise<DubbingStatusResult> {
-}> {
   const response = await elevenLabsRequest<{
     status?: string;
     dubbing_id?: string;
@@ -168,7 +167,6 @@ export async function waitForDubbingCompletion(
     timeoutMs?: number;
   } = {}
 ): Promise<DubbingStatusResult> {
-): Promise<{ status: string; dubbingId: string; error?: string }> {
   const intervalMs = options.intervalMs ?? 5000;
   const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
   const startedAt = Date.now();
