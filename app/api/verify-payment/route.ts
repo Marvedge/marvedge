@@ -9,7 +9,6 @@ import { isRateLimited } from "@/app/lib/audio/rateLimit";
 
 export const runtime = "nodejs";
 
-// Best effort client IP for rate limiting. Uses proxy headers when present.
 function clientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
@@ -17,12 +16,6 @@ function clientIp(req: Request): string {
   }
   return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
-
-// No new table allowed, so verified order ids cannot be stored in the DB.
-// This per instance set only softens replays on one server. The rate limit
-// below and the idempotent skip when the user is already on plan carry
-// the rest. It is capped to avoid growth without bound.
-const seenOrders = new Set<string>();
 
 function signaturesMatch(expected: string, actual: string): boolean {
   const a = Buffer.from(expected);
@@ -40,7 +33,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    // Slow down replay attempts. Open mode so checkout still works when Redis is down.
+    // Preserve checkout availability when Redis is unavailable.
     if (
       await isRateLimited(
         `verify-payment:${clientIp(req)}:${session.user.email.toLowerCase()}`,
@@ -54,10 +47,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Broken payloads are a client problem, not a server one.
     let razorpay_order_id: unknown;
     let razorpay_payment_id: unknown;
     let razorpay_signature: unknown;
+
     try {
       const parsed: unknown = await req.json();
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -91,8 +84,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-
     if (!process.env.RAZORPAY_KEY_SECRET || !process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
       return NextResponse.json(
         { success: false, message: "Payments are not configured" },
@@ -102,41 +93,36 @@ export async function POST(req: Request) {
 
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    const isAuthentic = signaturesMatch(expectedSignature, razorpay_signature);
-
-    if (!isAuthentic) {
+    if (!signaturesMatch(expectedSignature, razorpay_signature)) {
       return NextResponse.json(
         { success: false, message: "Invalid payment signature" },
         { status: 400 }
       );
     }
 
-    // The signature only proves the order/payment pair is genuine, it says
-    // nothing about how much was paid. Re-fetch the order from Razorpay and
-    // assert it matches the server defined price for the plan in its notes.
     const razorpay = new Razorpay({
-      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID as string,
-      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
 
     const order = await razorpay.orders.fetch(razorpay_order_id);
     const orderPlan = typeof order.notes?.plan === "string" ? order.notes.plan : undefined;
+
     if (!isPlanId(orderPlan)) {
       return NextResponse.json(
         { success: false, message: "Payment does not match a known plan" },
         { status: 400 }
       );
     }
-    const expectedAmount = PLANS[orderPlan].amount * 100;
-    const orderAmount = Number(order.amount);
 
+    const expectedAmount = PLANS[orderPlan].amount * 100;
     const isValidOrder =
       order.status === "paid" &&
       order.currency === PAYMENT_CURRENCY &&
-      orderAmount === expectedAmount &&
+      Number(order.amount) === expectedAmount &&
       order.notes?.plan === PLANS[orderPlan].id;
 
     if (!isValidOrder) {
@@ -146,9 +132,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fail closed unless Razorpay confirms that this order was created for the
-    // currently authenticated account. A valid signature proves the payment
-    // tuple is genuine, but does not by itself establish account ownership.
     const orderEmail = typeof order.notes?.email === "string" ? order.notes.email.trim() : "";
     const sessionEmail = session.user.email.trim();
 
@@ -159,34 +142,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // Update user's plan. The where clause uses the session email as is.
-    // Lowercase is used only for the compare above, never for the DB write.
-    // Idempotent skip: without a payment table the same order id can be
-    // posted again, so if the user is already on the paid plan, return
-    // success without another write.
+    // Orders remain paid after a refund. Verify the payment itself before
+    // granting access, including when the user already has the target plan.
+    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    const isValidPayment =
+      payment.id === razorpay_payment_id &&
+      payment.order_id === razorpay_order_id &&
+      payment.status === "captured" &&
+      payment.captured === true &&
+      payment.currency === PAYMENT_CURRENCY &&
+      Number(payment.amount) === expectedAmount &&
+      payment.amount_refunded === 0 &&
+      payment.refund_status === null;
+
+    if (!isValidPayment) {
+      return NextResponse.json(
+        { success: false, message: "Payment is not eligible for this upgrade" },
+        { status: 400 }
+      );
+    }
+
     const targetPlan = orderPlan.toUpperCase();
     const existing = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: { plan: true },
     });
-    if (existing?.plan === targetPlan) {
-      if (seenOrders.size > 5000) {
-        seenOrders.clear();
-      }
-      seenOrders.add(razorpay_order_id);
-      return NextResponse.json({
-        success: true,
-        message: "Payment verified successfully",
+
+    if (existing?.plan !== targetPlan) {
+      await prisma.user.update({
+        where: { email: session.user.email },
+        data: { plan: targetPlan },
       });
     }
-    await prisma.user.update({
-      where: { email: session.user.email },
-      data: { plan: targetPlan },
-    });
-    if (seenOrders.size > 5000) {
-      seenOrders.clear();
-    }
-    seenOrders.add(razorpay_order_id);
+
     return NextResponse.json({
       success: true,
       message: "Payment verified successfully",
