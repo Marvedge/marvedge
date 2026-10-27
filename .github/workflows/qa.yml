@@ -72,14 +72,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install FFmpeg
-        timeout-minutes: 5
+      - name: Set up FFmpeg and FFprobe
+        timeout-minutes: 2
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="20"
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout="20" ffmpeg
-          fi
-          ffmpeg -version
+          set -euo pipefail
+          ffmpeg_path="$(node -p "require('ffmpeg-static')")"
+          ffprobe_path="$(node -p "require('ffprobe-static').path")"
+          test -x "$ffmpeg_path"
+          test -x "$ffprobe_path"
+          media_bin="$RUNNER_TEMP/marvedge-media-bin"
+          mkdir -p "$media_bin"
+          ln -sf "$ffmpeg_path" "$media_bin/ffmpeg"
+          ln -sf "$ffprobe_path" "$media_bin/ffprobe"
+          echo "$media_bin" >> "$GITHUB_PATH"
+          "$media_bin/ffmpeg" -version
+          "$media_bin/ffprobe" -version
 
       - name: Generate Prisma client
         run: npx prisma generate
