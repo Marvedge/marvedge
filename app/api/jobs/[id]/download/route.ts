@@ -117,30 +117,74 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     // the cap is exceeded so a chunked response stops consuming bandwidth
     // instead of buffering behind a failed client stream.
     let streamedBytes = 0;
+    const reader = upstream.body.getReader();
+    let stopped = false;
+    let released = false;
+
+    function releaseReader() {
+      if (!released) {
+        released = true;
+        reader.releaseLock();
+      }
+    }
+
+    // Read only when the response consumer requests another chunk.
+    // Cancellation must reach the object store, including during a pending read.
     const cappedBody = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const reader = upstream.body!.getReader();
+      async pull(controller) {
         try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            streamedBytes += value.byteLength;
-            if (streamedBytes > MAX_DOWNLOAD_BYTES) {
-              try {
-                await reader.cancel();
-              } catch {
-                // Reader already closed/errored; the cap error below still applies.
-              }
-              controller.error(new Error("Exported file exceeds size limit"));
-              return;
-            }
-            controller.enqueue(value);
+          const { done, value } = await reader.read();
+
+          if (stopped) {
+            return;
           }
-          controller.close();
-        } catch (err) {
-          controller.error(err);
+
+          if (done) {
+            stopped = true;
+            controller.close();
+            releaseReader();
+            return;
+          }
+
+          streamedBytes += value.byteLength;
+          if (streamedBytes > MAX_DOWNLOAD_BYTES) {
+            stopped = true;
+            controller.error(new Error("Exported file exceeds size limit"));
+            try {
+              await reader.cancel("Exported file exceeds size limit");
+            } catch {
+              // Preserve the size-limit error if upstream cleanup fails.
+            } finally {
+              releaseReader();
+            }
+            return;
+          }
+
+          controller.enqueue(value);
+        } catch (error) {
+          if (stopped) {
+            return;
+          }
+          stopped = true;
+          controller.error(error);
+          try {
+            await reader.cancel(error);
+          } catch {
+            // Preserve the original stream error.
+          } finally {
+            releaseReader();
+          }
+        }
+      },
+      async cancel(reason) {
+        if (stopped) {
+          return;
+        }
+        stopped = true;
+        try {
+          await reader.cancel(reason);
         } finally {
-          reader.releaseLock();
+          releaseReader();
         }
       },
     });
