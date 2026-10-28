@@ -119,6 +119,53 @@ export async function POST(req: NextRequest) {
     const isDubJob = existingJobData.kind === "AVS_DUB";
     const isReframeJob = existingJobData.kind === "REFRAME";
 
+    // Progress callbacks must not enter completion/failure handling.
+    // Leave REFRAME validation, including wrong-kind cropTargets checks, below.
+    if (status === "PROCESSING" && !isReframeJob && cropTargets === undefined) {
+      if (
+        typeof progress !== "number" ||
+        !Number.isFinite(progress) ||
+        progress < 0 ||
+        progress > 100
+      ) {
+        return NextResponse.json(
+          { error: "Invalid progress: must be a number between 0 and 100" },
+          { status: 400 }
+        );
+      }
+
+      if (typeof prisma.videoJob.updateMany === "function") {
+        const updateResult = await prisma.videoJob.updateMany({
+          where: {
+            id: jobId,
+            status: { notIn: ["COMPLETED", "CANCELLED"] },
+          },
+          data: {
+            status: "PROCESSING",
+            progress: Math.round(progress),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          return NextResponse.json({
+            success: true,
+            ignored: true,
+            message: `Job ${jobId} is already in a terminal state`,
+          });
+        }
+      } else {
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: {
+            status: "PROCESSING",
+            progress: Math.round(progress),
+          },
+        });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
     // ── Reframe Job Handling ─────────────────────────────────────────
     if (cropTargets !== undefined || isReframeJob) {
       if (!isReframeJob) {
