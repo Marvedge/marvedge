@@ -14,6 +14,51 @@ function secretsMatch(provided: string, expected: string): boolean {
   );
 }
 
+async function completeLinkedJob(
+  jobId: string,
+  demoId: string,
+  exportedUrl: string,
+  data: Prisma.VideoJobUpdateManyMutationInput
+) {
+  const applied = await prisma.$transaction(async (tx) => {
+    if (typeof tx.videoJob.updateMany === "function") {
+      const result = await tx.videoJob.updateMany({
+        where: {
+          id: jobId,
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        data,
+      });
+
+      if (result.count === 0) {
+        return false;
+      }
+    } else {
+      await tx.videoJob.update({
+        where: { id: jobId },
+        data,
+      });
+    }
+
+    await tx.demo.update({
+      where: { id: demoId },
+      data: { exportedUrl },
+    });
+
+    return true;
+  });
+
+  return NextResponse.json(
+    applied
+      ? { success: true }
+      : {
+          success: true,
+          ignored: true,
+          message: `Job ${jobId} is already in a terminal state`,
+        }
+  );
+}
+
 /**
  * Worker webhook endpoint (Cloud Run video worker & reframe worker callbacks).
  *
@@ -280,6 +325,24 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: message }, { status: 400 });
         }
 
+        if (job.demoId && exportedUrl) {
+          return await completeLinkedJob(jobId, job.demoId, exportedUrl, {
+            status: "COMPLETED",
+            progress: 100,
+            exportedUrl,
+            jobData: {
+              ...existingJobData,
+              kind: "REFRAME",
+              cropTargets,
+              ...(fallback !== undefined ? { fallback } : {}),
+              ...(fallbackStage ? { fallbackStage } : {}),
+              ...(fallbackReason ? { fallbackReason } : {}),
+              ...(attemptsMade !== undefined ? { attemptsMade } : {}),
+            } as unknown as Prisma.InputJsonValue,
+            error: null,
+          });
+        }
+
         if (typeof prisma.videoJob.updateMany === "function") {
           const updateResult = await prisma.videoJob.updateMany({
             where: {
@@ -482,6 +545,15 @@ export async function POST(req: NextRequest) {
 
     // ── Existing AVS/WTM/Export Handling ─────────────────────────────
     const isCompleted = status === "COMPLETED" && exportedUrl;
+
+    if (isCompleted && job.demoId && exportedUrl) {
+      return await completeLinkedJob(jobId, job.demoId, exportedUrl, {
+        status: "COMPLETED",
+        progress: 100,
+        exportedUrl,
+        error: error || undefined,
+      });
+    }
 
     if (typeof prisma.videoJob.updateMany === "function") {
       const updateResult = await prisma.videoJob.updateMany({

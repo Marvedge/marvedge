@@ -5,6 +5,7 @@ import { prisma } from "@/app/lib/prisma";
 
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
+    $transaction: vi.fn(async (work: (tx: typeof prisma) => Promise<unknown>) => work(prisma)),
     videoJob: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -49,10 +50,7 @@ describe("POST /api/jobs/callback", () => {
     });
 
     it("rejects request with wrong secret", async () => {
-      const req = createCallbackRequest(
-        { jobId: "job-1", status: "COMPLETED" },
-        "wrong-secret"
-      );
+      const req = createCallbackRequest({ jobId: "job-1", status: "COMPLETED" }, "wrong-secret");
 
       const res = await POST(req);
       expect(res.status).toBe(401);
