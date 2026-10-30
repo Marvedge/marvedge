@@ -41,7 +41,7 @@ const ForgotPassword = () => {
     } catch (err) {
       setEmailSent(false);
       if (err instanceof z.ZodError) {
-        const message = err.errors.map((e) => e.message).join(" | ");
+        const message = err.issues.map((e) => e.message).join(" | ");
         toast.error(message);
       } else if (axios.isAxiosError(err)) {
         console.error("Axios error:", err.response?.data || err.message);

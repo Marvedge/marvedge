@@ -75,7 +75,7 @@ export function parseCredentials(provider: CrmProvider, input: unknown): Credent
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message ?? "Invalid credentials" };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid credentials" };
   }
 
   if (provider === "webhook") {

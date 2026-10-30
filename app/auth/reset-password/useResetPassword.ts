@@ -66,7 +66,7 @@ export const useResetPassword = () => {
     } catch (err) {
       const message =
         err instanceof z.ZodError
-          ? err.errors[0].message
+          ? err.issues[0].message
           : (axios.isAxiosError(err) && err.response?.data?.error) || "Reset failed.";
       toast.error(message);
     } finally {
