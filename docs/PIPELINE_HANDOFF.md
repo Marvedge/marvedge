@@ -490,4 +490,13 @@ All gates must be **PASS** before any production deployment.
 
 ---
 
+### Verification Evidence & Test Reports
+
+- Full E2E smoke test runner: `scripts/e2e_pipeline_run.sh`
+- Task-00089 live regression run: `docs/qa/Task_00089_E2E_Run_20261030_183416.md` (7/7 in-VPC checks PASS)
+- Task-00101 full regression report: `docs/qa/Task_00101_Release_Readiness_Report.md`
+- Scope freeze & CTO sign-off: `docs/SCOPE_FREEZE_CTO_SIGNOFF.md`
+
+---
+
 *Validated by: Aaditya Agarwal · Marvedge Engineering · Sprint 2, October 2026*
