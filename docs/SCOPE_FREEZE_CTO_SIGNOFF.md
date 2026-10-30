@@ -44,7 +44,7 @@ All subsequent work is **hardening, documentation, and operational readiness onl
 | Task-00073 | Dry-run quality audit and benchmark harness hardening | ✅ Done |
 | Task-00075 | Dubbing quality report | ✅ Done |
 | Task-00081 | GPU cost-per-minute documentation | ✅ Done |
-| Task-00089 | Full E2E pipeline smoke test (reframe → caption → dub) | ✅ Done |
+| Task-00089 | Full E2E pipeline smoke test (reframe → caption → dub) | ✅ Done (7/7 in-VPC checks PASS) |
 | Task-00090 | Pipeline handoff documentation | ✅ Done |
 | Task-00094 | GPU worker deployment plan and preflight gate | ✅ Done |
 | Task-00095 | Concurrent load testing | ✅ Done |
