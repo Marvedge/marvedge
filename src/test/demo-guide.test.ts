@@ -25,3 +25,13 @@ describe("guided demo steps", () => {
     expect(chapters(g)).toEqual([{ name: "Intro", index: 0 }, { name: "Setup", index: 2 }]);
   });
 });
+
+import { moveStepTo as _moveStepTo, addStep as _addStep, emptyGuide as _emptyGuide } from "@/lib/demo-guide";
+describe("drag to reorder steps", () => {
+  it("moves the first step to the end", () => {
+    let g = _emptyGuide();
+    for (let i = 0; i < 3; i++) g = _addStep(g, `img${i}`);
+    const ids = g.steps.map((s) => s.id);
+    expect(_moveStepTo(g, ids[0]!, 2).steps.map((s) => s.id)).toEqual([ids[1], ids[2], ids[0]]);
+  });
+});

@@ -52,6 +52,16 @@ export function moveStep(g: DemoGuide, id: string, dir: -1 | 1): DemoGuide {
   return { ...g, steps };
 }
 
+/** Move a step to a new position (used by drag-to-reorder). */
+export function moveStepTo(g: DemoGuide, id: string, to: number): DemoGuide {
+  const i = g.steps.findIndex((s) => s.id === id);
+  if (i < 0 || i === to) return g;
+  const steps = [...g.steps];
+  const [s] = steps.splice(i, 1);
+  steps.splice(Math.max(0, Math.min(to, steps.length)), 0, s!);
+  return { ...g, steps };
+}
+
 /** Clamp a click to a 0-100 percentage hotspot position. */
 export const toHotspot = (x: number, y: number, w: number, h: number) => ({
   x: Math.round(Math.min(100, Math.max(0, (x / w) * 100))),

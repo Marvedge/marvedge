@@ -23,7 +23,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace, type Project } from "@/lib/workspace";
-import { downloadFile, formatTime } from "@/lib/editor-model";
+import { appendVideoClip, defaultDraft, downloadFile, formatTime } from "@/lib/editor-model";
+import { detectMedia, nameFromFile } from "@/lib/media-detect";
+import { readVideoClip } from "@/lib/editor-media";
+import { emptyGuide, addStep, imageToDataUrl } from "@/lib/demo-guide";
 import { toast } from "sonner";
 export function WorkflowSteps({ step }: { step: number }) {
   return (
@@ -38,7 +41,13 @@ export function WorkflowSteps({ step }: { step: number }) {
     </div>
   );
 }
-export function SourcePage({ initialType, initialMethod }: { initialType?: string; initialMethod?: string | undefined }) {
+export function SourcePage({
+  initialType,
+  initialMethod,
+}: {
+  initialType?: string;
+  initialMethod?: string | undefined;
+}) {
   const [type, setType] = useState(initialType === "video" ? "video" : "demo");
   const [method, setMethod] = useState(initialMethod ?? "url");
   const [name, setName] = useState("");
@@ -48,11 +57,87 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
   const [purpose, setPurpose] = useState("Product onboarding");
   const [ratio, setRatio] = useState(initialType === "video" ? "9:16" : "16:9");
   const [language, setLanguage] = useState("English");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [mixChoice, setMixChoice] = useState<"video" | "demo">("video");
+  const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const detected = detectMedia(files);
+  const uploadKind = detected.suggestion === "mixed" ? mixChoice : detected.suggestion;
+  function pickFiles(list: FileList | null) {
+    const all = Array.from(list ?? []);
+    if (!all.length) return;
+    const d = detectMedia(all);
+    if (d.skipped.length)
+      toast.error(
+        `Skipped ${d.skipped.map((f) => f.name).join(", ")} — only videos and images work.`,
+      );
+    const usable = [...d.videos, ...d.images];
+    setFiles(usable);
+    setError("");
+    if (usable[0] && !name.trim()) setName(nameFromFile(usable[0].name));
+  }
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
-  const { addProject } = useWorkspace();
+  const { addProject, setDraft } = useWorkspace();
   const navigate = useNavigate();
+  async function submitUpload() {
+    const kind = uploadKind;
+    if (kind !== "video" && kind !== "demo") return;
+    setBusy(true);
+    try {
+      const id = crypto.randomUUID();
+      const base: Project = {
+        id,
+        name: name.trim(),
+        type: kind,
+        status: "Draft",
+        updated: "Just now",
+        thumbnail: kind === "video" ? "video" : "product",
+        sourceMethod: "upload",
+        ratio,
+        language,
+        audience,
+        prompt: `${purpose} for ${audience}`,
+      };
+      if (kind === "video") {
+        const clips = [];
+        for (const f of detected.videos) {
+          try {
+            clips.push(await readVideoClip(f));
+          } catch {
+            toast.error(`${f.name} could not be opened.`);
+          }
+        }
+        if (!clips.length) {
+          setError("None of the videos could be opened. Try MP4 or WebM.");
+          return;
+        }
+        if (detected.images.length)
+          toast.message(`${detected.images.length} image(s) left out of the video.`);
+        const first = detected.videos[0]!;
+        const draft = defaultDraft(clips[0]!.source, ratio);
+        let events = draft.events.filter((e) => e.lane !== "video");
+        for (const c of clips) events = appendVideoClip(events, c);
+        addProject({
+          ...base,
+          source: clips[0]!.source ?? "",
+          sourceName: first.name,
+          sourceSize: first.size,
+        });
+        setDraft(id, { ...draft, events });
+      } else {
+        let guide = emptyGuide();
+        for (const f of detected.images) guide = addStep(guide, await imageToDataUrl(f));
+        if (detected.videos.length)
+          toast.message(`${detected.videos.length} video(s) left out of the guided demo.`);
+        addProject({ ...base, sourceName: detected.images[0]?.name ?? "" });
+        setDraft(id, { ...defaultDraft(undefined, ratio), guide });
+      }
+      navigate({ to: "/editor/$projectId", params: { projectId: id } });
+    } finally {
+      setBusy(false);
+    }
+  }
   function submit() {
     if (!name.trim()) {
       setError("Give your project a name.");
@@ -71,12 +156,16 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
       setError("Describe the demo you want to create.");
       return;
     }
-    if (method === "upload" && !file) {
-      setError("Choose a recording first.");
+    if (method === "upload" && !files.length) {
+      setError("Choose videos or screenshots first.");
       return;
     }
     if (!consent) {
       setError("Confirm you have permission to use this content.");
+      return;
+    }
+    if (method === "upload") {
+      void submitUpload();
       return;
     }
     const id = crypto.randomUUID();
@@ -92,9 +181,8 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
       language,
       audience,
       prompt: method === "prompt" ? prompt : `${purpose} for ${audience}`,
-      source: file ? URL.createObjectURL(file) : url,
-      sourceName: file?.name || url,
-      sourceSize: file?.size,
+      source: url,
+      sourceName: url,
     };
     addProject(project);
     navigate({ to: "/review/$projectId", params: { projectId: id } });
@@ -114,27 +202,29 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
       <WorkflowSteps step={1} />
       <div className="source-workflow">
         <section>
-          <div className="type-options">
-            {[
-              { id: "demo", icon: MousePointer2, name: "Interactive demo" },
-              { id: "video", icon: Film, name: "Short-form video" },
-            ].map((t) => (
-              <Button
-                variant="outline"
-                className={`type-option ${type === t.id ? "selected" : ""}`}
-                key={t.id}
-                onClick={() => {
-                  setType(t.id);
-                  setRatio(t.id === "video" ? "9:16" : "16:9");
-                  if (t.id === "video") setMethod("upload");
-                }}
-              >
-                <t.icon />
-                <b>{t.name}</b>
-                <span className="radio-dot">{type === t.id && <Check size={12} />}</span>
-              </Button>
-            ))}
-          </div>
+          {method !== "upload" && (
+            <div className="type-options">
+              {[
+                { id: "demo", icon: MousePointer2, name: "Interactive demo" },
+                { id: "video", icon: Film, name: "Short-form video" },
+              ].map((t) => (
+                <Button
+                  variant="outline"
+                  className={`type-option ${type === t.id ? "selected" : ""}`}
+                  key={t.id}
+                  onClick={() => {
+                    setType(t.id);
+                    setRatio(t.id === "video" ? "9:16" : "16:9");
+                    if (t.id === "video") setMethod("upload");
+                  }}
+                >
+                  <t.icon />
+                  <b>{t.name}</b>
+                  <span className="radio-dot">{type === t.id && <Check size={12} />}</span>
+                </Button>
+              ))}
+            </div>
+          )}
           <h2 className="source-title">How would you like to start?</h2>
           <div className="source-methods">
             {[
@@ -154,8 +244,8 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
               {
                 id: "upload",
                 icon: UploadCloud,
-                title: "Upload a video",
-                label: "Bring an existing recording",
+                title: "Upload files",
+                label: "Videos or screenshots — we pick the editor",
               },
             ].map((m) =>
               m.id === "record" ? (
@@ -227,29 +317,82 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
               </label>
             )}
             {method === "upload" && (
-              <label className="upload-zone">
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f && !["video/mp4", "video/webm", "video/quicktime"].includes(f.type)) {
-                      setError("Choose an MP4, WebM, or MOV file.");
-                      return;
-                    }
-                    setFile(f || null);
-                    setError("");
+              <>
+                <label
+                  className={`upload-zone ${dragOver ? "selected" : ""}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
                   }}
-                />
-                {file ? <FileVideo size={30} /> : <UploadCloud size={30} />}
-                <b>{file?.name || "Choose your recording"}</b>
-                <span>
-                  {file
-                    ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
-                    : "MP4, WebM, or MOV · Browser playback support varies"}
-                </span>
-                <span className="upload-button">Browse files</span>
-              </label>
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    pickFiles(e.dataTransfer.files);
+                  }}
+                >
+                  <input
+                    type="file"
+                    multiple
+                    accept="video/*,image/png,image/jpeg,image/webp,image/gif"
+                    onChange={(e) => {
+                      pickFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  {files.length ? <FileVideo size={30} /> : <UploadCloud size={30} />}
+                  <b>
+                    {files.length
+                      ? `${files.length} file${files.length > 1 ? "s" : ""} ready`
+                      : "Drop videos or screenshots here"}
+                  </b>
+                  <span>
+                    {files.length
+                      ? `${(files.reduce((n, f) => n + f.size, 0) / 1024 / 1024).toFixed(1)} MB`
+                      : "MP4, WebM, MOV · PNG, JPG, WebP — one or many"}
+                  </span>
+                  <span className="upload-button">Browse files</span>
+                </label>
+                {detected.suggestion === "video" && (
+                  <p className="sample-label">
+                    Detected {detected.videos.length} video{detected.videos.length > 1 ? "s" : ""} →
+                    Video editor
+                  </p>
+                )}
+                {detected.suggestion === "demo" && (
+                  <p className="sample-label">
+                    Detected {detected.images.length} screenshot
+                    {detected.images.length > 1 ? "s" : ""} → Guided demo editor
+                  </p>
+                )}
+                {detected.suggestion === "mixed" && (
+                  <div className="type-options" role="radiogroup" aria-label="What should we make?">
+                    {(
+                      [
+                        ["video", Film, `Make a video (${detected.videos.length} clips)`],
+                        [
+                          "demo",
+                          MousePointer2,
+                          `Make a guided demo (${detected.images.length} steps)`,
+                        ],
+                      ] as const
+                    ).map(([id, Icon, label]) => (
+                      <Button
+                        key={id}
+                        variant="outline"
+                        role="radio"
+                        aria-checked={mixChoice === id}
+                        className={`type-option ${mixChoice === id ? "selected" : ""}`}
+                        onClick={() => setMixChoice(id)}
+                      >
+                        <Icon />
+                        <b>{label}</b>
+                        <span className="radio-dot">{mixChoice === id && <Check size={12} />}</span>
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
             <div className="form-grid">
               <label className="field-label">
@@ -303,8 +446,9 @@ export function SourcePage({ initialType, initialMethod }: { initialType?: strin
             )}
             <div className="form-actions">
               <span>Local draft · no AI processing starts</span>
-              <Button onClick={submit}>
-                Review project <ArrowRight />
+              <Button onClick={submit} disabled={busy}>
+                {method === "upload" ? (busy ? "Preparing…" : "Open in editor") : "Review project"}{" "}
+                <ArrowRight />
               </Button>
             </div>
           </div>

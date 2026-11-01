@@ -159,7 +159,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           folders: savedFolders,
           drafts: new Map(Object.entries(loadedDrafts).map(([k, v]) => [k, JSON.stringify(draftToSaved(v))])),
         };
-        if (loaded.length) setProjects((prev) => [...loaded, ...prev.filter((p) => !isSavable(p.id))]);
+        if (loaded.length) setProjects((prev) => [...prev.filter((p) => isSavable(p.id) && !loaded.some((l) => l.id === p.id)), ...loaded, ...prev.filter((p) => !isSavable(p.id))]);
         if (savedFolders.length) setFolders(savedFolders);
         else synced.current.folders = [];
         setDrafts((prev) => ({ ...loadedDrafts, ...prev }));
