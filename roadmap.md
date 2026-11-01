@@ -49,3 +49,18 @@
 - [x] Tab 8 Integrations: webhook planner, API & MCP placeholders
 - [x] Tab 9 Settings: appearance, billing, trust center, help tabs
 - [x] Save projects, folders and editor drafts to the account (media still session-only)
+
+## Audit (Nov 1) — buttons + feature coverage
+- [x] Click-through of 15 pages signed in: 0 errors, 0 broken links (22 internal links checked). Disabled on purpose: API key, MCP, Empty trash (when empty), Manage subscription.
+- Feature status (notebook numbers; Done / Partial / Missing):
+  - Create/Editor — Done: 1-5, 25, 27, 28, 43-50 (timeline, trim, split, transitions, text, speed), 121-122 basic. Partial: 6-10/111 (screen only, no camera/mic picker), 14-23 (no hotspots/chapters), 51-58 (no keyframes/auto-zoom), 109-110. Missing: 75-76 personalisation fields, 84-86 lead form inside demo. 117 = marketing site (public landing exists).
+  - Projects — Done: 42 trash/recovery, folders. Partial: 99 export (downloads draft, no render queue). Unclear: 38, 39.
+  - Library — Partial: 26 (starter templates only, no team/community), 33 (media not saved permanently).
+  - AI Studio — Done as text: 11, 12, 24, 59, 63, 65-70, 81-83, 101-104, 106, 107, 124. Missing: 60-62 recording agent/upkeep, 71-74 video variants, 88-90 subtitle/dub files, 116. AI results can't be sent into a project.
+  - Share & Hub — Partial: 29-31, 34-37 (preview link only), 77/80/87 (lead form designer, no collection), 91 team list (no invites). Missing: 108, 112-113 scheduling, 115 approvals.
+  - Analytics — Placeholder: 78, 79, 123 (sample data).
+  - Brand Kit — Partial: 32, 92, 114 (session only, not usable in editor).
+  - Integrations — Placeholder: 64, 93.
+  - Settings — Done: 94 trust center, 95 billing page, 96 help, 97 theme. Missing: 97 language/shortcuts, 98 notification sending. Unclear: 105.
+- [ ] Next (waiting on your pick): 1) real public share links + lead collection, 2) demo hotspots/chapters, 3) send AI results into projects.
+- [ ] Waiting on you: meaning of 38, 39, 105; home for 118-120.
