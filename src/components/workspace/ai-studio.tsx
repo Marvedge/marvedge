@@ -1,136 +1,125 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { FileText, Scissors, Languages, Bot, Lock, Send, Wand2 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { FileText, Captions, Languages, Scissors, UserRound, Bot, ClipboardList, Wand2, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/lib/workspace";
+import { runAiTool } from "@/lib/ai-studio.functions";
 
-function Soon() {
-  return <Badge variant="secondary" className="gap-1"><Lock size={11} />Coming soon</Badge>;
-}
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-5 space-y-4">
-      <h2 className="text-base font-semibold text-card-foreground">{title}</h2>
-      {children}
-    </section>
-  );
-}
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block space-y-1.5 text-sm"><span className="text-muted-foreground">{label}</span>{children}</label>;
-}
-function Select({ options }: { options: string[] }) {
-  return (
-    <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
-      {options.map((o) => <option key={o}>{o}</option>)}
-    </select>
-  );
-}
-function RunButton({ label }: { label: string }) {
-  return <Button className="w-full" onClick={() => toast.info("Preview only — AI not connected yet")}><Wand2 />{label}</Button>;
-}
-function Preview({ lines }: { lines: string[] }) {
-  return (
-    <div className="rounded-lg border border-dashed border-border bg-muted/40 p-4 space-y-2">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">Example preview · not generated</p>
-      {lines.map((l) => <div key={l} className="rounded-md bg-background px-3 py-2 text-sm text-foreground">{l}</div>)}
-    </div>
-  );
-}
+type Tool = "plan" | "script" | "captions" | "translate" | "repurpose" | "personalise" | "agent";
+type Opt = { key: string; label: string; choices?: string[] };
+const tools: { id: Tool; label: string; icon: typeof Bot; hint: string; placeholder: string; opts: Opt[] }[] = [
+  { id: "plan", label: "Plan & storyboard", icon: ClipboardList, hint: "Turn an idea into scenes, narration and timing.", placeholder: "e.g. A 60-second tour showing how to create a first report", opts: [{ key: "Audience", label: "Audience" }, { key: "Length", label: "Length", choices: ["30 seconds", "60 seconds", "2 minutes"] }] },
+  { id: "script", label: "Voiceover script", icon: FileText, hint: "A timed narration script for your video.", placeholder: "What should the video explain?", opts: [{ key: "Tone", label: "Tone", choices: ["Friendly", "Professional", "Energetic", "Calm"] }, { key: "Length", label: "Length", choices: ["30 seconds", "60 seconds", "2 minutes"] }] },
+  { id: "captions", label: "Captions", icon: Captions, hint: "Timed captions from a description or script.", placeholder: "Paste a script or describe the video", opts: [{ key: "Style", label: "Style", choices: ["Clean subtitles", "Bold word-by-word", "Minimal lower third"] }] },
+  { id: "translate", label: "Translate", icon: Languages, hint: "Translate scripts and captions, keeping timings.", placeholder: "Paste the script or captions to translate", opts: [{ key: "Target language", label: "Target language", choices: ["Hindi", "Spanish", "French", "German", "Japanese", "Portuguese"] }] },
+  { id: "repurpose", label: "Repurpose to clips", icon: Scissors, hint: "Find short social clips in a long recording.", placeholder: "Describe the webinar or recording (topics, length)", opts: [{ key: "Platform", label: "Platform", choices: ["LinkedIn", "Instagram Reels", "YouTube Shorts", "TikTok"] }] },
+  { id: "personalise", label: "Personalise", icon: UserRound, hint: "Tailor a demo for a prospect or industry.", placeholder: "What does the demo show?", opts: [{ key: "Prospect company", label: "Prospect company" }, { key: "Role", label: "Role" }, { key: "Industry", label: "Industry" }] },
+  { id: "agent", label: "AI Agent", icon: Bot, hint: "Ask anything about making your demo.", placeholder: "e.g. How should I structure an onboarding demo?", opts: [] },
+];
 
 export function AiStudioPage() {
   const { projects } = useWorkspace();
-  const names = projects.length ? projects.map((p) => p.name) : ["No projects yet"];
-  const [chat, setChat] = useState("");
+  const run = useServerFn(runAiTool);
+  const [toolId, setToolId] = useState<Tool>("plan");
+  const tool = tools.find((t) => t.id === toolId)!;
+  const [prompt, setPrompt] = useState("");
+  const [project, setProject] = useState("");
+  const [options, setOptions] = useState<Record<string, string>>({});
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function generate() {
+    if (prompt.trim().length < 3) {
+      toast.error("Add a short description first.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const opts: Record<string, string> = {};
+      for (const o of tool.opts) {
+        const v = options[`${tool.id}:${o.key}`] ?? o.choices?.[0] ?? "";
+        if (v) opts[o.key] = v;
+      }
+      if (project) opts["Project"] = project;
+      const r = await run({ data: { tool: tool.id, prompt, options: opts } });
+      setResult(r.text);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="page-heading">
         <div>
           <div className="eyebrow">AI STUDIO</div>
-          <h1>AI tools</h1>
-          <p>A preview of the AI tools planned for Marvedge.</p>
+          <h1>Create with AI</h1>
+          <p>Plan, write, caption, translate, repurpose and personalise — all in one place.</p>
         </div>
-        <Soon />
       </div>
-      <Tabs defaultValue="script">
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="script"><FileText />Script & captions</TabsTrigger>
-          <TabsTrigger value="edit"><Scissors />Auto-edit & highlights</TabsTrigger>
-          <TabsTrigger value="voice"><Languages />Translation & voice</TabsTrigger>
-          <TabsTrigger value="chat"><Bot />Assistant</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="script" className="grid gap-4 lg:grid-cols-2 mt-4">
-          <Panel title="Write a script">
-            <Field label="Project"><Select options={names} /></Field>
-            <Field label="What is this video about?"><Textarea placeholder="e.g. Show new users how to create their first report in under a minute" rows={4} /></Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Tone"><Select options={["Friendly", "Professional", "Energetic", "Calm"]} /></Field>
-              <Field label="Length"><Select options={["30 seconds", "60 seconds", "2 minutes"]} /></Field>
+      <div className="ai-studio-layout">
+        <nav className="ai-tool-list" aria-label="AI tools">
+          {tools.map((t) => (
+            <Button key={t.id} variant={t.id === toolId ? "secondary" : "ghost"} className="justify-start" onClick={() => { setToolId(t.id); setResult(""); }}>
+              <t.icon /> {t.label}
+            </Button>
+          ))}
+        </nav>
+        <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-card-foreground">{tool.label}</h2>
+            <p className="text-sm text-muted-foreground">{tool.hint}</p>
+          </div>
+          <label className="block space-y-1.5 text-sm">
+            <span className="text-muted-foreground">Project (optional)</span>
+            <select value={project} onChange={(e) => setProject(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
+              <option value="">None</option>
+              {projects.map((p) => <option key={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <Textarea rows={5} value={prompt} placeholder={tool.placeholder} onChange={(e) => setPrompt(e.target.value)} />
+          {tool.opts.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {tool.opts.map((o) => {
+                const k = `${tool.id}:${o.key}`;
+                return (
+                  <label key={k} className="block space-y-1.5 text-sm">
+                    <span className="text-muted-foreground">{o.label}</span>
+                    {o.choices ? (
+                      <select value={options[k] ?? o.choices[0]} onChange={(e) => setOptions({ ...options, [k]: e.target.value })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
+                        {o.choices.map((c) => <option key={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <Input value={options[k] ?? ""} onChange={(e) => setOptions({ ...options, [k]: e.target.value })} />
+                    )}
+                  </label>
+                );
+              })}
             </div>
-            <RunButton label="Generate script" />
-          </Panel>
-          <Panel title="Auto captions">
-            <Field label="Caption style"><Select options={["Clean subtitles", "Bold word-by-word", "Minimal lower third"]} /></Field>
-            <Field label="Spoken language"><Select options={["Detect automatically", "English", "Hindi", "Spanish"]} /></Field>
-            <RunButton label="Create captions" />
-            <Preview lines={["00:00 Welcome to your new dashboard.", "00:04 Click Create to start a report.", "00:09 Pick a template and you're done."]} />
-          </Panel>
-        </TabsContent>
-
-        <TabsContent value="edit" className="grid gap-4 lg:grid-cols-2 mt-4">
-          <Panel title="Smart edit">
-            <Field label="Project"><Select options={names} /></Field>
-            {["Remove silences and pauses", "Add zoom on clicks", "Suggest transitions between clips", "Track the active speaker"].map((o) => (
-              <label key={o} className="flex items-center gap-2 text-sm text-foreground"><input type="checkbox" defaultChecked />{o}</label>
-            ))}
-            <RunButton label="Apply smart edit" />
-          </Panel>
-          <Panel title="Find highlights">
-            <Field label="Clip format"><Select options={["Vertical 9:16 shorts", "Square 1:1", "Wide 16:9"]} /></Field>
-            <Field label="Number of clips"><Select options={["3", "5", "10"]} /></Field>
-            <RunButton label="Find best moments" />
-            <Preview lines={["Clip 1 · 0:12–0:41 · Product reveal", "Clip 2 · 1:05–1:30 · Customer question", "Clip 3 · 2:10–2:38 · Key takeaway"]} />
-          </Panel>
-        </TabsContent>
-
-        <TabsContent value="voice" className="grid gap-4 lg:grid-cols-2 mt-4">
-          <Panel title="Translate">
-            <Field label="Project"><Select options={names} /></Field>
-            <Field label="Translate into"><Select options={["Hindi", "Spanish", "French", "German", "Japanese"]} /></Field>
-            <Field label="What to translate"><Select options={["Captions and on-screen text", "Captions only", "Everything incl. voice"]} /></Field>
-            <RunButton label="Translate project" />
-          </Panel>
-          <Panel title="AI voiceover">
-            <Field label="Voice"><Select options={["Warm · female", "Clear · male", "Upbeat · neutral"]} /></Field>
-            <Field label="Speed"><Select options={["Normal", "Slower", "Faster"]} /></Field>
-            <Field label="Text to read"><Textarea placeholder="Paste your script, or generate one in Script & captions" rows={4} /></Field>
-            <RunButton label="Create voiceover" />
-            <p className="text-xs text-muted-foreground">Voice cloning will require the speaker's consent.</p>
-          </Panel>
-        </TabsContent>
-
-        <TabsContent value="chat" className="mt-4">
-          <Panel title="Ask the assistant">
-            <div className="space-y-3 min-h-48">
-              <div className="ml-auto max-w-md rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">Make the intro shorter and add a fade between clips.</div>
-              <div className="max-w-md text-sm text-foreground"><span className="font-medium">Marvedge assistant · example</span><br />I'd trim the intro to 4 seconds and add a crossfade after clip 1. Apply these changes?</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {["Tighten pacing", "Write a title", "Suggest music", "Make a vertical version"].map((s) => (
-                <Button key={s} size="sm" variant="outline" onClick={() => setChat(s)}>{s}</Button>
-              ))}
-            </div>
-            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); toast.info("Preview only — AI not connected yet"); setChat(""); }}>
-              <Input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Ask the assistant to edit your video…" />
-              <Button type="submit" size="icon" aria-label="Send"><Send /></Button>
-            </form>
-          </Panel>
-        </TabsContent>
-      </Tabs>
+          )}
+          <Button className="w-full" onClick={generate} disabled={loading}>
+            {loading ? <Loader2 className="animate-spin" /> : <Wand2 />} {loading ? "Generating…" : "Generate"}
+          </Button>
+        </section>
+        <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-card-foreground">Result</h2>
+            <Button size="sm" variant="ghost" disabled={!result} onClick={() => { navigator.clipboard.writeText(result); toast.success("Copied"); }}>
+              <Copy /> Copy
+            </Button>
+          </div>
+          {result ? (
+            <pre className="whitespace-pre-wrap text-sm text-foreground font-sans max-h-[520px] overflow-auto">{result}</pre>
+          ) : (
+            <p className="text-sm text-muted-foreground">Your generated content will appear here.</p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
