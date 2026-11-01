@@ -47,4 +47,5 @@
 - [x] Tab 6 Analytics: insights + viewer sessions
 - [x] Tab 7 Brand Kit: saved components
 - [x] Tab 8 Integrations: webhook planner, API & MCP placeholders
-- [ ] Tab 9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings
+- [x] Tab 9 Settings: appearance, billing, trust center, help tabs
+- [ ] Save projects, folders and media permanently (next step)
