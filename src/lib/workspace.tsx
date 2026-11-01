@@ -50,6 +50,7 @@ const samples: Project[] = [
     thumbnail: "board",
   },
 ];
+export type BrandComponent = { id: string; kind: "Call to action" | "Lower third" | "Intro card" | "Outro card" | "Watermark"; text: string };
 export type TrashItem = { deletedAt: string } & (
   | { kind: "project"; item: Project; draft?: EditorDraft | undefined }
   | { kind: "post"; item: UploadPost }
@@ -78,6 +79,8 @@ type Workspace = {
   removeProject: (id: string) => void;
   profile: { name: string; email: string; workspace: string };
   setProfile: (profile: { name: string; email: string; workspace: string }) => void;
+  brandComponents: BrandComponent[];
+  setBrandComponents: React.Dispatch<React.SetStateAction<BrandComponent[]>>;
   folders: string[];
   setFolders: React.Dispatch<React.SetStateAction<string[]>>;
   brand: { color: string; font: string };
@@ -131,6 +134,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspace: "My workspace",
   });
   const [brand, setBrand] = useState({ color: "purple", font: "DM Sans" });
+  const [brandComponents, setBrandComponents] = useState<BrandComponent[]>([
+    { id: "cta", kind: "Call to action", text: "Book a demo" },
+    { id: "intro", kind: "Intro card", text: "Welcome to the tour" },
+  ]);
   const [folders, setFolders] = useState<string[]>(["Onboarding", "Launches"]);
   return (
     <WorkspaceContext.Provider
@@ -206,6 +213,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         },
         profile,
         setProfile,
+        brandComponents,
+        setBrandComponents,
         folders,
         setFolders,
         brand,
