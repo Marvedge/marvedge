@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { AccountContext } from "./account";
+import { isSavable, toSaved, draftToSaved, loadSaved, saveProjects, deleteProjects, saveDraft, syncFolders } from "./project-store";
 import { defaultDraft, type EditorDraft } from "./editor-model";
 import {
   samplePosts,
@@ -81,6 +83,7 @@ type Workspace = {
   setProfile: (profile: { name: string; email: string; workspace: string }) => void;
   brandComponents: BrandComponent[];
   setBrandComponents: React.Dispatch<React.SetStateAction<BrandComponent[]>>;
+  saveState: "local" | "loading" | "saved" | "error";
   folders: string[];
   setFolders: React.Dispatch<React.SetStateAction<string[]>>;
   brand: { color: string; font: string };
@@ -139,6 +142,72 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     { id: "intro", kind: "Intro card", text: "Welcome to the tour" },
   ]);
   const [folders, setFolders] = useState<string[]>(["Onboarding", "Launches"]);
+  const ownerId = useContext(AccountContext)?.user?.id;
+  const [saveState, setSaveState] = useState<"local" | "loading" | "saved" | "error">(ownerId ? "loading" : "local");
+  const synced = useRef<{ projects: Map<string, string>; folders: string[]; drafts: Map<string, string> } | null>(null);
+  useEffect(() => {
+    if (!ownerId) return;
+    let cancelled = false;
+    loadSaved(ownerId)
+      .then(({ projects: rows, folders: savedFolders }) => {
+        if (cancelled) return;
+        const loaded = rows.map((r) => ({ ...(r.data as Project), id: r.id, updated: relativeTime(r.updated_at) }));
+        const loadedDrafts: Record<string, EditorDraft> = {};
+        for (const r of rows) if (r.draft) loadedDrafts[r.id] = r.draft as unknown as EditorDraft;
+        synced.current = {
+          projects: new Map(loaded.map((p) => [p.id, JSON.stringify(toSaved(p))])),
+          folders: savedFolders,
+          drafts: new Map(Object.entries(loadedDrafts).map(([k, v]) => [k, JSON.stringify(draftToSaved(v))])),
+        };
+        if (loaded.length) setProjects((prev) => [...loaded, ...prev.filter((p) => !isSavable(p.id))]);
+        if (savedFolders.length) setFolders(savedFolders);
+        else synced.current.folders = [];
+        setDrafts((prev) => ({ ...loadedDrafts, ...prev }));
+        setSaveState("saved");
+      })
+      .catch(() => !cancelled && setSaveState("error"));
+    return () => { cancelled = true; };
+  }, [ownerId]);
+  useEffect(() => {
+    const s = synced.current;
+    if (!ownerId || !s) return;
+    const savable = projects.filter((p) => isSavable(p.id));
+    const changed = savable
+      .map((p) => ({ id: p.id, data: toSaved(p) }))
+      .filter((r) => s.projects.get(r.id) !== JSON.stringify(r.data));
+    const ids = new Set(savable.map((p) => p.id));
+    const removed = [...s.projects.keys()].filter((id) => !ids.has(id));
+    if (!changed.length && !removed.length) return;
+    for (const r of changed) s.projects.set(r.id, JSON.stringify(r.data));
+    for (const id of removed) s.projects.delete(id);
+    Promise.all([saveProjects(ownerId, changed), deleteProjects(removed)])
+      .then(() => setSaveState("saved"))
+      .catch(() => setSaveState("error"));
+  }, [projects, ownerId, saveState]);
+  useEffect(() => {
+    const s = synced.current;
+    if (!ownerId || !s) return;
+    const add = folders.filter((f) => !s.folders.includes(f));
+    const remove = s.folders.filter((f) => !folders.includes(f));
+    if (!add.length && !remove.length) return;
+    s.folders = [...folders];
+    syncFolders(ownerId, add, remove).catch(() => setSaveState("error"));
+  }, [folders, ownerId, saveState]);
+  useEffect(() => {
+    const s = synced.current;
+    if (!ownerId || !s) return;
+    const timer = setTimeout(() => {
+      for (const [id, d] of Object.entries(drafts)) {
+        if (!isSavable(id) || !s.projects.has(id)) continue;
+        const saved = draftToSaved(d);
+        const key = JSON.stringify(saved);
+        if (s.drafts.get(id) === key) continue;
+        s.drafts.set(id, key);
+        saveDraft(id, saved).catch(() => setSaveState("error"));
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [drafts, ownerId, saveState]);
   return (
     <WorkspaceContext.Provider
       value={{
@@ -215,6 +284,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setProfile,
         brandComponents,
         setBrandComponents,
+        saveState,
         folders,
         setFolders,
         brand,
@@ -241,4 +311,14 @@ export function pageHead(title: string, description: string) {
       { name: "twitter:card", content: "summary_large_image" },
     ],
   };
+}
+
+function relativeTime(iso: string) {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h} hour${h > 1 ? "s" : ""} ago`;
+  const d = Math.round(h / 24);
+  return d === 1 ? "Yesterday" : `${d} days ago`;
 }
