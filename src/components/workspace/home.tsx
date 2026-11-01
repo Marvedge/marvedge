@@ -12,7 +12,15 @@ import {
   Sparkles,
   Clock3,
   FolderOpen,
+  Video,
+  Link2,
+  Wand2,
+  Bot,
+  Eye,
+  Target,
+  Users,
 } from "lucide-react";
+import { UsageBars } from "./usage-bars";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace";
 import { ProductScreen } from "./project-thumbnail";
@@ -38,6 +46,19 @@ export function HomePage() {
           </Link>
         </Button>
       </div>
+      <section className="quick-create" aria-label="Quick create">
+        <div className="section-heading">
+          <h2>Quick create</h2>
+          <span>Pick a starting point — every option opens in the editor.</span>
+        </div>
+        <div className="quick-create-grid">
+          <Link to="/record" className="quick-create-card"><Video size={18} /><b>Record</b><span>Screen, camera or both</span></Link>
+          <Link to="/create" search={{ type: "video", method: "upload" }} className="quick-create-card"><Upload size={18} /><b>Upload</b><span>Bring an existing video</span></Link>
+          <Link to="/create" search={{ type: "demo", method: "url" }} className="quick-create-card"><Link2 size={18} /><b>From URL</b><span>Capture a product page</span></Link>
+          <Link to="/create" search={{ type: "demo", method: "prompt" }} className="quick-create-card"><Wand2 size={18} /><b>From prompt</b><span>Describe what to make</span></Link>
+          <Link to="/ai-studio" className="quick-create-card"><Bot size={18} /><b>AI Agent</b><span>Plan it with AI Studio</span></Link>
+        </div>
+      </section>
       <section className="creation-section">
         <div className="section-heading">
           <h2>What will you create today?</h2>
@@ -139,6 +160,30 @@ export function HomePage() {
           </div>
         )}
       </section>
+      <section className="performance-section">
+        <div className="section-heading">
+          <div className="flex items-center gap-3">
+            <h2>Performance snapshot</h2>
+            <span className="sample-label">Sample activity</span>
+          </div>
+          <Button variant="link" asChild>
+            <Link to="/analytics">Open analytics <ArrowRight /></Link>
+          </Button>
+        </div>
+        <div className="performance-grid">
+          {[
+            { icon: Eye, label: "Views", value: "1,284" },
+            { icon: Target, label: "Completion", value: "62%" },
+            { icon: Users, label: "Leads", value: "37" },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="performance-card">
+              <Icon size={16} />
+              <span>{label}</span>
+              <b>{value}</b>
+            </div>
+          ))}
+        </div>
+      </section>
       <div className="home-bottom">
         <section className="getting-started">
           <div className="section-heading">
@@ -188,6 +233,7 @@ export function HomePage() {
               <small>Preview workspace</small>
             </div>
           </div>
+          <div className="home-usage"><UsageBars /></div>
           <Link to="/help" className="resource-link">
             <span className="resource-icon">
               <Sparkles size={19} />
