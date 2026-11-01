@@ -69,9 +69,3 @@ export const runAiTool = createServerFn({ method: "POST" })
     }
     return { text: text.trim() || "No result was returned." };
   });
-    if (res.status === 429) throw new Error("Too many requests right now — please wait a moment and try again.");
-    if (res.status === 402) throw new Error("AI credits have run out. Add credits in your workspace to keep generating.");
-    if (!res.ok) throw new Error(`AI request failed (${res.status}).`);
-    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return { text: json.choices?.[0]?.message?.content?.trim() || "No result was returned." };
-  });
