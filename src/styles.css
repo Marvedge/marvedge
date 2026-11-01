@@ -6190,3 +6190,8 @@ select,
 .performance-section { margin: 28px 0; }
 .home-usage { margin: 12px 0; }
 @media (max-width: 900px) { .quick-create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .performance-grid { grid-template-columns: 1fr; } }
+.folder-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 14px; }
+.folder-count { font-size: 10px; color: var(--muted-foreground); }
+.new-folder { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; padding-left: 8px; background: var(--card); }
+.new-folder input { width: 110px; background: transparent; font-size: 12px; outline: none; color: var(--foreground); }
+.project-folder-select { margin-top: 6px; font-size: 11px; background: transparent; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; }

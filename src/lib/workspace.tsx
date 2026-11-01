@@ -22,6 +22,7 @@ export type Project = {
   prompt?: string;
   audience?: string;
   language?: string;
+  folder?: string | undefined;
 };
 const samples: Project[] = [
   {
@@ -77,6 +78,8 @@ type Workspace = {
   removeProject: (id: string) => void;
   profile: { name: string; email: string; workspace: string };
   setProfile: (profile: { name: string; email: string; workspace: string }) => void;
+  folders: string[];
+  setFolders: React.Dispatch<React.SetStateAction<string[]>>;
   brand: { color: string; font: string };
   setBrand: (brand: { color: string; font: string }) => void;
 };
@@ -128,6 +131,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspace: "My workspace",
   });
   const [brand, setBrand] = useState({ color: "purple", font: "DM Sans" });
+  const [folders, setFolders] = useState<string[]>(["Onboarding", "Launches"]);
   return (
     <WorkspaceContext.Provider
       value={{
@@ -202,6 +206,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         },
         profile,
         setProfile,
+        folders,
+        setFolders,
         brand,
         setBrand,
       }}
