@@ -22,6 +22,7 @@ import {
   Upload,
   Trash2,
   Bot,
+  Library,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace";
@@ -33,6 +34,7 @@ const navigation = [
   { label: "Projects", path: "/projects", icon: Folder },
   { label: "Uploads", path: "/uploads", icon: Upload },
   { label: "Create", path: "/create", icon: Plus },
+  { label: "Library", path: "/library", icon: Library },
   { label: "AI Studio", path: "/ai-studio", icon: Bot },
   { label: "Analytics", path: "/analytics", icon: ChartNoAxesCombined },
   { label: "Brand Kit", path: "/brand-kit", icon: Palette },
