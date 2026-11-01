@@ -46,4 +46,5 @@
 - [x] Tab 5 Share & Hub: link, embed, lead form, hub, team
 - [x] Tab 6 Analytics: insights + viewer sessions
 - [x] Tab 7 Brand Kit: saved components
-- [ ] Tabs 8-9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings
+- [x] Tab 8 Integrations: webhook planner, API & MCP placeholders
+- [ ] Tab 9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings

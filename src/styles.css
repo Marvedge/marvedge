@@ -6223,3 +6223,6 @@ select,
 .sample-lower { border-left: 4px solid var(--primary); }
 .sample-intro, .sample-outro { text-align: center; font-weight: 600; padding: 18px; }
 .sample-watermark { opacity: .6; font-size: 11px; text-align: right; }
+.dev-integrations { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+.dev-integrations .form-section { display: grid; gap: 10px; align-content: start; }
+@media (max-width: 900px) { .dev-integrations { grid-template-columns: 1fr; } }
