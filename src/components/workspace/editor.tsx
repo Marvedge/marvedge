@@ -40,6 +40,8 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { useWorkspace } from "@/lib/workspace";
 import { type EditorDraft, timelineDuration, formatTime, appendVideoClip, watermarkOf } from "@/lib/editor-model";
 import { readVideoClip } from "@/lib/editor-media";
+import { detectMedia } from "@/lib/media-detect";
+import { EditorTopBar } from "./editor-top-bar";
 import { EditorCanvas } from "./editor-canvas";
 import { EditorTimeline } from "./editor-timeline";
 import { StudioInspector } from "./studio-inspector";
@@ -149,58 +151,18 @@ export function EditorPage({ projectId }: { projectId: string }) {
     }
   }
   return (
-    <div className="studio">
-      <header className="studio-header">
-        <div className="studio-header-left">
-          <Button variant="ghost" size="icon" asChild aria-label="Back to projects">
-            <Link to="/projects">
-              <ArrowLeft />
-            </Link>
-          </Button>
-          <Link to="/" className="studio-brand">
-            m<span />
-          </Link>
-          <span className="toolbar-divider" />
-          <div className="studio-project-title">
-            <input
-              aria-label="Project title"
-              value={project.name}
-              onChange={(e) => updateProject(projectId, { name: e.target.value })}
-            />
-            <span>
-              <Check size={11} />
-              All changes saved in session
-            </span>
-          </div>
-        </div>
-        <div className="studio-header-center">
-          <span>Draft</span>
-          <ChevronRight size={12} />
-          <span>Video editor</span>
-        </div>
-        <div className="studio-header-actions">
-          <ThemeToggle />
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Undo"
-            aria-label="Undo"
-            onClick={undo}
-            disabled={!history.length}
-          >
-            <Undo2 />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Redo"
-            aria-label="Redo"
-            onClick={redo}
-            disabled={!future.length}
-          >
-            <Redo2 />
-          </Button>
-          <span className="toolbar-divider" />
+    <div
+      className="studio"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        const d = detectMedia(Array.from(e.dataTransfer.files));
+        if (d.images.length || d.skipped.length) toast.message("Only videos can be dropped onto the timeline — screenshots belong in a guided demo.");
+        void (async () => { for (const f of d.videos) await addVideo(f); })();
+      }}
+    >
+      <EditorTopBar projectId={projectId} label="Video editor" undo={{ onUndo: undo, onRedo: redo, canUndo: history.length > 0, canRedo: future.length > 0 }}>
           <Button variant="outline" asChild>
             <Link to="/preview/$projectId" params={{ projectId }} aria-label="Preview" title="Preview">
               <Play />
@@ -224,8 +186,7 @@ export function EditorPage({ projectId }: { projectId: string }) {
               <DropdownMenuItem asChild><Link to="/help">Help Center</Link></DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </header>
+      </EditorTopBar>
       <div className="studio-middle">
         <nav className="studio-toolrail">
           {tools.slice(0, 6).map((t) => (

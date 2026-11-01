@@ -10,13 +10,11 @@ export function EditorTopBar({
   projectId,
   label,
   undo,
-  redo,
   children,
 }: {
   projectId: string;
   label: string;
   undo?: { onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean };
-  redo?: never;
   children?: ReactNode;
 }) {
   const { projects, updateProject, saveState } = useWorkspace();
@@ -31,7 +29,6 @@ export function EditorTopBar({
         : saveState === "saved"
           ? { icon: <Check size={11} />, text: "Saved to your account" }
           : { icon: <CloudOff size={11} />, text: "Kept in this session" };
-  void redo;
   return (
     <header className="studio-header">
       <div className="studio-header-left">
