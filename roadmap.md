@@ -63,4 +63,5 @@
   - Integrations — Placeholder: 64, 93.
   - Settings — Done: 94 trust center, 95 billing page, 96 help, 97 theme. Missing: 97 language/shortcuts, 98 notification sending. Unclear: 105.
 - [ ] Next (waiting on your pick): 1) real public share links + lead collection, 2) demo hotspots/chapters, 3) send AI results into projects.
-- [ ] Waiting on you: meaning of 38, 39, 105; home for 118-120.
+- [x] Placed: 38-39 (version history & duplicates) in Projects; 105 (language & shortcuts) in Settings; 118-120 (advanced AI/creative tools) in AI Studio.
+- [x] Split editor: Video editor for videos, Guided demo editor (screenshot steps, hotspots, tooltips, chapters, end button, Try it player) for demos.
