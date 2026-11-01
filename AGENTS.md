@@ -12,9 +12,9 @@
 ## Workspace architecture
 - Keep site appearance in the root ThemeProvider with browser-local preference and system fallback; shared semantic tokens theme every page and portal without changing project media.
 - Public marketing and account pages live outside the managed authenticated layout; workspace pages keep their existing URLs under that layout so account access is gated without losing navigation.
-- Cloud Auth owns identities and owner-only profiles; project state stays session-local and resets on identity changes to prevent cross-account draft leakage.
+- Cloud Auth owns identities and owner-only profiles; WorkspaceProvider remounts per identity and syncs UUID projects, folders and drafts to owner-only tables (blob links stripped, samples local) so work persists without cross-account leakage.
 - Use TanStack leaf routes for every workspace page and a shared root shell so navigation stays consistent.
-- Keep preview project and preference state in the WorkspaceProvider for the current session; do not imply remote persistence or connected services.
+- Keep remaining preference, media and planning state in the WorkspaceProvider for the session; do not imply remote persistence or connected services beyond what is saved.
 - Keep workspace presentation styles and semantic palette tokens in src/styles.css so the supplied brand remains consistent across pages.
 - Keep project editing, preview, and export in isolated project-ID leaf routes, with drafts in the WorkspaceProvider, so edits survive navigation without dashboard clutter.
 - Keep the editor clip-first: properties open on demand, video and transition rows stay visible, unused tracks are optional, and overlapping events occupy separate rows; use shared browser metadata import to append videos without overlap.

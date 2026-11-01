@@ -48,4 +48,4 @@
 - [x] Tab 7 Brand Kit: saved components
 - [x] Tab 8 Integrations: webhook planner, API & MCP placeholders
 - [x] Tab 9 Settings: appearance, billing, trust center, help tabs
-- [ ] Save projects, folders and media permanently (next step)
+- [x] Save projects, folders and editor drafts to the account (media still session-only)

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace";
 import { ProjectCard } from "./project-card";
 export function ProjectsPage() {
-  const { projects, folders, setFolders, trash } = useWorkspace();
+  const { projects, folders, setFolders, trash, saveState } = useWorkspace();
   const [folder, setFolder] = useState("all");
   const [newFolder, setNewFolder] = useState("");
   const trashCount = trash.filter((t) => t.kind === "project").length;
@@ -124,7 +124,7 @@ export function ProjectsPage() {
       </div>
       <div className="library-heading">
         <span>{filtered.length} projects</span>
-        <span className="sample-label">Session workspace · includes samples</span>
+        <span className="sample-label">{saveState === "saved" ? "Saved to your account · samples stay local" : saveState === "error" ? "Couldn’t save — changes kept for this session" : saveState === "loading" ? "Loading your projects…" : "Session workspace · includes samples"}</span>
       </div>
       <div className={view === "grid" ? "projects-grid" : "projects-list"}>
         {filtered.map((p) => (
