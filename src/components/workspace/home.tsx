@@ -247,8 +247,8 @@ export function HomePage() {
         </section>
       </div>
       <div className="preview-note">
-        <Circle size={11} /> You’re exploring a preview workspace. Projects and changes are kept for
-        this session only.
+        <Circle size={11} /> Your own projects, folders and edits are saved to your account. Sample projects, uploaded
+        media and recordings stay in this session.
       </div>
     </>
   );
