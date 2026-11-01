@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -38,6 +38,7 @@ export function AiPanel({
 }) {
   const { projects, getDraft, setDraft, addProject } = useWorkspace();
   const run = useServerFn(runAiTool);
+  const navigate = useNavigate();
   const project = projects.find((p) => p.id === projectId);
   const kind = project?.type ?? "video";
   const available = project ? toolsFor(kind) : (Object.keys(aiTools) as AiTool[]);
@@ -122,7 +123,7 @@ export function AiPanel({
     ];
     addProject({ ...project, id, name: `${project.name} — ${item.title || "Clip"}`, status: "Draft", updated: "Just now", folder: project.folder });
     setDraft(id, { ...draft, events, description: item.text });
-    toast.success("Clip project created", { action: { label: "Open", onClick: () => window.location.assign(`/editor/${id}`) } });
+    toast.success("Clip project created", { action: { label: "Open", onClick: () => void navigate({ to: "/editor/$projectId", params: { projectId: id } }) } });
   }
 
   const canApply = !!project && !!result && result.tool !== "repurpose" && result.items.length > 0 && !(kind === "demo" && result.tool === "captions");

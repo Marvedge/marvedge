@@ -1,4 +1,5 @@
 import { readAudioClip } from "@/lib/editor-media";
+import { AiPanel } from "./ai-panel";
 import { WatermarkPanel } from "./watermark-panel";
 import { TransitionPicker } from "./transition-picker";
 import { useState } from "react";
@@ -38,6 +39,7 @@ export function StudioInspector({
   onClose,
   onAddVideo,
   addingVideo,
+  projectId,
 }: {
   tab: string;
   draft: EditorDraft;
@@ -49,6 +51,7 @@ export function StudioInspector({
   onClose?: () => void;
   onAddVideo: (file: File) => void;
   addingVideo: boolean;
+  projectId?: string;
 }) {
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState("All");
@@ -120,7 +123,7 @@ export function StudioInspector({
           {tab === "Canvas"
             ? "Project settings"
             : tab === "AI Assistant"
-              ? "Automation"
+              ? "AI tools"
               : "Tools & properties"}
         </span>
         {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close properties" title="Close properties"><X /></Button>}
@@ -654,36 +657,7 @@ export function StudioInspector({
             </div>
           </>
         )}
-        {tab === "AI Assistant" && (
-          <>
-            <div className="assistant-welcome">
-              <Sparkles size={30} />
-              <h3>A creative helping hand.</h3>
-              <p>
-                Keep the creative decisions. Let automation handle the repetitive work, when
-                connected.
-              </p>
-            </div>
-            {[
-              "Generate script",
-              "Suggest scenes & titles",
-              "Find best moments",
-              "Auto captions",
-              "Suggest zoom & focus",
-              "Track active speaker",
-              "Remove silence",
-              "Reframe vertical shorts",
-            ].map((s) => (
-              <div className="planned-tool" key={s}>
-                <span>{s}</span>
-                <span className="sample-label">Planned</span>
-              </div>
-            ))}
-            <div className="info-note">
-              No AI jobs are running. All edits in this workspace are manual and session-only.
-            </div>
-          </>
-        )}
+        {tab === "AI Assistant" && projectId && <AiPanel projectId={projectId} onApply={change} layout="panel" />}
         {tab === "Media" && (
           <>
             <label className="file-control">
