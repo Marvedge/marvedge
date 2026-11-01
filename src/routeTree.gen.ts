@@ -22,6 +22,7 @@ import { Route as AuthenticatedBrandKitRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedCreateRouteImport } from './routes/_authenticated/create'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedIntegrationsRouteImport } from './routes/_authenticated/integrations'
+import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedRecordRouteImport } from './routes/_authenticated/record'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -100,6 +101,11 @@ const AuthenticatedIntegrationsRoute =
     path: '/integrations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -181,6 +187,7 @@ export interface FileRoutesByFullPath {
   '/create': typeof AuthenticatedCreateRoute
   '/home': typeof AuthenticatedHomeRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
+  '/library': typeof AuthenticatedLibraryRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/record': typeof AuthenticatedRecordRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByTo {
   '/create': typeof AuthenticatedCreateRoute
   '/home': typeof AuthenticatedHomeRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
+  '/library': typeof AuthenticatedLibraryRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/record': typeof AuthenticatedRecordRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -234,6 +242,7 @@ export interface FileRoutesById {
   '/_authenticated/create': typeof AuthenticatedCreateRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
+  '/_authenticated/library': typeof AuthenticatedLibraryRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/record': typeof AuthenticatedRecordRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -262,6 +271,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/home'
     | '/integrations'
+    | '/library'
     | '/projects'
     | '/record'
     | '/settings'
@@ -288,6 +298,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/home'
     | '/integrations'
+    | '/library'
     | '/projects'
     | '/record'
     | '/settings'
@@ -314,6 +325,7 @@ export interface FileRouteTypes {
     | '/_authenticated/create'
     | '/_authenticated/home'
     | '/_authenticated/integrations'
+    | '/_authenticated/library'
     | '/_authenticated/projects'
     | '/_authenticated/record'
     | '/_authenticated/settings'
@@ -431,6 +443,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIntegrationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/library': {
+      id: '/_authenticated/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof AuthenticatedLibraryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/projects': {
       id: '/_authenticated/projects'
       path: '/projects'
@@ -538,6 +557,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateRoute: typeof AuthenticatedCreateRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
+  AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedRecordRoute: typeof AuthenticatedRecordRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -557,6 +577,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateRoute: AuthenticatedCreateRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
+  AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedRecordRoute: AuthenticatedRecordRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
