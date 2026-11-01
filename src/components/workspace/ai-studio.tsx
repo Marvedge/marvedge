@@ -32,7 +32,10 @@ export function AiStudioPage() {
   const [loading, setLoading] = useState(false);
 
   async function generate() {
-    if (prompt.trim().length < 3) return toast.error("Add a short description first.");
+    if (prompt.trim().length < 3) {
+      toast.error("Add a short description first.");
+      return;
+    }
     setLoading(true);
     try {
       const opts: Record<string, string> = {};

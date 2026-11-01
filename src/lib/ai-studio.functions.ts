@@ -22,20 +22,53 @@ export const runAiTool = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
+    const key = process.env["LOVABLE_API_KEY"];
     if (!key) throw new Error("AI is not configured.");
     const opts = Object.entries(data.options).map(([k, v]) => `${k}: ${v}`).join("\n");
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: { "Lovable-API-Key": key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: `${AI_TOOLS[data.tool]} Use plain text with simple headings and lists. No preamble.` },
-          { role: "user", content: `${data.prompt}${opts ? `\n\nSettings:\n${opts}` : ""}` },
-        ],
+        model: "openai/gpt-6-astra",
+        stream: true,
+        store: false,
+        reasoning: { effort: "low" },
+        instructions: `${AI_TOOLS[data.tool]} Use plain text with simple headings and lists. No preamble.`,
+        input: `${data.prompt}${opts ? `\n\nSettings:\n${opts}` : ""}`,
       }),
     });
+    if (res.status === 429) throw new Error("Too many requests right now — please wait a moment and try again.");
+    if (res.status === 402) throw new Error("AI credits have run out. Add credits in your workspace to keep generating.");
+    if (!res.ok || !res.body) {
+      const body = await res.text();
+      console.error(`AI request failed [${res.status}]: ${body}`);
+      throw new Error(`AI request failed (${res.status}).`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let text = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const evt = JSON.parse(payload) as { type?: string; delta?: string };
+          if (evt.type === "response.output_text.delta" && evt.delta) text += evt.delta;
+          if (evt.type === "error" || evt.type === "response.failed") throw new Error("AI generation failed.");
+        } catch (e) {
+          if (e instanceof Error && e.message === "AI generation failed.") throw e;
+        }
+      }
+    }
+    return { text: text.trim() || "No result was returned." };
+  });
     if (res.status === 429) throw new Error("Too many requests right now — please wait a moment and try again.");
     if (res.status === 402) throw new Error("AI credits have run out. Add credits in your workspace to keep generating.");
     if (!res.ok) throw new Error(`AI request failed (${res.status}).`);
