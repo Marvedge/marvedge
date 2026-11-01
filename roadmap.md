@@ -37,3 +37,8 @@
 - [x] Interactive trim: drag clip edges to trim, right-click menu (properties, split, duplicate, delete)
 - [x] Fix reliable edge dragging and trimmed playback; verified undo and media bounds.
 - [x] Add export video speed, preview and speed-adjusted draft/caption downloads; verified with imported video.
+
+## Tab-by-tab build (blueprint)
+- [x] Tab 1 Home + Create: quick create, performance snapshot, usage meter, create method links
+- [ ] Tab 2 Projects (next, awaiting go-ahead)
+- [ ] Tabs 3-9: Library, AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings

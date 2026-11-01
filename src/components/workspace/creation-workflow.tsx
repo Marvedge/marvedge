@@ -38,9 +38,9 @@ export function WorkflowSteps({ step }: { step: number }) {
     </div>
   );
 }
-export function SourcePage({ initialType }: { initialType?: string }) {
+export function SourcePage({ initialType, initialMethod }: { initialType?: string; initialMethod?: string | undefined }) {
   const [type, setType] = useState(initialType === "video" ? "video" : "demo");
-  const [method, setMethod] = useState("url");
+  const [method, setMethod] = useState(initialMethod ?? "url");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [prompt, setPrompt] = useState("");

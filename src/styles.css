@@ -6179,3 +6179,14 @@ select,
   .auth-header-actions > a { padding: 0 5px; font-size: 11px; }
   .dark .landing-hero::after { background: linear-gradient(180deg, var(--image-shade) 40%, var(--image-shade-clear)); }
 }
+.quick-create { margin-bottom: 28px; }
+.quick-create-grid, .performance-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.performance-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.quick-create-card, .performance-card { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--card-foreground); transition: border-color .2s, transform .2s; }
+.quick-create-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+.quick-create-card svg, .performance-card svg { color: var(--primary); }
+.quick-create-card span, .performance-card span { font-size: 11px; color: var(--muted-foreground); }
+.performance-card b { font-size: 22px; }
+.performance-section { margin: 28px 0; }
+.home-usage { margin: 12px 0; }
+@media (max-width: 900px) { .quick-create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .performance-grid { grid-template-columns: 1fr; } }
