@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   MoreHorizontal,
   MousePointer2,
@@ -7,6 +7,7 @@ import {
   Pencil,
   Trash2,
   ArrowUpRight,
+  Download,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,8 @@ export function ProjectCard({ project, list = false }: { project: Project; list?
   const [menu, setMenu] = useState(false);
   const [action, setAction] = useState("");
   const [name, setName] = useState(project.name);
-  const { addProject, updateProject, removeProject } = useWorkspace();
+  const { addProject, updateProject, removeProject, folders } = useWorkspace();
+  const navigate = useNavigate();
   return (
     <article className={`project-card ${list ? "project-list-row" : ""}`}>
       <Link
@@ -51,6 +53,7 @@ export function ProjectCard({ project, list = false }: { project: Project; list?
                   ["Rename", Pencil],
                   ["Duplicate", Copy],
                   ["Open", ArrowUpRight],
+                  ["Export", Download],
                   ["Move to trash", Trash2],
                 ].map(([label, Icon]) => {
                   const ActionIcon = Icon as typeof Pencil;
@@ -68,6 +71,8 @@ export function ProjectCard({ project, list = false }: { project: Project; list?
                             status: "Draft",
                             updated: "Just now",
                           });
+                        } else if (label === "Export") {
+                          navigate({ to: "/export/$projectId", params: { projectId: project.id } });
                         } else setAction(String(label));
                       }}
                     >
@@ -86,6 +91,17 @@ export function ProjectCard({ project, list = false }: { project: Project; list?
           <span className="meta-dot">·</span>
           <span>{project.updated}</span>
         </div>
+        <select
+          className="project-folder-select"
+          aria-label={`Folder for ${project.name}`}
+          value={project.folder ?? ""}
+          onChange={(e) => updateProject(project.id, { folder: e.target.value || undefined })}
+        >
+          <option value="">No folder</option>
+          {folders.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
       </div>
       <Dialog
         open={action !== ""}

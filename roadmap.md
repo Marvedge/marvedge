@@ -40,5 +40,5 @@
 
 ## Tab-by-tab build (blueprint)
 - [x] Tab 1 Home + Create: quick create, performance snapshot, usage meter, create method links
-- [ ] Tab 2 Projects (next, awaiting go-ahead)
+- [x] Tab 2 Projects: folders, move to folder, export action, trash shortcut
 - [ ] Tabs 3-9: Library, AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings
