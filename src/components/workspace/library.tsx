@@ -35,7 +35,7 @@ export function LibraryPage() {
           <p>Your media and starter templates, ready to drop into any project.</p>
         </div>
         <Button asChild>
-          <Link to="/uploads"><Upload /> Upload media</Link>
+          <Link to="/create" search={{ tab: "uploads" }}><Upload /> Upload media</Link>
         </Button>
       </div>
       <div className="folder-bar" role="tablist" aria-label="Library sections">
@@ -80,7 +80,7 @@ export function LibraryPage() {
             <ImageIcon size={40} />
             <h2>{search ? "No matching media" : "Upload your first asset"}</h2>
             <p>Uploaded images, videos and your recordings appear here.</p>
-            <Button asChild><Link to="/uploads"><Upload /> Upload media</Link></Button>
+            <Button asChild><Link to="/create" search={{ tab: "uploads" }}><Upload /> Upload media</Link></Button>
           </div>
         )
       ) : (

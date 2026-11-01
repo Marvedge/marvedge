@@ -218,7 +218,7 @@ export function EditorPage({ projectId }: { projectId: string }) {
               <Button variant="ghost" size="icon" aria-label="Project options" title="Project options"><MoreHorizontal /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild><Link to="/uploads"><Upload />Upload management</Link></DropdownMenuItem>
+              <DropdownMenuItem asChild><Link to="/create" search={{ tab: "uploads" }}><Upload />Upload management</Link></DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={reset}><RotateCcw />Reset draft</DropdownMenuItem>
               <DropdownMenuItem asChild><Link to="/help">Help Center</Link></DropdownMenuItem>

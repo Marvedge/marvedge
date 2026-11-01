@@ -50,18 +50,6 @@ export function ChannelIcon({ channel, size = 17 }: { channel: string; size?: nu
     </span>
   );
 }
-function UploadNavigation() {
-  return (
-    <nav className="upload-navigation">
-      <Link to="/uploads" activeOptions={{ exact: true }} activeProps={{ className: "selected" }}>
-        <CalendarDays size={17} /> Publishing
-      </Link>
-      <Link to="/uploads/accounts" activeProps={{ className: "selected" }}>
-        <Settings2 size={17} /> Accounts & credentials
-      </Link>
-    </nav>
-  );
-}
 const newPost = (): UploadPost => ({
   id: crypto.randomUUID(),
   title: "",
@@ -262,14 +250,14 @@ export function UploadManagementPage() {
         hidden
         onChange={(e) => void addFiles(e.target.files)}
       />
-      <UploadNavigation />
+
       <div className="upload-notice">
         <ShieldCheck size={18} />
         <span>
           <b>Planning workspace</b> · Sample posts and session-only uploads. Accounts are not
           connected; posts will not publish.
         </span>
-        <Link to="/uploads/accounts">
+        <Link to="/create" search={{ tab: "accounts" }}>
           Set up accounts <ArrowRight size={14} />
         </Link>
       </div>
@@ -668,7 +656,7 @@ export function UploadAccountsPage() {
           Add account
         </Button>
       </div>
-      <UploadNavigation />
+
       <div className="upload-notice">
         <ShieldCheck size={18} />
         <span>

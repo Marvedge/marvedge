@@ -565,7 +565,7 @@ export function ExportPage({ projectId }: { projectId: string }) {
               <Button variant="outline" asChild onClick={() => {
                 setUploadPosts((posts) => [{ id: crypto.randomUUID(), title: p.name, caption: draft.description || p.name, channels: [], status: "Draft", scheduledAt: "", projectId }, ...posts]);
               }}>
-                <Link to="/uploads"><Calendar /> Add to upload queue</Link>
+                <Link to="/create" search={{ tab: "uploads" }}><Calendar /> Add to upload queue</Link>
               </Button>
               <label className="field-label">
                 Visibility
