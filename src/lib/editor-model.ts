@@ -48,6 +48,7 @@ export type EditorDraft = {
   locked: Lane[];
   watermark?: Watermark;
   playbackSpeed?: number;
+  guide?: import("./demo-guide").DemoGuide | undefined;
 };
 export const lanes: { id: Lane; name: string }[] = [
   { id: "video", name: "Recording" },

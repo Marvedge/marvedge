@@ -25,3 +25,4 @@
 - Keep illustrative analytics in a deterministic frontend dataset and label every report as sample activity so unconnected tracking is never mistaken for real customer data.
 - Keep upload planning, local media, and non-secret account setup profiles in WorkspaceProvider; without app authentication and secure server storage, block credential collection and real publishing rather than simulate connected accounts.
 - Keep recoverable trash and editable usage planning budgets in WorkspaceProvider; count known shared media sizes once including trash, preserve project drafts on restore, and never represent illustrative budgets as account entitlements.
+- Projects open the editor by type: video projects use the timeline Video editor, demo projects use the step-based Guided demo editor whose steps live in the draft's guide field (images saved as downscaled data URLs so they persist).

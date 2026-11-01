@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { DemoPlayer } from "./demo-editor";
 import {
   ArrowLeft,
   ArrowRight,
@@ -172,6 +173,13 @@ export function PreviewPage({ projectId }: { projectId: string }) {
   const [leadMessage, setLeadMessage] = useState("");
   if (!p) return <MissingProject />;
   const draft = getDraft(projectId);
+  if (p.type === "demo" && draft.guide?.steps.length)
+    return (
+      <div className="min-h-screen bg-background p-6 text-foreground">
+        <Button variant="ghost" asChild className="mb-4"><Link to="/editor/$projectId" params={{ projectId }}>Back to editor</Link></Button>
+        <DemoPlayer guide={draft.guide} />
+      </div>
+    );
   const duration = timelineDuration(draft.events);
   const gate = draft.gate !== "Off" && !gateDismissed && time >= duration / 2;
   function external(url: string) {
