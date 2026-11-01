@@ -44,6 +44,9 @@ import {
 } from "@/lib/demo-guide";
 import { detectMedia } from "@/lib/media-detect";
 import { EditorTopBar } from "./editor-top-bar";
+import { AiPanel } from "./ai-panel";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 const tipPos: Record<TooltipSide, string> = {
@@ -65,6 +68,7 @@ export function DemoEditorPage({ projectId }: { projectId: string }) {
   const [dragId, setDragId] = useState("");
   const [dropping, setDropping] = useState(false);
   const [panel, setPanel] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
@@ -216,6 +220,7 @@ export function DemoEditorPage({ projectId }: { projectId: string }) {
             <span className="editor-action-label">Play demo</span>
           </Button>
         </div>
+        <Button variant="outline" onClick={() => setAiOpen(true)} title="AI tools"><Sparkles /><span className="editor-action-label">AI</span></Button>
         <Button asChild>
           <Link to="/share" title="Share">
             <Send />
@@ -235,6 +240,12 @@ export function DemoEditorPage({ projectId }: { projectId: string }) {
         }}
       />
 
+      <Sheet open={aiOpen} onOpenChange={setAiOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader><SheetTitle>AI tools</SheetTitle></SheetHeader>
+          <div className="mt-4"><AiPanel projectId={projectId} onApply={(d) => commit(d.guide ?? emptyGuide())} layout="panel" /></div>
+        </SheetContent>
+      </Sheet>
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-primary/10 text-lg font-semibold text-primary ring-4 ring-inset ring-primary">
           Drop screenshots to add steps

@@ -204,7 +204,7 @@ export function EditorPage({ projectId }: { projectId: string }) {
             >
               <t.icon />
               <span>{t.label ?? t.name}</span>
-              {t.name === "AI Assistant" && <span className="tool-planned-dot" />}
+              
             </Button>
           ))}
           <DropdownMenu>
@@ -212,7 +212,7 @@ export function EditorPage({ projectId }: { projectId: string }) {
               <Button variant="ghost" className={`studio-tool ${tools.slice(6).some((t) => t.name === tab) ? "tool-active" : ""}`} aria-label="More editor tools" title="More editor tools"><MoreHorizontal /><span>More</span></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="start">
-              {tools.slice(6).map((t) => <DropdownMenuItem key={t.name} onSelect={() => { setTab(t.name); setInspector(true); }}><t.icon />{t.name}{t.name === "AI Assistant" && <span className="text-muted-foreground text-xs">Planned</span>}</DropdownMenuItem>)}
+              {tools.slice(6).map((t) => <DropdownMenuItem key={t.name} onSelect={() => { setTab(t.name); setInspector(true); }}><t.icon />{t.name}</DropdownMenuItem>)}
             </DropdownMenuContent>
           </DropdownMenu>
         </nav>
@@ -341,6 +341,7 @@ export function EditorPage({ projectId }: { projectId: string }) {
         </section>
         {inspector && (
           <StudioInspector
+            projectId={projectId}
             key={tab}
             tab={tab}
             draft={draft}
