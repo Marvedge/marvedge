@@ -176,7 +176,7 @@ export function EditorPage({ projectId }: { projectId: string }) {
         <div className="studio-header-center">
           <span>Draft</span>
           <ChevronRight size={12} />
-          <span>{project.type === "demo" ? "Interactive demo" : "Short-form video"}</span>
+          <span>Video editor</span>
         </div>
         <div className="studio-header-actions">
           <ThemeToggle />
