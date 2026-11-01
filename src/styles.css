@@ -6214,3 +6214,12 @@ select,
 .sessions-table { width: 100%; font-size: 12px; border-collapse: collapse; }
 .sessions-table th, .sessions-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .sessions-table th { color: var(--muted-foreground); font-weight: 500; }
+.brand-components { margin-top: 20px; }
+.brand-component-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+.brand-component-card { position: relative; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card); display: grid; gap: 8px; }
+.brand-component-card > button { position: absolute; top: 4px; right: 4px; }
+.brand-component-sample { font-size: 13px; padding: 8px 12px; border-radius: 6px; background: var(--muted); color: var(--foreground); }
+.sample-call { background: var(--primary); color: var(--primary-foreground); text-align: center; border-radius: 999px; font-weight: 600; }
+.sample-lower { border-left: 4px solid var(--primary); }
+.sample-intro, .sample-outro { text-align: center; font-weight: 600; padding: 18px; }
+.sample-watermark { opacity: .6; font-size: 11px; text-align: right; }

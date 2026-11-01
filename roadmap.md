@@ -45,4 +45,5 @@
 - [x] Tab 4 AI Studio: 7 real AI tools
 - [x] Tab 5 Share & Hub: link, embed, lead form, hub, team
 - [x] Tab 6 Analytics: insights + viewer sessions
-- [ ] Tabs 7-9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings
+- [x] Tab 7 Brand Kit: saved components
+- [ ] Tabs 8-9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings

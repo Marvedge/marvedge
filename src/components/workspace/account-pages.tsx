@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "@/lib/account";
+import { BrandComponents } from "./brand-components";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "@tanstack/react-router";
 import {
@@ -179,6 +180,7 @@ export function BrandPage() {
           <div className="brand-caption-preview">YOUR NEXT BIG IDEA STARTS HERE</div>
         </section>
       </div>
+      <BrandComponents />
     </>
   );
 }
