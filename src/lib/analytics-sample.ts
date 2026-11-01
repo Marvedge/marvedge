@@ -71,3 +71,41 @@ export function analyticsReport(days: number, projectId: string) {
     })),
   };
 }
+
+const companies = ["Northwind", "Acme Corp", "Globex", "Initech", "Umbrella", "Stark Labs", "Wayne Ent.", "Hooli"];
+export const sampleSessions = Array.from({ length: 16 }, (_, i) => {
+  const p = analyticsExamples[i % 3]!;
+  const steps = 4 + (i % 5);
+  return {
+    id: `s${i}`,
+    viewer: i % 4 === 0 ? "Anonymous" : `viewer${i + 1}@${companies[i % 8]!.toLowerCase().replace(/[^a-z]/g, "")}.com`,
+    company: companies[i % 8]!,
+    projectId: p.id,
+    project: p.name,
+    day: 90 - (i * 5) % 30,
+    minutes: 1 + ((i * 7) % 9),
+    steps: Math.min(steps, 8),
+    totalSteps: 8,
+    lead: i % 3 === 0,
+  };
+});
+
+/** Rule-based insights from a report: best demo, weakest completion, and trend. */
+export function analyticsInsights(report: ReturnType<typeof analyticsReport>) {
+  const out: string[] = [];
+  const ps = report.projects.filter((p) => p.views > 0);
+  if (ps.length) {
+    const best = [...ps].sort((a, b) => b.leads / b.views - a.leads / a.views)[0]!;
+    const weak = [...ps].sort((a, b) => a.completions / a.views - b.completions / b.views)[0]!;
+    out.push(`${best.name} converts best at ${((best.leads / best.views) * 100).toFixed(1)}% of views to leads.`);
+    if (ps.length > 1) out.push(`${weak.name} has the lowest completion (${((weak.completions / weak.views) * 100).toFixed(0)}%) — try shortening it or adding chapters.`);
+  }
+  const half = Math.floor(report.daily.length / 2);
+  const a = report.daily.slice(0, half).reduce((s, d) => s + d.views, 0);
+  const b = report.daily.slice(half).reduce((s, d) => s + d.views, 0);
+  if (a > 0) {
+    const change = ((b - a) / a) * 100;
+    out.push(`Views are ${change >= 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% in the second half of this period.`);
+  }
+  return out;
+}
