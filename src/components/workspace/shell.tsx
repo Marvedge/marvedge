@@ -23,6 +23,7 @@ import {
   Trash2,
   Bot,
   Library,
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace";
@@ -36,6 +37,7 @@ const navigation = [
   { label: "Create", path: "/create", icon: Plus },
   { label: "Library", path: "/library", icon: Library },
   { label: "AI Studio", path: "/ai-studio", icon: Bot },
+  { label: "Share & Hub", path: "/share", icon: Share2 },
   { label: "Analytics", path: "/analytics", icon: ChartNoAxesCombined },
   { label: "Brand Kit", path: "/brand-kit", icon: Palette },
   { label: "Integrations", path: "/integrations", icon: Plug },
