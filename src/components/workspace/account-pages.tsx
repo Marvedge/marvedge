@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAccount } from "@/lib/account";
 import { BrandComponents } from "./brand-components";
 import { DeveloperIntegrations } from "./developer-integrations";
+import { useTheme } from "@/lib/theme";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "@tanstack/react-router";
 import {
@@ -29,6 +30,9 @@ import {
   User,
   Building2,
   Download,
+  SunMoon,
+  ShieldCheck,
+  LifeBuoy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/lib/workspace";
@@ -532,6 +536,7 @@ export function SettingsPage() {
     if (user?.email) setEmail(user.email);
   }, [accountProfile, user]);
   const [notifications, setNotifications] = useState([true, true, false, false]);
+  const { theme, toggleTheme } = useTheme();
   return (
     <>
       <PageHeading
@@ -546,6 +551,10 @@ export function SettingsPage() {
             { label: "Workspace", icon: Building2 },
             { label: "Notifications", icon: Bell },
             { label: "Security & privacy", icon: Shield },
+            { label: "Appearance", icon: SunMoon },
+            { label: "Billing", icon: CreditCard },
+            { label: "Trust center", icon: ShieldCheck },
+            { label: "Help & support", icon: LifeBuoy },
           ].map((t) => (
             <Button
               variant={tab === t.label ? "secondary" : "ghost"}
@@ -671,7 +680,45 @@ export function SettingsPage() {
               </div>
             </div>
           )}
-          {tab === "Security & privacy" ? (
+          {tab === "Appearance" && (
+            <div className="review-list">
+              <div>
+                <span>Theme</span>
+                <Button variant="outline" size="sm" onClick={toggleTheme}>
+                  <SunMoon /> {theme === "dark" ? "Dark — switch to light" : "Light — switch to dark"}
+                </Button>
+              </div>
+            </div>
+          )}
+          {tab === "Billing" && (
+            <>
+              <div className="review-list">
+                <div><span>Current plan</span><b>Free preview</b></div>
+                <div><span>Payments</span><b>Not connected yet</b></div>
+              </div>
+              <Button asChild><Link to="/subscription"><CreditCard /> View plans & usage</Link></Button>
+            </>
+          )}
+          {tab === "Trust center" && (
+            <>
+              <div className="review-list">
+                <div><span>Account sign-in</span><b>Secured</b></div>
+                <div><span>Personal profile access</span><b>Owner only</b></div>
+                <div><span>Data encryption in transit</span><b>HTTPS</b></div>
+                <div><span>Single sign-on (SSO)</span><b>Planned</b></div>
+                <div><span>Audit log</span><b>Planned</b></div>
+                <div><span>SOC 2 / GDPR documentation</span><b>Planned</b></div>
+              </div>
+              <div className="info-note">Only items marked Secured, Owner only or HTTPS are in place today.</div>
+            </>
+          )}
+          {tab === "Help & support" && (
+            <>
+              <p className="text-sm text-muted-foreground">Guides, answers and ways to reach us.</p>
+              <Button asChild><Link to="/help"><LifeBuoy /> Open Help Center</Link></Button>
+            </>
+          )}
+          {["Appearance", "Billing", "Trust center", "Help & support"].includes(tab) ? null : tab === "Security & privacy" ? (
             <>
               <div className="review-list">
                 <div>
