@@ -26,6 +26,7 @@ import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedRecordRouteImport } from './routes/_authenticated/record'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedShareRouteImport } from './routes/_authenticated/share'
 import { Route as AuthenticatedSubscriptionRouteImport } from './routes/_authenticated/subscription'
 import { Route as AuthenticatedTrashRouteImport } from './routes/_authenticated/trash'
 import { Route as AuthenticatedUploadsRouteImport } from './routes/_authenticated/uploads'
@@ -121,6 +122,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedShareRoute = AuthenticatedShareRouteImport.update({
+  id: '/share',
+  path: '/share',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSubscriptionRoute =
   AuthenticatedSubscriptionRouteImport.update({
     id: '/subscription',
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/projects': typeof AuthenticatedProjectsRoute
   '/record': typeof AuthenticatedRecordRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/share': typeof AuthenticatedShareRoute
   '/subscription': typeof AuthenticatedSubscriptionRoute
   '/trash': typeof AuthenticatedTrashRoute
   '/uploads': typeof AuthenticatedUploadsRouteWithChildren
@@ -218,6 +225,7 @@ export interface FileRoutesByTo {
   '/projects': typeof AuthenticatedProjectsRoute
   '/record': typeof AuthenticatedRecordRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/share': typeof AuthenticatedShareRoute
   '/subscription': typeof AuthenticatedSubscriptionRoute
   '/trash': typeof AuthenticatedTrashRoute
   '/editor/$projectId': typeof AuthenticatedEditorProjectIdRoute
@@ -246,6 +254,7 @@ export interface FileRoutesById {
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/record': typeof AuthenticatedRecordRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/share': typeof AuthenticatedShareRoute
   '/_authenticated/subscription': typeof AuthenticatedSubscriptionRoute
   '/_authenticated/trash': typeof AuthenticatedTrashRoute
   '/_authenticated/uploads': typeof AuthenticatedUploadsRouteWithChildren
@@ -275,6 +284,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/record'
     | '/settings'
+    | '/share'
     | '/subscription'
     | '/trash'
     | '/uploads'
@@ -302,6 +312,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/record'
     | '/settings'
+    | '/share'
     | '/subscription'
     | '/trash'
     | '/editor/$projectId'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/_authenticated/projects'
     | '/_authenticated/record'
     | '/_authenticated/settings'
+    | '/_authenticated/share'
     | '/_authenticated/subscription'
     | '/_authenticated/trash'
     | '/_authenticated/uploads'
@@ -471,6 +483,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/share': {
+      id: '/_authenticated/share'
+      path: '/share'
+      fullPath: '/share'
+      preLoaderRoute: typeof AuthenticatedShareRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/subscription': {
       id: '/_authenticated/subscription'
       path: '/subscription'
@@ -561,6 +580,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedRecordRoute: typeof AuthenticatedRecordRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedShareRoute: typeof AuthenticatedShareRoute
   AuthenticatedSubscriptionRoute: typeof AuthenticatedSubscriptionRoute
   AuthenticatedTrashRoute: typeof AuthenticatedTrashRoute
   AuthenticatedUploadsRoute: typeof AuthenticatedUploadsRouteWithChildren
@@ -581,6 +601,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedRecordRoute: AuthenticatedRecordRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedShareRoute: AuthenticatedShareRoute,
   AuthenticatedSubscriptionRoute: AuthenticatedSubscriptionRoute,
   AuthenticatedTrashRoute: AuthenticatedTrashRoute,
   AuthenticatedUploadsRoute: AuthenticatedUploadsRouteWithChildren,
