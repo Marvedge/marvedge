@@ -60,8 +60,8 @@ export function AiPanel({
 
   async function generate() {
     const needsContext = contextTools.includes(tid);
-    if (needsContext && !project) return toast.error("Pick a project first — this tool works on its text.");
-    if (!needsContext && prompt.trim().length < 3) return toast.error("Add a short description first.");
+    if (needsContext && !project) { toast.error("Pick a project first — this tool works on its text."); return; }
+    if (!needsContext && prompt.trim().length < 3) { toast.error("Add a short description first."); return; }
     setLoading(true);
     try {
       const opts: Record<string, string> = {};
