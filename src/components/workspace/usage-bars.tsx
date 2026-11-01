@@ -37,7 +37,7 @@ export function UsageBars({ detailed = false }: { detailed?: boolean }) {
           <label className="field-label">Project planning budget<input type="number" min={1} max={100000} value={usageBudgets.projects} onChange={(e) => { const value = Number(e.target.value); if (Number.isInteger(value) && value > 0 && value <= 100000) setUsageBudgets((prev) => ({ ...prev, projects: value })); }} /></label>
           <label className="field-label">Storage planning budget<select value={usageBudgets.storageMB} onChange={(e) => setUsageBudgets((prev) => ({ ...prev, storageMB: Number(e.target.value) }))}><option value={512}>512 MB</option><option value={1024}>1 GB</option><option value={5120}>5 GB</option><option value={10240}>10 GB</option></select></label>
         </div>
-        <div className="usage-storage-actions"><span>{formatBytes(trashBytes)} in trash</span><Button variant="outline" asChild><Link to="/trash">Manage trash</Link></Button><Button variant="outline" asChild><Link to="/uploads">Manage media</Link></Button></div>
+        <div className="usage-storage-actions"><span>{formatBytes(trashBytes)} in trash</span><Button variant="outline" asChild><Link to="/trash">Manage trash</Link></Button><Button variant="outline" asChild><Link to="/create" search={{ tab: "uploads" }}>Manage media</Link></Button></div>
       </>}
     </section>
   );

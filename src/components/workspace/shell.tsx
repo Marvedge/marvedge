@@ -19,8 +19,6 @@ import {
   ArrowUpRight,
   Check,
   X,
-  Upload,
-  Trash2,
   Bot,
   Library,
   Share2,
@@ -33,7 +31,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const navigation = [
   { label: "Home", path: "/home", icon: House },
   { label: "Projects", path: "/projects", icon: Folder },
-  { label: "Uploads", path: "/uploads", icon: Upload },
   { label: "Create", path: "/create", icon: Plus },
   { label: "Library", path: "/library", icon: Library },
   { label: "AI Studio", path: "/ai-studio", icon: Bot },
@@ -43,7 +40,6 @@ const navigation = [
   { label: "Integrations", path: "/integrations", icon: Plug },
 ] as const;
 const accountNav = [
-  { label: "Trash", path: "/trash", icon: Trash2 },
   { label: "Subscription", path: "/subscription", icon: CreditCard },
   { label: "Help Center", path: "/help", icon: CircleHelp },
   { label: "Settings", path: "/settings", icon: Settings },
@@ -57,7 +53,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const accountName = accountProfile?.display_name || user?.email?.split("@")[0] || profile.name;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const title =
-    [...navigation, ...accountNav].find((i) => i.path === pathname)?.label || (pathname.startsWith("/uploads") ? "Upload accounts" : "Project editor");
+    [...navigation, ...accountNav].find((i) => i.path === pathname)?.label || (pathname === "/trash" ? "Trash" : "Project editor");
   return (
     <div className={`workspace ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
