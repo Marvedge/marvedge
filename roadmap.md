@@ -42,4 +42,5 @@
 - [x] Tab 1 Home + Create: quick create, performance snapshot, usage meter, create method links
 - [x] Tab 2 Projects: folders, move to folder, export action, trash shortcut
 - [x] Tab 3 Library: assets + templates
-- [ ] Tabs 4-9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings
+- [x] Tab 4 AI Studio: 7 real AI tools
+- [ ] Tabs 5-9: AI Studio, Share & Hub, Analytics, Brand Kit, Integrations, Settings
