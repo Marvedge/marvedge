@@ -12,7 +12,8 @@ import {
   Tablet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { analyticsExamples, analyticsReport } from "@/lib/analytics-sample";
+import { analyticsExamples, analyticsReport, analyticsInsights, sampleSessions } from "@/lib/analytics-sample";
+import { Lightbulb } from "lucide-react";
 import { downloadFile } from "@/lib/editor-model";
 const number = (n: number) => n.toLocaleString("en-US");
 const percent = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(1)}%` : "—");
@@ -252,6 +253,28 @@ export function AnalyticsPage() {
           ))}
         </section>
       </div>
+      <section className="data-section analytics-extra">
+        <h2><Lightbulb size={16} className="inline mr-1" />Insights</h2>
+        <ul className="insight-list">
+          {analyticsInsights(report).map((i) => <li key={i}>{i}</li>)}
+        </ul>
+      </section>
+      <section className="data-section analytics-extra">
+        <h2>Viewer sessions</h2>
+        <div className="overflow-auto">
+          <table className="sessions-table">
+            <thead><tr><th>Viewer</th><th>Company</th><th>Demo</th><th>Time</th><th>Steps</th><th>Lead</th></tr></thead>
+            <tbody>
+              {sampleSessions.filter((s) => (project === "all" || s.projectId === project) && s.day > 90 - days).map((s) => (
+                <tr key={s.id}>
+                  <td>{s.viewer}</td><td>{s.company}</td><td>{s.project}</td>
+                  <td>{s.minutes} min</td><td>{s.steps}/{s.totalSteps}</td><td>{s.lead ? "Yes" : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
       <p className="preview-note">
         Illustrative data only. Filters and downloads use sample activity; no real visitors, clicks,
         or leads are being collected.
