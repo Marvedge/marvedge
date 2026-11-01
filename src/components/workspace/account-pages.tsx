@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "@/lib/account";
 import { BrandComponents } from "./brand-components";
+import { DeveloperIntegrations } from "./developer-integrations";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "@tanstack/react-router";
 import {
@@ -267,6 +268,7 @@ export function IntegrationsPage() {
             </article>
           ))}
       </div>
+      <DeveloperIntegrations />
       <div className="info-note">
         These are planned integration options, not active connections. No account data or leads are
         shared.
