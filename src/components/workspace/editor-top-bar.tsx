@@ -32,8 +32,16 @@ export function EditorTopBar({
   return (
     <header className="studio-header">
       <div className="studio-header-left">
-        <Button variant="ghost" size="icon" asChild aria-label="Back to projects" title="Back to projects">
-          <Link to="/projects"><ArrowLeft /></Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          asChild
+          aria-label="Back to projects"
+          title="Back to projects"
+        >
+          <Link to="/projects">
+            <ArrowLeft />
+          </Link>
         </Button>
         <span className="toolbar-divider" />
         <div className="studio-project-title">
@@ -42,7 +50,10 @@ export function EditorTopBar({
             value={project?.name ?? ""}
             onChange={(e) => updateProject(projectId, { name: e.target.value })}
           />
-          <span>{status.icon}{status.text}</span>
+          <span>
+            {status.icon}
+            {status.text}
+          </span>
         </div>
       </div>
       <div className="studio-header-center">
@@ -54,8 +65,26 @@ export function EditorTopBar({
         <ThemeToggle />
         {undo && (
           <>
-            <Button variant="ghost" size="icon" title="Undo (Ctrl+Z)" aria-label="Undo" onClick={undo.onUndo} disabled={!undo.canUndo}><Undo2 /></Button>
-            <Button variant="ghost" size="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" onClick={undo.onRedo} disabled={!undo.canRedo}><Redo2 /></Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Undo (Ctrl+Z)"
+              aria-label="Undo"
+              onClick={undo.onUndo}
+              disabled={!undo.canUndo}
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Redo (Ctrl+Shift+Z)"
+              aria-label="Redo"
+              onClick={undo.onRedo}
+              disabled={!undo.canRedo}
+            >
+              <Redo2 />
+            </Button>
             <span className="toolbar-divider" />
           </>
         )}

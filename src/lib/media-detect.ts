@@ -26,9 +26,19 @@ export function detectMedia<F extends Pick<File, "name" | "type">>(files: F[]): 
   const images = files.filter((f) => kindOf(f) === "image").sort(byName);
   const skipped = files.filter((f) => kindOf(f) === "unsupported");
   const suggestion =
-    videos.length && images.length ? "mixed" : videos.length ? "video" : images.length ? "demo" : "none";
+    videos.length && images.length
+      ? "mixed"
+      : videos.length
+        ? "video"
+        : images.length
+          ? "demo"
+          : "none";
   return { videos, images, skipped, suggestion };
 }
 
 export const nameFromFile = (name: string) =>
-  name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim() || "Untitled project";
+  name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() || "Untitled project";
