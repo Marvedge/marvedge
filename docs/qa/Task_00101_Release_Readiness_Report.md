@@ -12,12 +12,12 @@
 
 This report establishes the comprehensive release-readiness documentation for **Task-00101**, concluding the validation milestones of Sprint 2.
 
-Following the root-cause bug fixes and mathematical hardening completed in Task-00099 (Slew-Rate Limiter for crop jumps, Bipartite Proximity Tracking for identity preservation, and Even-Integer Parity boundary clamping), we executed the complete end-to-end regression across our **8-video benchmark corpus** (totaling **6.8+ hours of diverse real-world footage**).
+Following the root-cause bug fixes and mathematical hardening completed in Task-00099 (Slew-Rate Limiter for crop jumps, Bipartite Proximity Tracking for identity preservation, and Even-Integer Parity boundary clamping), we executed the complete end-to-end regression across our **8-video benchmark corpus** (totaling **8.44 hours of diverse real-world footage**).
 
 ### Key Release Highlights
 
-1. **100% Invariant Compliance:** All 17 production gates (`AF-01` to `AF-07`, `TN-01` to `TN-07`, `CP-01` to `CP-03`) and 6 adversarial edge cases (`EC-01` to `EC-06`) achieved **100% PASS** status.
-2. **Sub-Linear Real-Time Performance:** Throughput sustained between **7.8× and 73.4× Real-Time** (average: **12.4× RT** on a single NVIDIA Tesla T4 GPU). Over 6.8 hours of video processed end-to-end in **~38.5 minutes** of cumulative wall-clock compute.
+1. **Invariant Compliance (reported, not independently verified):** The report records 17 production gates and 6 adversarial edge cases as PASS; supporting Task-101 execution evidence was not found in the checked-in files.
+2. **Sub-Linear Real-Time Performance:** Throughput sustained between **7.8× and 73.4× Real-Time** (average: **12.4× RT** on a single NVIDIA Tesla T4 GPU). Over 8.44 hours of video processed end-to-end in **~38.5 minutes** of cumulative wall-clock compute.
 3. **Flawless Long-Form Stability:** 0 crashes, 0 memory leaks, 0 unhandled exceptions across long assets, including a 2-hour 14-minute full feature film (`vid05`) and a 2-hour ambient asset (`vid08`).
 4. **Human Quality Audit:** 50 randomly sampled 9:16 rendered portrait clips audited by engineering confirmed **96.0% subject framing accuracy**, **98.0% motion smoothness**, and **100% 9:16 aspect ratio correctness**.
 
@@ -66,10 +66,10 @@ Each of the 17 criteria established in `AUTOFLIP_TALKNET_SHIP_READINESS_CRITERIA
 | **TN-04** | **TalkNet Long-Asset Stability:** No VRAM OOM on long assets                       | 100% clean execution                     | **Peak VRAM: 2.8 GB** (zero memory leak on 16GB T4)                   | ✅ **PASS** |
 | **TN-05** | **Missing Weights Handling:** Returns HTTP 503 if ONNX/PyTorch models absent       | 100% on missing model                    | **HTTP 503** with structured error payload                            | ✅ **PASS** |
 | **TN-06** | **TalkNet Scratch Cleanup:** No orphaned `talknet_*` audio/frame directories       | 0 leaked directories                     | **0 leaked directories** verified post-run                            | ✅ **PASS** |
-| **TN-07** | **Response Contract Compliance:** JSON payload strictly matches schema             | 100% schema match                        | **100.0%** compliance across all 547 generated track records          | ✅ **PASS** |
+| **TN-07** | **Response Contract Compliance:** JSON payload strictly matches schema | 100% schema match | **Unverified:** per-video table totals 546 records, while this row claims 547; execution evidence is needed to reconcile. | **UNVERIFIED** |
 | **CP-01** | **End-to-End Integration:** Full ingest $\to$ detect $\to$ track $\to$ crop render | $\ge 3$ distinct assets                  | **8 of 8 assets** rendered full 9:16 portrait MP4s                    | ✅ **PASS** |
 | **CP-02** | **Throughput Latency:** Rate invariant $\ge 5.0\times$ Real-Time for XL tier       | $\ge 5.0\times$ RT                       | **7.8× to 73.4× RT** (exceeds target by up to 14.6×)                  | ✅ **PASS** |
-| **CP-03** | **Unit & Integration Suite Health:** Zero regression across test suites            | 0 failures, 0 errors                     | **111/111 unit tests pass** across all services                       | ✅ **PASS** |
+| **CP-03** | **Unit & Integration Suite Health:** Zero regression across test suites | 0 failures, 0 errors | **119/119 tests passed:** AutoFlip 47, TalkNet 35, Scripts/ML 37; independently verified. | **PASS** |
 
 ---
 
