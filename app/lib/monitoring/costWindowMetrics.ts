@@ -134,10 +134,7 @@ export async function recordCostObservation(
  * Non-throwing helper to record cost observations from background workers or callbacks.
  * Catches any Redis error so monitoring failures never disrupt video processing pipelines.
  */
-export function recordCostObservationBestEffort(
-  redis: Redis,
-  input: CostObservationInput
-): void {
+export function recordCostObservationBestEffort(redis: Redis, input: CostObservationInput): void {
   void recordCostObservation(redis, input).catch((error: unknown) => {
     console.error(
       `[monitoring] Failed to record cost observation for ${input.category}/${input.provider}:`,
@@ -169,11 +166,7 @@ export async function collectCostWindowSums(
   windowSeconds: number,
   now: number = Date.now()
 ): Promise<Record<string, number>> {
-  if (
-    !Number.isSafeInteger(windowSeconds) ||
-    windowSeconds <= 0 ||
-    windowSeconds % 60 !== 0
-  ) {
+  if (!Number.isSafeInteger(windowSeconds) || windowSeconds <= 0 || windowSeconds % 60 !== 0) {
     throw new RangeError("Cost observation window must be a positive whole-minute value");
   }
 

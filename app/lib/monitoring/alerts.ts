@@ -7,8 +7,14 @@ import {
   type ExternalNotificationConfig,
 } from "./externalNotifications";
 import { collectStuckQueueMetrics, type StuckQueueMetricSources } from "./stuckQueueMetrics";
+import {
+  createAlertStateStore,
+  InMemoryAlertStateStore,
+  DEFAULT_ALERT_STATE_TTL_SECONDS,
+  type AlertStateStore,
+} from "./alertStateStore";
 
-export type AlertPipeline = "reframe" | "dubbing";
+export type AlertPipeline = "reframe" | "dubbing" | "monitoring";
 export type AlertSeverity = "warning";
 export type AlertStatus = "firing" | "resolved";
 export type AlertName =
@@ -23,7 +29,8 @@ export type AlertName =
   | "gpu_hours_threshold"
   | "gpu_spend_threshold"
   | "dubbing_vendor_spend_threshold"
-  | "dubbing_vendor_usage_threshold";
+  | "dubbing_vendor_usage_threshold"
+  | "monitoring_data_unavailable";
 
 export interface MonitoringAlertEvent {
   name: AlertName;
@@ -45,6 +52,7 @@ export interface MonitoringAlertConfig {
   failureRateObservationWindowSeconds: number;
   failureRateMinimumJobs: number;
   alertCooldownSeconds: number;
+  alertStateTtlSeconds?: number;
 
   // Stuck queue alerts (measures age of oldest active/waiting job without false alarming when empty)
   reframeStuckQueueThresholdSeconds?: number;
@@ -90,6 +98,10 @@ export interface AlertEvaluationOptions {
   queueGauge?: Pick<Gauge<"pipeline" | "state">, "get">;
   costWindowData?: CostWindowData;
   costRedis?: Redis;
+  stateRedis?: Redis;
+  alertStateStore?: AlertStateStore;
+  monitoringDataUnavailable?: boolean;
+  monitoringDataUnavailableReason?: string;
   emit?: (event: MonitoringAlertEvent) => void;
 }
 
@@ -148,11 +160,10 @@ export function loadMonitoringAlertConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env
 ): MonitoringAlertConfig {
   const positive = (value: number) => value > 0;
+  const failureRate = (value: number) => value > 0 && value <= 1;
   const positiveInteger = (value: number) => Number.isInteger(value) && value > 0;
   const wholeMinute = (value: number) => positiveInteger(value) && value % 60 === 0;
-  const failureRate = (value: number) => value > 0 && value <= 1;
 
-  // Base latency, failure-rate, and queue depth alerts
   const baseConfig: MonitoringAlertConfig = {
     reframeInferenceLatencyThresholdSeconds: readNumber(
       environment,
@@ -200,6 +211,12 @@ export function loadMonitoringAlertConfig(
       positiveInteger
     ),
   };
+
+  const alertStateTtlSeconds = readOptionalNumber(
+    environment,
+    "MONITORING_ALERT_STATE_TTL_SECONDS",
+    positiveInteger
+  );
 
   // Stuck queue alerts configuration
   const defaultStuckThreshold = readOptionalNumber(
@@ -329,6 +346,7 @@ export function loadMonitoringAlertConfig(
 
   return {
     ...baseConfig,
+    ...(alertStateTtlSeconds !== undefined ? { alertStateTtlSeconds } : {}),
     reframeStuckQueueThresholdSeconds,
     dubbingStuckQueueThresholdSeconds,
     gpuHoursThreshold,
@@ -409,12 +427,7 @@ interface AlertCondition {
   threshold: number;
 }
 
-interface AlertState {
-  firing: boolean;
-  lastFiringAt: number;
-}
-
-const alertNames: AlertName[] = [
+const alertNames: readonly AlertName[] = [
   "reframe_inference_latency",
   "dubbing_processing_latency",
   "reframe_job_failure_rate",
@@ -427,6 +440,7 @@ const alertNames: AlertName[] = [
   "gpu_spend_threshold",
   "dubbing_vendor_spend_threshold",
   "dubbing_vendor_usage_threshold",
+  "monitoring_data_unavailable",
 ];
 
 function emitStructuredAlert(event: MonitoringAlertEvent): void {
@@ -479,13 +493,23 @@ export async function dispatchAlertWebhook(
 }
 
 export function createMonitoringAlertEvaluator(
-  defaultEmit: (event: MonitoringAlertEvent) => void = emitStructuredAlert
+  defaultEmit: (event: MonitoringAlertEvent) => void = emitStructuredAlert,
+  defaultStore?: AlertStateStore
 ): (options?: AlertEvaluationOptions) => Promise<MonitoringAlertEvent[]> {
-  const states = new Map<AlertName, AlertState>();
+  const fallbackStore = defaultStore ?? new InMemoryAlertStateStore();
+  const actualDefaultEmit = defaultEmit;
 
   return async (options = {}) => {
     const config = options.config ?? loadMonitoringAlertConfig();
     const now = options.now ?? Date.now();
+    const store =
+      options.alertStateStore ??
+      (options.stateRedis
+        ? createAlertStateStore(options.stateRedis, {
+            ttlSeconds: config.alertStateTtlSeconds ?? DEFAULT_ALERT_STATE_TTL_SECONDS,
+          })
+        : fallbackStore);
+
     const [reframeHistogram, dubbingHistogram, queueSnapshot] = await Promise.all([
       (options.inferenceHistogram ?? reframeInferenceDurationSeconds).get(),
       (options.dubbingHistogram ?? dubbingDurationSeconds).get(),
@@ -522,61 +546,70 @@ export function createMonitoringAlertEvaluator(
       });
     }
 
-    for (const pipeline of ["reframe", "dubbing"] as const) {
-      const windowCounts = options.failureRateWindowCounts?.[pipeline];
-      if (!windowCounts) {
-        continue;
-      }
+    if (options.failureRateWindowCounts?.reframe) {
       const rate = calculateWindowedFailureRate(
-        windowCounts,
+        options.failureRateWindowCounts.reframe,
         config.failureRateMinimumJobs,
         config.failureRateObservationWindowSeconds
       );
-      if (rate === undefined) {
-        continue;
+      if (rate !== undefined) {
+        evaluated.add("reframe_job_failure_rate");
+        conditions.push({
+          name: "reframe_job_failure_rate",
+          pipeline: "reframe",
+          observedValue: rate,
+          threshold: config.reframeFailureRateThreshold,
+        });
       }
+    }
+    if (options.failureRateWindowCounts?.dubbing) {
+      const rate = calculateWindowedFailureRate(
+        options.failureRateWindowCounts.dubbing,
+        config.failureRateMinimumJobs,
+        config.failureRateObservationWindowSeconds
+      );
+      if (rate !== undefined) {
+        evaluated.add("dubbing_job_failure_rate");
+        conditions.push({
+          name: "dubbing_job_failure_rate",
+          pipeline: "dubbing",
+          observedValue: rate,
+          threshold: config.dubbingFailureRateThreshold,
+        });
+      }
+    }
 
-      const name = pipeline === "reframe" ? "reframe_job_failure_rate" : "dubbing_job_failure_rate";
-      evaluated.add(name);
+    const reframeWaiting = typedQueueSnapshot.values.find(
+      (value) => value.labels.pipeline === "reframe" && value.labels.state === "waiting"
+    )?.value;
+    const dubbingWaiting = typedQueueSnapshot.values.find(
+      (value) => value.labels.pipeline === "dubbing" && value.labels.state === "waiting"
+    )?.value;
+
+    if (reframeWaiting !== undefined && (options.queueDepthAvailability?.reframe ?? true)) {
+      evaluated.add("reframe_queue_depth");
       conditions.push({
-        name,
-        pipeline,
-        observedValue: rate,
-        threshold:
-          pipeline === "reframe"
-            ? config.reframeFailureRateThreshold
-            : config.dubbingFailureRateThreshold,
+        name: "reframe_queue_depth",
+        pipeline: "reframe",
+        observedValue: reframeWaiting,
+        threshold: config.reframeQueueDepthThreshold,
+      });
+    }
+    if (dubbingWaiting !== undefined && (options.queueDepthAvailability?.dubbing ?? true)) {
+      evaluated.add("dubbing_queue_depth");
+      conditions.push({
+        name: "dubbing_queue_depth",
+        pipeline: "dubbing",
+        observedValue: dubbingWaiting,
+        threshold: config.dubbingQueueDepthThreshold,
       });
     }
 
-    for (const pipeline of ["reframe", "dubbing"] as const) {
-      if (options.queueDepthAvailability?.[pipeline] === false) {
-        continue;
-      }
-      const queueValue = typedQueueSnapshot.values.find(
-        (value) => value.labels.pipeline === pipeline && value.labels.state === "waiting"
-      )?.value;
-      if (queueValue === undefined) {
-        continue;
-      }
-
-      const name = pipeline === "reframe" ? "reframe_queue_depth" : "dubbing_queue_depth";
-      evaluated.add(name);
-      conditions.push({
-        name,
-        pipeline,
-        observedValue: queueValue,
-        threshold:
-          pipeline === "reframe"
-            ? config.reframeQueueDepthThreshold
-            : config.dubbingQueueDepthThreshold,
-      });
-    }
-
-    // Stuck queues evaluation
+    // Stuck queue evaluation
     if (
       config.reframeStuckQueueThresholdSeconds !== undefined &&
-      options.stuckQueueAges?.reframe !== undefined
+      options.stuckQueueAges?.reframe !== undefined &&
+      options.stuckQueueAges.reframe !== null
     ) {
       evaluated.add("reframe_stuck_queue");
       conditions.push({
@@ -589,7 +622,8 @@ export function createMonitoringAlertEvaluator(
 
     if (
       config.dubbingStuckQueueThresholdSeconds !== undefined &&
-      options.stuckQueueAges?.dubbing !== undefined
+      options.stuckQueueAges?.dubbing !== undefined &&
+      options.stuckQueueAges.dubbing !== null
     ) {
       evaluated.add("dubbing_stuck_queue");
       conditions.push({
@@ -665,6 +699,17 @@ export function createMonitoringAlertEvaluator(
       });
     }
 
+    // Monitoring data availability evaluation
+    if (options.monitoringDataUnavailable !== undefined) {
+      evaluated.add("monitoring_data_unavailable");
+      conditions.push({
+        name: "monitoring_data_unavailable",
+        pipeline: "monitoring",
+        observedValue: options.monitoringDataUnavailable ? 1 : 0,
+        threshold: 0,
+      });
+    }
+
     const activeConditions = new Map(conditions.map((condition) => [condition.name, condition]));
     const events: MonitoringAlertEvent[] = [];
     const cooldownMs = config.alertCooldownSeconds * 1000;
@@ -683,32 +728,28 @@ export function createMonitoringAlertEvaluator(
       }
 
       const condition = activeConditions.get(name);
-      const previous = states.get(name);
       const isFiring = condition !== undefined && condition.observedValue > condition.threshold;
 
-      if (isFiring && condition) {
-        const mayEmit = !previous || now - previous.lastFiringAt >= cooldownMs;
-        const state: AlertState = {
-          firing: true,
-          lastFiringAt: previous?.lastFiringAt ?? now,
+      const result = await store.transition(name, isFiring, now, cooldownMs, {
+        observedValue: condition?.observedValue,
+        threshold: condition?.threshold,
+        pipeline: condition?.pipeline,
+      });
+
+      if (result.action === "EMIT_FIRING" && condition) {
+        const event: MonitoringAlertEvent = {
+          name,
+          pipeline: condition.pipeline,
+          severity: "warning",
+          observedValue: condition.observedValue,
+          threshold: condition.threshold,
+          timestamp: new Date(now).toISOString(),
+          status: "firing",
         };
-        if (mayEmit) {
-          state.lastFiringAt = now;
-          const event: MonitoringAlertEvent = {
-            name,
-            pipeline: condition.pipeline,
-            severity: "warning",
-            observedValue: condition.observedValue,
-            threshold: condition.threshold,
-            timestamp: new Date(now).toISOString(),
-            status: "firing",
-          };
-          events.push(event);
-          (options.emit ?? defaultEmit)(event);
-          void sendExternalAlertNotification(event, notificationConfig);
-        }
-        states.set(name, state);
-      } else if (previous?.firing && condition) {
+        events.push(event);
+        (options.emit ?? actualDefaultEmit)(event);
+        void sendExternalAlertNotification(event, notificationConfig);
+      } else if (result.action === "EMIT_RESOLVED" && condition) {
         const event: MonitoringAlertEvent = {
           name,
           pipeline: condition.pipeline,
@@ -719,9 +760,8 @@ export function createMonitoringAlertEvaluator(
           status: "resolved",
         };
         events.push(event);
-        (options.emit ?? defaultEmit)(event);
+        (options.emit ?? actualDefaultEmit)(event);
         void sendExternalAlertNotification(event, notificationConfig);
-        states.set(name, { firing: false, lastFiringAt: previous.lastFiringAt });
       }
     }
 
@@ -736,18 +776,25 @@ export async function evaluateMonitoringAlerts(
 ): Promise<MonitoringAlertEvent[]> {
   const config = options.config ?? loadMonitoringAlertConfig();
   const now = options.now ?? Date.now();
+  let monitoringDataUnavailable = options.monitoringDataUnavailable ?? false;
+
   let failureRateWindowCounts = options.failureRateWindowCounts;
   if (!failureRateWindowCounts) {
-    let metricsQueues = options.failureRateQueues;
-    if (!metricsQueues) {
-      const { reframeQueue, dubbingQueue } = await import("../queue");
-      metricsQueues = { reframe: reframeQueue, dubbing: dubbingQueue };
+    try {
+      let metricsQueues = options.failureRateQueues;
+      if (!metricsQueues) {
+        const { reframeQueue, dubbingQueue } = await import("../queue");
+        metricsQueues = { reframe: reframeQueue, dubbing: dubbingQueue };
+      }
+      failureRateWindowCounts = await collectJobOutcomeWindowCounts(
+        metricsQueues,
+        config.failureRateObservationWindowSeconds,
+        now
+      );
+    } catch (err) {
+      console.warn("[monitoring] Failed collecting job outcome window counts:", err);
+      monitoringDataUnavailable = true;
     }
-    failureRateWindowCounts = await collectJobOutcomeWindowCounts(
-      metricsQueues,
-      config.failureRateObservationWindowSeconds,
-      now
-    );
   }
 
   let stuckQueueAges = options.stuckQueueAges;
@@ -756,45 +803,55 @@ export async function evaluateMonitoringAlerts(
     (config.reframeStuckQueueThresholdSeconds !== undefined ||
       config.dubbingStuckQueueThresholdSeconds !== undefined)
   ) {
-    let stuckQueues = options.stuckQueueQueues;
-    if (!stuckQueues) {
-      if (options.failureRateQueues) {
-        stuckQueues = options.failureRateQueues as unknown as StuckQueueMetricSources;
-      } else {
-        const { reframeQueue, dubbingQueue } = await import("../queue");
-        stuckQueues = { reframe: reframeQueue, dubbing: dubbingQueue };
+    try {
+      let stuckQueues = options.stuckQueueQueues;
+      if (!stuckQueues) {
+        if (options.failureRateQueues) {
+          stuckQueues = options.failureRateQueues as unknown as StuckQueueMetricSources;
+        } else {
+          const { reframeQueue, dubbingQueue } = await import("../queue");
+          stuckQueues = { reframe: reframeQueue, dubbing: dubbingQueue };
+        }
       }
+      stuckQueueAges = await collectStuckQueueMetrics(stuckQueues, now);
+    } catch (err) {
+      console.warn("[monitoring] Failed collecting stuck queue metrics:", err);
+      monitoringDataUnavailable = true;
     }
-    stuckQueueAges = await collectStuckQueueMetrics(stuckQueues, now);
   }
 
   let costWindowData = options.costWindowData;
   if (!costWindowData && options.costRedis) {
-    costWindowData = {};
-    if (
-      (config.gpuHoursThreshold !== undefined || config.gpuSpendThresholdUsd !== undefined) &&
-      config.gpuHoursObservationWindowSeconds
-    ) {
-      const { collectCostWindowSum } = await import("./costWindowMetrics");
-      costWindowData.gpuJobDurationSeconds = await collectCostWindowSum(
-        options.costRedis,
-        { category: "gpu_worker", provider: "reframe", unit: "seconds" },
-        config.gpuHoursObservationWindowSeconds,
-        now
-      );
-    }
-    if (
-      (config.dubbingVendorSpendThresholdUsd !== undefined ||
-        config.dubbingVendorUsageThreshold !== undefined) &&
-      config.dubbingVendorObservationWindowSeconds
-    ) {
-      const { collectCostWindowSum } = await import("./costWindowMetrics");
-      costWindowData.dubbingVendorUsage = await collectCostWindowSum(
-        options.costRedis,
-        { category: "dubbing", provider: "elevenlabs", unit: "characters" },
-        config.dubbingVendorObservationWindowSeconds,
-        now
-      );
+    try {
+      costWindowData = {};
+      if (
+        (config.gpuHoursThreshold !== undefined || config.gpuSpendThresholdUsd !== undefined) &&
+        config.gpuHoursObservationWindowSeconds
+      ) {
+        const { collectCostWindowSum } = await import("./costWindowMetrics");
+        costWindowData.gpuJobDurationSeconds = await collectCostWindowSum(
+          options.costRedis,
+          { category: "gpu_worker", provider: "reframe", unit: "seconds" },
+          config.gpuHoursObservationWindowSeconds,
+          now
+        );
+      }
+      if (
+        (config.dubbingVendorSpendThresholdUsd !== undefined ||
+          config.dubbingVendorUsageThreshold !== undefined) &&
+        config.dubbingVendorObservationWindowSeconds
+      ) {
+        const { collectCostWindowSum } = await import("./costWindowMetrics");
+        costWindowData.dubbingVendorUsage = await collectCostWindowSum(
+          options.costRedis,
+          { category: "dubbing", provider: "elevenlabs", unit: "characters" },
+          config.dubbingVendorObservationWindowSeconds,
+          now
+        );
+      }
+    } catch (err) {
+      console.warn("[monitoring] Failed collecting cost window metrics:", err);
+      monitoringDataUnavailable = true;
     }
   }
 
@@ -805,5 +862,7 @@ export async function evaluateMonitoringAlerts(
     failureRateWindowCounts,
     stuckQueueAges,
     costWindowData,
+    monitoringDataUnavailable:
+      options.monitoringDataUnavailable ?? (monitoringDataUnavailable ? true : undefined),
   });
 }

@@ -48,20 +48,39 @@ async function main(): Promise<void> {
     });
   }
 
+  console.info(
+    `[monitoring] External alert evaluator initialized (interval: ${intervalMs}ms, cooldown: ${alertConfig.alertCooldownSeconds}s, dry-run: ${alertConfig.alertDryRun ? "true" : "false"}).`
+  );
+
   const loop = startMonitoringAlertLoop(intervalMs, async () => {
-    const queueDepthAvailability = await collectQueueMetrics(queues);
-    const latencyWindowMeans = await collectLatencyWindowMeans(
-      redis,
-      alertConfig.failureRateObservationWindowSeconds
-    );
-    await evaluateMonitoringAlerts({
-      config: alertConfig,
-      failureRateQueues: queues,
-      stuckQueueQueues: queues,
-      latencyWindowMeans,
-      queueDepthAvailability,
-      costRedis: redis,
-    });
+    try {
+      const queueDepthAvailability = await collectQueueMetrics(queues);
+      const latencyWindowMeans = await collectLatencyWindowMeans(
+        redis,
+        alertConfig.failureRateObservationWindowSeconds
+      );
+      await evaluateMonitoringAlerts({
+        config: alertConfig,
+        failureRateQueues: queues,
+        stuckQueueQueues: queues,
+        latencyWindowMeans,
+        queueDepthAvailability,
+        costRedis: redis,
+        stateRedis: redis,
+        monitoringDataUnavailable: false,
+      });
+    } catch (error) {
+      console.warn(
+        "[monitoring] Error during metric collection cycle; evaluating monitoring-data-unavailable alert:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      await evaluateMonitoringAlerts({
+        config: alertConfig,
+        stateRedis: redis,
+        monitoringDataUnavailable: true,
+        monitoringDataUnavailableReason: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   });
 
   let shutdownPromise: Promise<void> | undefined;
