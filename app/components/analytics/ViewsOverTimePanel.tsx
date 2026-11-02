@@ -15,6 +15,11 @@ interface ViewsOverTimePanelProps {
   viewsOverTime: { date: string; views: number }[];
 }
 
+function formatTooltipDate(dateStr: string): string {
+  const date = new Date(dateStr + "T00:00:00Z");
+  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 const ViewsOverTimePanel = ({ viewsOverTime }: ViewsOverTimePanelProps) => {
   const hasData = viewsOverTime.length > 0;
 
@@ -54,10 +59,14 @@ const ViewsOverTimePanel = ({ viewsOverTime }: ViewsOverTimePanelProps) => {
               <Tooltip
                 contentStyle={{
                   borderRadius: "12px",
-                  border: "none",
                   boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                  backgroundColor: "#101329",
+                  border: "1px solid rgba(161, 153, 210, 0.25)",
                 }}
-                labelStyle={{ color: "#8C82B4", fontWeight: 600, marginBottom: "4px" }}
+                labelStyle={{ color: "#bdb7d1", fontWeight: 600, marginBottom: "4px" }}
+                labelFormatter={(dateStr) => formatTooltipDate(dateStr)}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+formatter={(value: any, name: any) => [value?.toLocaleString?.() ?? "0", name]}
               />
               <Line
                 type="monotone"

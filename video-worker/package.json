@@ -31,5 +31,8 @@
   },
   "devDependencies": {
     "tsx": "^4.21.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   }
 }

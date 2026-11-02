@@ -31,7 +31,10 @@ const TopDemosPanel = ({ topDemos }: TopDemosPanelProps) => (
               <div className="rank flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#EAE5FB] text-sm font-semibold text-[#8A76FC]">
                 {i + 1}
               </div>
-              <p className="demo-name min-w-0 truncate text-sm font-medium text-[#2D2154]">
+              <p
+                className="demo-name min-w-0 truncate text-sm font-medium text-[#2D2154]"
+                title={demo.title}
+              >
                 {demo.title}
               </p>
             </div>

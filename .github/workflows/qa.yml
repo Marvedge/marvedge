@@ -72,8 +72,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Set up FFmpeg and FFprobe
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          ffmpeg_path="$(node -p "require('ffmpeg-static')")"
+          ffprobe_path="$(node -p "require('ffprobe-static').path")"
+          test -x "$ffmpeg_path"
+          test -x "$ffprobe_path"
+          media_bin="$RUNNER_TEMP/marvedge-media-bin"
+          mkdir -p "$media_bin"
+          ln -sf "$ffmpeg_path" "$media_bin/ffmpeg"
+          ln -sf "$ffprobe_path" "$media_bin/ffprobe"
+          echo "$media_bin" >> "$GITHUB_PATH"
+          "$media_bin/ffmpeg" -version
+          "$media_bin/ffprobe" -version
 
       - name: Generate Prisma client
         run: npx prisma generate
