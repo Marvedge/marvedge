@@ -37,7 +37,7 @@ export function resolveOrGenerateInputMedia(
           "default=noprint_wrappers=1:nokey=1",
           inputPath,
         ],
-        { encoding: "utf8", timeout: 1000 }
+        { encoding: "utf8", timeout: 15000 }
       );
       if (probeRes.status === 0 && probeRes.stdout) {
         const parsed = parseFloat(probeRes.stdout.trim());

@@ -100,11 +100,6 @@ async function dispatchVideoJob(
   duration: number,
   normalizedPayload: Record<string, unknown>
 ): Promise<void> {
-  const speakerTracksUri =
-    typeof normalizedPayload.speakerTracksUri === "string" && normalizedPayload.speakerTracksUri.trim()
-      ? normalizedPayload.speakerTracksUri.trim()
-      : undefined;
-
   try {
     // Do not overwrite a settled job. A COMPLETED or CANCELLED record is final.
     const existing = await prisma.videoJob
@@ -126,6 +121,11 @@ async function dispatchVideoJob(
     const chunksCount = Math.min(MAX_CHUNKS, Math.max(1, Math.ceil(duration / chunkDuration)));
     const chunkFilenames: string[] = [];
     const fetchTasks = [];
+    const speakerTracksUri =
+      typeof normalizedPayload.speakerTracksUri === "string" &&
+      normalizedPayload.speakerTracksUri.trim()
+        ? normalizedPayload.speakerTracksUri.trim()
+        : undefined;
 
     for (let i = 0; i < chunksCount; i++) {
       const startTime = i * chunkDuration;
@@ -158,16 +158,23 @@ async function dispatchVideoJob(
     const executing = new Set<Promise<unknown>>();
     const results = [];
 
-    for (const task of fetchTasks) {
-      const promise = task().finally(() => executing.delete(promise));
-      executing.add(promise);
-      results.push(promise);
-      if (executing.size >= MAX_CONCURRENT_CHUNKS) {
-        await Promise.race(executing);
-      }
-    }
+    let completedTasks: unknown[];
 
-    const completedTasks = await Promise.all(results);
+    try {
+      for (const task of fetchTasks) {
+        const promise = task().finally(() => executing.delete(promise));
+        executing.add(promise);
+        results.push(promise);
+        if (executing.size >= MAX_CONCURRENT_CHUNKS) {
+          await Promise.race(executing);
+        }
+      }
+
+      completedTasks = await Promise.all(results);
+    } finally {
+      // Finish outstanding calls before another dispatch attempt starts.
+      await Promise.allSettled(results);
+    }
 
     // Drop bad chunks safely. Only string non empty outputs are merged.
     const chunkResults = completedTasks as {
@@ -217,14 +224,8 @@ async function dispatchVideoJob(
       },
     });
   } catch (dispatchError) {
-    console.error("Job dispatch failed:", dispatchError);
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "FAILED",
-        error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
-      },
-    });
+    // Let the retry handler decide when failure is final.
+    throw dispatchError;
   }
 }
 
@@ -236,14 +237,26 @@ async function dispatchVideoJobWithColdStartRetry(
   normalizedPayload: Record<string, unknown>
 ): Promise<void> {
   try {
-    await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes("fetch failed") && !msg.toLowerCase().includes("cold start")) {
-      throw err;
+    try {
+      await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
+    } catch (err) {
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      if (!msg.includes("fetch failed") && !msg.includes("cold start")) {
+        throw err;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
     }
-    await new Promise((r) => setTimeout(r, 2000));
-    await dispatchVideoJob(jobId, videoUrl, duration, normalizedPayload);
+  } catch (dispatchError) {
+    console.error("Job dispatch failed:", dispatchError);
+    await prisma.videoJob.update({
+      where: { id: jobId },
+      data: {
+        status: "FAILED",
+        error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
+      },
+    });
   }
 }
 
@@ -297,8 +310,7 @@ export async function POST(req: NextRequest) {
       typeof rawCustomBackgroundUrl === "string" && rawCustomBackgroundUrl.trim()
         ? rawCustomBackgroundUrl.trim()
         : undefined;
-    const sanitizedDemoId =
-      typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
+    const sanitizedDemoId = typeof demoId === "string" && demoId.trim() ? demoId.trim() : null;
 
     // Parse native storage URIs up front, but do NOT sign them until the caller
     // is known: signing is what needs the ownership check below.

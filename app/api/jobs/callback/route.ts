@@ -14,6 +14,51 @@ function secretsMatch(provided: string, expected: string): boolean {
   );
 }
 
+async function completeLinkedJob(
+  jobId: string,
+  demoId: string,
+  exportedUrl: string,
+  data: Prisma.VideoJobUpdateManyMutationInput
+) {
+  const applied = await prisma.$transaction(async (tx) => {
+    if (typeof tx.videoJob.updateMany === "function") {
+      const result = await tx.videoJob.updateMany({
+        where: {
+          id: jobId,
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
+        data,
+      });
+
+      if (result.count === 0) {
+        return false;
+      }
+    } else {
+      await tx.videoJob.update({
+        where: { id: jobId },
+        data,
+      });
+    }
+
+    await tx.demo.update({
+      where: { id: demoId },
+      data: { exportedUrl },
+    });
+
+    return true;
+  });
+
+  return NextResponse.json(
+    applied
+      ? { success: true }
+      : {
+          success: true,
+          ignored: true,
+          message: `Job ${jobId} is already in a terminal state`,
+        }
+  );
+}
+
 /**
  * Worker webhook endpoint (Cloud Run video worker & reframe worker callbacks).
  *
@@ -118,6 +163,53 @@ export async function POST(req: NextRequest) {
         : {};
     const isDubJob = existingJobData.kind === "AVS_DUB";
     const isReframeJob = existingJobData.kind === "REFRAME";
+
+    // Progress callbacks must not enter completion/failure handling.
+    // Leave REFRAME validation, including wrong-kind cropTargets checks, below.
+    if (status === "PROCESSING" && !isReframeJob && cropTargets === undefined) {
+      if (
+        typeof progress !== "number" ||
+        !Number.isFinite(progress) ||
+        progress < 0 ||
+        progress > 100
+      ) {
+        return NextResponse.json(
+          { error: "Invalid progress: must be a number between 0 and 100" },
+          { status: 400 }
+        );
+      }
+
+      if (typeof prisma.videoJob.updateMany === "function") {
+        const updateResult = await prisma.videoJob.updateMany({
+          where: {
+            id: jobId,
+            status: { notIn: ["COMPLETED", "CANCELLED"] },
+          },
+          data: {
+            status: "PROCESSING",
+            progress: Math.round(progress),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          return NextResponse.json({
+            success: true,
+            ignored: true,
+            message: `Job ${jobId} is already in a terminal state`,
+          });
+        }
+      } else {
+        await prisma.videoJob.update({
+          where: { id: jobId },
+          data: {
+            status: "PROCESSING",
+            progress: Math.round(progress),
+          },
+        });
+      }
+
+      return NextResponse.json({ success: true });
+    }
 
     // ── Reframe Job Handling ─────────────────────────────────────────
     if (cropTargets !== undefined || isReframeJob) {
@@ -231,6 +323,24 @@ export async function POST(req: NextRequest) {
         } catch (valErr) {
           const message = valErr instanceof Error ? valErr.message : "Invalid cropTargets";
           return NextResponse.json({ error: message }, { status: 400 });
+        }
+
+        if (job.demoId && exportedUrl) {
+          return await completeLinkedJob(jobId, job.demoId, exportedUrl, {
+            status: "COMPLETED",
+            progress: 100,
+            exportedUrl,
+            jobData: {
+              ...existingJobData,
+              kind: "REFRAME",
+              cropTargets,
+              ...(fallback !== undefined ? { fallback } : {}),
+              ...(fallbackStage ? { fallbackStage } : {}),
+              ...(fallbackReason ? { fallbackReason } : {}),
+              ...(attemptsMade !== undefined ? { attemptsMade } : {}),
+            } as unknown as Prisma.InputJsonValue,
+            error: null,
+          });
         }
 
         if (typeof prisma.videoJob.updateMany === "function") {
@@ -435,6 +545,15 @@ export async function POST(req: NextRequest) {
 
     // ── Existing AVS/WTM/Export Handling ─────────────────────────────
     const isCompleted = status === "COMPLETED" && exportedUrl;
+
+    if (isCompleted && job.demoId && exportedUrl) {
+      return await completeLinkedJob(jobId, job.demoId, exportedUrl, {
+        status: "COMPLETED",
+        progress: 100,
+        exportedUrl,
+        error: error || undefined,
+      });
+    }
 
     if (typeof prisma.videoJob.updateMany === "function") {
       const updateResult = await prisma.videoJob.updateMany({

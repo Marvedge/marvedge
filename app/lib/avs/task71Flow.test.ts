@@ -30,7 +30,6 @@ function mockPrismaPromise<T>(value: T): Prisma.PrismaPromise<T> {
   } as unknown as Prisma.PrismaPromise<T>;
 }
 
-
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
 }));
@@ -145,7 +144,9 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
     expect(queuedPayload).not.toBeNull();
     expect(queuedPayload.name).toBe("avs-dub");
     expect(queuedPayload.data.jobId).toBe(jobId);
-    expect(queuedPayload.data.dubUrl).toBe("https://storage.googleapis.com/test-bucket/prerecorded-audio.mp3");
+    expect(queuedPayload.data.dubUrl).toBe(
+      "https://storage.googleapis.com/test-bucket/prerecorded-audio.mp3"
+    );
 
     // ── STEP 3: WORKER PROCESSOR EXECUTION (with stubbed Cloud Run /avs-dub) ──
     const progressList: number[] = [];

@@ -1,4 +1,5 @@
 import type { Gauge, Histogram } from "@prometheus-io/client";
+import type Redis from "ioredis";
 import { dubbingDurationSeconds, queueDepth, reframeInferenceDurationSeconds } from "./metrics";
 import { collectJobOutcomeWindowCounts, type JobOutcomeMetricsSources } from "./jobOutcomeMetrics";
 
@@ -11,7 +12,10 @@ export type AlertName =
   | "reframe_job_failure_rate"
   | "dubbing_job_failure_rate"
   | "reframe_queue_depth"
-  | "dubbing_queue_depth";
+  | "dubbing_queue_depth"
+  | "gpu_hours_threshold"
+  | "dubbing_vendor_spend_threshold"
+  | "dubbing_vendor_usage_threshold";
 
 export interface MonitoringAlertEvent {
   name: AlertName;
@@ -33,6 +37,25 @@ export interface MonitoringAlertConfig {
   failureRateObservationWindowSeconds: number;
   failureRateMinimumJobs: number;
   alertCooldownSeconds: number;
+
+  // GPU worker runtime alerts (measures active worker processing duration on GPU hosts, distinct from EC2 instance running time)
+  gpuHoursThreshold?: number;
+  gpuHoursObservationWindowSeconds?: number;
+
+  // Dubbing vendor spend / usage alerts
+  dubbingVendorSpendThresholdUsd?: number;
+  dubbingVendorUsageThreshold?: number;
+  dubbingVendorObservationWindowSeconds?: number;
+  dubbingVendorEstimatedUnitCostUsd?: number;
+
+  // Optional notification webhook
+  alertWebhookUrl?: string;
+}
+
+export interface CostWindowData {
+  gpuJobDurationSeconds?: number;
+  dubbingVendorUsage?: number;
+  dubbingVendorSpendUsd?: number;
 }
 
 export interface AlertEvaluationOptions {
@@ -45,6 +68,8 @@ export interface AlertEvaluationOptions {
   inferenceHistogram?: Pick<Histogram<"status">, "get">;
   dubbingHistogram?: Pick<Histogram<"status">, "get">;
   queueGauge?: Pick<Gauge<"pipeline" | "state">, "get">;
+  costWindowData?: CostWindowData;
+  costRedis?: Redis;
   emit?: (event: MonitoringAlertEvent) => void;
 }
 
@@ -82,6 +107,23 @@ function readNumber(
   return value;
 }
 
+function readOptionalNumber(
+  environment: Readonly<Record<string, string | undefined>>,
+  variableName: string,
+  validate: (value: number) => boolean
+): number | undefined {
+  const rawValue = environment[variableName]?.trim();
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const value = Number(rawValue);
+  if (!Number.isFinite(value) || !validate(value)) {
+    throw new MonitoringAlertConfigurationError(variableName);
+  }
+  return value;
+}
+
 export function loadMonitoringAlertConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env
 ): MonitoringAlertConfig {
@@ -90,7 +132,8 @@ export function loadMonitoringAlertConfig(
   const wholeMinute = (value: number) => positiveInteger(value) && value % 60 === 0;
   const failureRate = (value: number) => value > 0 && value <= 1;
 
-  return {
+  // Base latency, failure-rate, and queue depth alerts
+  const baseConfig: MonitoringAlertConfig = {
     reframeInferenceLatencyThresholdSeconds: readNumber(
       environment,
       "MONITORING_REFRAME_INFERENCE_LATENCY_THRESHOLD_SECONDS",
@@ -136,6 +179,89 @@ export function loadMonitoringAlertConfig(
       "MONITORING_ALERT_COOLDOWN_SECONDS",
       positiveInteger
     ),
+  };
+
+  // GPU worker runtime configuration
+  const gpuHoursThreshold = readOptionalNumber(
+    environment,
+    "MONITORING_GPU_HOURS_THRESHOLD",
+    positive
+  );
+  const gpuHoursObservationWindowSeconds = readOptionalNumber(
+    environment,
+    "MONITORING_GPU_HOURS_OBSERVATION_WINDOW_SECONDS",
+    wholeMinute
+  );
+
+  if (gpuHoursThreshold !== undefined && gpuHoursObservationWindowSeconds === undefined) {
+    throw new MonitoringAlertConfigurationError("MONITORING_GPU_HOURS_OBSERVATION_WINDOW_SECONDS");
+  }
+
+  // Dubbing vendor spend and usage configuration
+  const dubbingVendorSpendThresholdUsd = readOptionalNumber(
+    environment,
+    "MONITORING_DUBBING_VENDOR_SPEND_THRESHOLD_USD",
+    positive
+  );
+  const dubbingVendorUsageThreshold = readOptionalNumber(
+    environment,
+    "MONITORING_DUBBING_VENDOR_USAGE_THRESHOLD",
+    positive
+  );
+  const dubbingVendorObservationWindowSeconds = readOptionalNumber(
+    environment,
+    "MONITORING_DUBBING_VENDOR_OBSERVATION_WINDOW_SECONDS",
+    wholeMinute
+  );
+  const dubbingVendorEstimatedUnitCostUsd = readOptionalNumber(
+    environment,
+    "MONITORING_DUBBING_VENDOR_ESTIMATED_UNIT_COST_USD",
+    positive
+  );
+
+  if (
+    (dubbingVendorSpendThresholdUsd !== undefined || dubbingVendorUsageThreshold !== undefined) &&
+    dubbingVendorObservationWindowSeconds === undefined
+  ) {
+    throw new MonitoringAlertConfigurationError(
+      "MONITORING_DUBBING_VENDOR_OBSERVATION_WINDOW_SECONDS"
+    );
+  }
+
+  // Reject configuration if spend threshold is set but estimated unit pricing is missing
+  if (
+    dubbingVendorSpendThresholdUsd !== undefined &&
+    dubbingVendorEstimatedUnitCostUsd === undefined
+  ) {
+    throw new MonitoringAlertConfigurationError(
+      "MONITORING_DUBBING_VENDOR_ESTIMATED_UNIT_COST_USD"
+    );
+  }
+
+  // Webhook URL validation
+  let alertWebhookUrl: string | undefined;
+  const rawWebhookUrl = environment.MONITORING_ALERT_WEBHOOK_URL?.trim();
+  if (rawWebhookUrl) {
+    try {
+      const parsed = new URL(rawWebhookUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Protocol must be http: or https:");
+      }
+      alertWebhookUrl = rawWebhookUrl;
+    } catch {
+      throw new MonitoringAlertConfigurationError("MONITORING_ALERT_WEBHOOK_URL");
+    }
+  }
+
+  return {
+    ...baseConfig,
+    gpuHoursThreshold,
+    gpuHoursObservationWindowSeconds,
+    dubbingVendorSpendThresholdUsd,
+    dubbingVendorUsageThreshold,
+    dubbingVendorObservationWindowSeconds,
+    dubbingVendorEstimatedUnitCostUsd,
+    alertWebhookUrl,
   };
 }
 
@@ -213,6 +339,9 @@ const alertNames: AlertName[] = [
   "dubbing_job_failure_rate",
   "reframe_queue_depth",
   "dubbing_queue_depth",
+  "gpu_hours_threshold",
+  "dubbing_vendor_spend_threshold",
+  "dubbing_vendor_usage_threshold",
 ];
 
 function emitStructuredAlert(event: MonitoringAlertEvent): void {
@@ -220,10 +349,54 @@ function emitStructuredAlert(event: MonitoringAlertEvent): void {
   log(`[monitoring] ${JSON.stringify(event)}`);
 }
 
+/**
+ * Dispatch alert event notification to configured webhook URL.
+ * Bounded timeout and safe error catching ensure delivery failures never crash the monitoring process.
+ */
+export async function dispatchAlertWebhook(
+  url: string,
+  event: MonitoringAlertEvent,
+  timeoutMs: number = 5000
+): Promise<boolean> {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("Protocol must be http: or https:");
+    }
+    // Clean safe URL for logging without query params or secrets
+    const safeUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        console.warn(
+          `[monitoring] Alert webhook returned non-2xx status (${response.status}) from ${safeUrl}`
+        );
+        return false;
+      }
+      return true;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.warn(`[monitoring] Failed to send alert webhook notification: ${message}`);
+    return false;
+  }
+}
+
 export function createMonitoringAlertEvaluator(
   defaultEmit: (event: MonitoringAlertEvent) => void = emitStructuredAlert
 ): (options?: AlertEvaluationOptions) => Promise<MonitoringAlertEvent[]> {
-  // The six known alert names bound this process-local deduplication state.
   const states = new Map<AlertName, AlertState>();
 
   return async (options = {}) => {
@@ -265,8 +438,6 @@ export function createMonitoringAlertEvaluator(
     }
 
     for (const pipeline of ["reframe", "dubbing"] as const) {
-      // The process-local cumulative jobs counter cannot provide trustworthy cross-process
-      // window deltas; only explicit window-scoped counts are eligible for this alert.
       const windowCounts = options.failureRateWindowCounts?.[pipeline];
       if (!windowCounts) {
         continue;
@@ -317,6 +488,52 @@ export function createMonitoringAlertEvaluator(
       });
     }
 
+    // Cost / Usage metrics evaluation
+    if (config.gpuHoursThreshold !== undefined && options.costWindowData?.gpuJobDurationSeconds !== undefined) {
+      const gpuHours = options.costWindowData.gpuJobDurationSeconds / 3600;
+      evaluated.add("gpu_hours_threshold");
+      conditions.push({
+        name: "gpu_hours_threshold",
+        pipeline: "reframe",
+        observedValue: gpuHours,
+        threshold: config.gpuHoursThreshold,
+      });
+    }
+
+    if (config.dubbingVendorSpendThresholdUsd !== undefined) {
+      let observedSpend = options.costWindowData?.dubbingVendorSpendUsd;
+      if (
+        observedSpend === undefined &&
+        options.costWindowData?.dubbingVendorUsage !== undefined &&
+        config.dubbingVendorEstimatedUnitCostUsd !== undefined
+      ) {
+        observedSpend =
+          options.costWindowData.dubbingVendorUsage * config.dubbingVendorEstimatedUnitCostUsd;
+      }
+      if (observedSpend !== undefined) {
+        evaluated.add("dubbing_vendor_spend_threshold");
+        conditions.push({
+          name: "dubbing_vendor_spend_threshold",
+          pipeline: "dubbing",
+          observedValue: observedSpend,
+          threshold: config.dubbingVendorSpendThresholdUsd,
+        });
+      }
+    }
+
+    if (
+      config.dubbingVendorUsageThreshold !== undefined &&
+      options.costWindowData?.dubbingVendorUsage !== undefined
+    ) {
+      evaluated.add("dubbing_vendor_usage_threshold");
+      conditions.push({
+        name: "dubbing_vendor_usage_threshold",
+        pipeline: "dubbing",
+        observedValue: options.costWindowData.dubbingVendorUsage,
+        threshold: config.dubbingVendorUsageThreshold,
+      });
+    }
+
     const activeConditions = new Map(conditions.map((condition) => [condition.name, condition]));
     const events: MonitoringAlertEvent[] = [];
     const cooldownMs = config.alertCooldownSeconds * 1000;
@@ -349,6 +566,9 @@ export function createMonitoringAlertEvaluator(
           };
           events.push(event);
           (options.emit ?? defaultEmit)(event);
+          if (config.alertWebhookUrl) {
+            void dispatchAlertWebhook(config.alertWebhookUrl, event);
+          }
         }
         states.set(name, state);
       } else if (previous?.firing && condition) {
@@ -363,6 +583,9 @@ export function createMonitoringAlertEvaluator(
         };
         events.push(event);
         (options.emit ?? defaultEmit)(event);
+        if (config.alertWebhookUrl) {
+          void dispatchAlertWebhook(config.alertWebhookUrl, event);
+        }
         states.set(name, { firing: false, lastFiringAt: previous.lastFiringAt });
       }
     }
@@ -392,10 +615,38 @@ export async function evaluateMonitoringAlerts(
     );
   }
 
+  let costWindowData = options.costWindowData;
+  if (!costWindowData && options.costRedis) {
+    costWindowData = {};
+    if (config.gpuHoursThreshold !== undefined && config.gpuHoursObservationWindowSeconds) {
+      const { collectCostWindowSum } = await import("./costWindowMetrics");
+      costWindowData.gpuJobDurationSeconds = await collectCostWindowSum(
+        options.costRedis,
+        { category: "gpu_worker", provider: "reframe", unit: "seconds" },
+        config.gpuHoursObservationWindowSeconds,
+        now
+      );
+    }
+    if (
+      (config.dubbingVendorSpendThresholdUsd !== undefined ||
+        config.dubbingVendorUsageThreshold !== undefined) &&
+      config.dubbingVendorObservationWindowSeconds
+    ) {
+      const { collectCostWindowSum } = await import("./costWindowMetrics");
+      costWindowData.dubbingVendorUsage = await collectCostWindowSum(
+        options.costRedis,
+        { category: "dubbing", provider: "elevenlabs", unit: "characters" },
+        config.dubbingVendorObservationWindowSeconds,
+        now
+      );
+    }
+  }
+
   return evaluateConfiguredAlerts({
     ...options,
     config,
     now,
     failureRateWindowCounts,
+    costWindowData,
   });
 }

@@ -70,7 +70,7 @@ export const useSignUp = () => {
     } catch (err) {
       // Preserve useful validation errors without revealing account existence.
       if (err instanceof z.ZodError) {
-        toast.error(err.errors[0].message);
+        toast.error(err.issues[0].message);
       } else if (
         axios.isAxiosError(err) &&
         err.response?.status === 400 &&

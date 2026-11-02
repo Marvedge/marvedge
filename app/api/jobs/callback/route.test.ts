@@ -5,6 +5,7 @@ process.env.CALLBACK_SECRET = "test-callback-secret";
 
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
+    $transaction: vi.fn(async (work: (tx: typeof prisma) => Promise<unknown>) => work(prisma)),
     videoJob: {
       findUnique: vi.fn(),
       update: vi.fn(),
