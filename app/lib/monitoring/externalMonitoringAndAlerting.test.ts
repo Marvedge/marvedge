@@ -79,6 +79,15 @@ describe("Task-00105: External Monitoring and Alerting", () => {
         })
       ).toThrow(MonitoringAlertConfigurationError);
     });
+
+    it("rejects invalid webhook URL protocol", () => {
+      expect(() =>
+        loadMonitoringAlertConfig({
+          ...baseEnv,
+          MONITORING_ALERT_WEBHOOK_URL: "ftp://alerts.example.com/webhook",
+        })
+      ).toThrow(MonitoringAlertConfigurationError);
+    });
   });
 
   describe("Stuck queue alert evaluation", () => {
@@ -155,6 +164,24 @@ describe("Task-00105: External Monitoring and Alerting", () => {
       });
       expect(events).toEqual([]);
     });
+
+    it("handles missing queue data without throwing or false alarming", async () => {
+      const config: MonitoringAlertConfig = {
+        ...baseConfig,
+        reframeStuckQueueThresholdSeconds: 60,
+        dubbingStuckQueueThresholdSeconds: 60,
+      };
+
+      const evaluate = createMonitoringAlertEvaluator(vi.fn());
+
+      // Queues unavailable / disconnected
+      const events = await evaluate({
+        config,
+        now,
+        stuckQueueAges: undefined,
+      });
+      expect(events).toEqual([]);
+    });
   });
 
   describe("GPU spend threshold alert evaluation", () => {
@@ -214,6 +241,23 @@ describe("Task-00105: External Monitoring and Alerting", () => {
       ]);
       expect(sendNotificationSpy).toHaveBeenCalledTimes(2);
     });
+
+    it("gracefully ignores evaluation when cost window data is missing", async () => {
+      const config: MonitoringAlertConfig = {
+        ...baseConfig,
+        gpuSpendThresholdUsd: 10.0,
+        gpuHourlyRateUsd: 2.0,
+        gpuHoursObservationWindowSeconds: 3600,
+      };
+
+      const evaluate = createMonitoringAlertEvaluator(vi.fn());
+      const events = await evaluate({
+        config,
+        now,
+        costWindowData: undefined,
+      });
+      expect(events).toEqual([]);
+    });
   });
 
   describe("Deduplication and cooldown", () => {
@@ -266,6 +310,28 @@ describe("Task-00105: External Monitoring and Alerting", () => {
       expect(recovered).toHaveLength(1);
       expect(recovered[0].status).toBe("resolved");
       expect(sendNotificationSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("resets deduplication state when a new evaluator instance is initialized", async () => {
+      const config: MonitoringAlertConfig = {
+        ...baseConfig,
+        reframeStuckQueueThresholdSeconds: 60,
+        alertCooldownSeconds: 300,
+      };
+
+      const sendNotificationSpy = vi
+        .spyOn(externalNotifications, "sendExternalAlertNotification")
+        .mockResolvedValue({ emailSent: false, webhookSent: false, dryRun: false, errors: [] });
+
+      // Instance 1 fires
+      const eval1 = createMonitoringAlertEvaluator(vi.fn());
+      await eval1({ config, now, stuckQueueAges: { reframe: 100 } });
+      expect(sendNotificationSpy).toHaveBeenCalledTimes(1);
+
+      // Instance 2 (e.g. process restart) fires again immediately because state is process-local
+      const eval2 = createMonitoringAlertEvaluator(vi.fn());
+      await eval2({ config, now: now + 10_000, stuckQueueAges: { reframe: 100 } });
+      expect(sendNotificationSpy).toHaveBeenCalledTimes(2);
     });
   });
 });
