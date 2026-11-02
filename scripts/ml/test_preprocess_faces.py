@@ -71,7 +71,7 @@ def check(label, condition, reason="", warning=False):
 
 
 # ─── Test 1: Directory structure ─────────────────────────────────────────────
-def test_directory_structure(output_dir):
+def validate_directory_structure(output_dir):
     print("\n📁 Test 1: Directory Structure")
     for subdir in ["pyavi", "pyframes", "pywork", "pycrop"]:
         path = os.path.join(output_dir, subdir)
@@ -98,7 +98,7 @@ def test_directory_structure(output_dir):
 
 
 # ─── Test 2: metadata.json schema ────────────────────────────────────────────
-def test_metadata_schema(output_dir):
+def validate_metadata_schema(output_dir):
     print("\n📋 Test 2: metadata.json Schema")
     meta_path = os.path.join(output_dir, "metadata.json")
 
@@ -164,7 +164,7 @@ def test_metadata_schema(output_dir):
 
 
 # ─── Test 3: Cropped video integrity ─────────────────────────────────────────
-def test_video_crops(output_dir, tracks):
+def validate_video_crops(output_dir, tracks):
     print("\n🎬 Test 3: Cropped Video Integrity (pycrop/*.avi)")
     crop_dir = os.path.join(output_dir, "pycrop")
     avi_files = sorted(glob.glob(os.path.join(crop_dir, "*.avi")))
@@ -206,7 +206,7 @@ def test_video_crops(output_dir, tracks):
 
 
 # ─── Test 4: Audio integrity ─────────────────────────────────────────────────
-def test_audio_crops(output_dir):
+def validate_audio_crops(output_dir):
     print("\n🔊 Test 4: Cropped Audio Integrity (pycrop/*.wav)")
     crop_dir = os.path.join(output_dir, "pycrop")
     wav_files = sorted(glob.glob(os.path.join(crop_dir, "*.wav")))
@@ -239,7 +239,7 @@ def test_audio_crops(output_dir):
 
 
 # ─── Test 5: Cross-file coverage ─────────────────────────────────────────────
-def test_cross_file_coverage(output_dir, tracks):
+def validate_cross_file_coverage(output_dir, tracks):
     print("\n🔗 Test 5: Cross-File Coverage (metadata ↔ disk)")
     if not tracks:
         print("   Skipped — no tracks loaded from metadata")
@@ -259,7 +259,7 @@ def test_cross_file_coverage(output_dir, tracks):
 
 
 # ─── Test 6: Multi-Speaker Characteristics ───────────────────────────────────
-def test_multispeaker_characteristics(output_dir, tracks, min_speakers=1):
+def validate_multispeaker_characteristics(output_dir, tracks, min_speakers=1):
     print("\n👥 Test 6: Multi-Speaker Tracking Validation")
     if not tracks:
         print("   Skipped — no tracks loaded")
@@ -722,12 +722,12 @@ def main():
         print(f"  Output dir: {output_dir}")
         print(f"{'='*60}")
 
-        test_directory_structure(output_dir)
-        tracks = test_metadata_schema(output_dir)
-        test_video_crops(output_dir, tracks)
-        test_audio_crops(output_dir)
-        test_cross_file_coverage(output_dir, tracks)
-        test_multispeaker_characteristics(output_dir, tracks, min_speakers=args.minSpeakers)
+        validate_directory_structure(output_dir)
+        tracks = validate_metadata_schema(output_dir)
+        validate_video_crops(output_dir, tracks)
+        validate_audio_crops(output_dir)
+        validate_cross_file_coverage(output_dir, tracks)
+        validate_multispeaker_characteristics(output_dir, tracks, min_speakers=args.minSpeakers)
 
     # ── Summary ──────────────────────────────────────────────────────────────
     total = results["pass"] + results["fail"] + results["warn"]
