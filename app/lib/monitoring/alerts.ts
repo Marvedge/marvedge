@@ -748,7 +748,23 @@ export function createMonitoringAlertEvaluator(
         };
         events.push(event);
         (options.emit ?? actualDefaultEmit)(event);
-        void sendExternalAlertNotification(event, notificationConfig);
+        const dispatchResult = await sendExternalAlertNotification(event, notificationConfig);
+        const attempted = Boolean(
+          notificationConfig.alertWebhookUrl ||
+          (notificationConfig.resendApiKey && notificationConfig.alertEmailRecipient)
+        );
+        if (
+          attempted &&
+          !dispatchResult.dryRun &&
+          !dispatchResult.webhookSent &&
+          !dispatchResult.emailSent &&
+          dispatchResult.errors.length > 0
+        ) {
+          console.warn(
+            `[monitoring] External notification delivery failed on all channels for ${name}; resetting cooldown for retry.`
+          );
+          await store.resetFiringCooldown(name);
+        }
       } else if (result.action === "EMIT_RESOLVED" && condition) {
         const event: MonitoringAlertEvent = {
           name,
@@ -761,7 +777,7 @@ export function createMonitoringAlertEvaluator(
         };
         events.push(event);
         (options.emit ?? actualDefaultEmit)(event);
-        void sendExternalAlertNotification(event, notificationConfig);
+        await sendExternalAlertNotification(event, notificationConfig);
       }
     }
 

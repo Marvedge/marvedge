@@ -51,8 +51,9 @@ Alert state tracking ensures high operational reliability across process lifecyc
 4. **Cross-Restart Cooldown Persistence**: If an evaluator crashes and restarts, previous `lastFiringAt` timestamps are loaded from Redis, preventing alert re-triggering within cooldown windows.
 5. **Notification Storm Prevention**: When Redis reconnects after a transient disconnection, existing keys in Redis are preserved with their `lastFiringAt` intact. Evaluators will not refire firing alerts unless the cooldown period has legitimately expired.
 6. **Automatic Cleanup (TTL)**: All state keys in Redis use a configurable TTL (default 7 days / 604,800 seconds via `MONITORING_ALERT_STATE_TTL_SECONDS`) preventing unbounded Redis memory growth.
-7. **Resilient In-Memory Fallback**: If Redis is offline or commands time out, the system automatically logs a diagnostic warning and delegates to an in-memory store. Evaluators never crash or unhandled-reject due to Redis errors.
+7. **Resilient In-Memory Fallback & Degraded Mode Disclosure**: If Redis is offline or commands time out, the system automatically logs a diagnostic warning and delegates to a process-local in-memory store. Evaluators never crash or unhandled-reject due to Redis errors. _Degraded mode disclosure:_ While operating in in-memory fallback, single-process deduplication and cooldowns remain active, but cross-process deduplication across multiple host instances cannot be guaranteed until Redis connectivity is restored.
 8. **Never Treat Missing Data as Healthy**: If queues, Redis, or Prometheus data sources cannot be reached, pipeline alerts are skipped (never assumed to be 0 or healthy), and a separate `monitoring_data_unavailable` alert is triggered.
+9. **Notification Delivery Failure Recovery**: If an alert breaches threshold but external dispatch fails on all configured channels (e.g. transient HTTP 5xx or network drops), the evaluator resets the cooldown for that alert so the subsequent evaluation tick immediately retries delivery rather than suppressing on-call alerts for the full cooldown window.
 
 ---
 

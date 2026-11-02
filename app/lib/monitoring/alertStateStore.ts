@@ -28,6 +28,7 @@ export interface AlertStateStore {
   ): Promise<AlertTransitionResult>;
   getState(name: AlertName): Promise<PersistedAlertState | undefined>;
   clear(name?: AlertName): Promise<void>;
+  resetFiringCooldown(name: AlertName): Promise<void>;
 }
 
 export const DEFAULT_ALERT_STATE_TTL_SECONDS = 7 * 24 * 3600; // 7 days
@@ -188,6 +189,17 @@ export class InMemoryAlertStateStore implements AlertStateStore {
       this.states.clear();
     }
   }
+
+  public async resetFiringCooldown(name: AlertName): Promise<void> {
+    const prev = this.states.get(name);
+    if (prev && prev.firing) {
+      this.states.set(name, {
+        ...prev,
+        lastFiringAt: 0,
+        lastNotificationAt: 0,
+      });
+    }
+  }
 }
 
 export class RedisAlertStateStore implements AlertStateStore {
@@ -252,7 +264,7 @@ export class RedisAlertStateStore implements AlertStateStore {
     } catch (error) {
       // Redis unavailable or command timeout: fail-safe fallback to in-memory store
       console.warn(
-        `[monitoring:alertStateStore] Redis transition error for ${name}; using in-memory fallback:`,
+        `[monitoring:alertStateStore] Redis unavailable for alert '${name}'; falling back to process-local in-memory store (cross-process deduplication is degraded):`,
         error instanceof Error ? error.message : "Unknown Redis error"
       );
       return this.inMemoryFallback.transition(name, isFiring, now, cooldownMs, metadata);
@@ -289,6 +301,16 @@ export class RedisAlertStateStore implements AlertStateStore {
       await this.inMemoryFallback.clear(name);
     } else {
       await this.inMemoryFallback.clear();
+    }
+  }
+
+  public async resetFiringCooldown(name: AlertName): Promise<void> {
+    const key = this.getKey(name);
+    try {
+      await this.redis.hset(key, "lastFiringAt", "0", "lastNotificationAt", "0");
+      await this.inMemoryFallback.resetFiringCooldown(name);
+    } catch {
+      await this.inMemoryFallback.resetFiringCooldown(name);
     }
   }
 }

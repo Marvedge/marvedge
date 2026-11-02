@@ -85,6 +85,21 @@ class MockRedis {
     return Object.fromEntries(hash.entries());
   }
 
+  async hset(key: string, ...args: string[]): Promise<number> {
+    if (this.shouldFail) {
+      throw new Error("Redis connection lost (ECONNREFUSED)");
+    }
+    let hash = this.hashes.get(key);
+    if (!hash) {
+      hash = new Map<string, string>();
+      this.hashes.set(key, hash);
+    }
+    for (let i = 0; i < args.length; i += 2) {
+      hash.set(args[i], args[i + 1]);
+    }
+    return 1;
+  }
+
   async del(key: string): Promise<number> {
     if (this.shouldFail) {
       throw new Error("Redis connection lost (ECONNREFUSED)");
@@ -401,6 +416,94 @@ describe("Task-00105: Redis-backed Alert State Persistence and Failure Modes", (
 
     // Suppressed because cooldown is intact in Redis! No notification storm.
     expect(reconnectedEvents).toHaveLength(0);
+    expect(notificationSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries notification delivery on the next cycle when external dispatch fails, preventing permanent suppression", async () => {
+    const mockRedis = new MockRedis();
+    const sharedRedis = mockRedis as unknown as Redis;
+
+    const webhookConfig: MonitoringAlertConfig = {
+      ...baseConfig,
+      alertWebhookUrl: "https://alerts.example.com/webhook",
+      alertCooldownSeconds: 300,
+    };
+
+    // First attempt fails due to webhook HTTP failure
+    const notificationSpy = vi
+      .spyOn(externalNotifications, "sendExternalAlertNotification")
+      .mockResolvedValueOnce({
+        emailSent: false,
+        webhookSent: false,
+        dryRun: false,
+        errors: ["HTTP 500 Internal Server Error"],
+      })
+      // Second attempt 60s later succeeds
+      .mockResolvedValueOnce({
+        emailSent: false,
+        webhookSent: true,
+        dryRun: false,
+        errors: [],
+      });
+
+    const store = createAlertStateStore(sharedRedis);
+    const evaluate = createMonitoringAlertEvaluator(vi.fn(), store);
+
+    // T = 0: breach occurs, notification attempt 1 fails
+    const events1 = await evaluate({
+      config: webhookConfig,
+      now,
+      stuckQueueAges: { reframe: 100 },
+    });
+    expect(events1).toHaveLength(1);
+    expect(notificationSpy).toHaveBeenCalledTimes(1);
+
+    // T = 60s (well before 300s cooldown): condition is still firing.
+    // Because dispatch failed, cooldown was reset so the alert retries rather than being suppressed for 5 minutes!
+    const events2 = await evaluate({
+      config: webhookConfig,
+      now: now + 60_000,
+      stuckQueueAges: { reframe: 110 },
+    });
+    expect(events2).toHaveLength(1);
+    expect(notificationSpy).toHaveBeenCalledTimes(2);
+
+    // T = 120s: notification succeeded at T=60s, so normal cooldown is now strictly enforced!
+    const events3 = await evaluate({
+      config: webhookConfig,
+      now: now + 120_000,
+      stuckQueueAges: { reframe: 120 },
+    });
+    expect(events3).toHaveLength(0);
+    expect(notificationSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("fires monitoring_data_unavailable and falls back gracefully when Redis itself is unreachable", async () => {
+    const mockRedis = new MockRedis();
+    mockRedis.shouldFail = true; // Redis daemon is down
+    const sharedRedis = mockRedis as unknown as Redis;
+
+    const notificationSpy = vi
+      .spyOn(externalNotifications, "sendExternalAlertNotification")
+      .mockResolvedValue({ emailSent: false, webhookSent: false, dryRun: false, errors: [] });
+
+    const store = createAlertStateStore(sharedRedis);
+    const evaluate = createMonitoringAlertEvaluator(vi.fn(), store);
+
+    // When Redis is down, telemetry cannot be collected, so monitoringDataUnavailable is evaluated
+    const events = await evaluate({
+      config: baseConfig,
+      now,
+      monitoringDataUnavailable: true,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      name: "monitoring_data_unavailable",
+      pipeline: "monitoring",
+      status: "firing",
+    });
+    // Notification dispatch over external HTTPS was still triggered despite local Redis being down
     expect(notificationSpy).toHaveBeenCalledTimes(1);
   });
 });
