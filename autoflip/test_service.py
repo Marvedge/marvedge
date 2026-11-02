@@ -62,7 +62,8 @@ def client():
 
 
 class TestValidation:
-    def test_valid_requests(self):
+    def test_valid_requests(self, monkeypatch):
+        _patch_public_dns(monkeypatch)
         validate_reframe_request("https://example.com/video.mp4", "9:16")
         validate_reframe_request("http://example.com/video.mp4", "1:1")
 
@@ -80,7 +81,8 @@ class TestValidation:
         with pytest.raises(ValidationError, match="must use HTTP or HTTPS"):
             validate_reframe_request("file:///tmp/local.mp4", "9:16")
 
-    def test_missing_or_invalid_aspect_ratio(self):
+    def test_missing_or_invalid_aspect_ratio(self, monkeypatch):
+        _patch_public_dns(monkeypatch)
         with pytest.raises(ValidationError, match="targetAspectRatio is required"):
             validate_reframe_request("https://example.com/video.mp4", "")
 
@@ -93,7 +95,8 @@ class TestValidation:
 
 class TestVideoDownload:
     @patch("service._build_safe_session")
-    def test_download_success(self, mock_session, tmp_path):
+    def test_download_success(self, mock_session, tmp_path, monkeypatch):
+        _patch_public_dns(monkeypatch)
         mock_resp = MagicMock()
         mock_resp.iter_content.return_value = [b"mock_video_bytes"]
         mock_resp.raise_for_status = MagicMock()
@@ -111,7 +114,8 @@ class TestVideoDownload:
             assert f.read() == b"mock_video_bytes"
 
     @patch("service._build_safe_session")
-    def test_download_failure(self, mock_session, tmp_path):
+    def test_download_failure(self, mock_session, tmp_path, monkeypatch):
+        _patch_public_dns(monkeypatch)
         import requests
 
         mock_session.return_value.get.side_effect = requests.exceptions.HTTPError(
@@ -123,7 +127,8 @@ class TestVideoDownload:
             download_video("https://example.com/notfound.mp4", dest)
 
     @patch("service._build_safe_session")
-    def test_download_timeout(self, mock_session, tmp_path):
+    def test_download_timeout(self, mock_session, tmp_path, monkeypatch):
+        _patch_public_dns(monkeypatch)
         import requests
 
         mock_session.return_value.get.side_effect = requests.exceptions.Timeout(
@@ -351,6 +356,7 @@ class TestDownloadSizeCap:
     def test_content_length_over_cap_aborts_before_writing(
         self, mock_session, tmp_path, monkeypatch
     ):
+        _patch_public_dns(monkeypatch)
         monkeypatch.setattr("service.MAX_DOWNLOAD_SIZE_BYTES", 10)
         mock_resp = MagicMock()
         mock_resp.is_redirect = False
@@ -369,6 +375,7 @@ class TestDownloadSizeCap:
     def test_endless_stream_is_aborted_and_partial_removed(
         self, mock_session, tmp_path, monkeypatch
     ):
+        _patch_public_dns(monkeypatch)
         monkeypatch.setattr("service.MAX_DOWNLOAD_SIZE_BYTES", 10)
 
         def endless_chunks():
@@ -393,6 +400,7 @@ class TestDownloadSizeCap:
     def test_partial_file_removed_on_stream_error(
         self, mock_session, tmp_path, monkeypatch
     ):
+        _patch_public_dns(monkeypatch)
         import requests
 
         def failing_chunks():
@@ -655,8 +663,9 @@ class TestCleanupAndEndToEnd:
     @patch("service.download_video")
     @patch("service.run_autoflip_subprocess")
     def test_process_reframe_cleanup_on_success(
-        self, mock_run, mock_dl, tmp_path
+        self, mock_run, mock_dl, tmp_path, monkeypatch
     ):
+        _patch_public_dns(monkeypatch)
         temp_dirs_created = []
 
         def side_effect_run(
@@ -686,8 +695,9 @@ class TestCleanupAndEndToEnd:
     @patch("service.download_video")
     @patch("service.run_autoflip_subprocess")
     def test_process_reframe_cleanup_on_failure(
-        self, mock_run, mock_dl, tmp_path
+        self, mock_run, mock_dl, tmp_path, monkeypatch
     ):
+        _patch_public_dns(monkeypatch)
         temp_dirs_created = []
 
         def side_effect_run(
@@ -724,7 +734,8 @@ class TestHttpServerEndpoints:
         assert data["ok"] is False
         assert "videoUrl is required" in data["error"]
 
-    def test_post_reframe_aspect_ratio_error(self, client):
+    def test_post_reframe_aspect_ratio_error(self, client, monkeypatch):
+        _patch_public_dns(monkeypatch)
         resp = client.post(
             "/reframe",
             json={"videoUrl": "https://example.com/v.mp4", "targetAspectRatio": "invalid"},
