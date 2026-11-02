@@ -5,6 +5,7 @@
  */
 
 import fs from "fs";
+import http from "http";
 import path from "path";
 import {
   buildFfmpegCropFilter,
@@ -25,6 +26,178 @@ export interface StageExecutionOutput {
   error?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   outputArtifacts?: Record<string, any>;
+}
+
+export interface EphemeralMediaServer {
+  url: string;
+  close: () => Promise<void>;
+}
+
+/**
+ * Validates whether a given URL is a valid, remote HTTP/HTTPS URL.
+ */
+export function isValidHttpUrl(urlString: string): boolean {
+  try {
+    const parsed = new URL(urlString);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Starts an ephemeral local HTTP server to serve the local benchmark media file
+ * over HTTP for container/service consumption. Safely validates requested paths to
+ * prevent arbitrary filesystem traversal.
+ */
+export async function startEphemeralMediaServer(
+  mediaFilePath: string,
+  host: string = "0.0.0.0",
+  port: number = 0
+): Promise<EphemeralMediaServer> {
+  const resolvedMedia = path.resolve(mediaFilePath);
+  const mediaFilename = path.basename(resolvedMedia);
+
+  const server = http.createServer((req, res) => {
+    try {
+      const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      // Only serve the specific media file path; reject traversal or unknown routes
+      if (
+        parsedUrl.pathname !== `/${encodeURIComponent(mediaFilename)}` &&
+        parsedUrl.pathname !== `/${mediaFilename}` &&
+        parsedUrl.pathname !== "/media"
+      ) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
+        return;
+      }
+
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        res.writeHead(405, { "Content-Type": "text/plain" });
+        res.end("Method Not Allowed");
+        return;
+      }
+
+      if (!fs.existsSync(resolvedMedia)) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Media Not Found");
+        return;
+      }
+
+      const stat = fs.statSync(resolvedMedia);
+      res.writeHead(200, {
+        "Content-Type": "video/mp4",
+        "Content-Length": stat.size,
+        "Accept-Ranges": "bytes",
+      });
+
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+
+      const readStream = fs.createReadStream(resolvedMedia);
+      readStream.pipe(res);
+      readStream.on("error", () => {
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+        }
+        res.end();
+      });
+    } catch {
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+      }
+      res.end("Internal Server Error");
+    }
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.listen(port, host, () => resolve());
+    server.once("error", reject);
+  });
+
+  const addr = server.address();
+  const actualPort = typeof addr === "object" && addr ? addr.port : port;
+  const advertisedHost =
+    process.env.BENCHMARK_MEDIA_HOST || (host === "0.0.0.0" ? "127.0.0.1" : host);
+
+  const url = `http://${advertisedHost}:${actualPort}/${encodeURIComponent(mediaFilename)}`;
+
+  return {
+    url,
+    close: async () => {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    },
+  };
+}
+
+/**
+ * Resolves an accessible HTTP/HTTPS URL for media input required by AutoFlip and TalkNet.
+ * Supports:
+ * 1. BENCHMARK_MEDIA_URL explicit override (e.g. S3/GCS signed URL or pre-existing HTTP URL).
+ * 2. Pre-existing valid HTTP/HTTPS media path.
+ * 3. Ephemeral HTTP server for local/synthetic files when BENCHMARK_SERVE_LOCAL_MEDIA is enabled.
+ * 4. Explicit blocked failure when a local file cannot be served or accessed by remote services.
+ */
+export async function resolveAccessibleMediaUrl(
+  media: InputMediaMetadata,
+  serviceEndpoint?: string
+): Promise<{ url?: string; cleanup?: () => Promise<void>; blockedReason?: string }> {
+  // 1. Explicit environment variable override
+  if (process.env.BENCHMARK_MEDIA_URL) {
+    const envUrl = process.env.BENCHMARK_MEDIA_URL.trim();
+    if (!isValidHttpUrl(envUrl)) {
+      return {
+        blockedReason: `BENCHMARK_MEDIA_URL '${envUrl}' is not a valid HTTP or HTTPS URL.`,
+      };
+    }
+    return { url: envUrl };
+  }
+
+  // 2. Input media path itself is an HTTP/HTTPS URL
+  if (isValidHttpUrl(media.path)) {
+    return { url: media.path };
+  }
+
+  // 3. Local filesystem path: verify accessibility
+  // Remote containers require an accessible HTTP URL.
+  // If BENCHMARK_SERVE_LOCAL_MEDIA is set to "1" or "true", launch ephemeral HTTP server
+  if (
+    process.env.BENCHMARK_SERVE_LOCAL_MEDIA === "1" ||
+    process.env.BENCHMARK_SERVE_LOCAL_MEDIA === "true"
+  ) {
+    if (!fs.existsSync(media.path)) {
+      return {
+        blockedReason: `Local media file '${media.path}' does not exist and cannot be served.`,
+      };
+    }
+    try {
+      const server = await startEphemeralMediaServer(
+        media.path,
+        process.env.BENCHMARK_SERVER_BIND_HOST || "0.0.0.0",
+        Number(process.env.BENCHMARK_SERVER_PORT) || 0
+      );
+      return {
+        url: server.url,
+        cleanup: server.close,
+      };
+    } catch (err: unknown) {
+      return {
+        blockedReason: `Failed to start ephemeral media server: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  // 4. Default: Cannot send local path directly to remote service
+  return {
+    blockedReason:
+      `Real inference service at '${serviceEndpoint || "remote container"}' requires an accessible HTTP/HTTPS URL. ` +
+      `Local file '${media.path}' cannot be sent as a local filesystem path. ` +
+      "Provide an HTTP/HTTPS URL via --input or BENCHMARK_MEDIA_URL, or set BENCHMARK_SERVE_LOCAL_MEDIA=true with an accessible network route.",
+  };
 }
 
 /**
@@ -51,11 +224,28 @@ export async function executeReframeStage(
       };
     }
 
+    // Resolve accessible HTTP/HTTPS URL for AutoFlip
+    const {
+      url: accessibleUrl,
+      cleanup,
+      blockedReason,
+    } = await resolveAccessibleMediaUrl(media, serviceUrl);
+
+    if (blockedReason || !accessibleUrl) {
+      return {
+        stage: "reframe",
+        status: "blocked",
+        provider: "autoflip",
+        notes: [blockedReason || "Inaccessible media URL for AutoFlip"],
+        error: "MEDIA_URL_INACCESSIBLE",
+      };
+    }
+
     try {
       const cropTargets = await callMlInference(
         serviceUrl,
         {
-          videoUrl: media.path,
+          videoUrl: accessibleUrl,
           targetAspectRatio: "9:16",
         },
         { timeoutMs: 15000 }
@@ -71,6 +261,7 @@ export async function executeReframeStage(
         notes,
         outputArtifacts: {
           cropTargetsCount: cropTargets.crop_targets.length,
+          inputUrl: accessibleUrl,
         },
       };
     } catch (err: unknown) {
@@ -81,6 +272,10 @@ export async function executeReframeStage(
         notes: [`AutoFlip inference error: ${(err as Error).message}`],
         error: (err as Error).message,
       };
+    } finally {
+      if (cleanup) {
+        await cleanup();
+      }
     }
   }
 
@@ -153,9 +348,8 @@ export async function executeAvsStage(
         status: "blocked",
         provider: "talknet",
         notes: [
-          `TalkNet model weights missing: ${missingWeights.map((p) => path.basename(p)).join(", ")}`,
-          "Automatic model weight download is disabled per Task-0102 policy.",
-          "Preflight blocked: Place weights in talknet/weights/ before running real AVS inference.",
+          `TalkNet execution blocked: Model weights not found at ${missingWeights.join(", ")}.`,
+          "Automatic model weight download is disabled to avoid uncontrolled network load and non-deterministic execution.",
         ],
         error: "TALKNET_WEIGHTS_MISSING",
       };
@@ -172,12 +366,29 @@ export async function executeAvsStage(
       };
     }
 
+    // Resolve accessible HTTP/HTTPS URL for TalkNet
+    const {
+      url: accessibleUrl,
+      cleanup,
+      blockedReason,
+    } = await resolveAccessibleMediaUrl(media, serviceUrl);
+
+    if (blockedReason || !accessibleUrl) {
+      return {
+        stage: "avs",
+        status: "blocked",
+        provider: "talknet",
+        notes: [blockedReason || "Inaccessible media URL for TalkNet"],
+        error: "MEDIA_URL_INACCESSIBLE",
+      };
+    }
+
     try {
       const detectUrl = `${serviceUrl.replace(/\/+$/, "")}/detect`;
       const res = await fetch(detectUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl: media.path }),
+        body: JSON.stringify({ videoUrl: accessibleUrl }),
         signal: AbortSignal.timeout(30000),
       });
 
@@ -193,7 +404,10 @@ export async function executeAvsStage(
         status: "real_inference",
         provider: "talknet",
         notes,
-        outputArtifacts: body,
+        outputArtifacts: {
+          ...body,
+          inputUrl: accessibleUrl,
+        },
       };
     } catch (err: unknown) {
       return {
@@ -203,6 +417,10 @@ export async function executeAvsStage(
         notes: [`TalkNet inference failure: ${(err as Error).message}`],
         error: (err as Error).message,
       };
+    } finally {
+      if (cleanup) {
+        await cleanup();
+      }
     }
   }
 

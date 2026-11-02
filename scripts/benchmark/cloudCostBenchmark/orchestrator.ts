@@ -30,6 +30,14 @@ export interface OrchestratorRunOptions {
   inputMedia: InputMediaMetadata;
 }
 
+interface SingleJobResult {
+  durationMs: number;
+  status: StageExecutionStatus;
+  provider: string;
+  notes: string[];
+  error?: string;
+}
+
 export class BenchmarkOrchestrator {
   public readonly config: BenchmarkConfig;
   public readonly media: InputMediaMetadata;
@@ -49,9 +57,6 @@ export class BenchmarkOrchestrator {
 
   public async runStage(stage: PipelineStage): Promise<StageResult> {
     const { concurrency, iterations, warmup } = this.config;
-    const stageNotes: string[] = [];
-    let detectedStatus: StageExecutionStatus = "fixture";
-    let detectedProvider = "fixture";
 
     // 1. Warm-up Iterations (reported separately, not included in latency stats)
     const warmupStart = performance.now();
@@ -65,11 +70,7 @@ export class BenchmarkOrchestrator {
     const warmupDurationMs = performance.now() - warmupStart;
 
     // 2. Measured Iterations
-    const iterationLatenciesMs: number[] = [];
-    let completedJobs = 0;
-    let failedJobs = 0;
-    let lastError: string | undefined;
-
+    const jobResults: SingleJobResult[] = [];
     const measureStart = performance.now();
 
     // Execute in batches according to concurrency
@@ -81,25 +82,22 @@ export class BenchmarkOrchestrator {
         try {
           const out = await this.dispatchStageWork(stage);
           const iterDuration = performance.now() - iterStart;
-          detectedStatus = out.status;
-          detectedProvider = out.provider;
-          if (out.notes) {
-            for (const n of out.notes) {
-              if (!stageNotes.includes(n)) {
-                stageNotes.push(n);
-              }
-            }
-          }
-          if (out.status === "blocked") {
-            failedJobs++;
-            lastError = out.error || "Stage execution blocked";
-          } else {
-            completedJobs++;
-            iterationLatenciesMs.push(iterDuration);
-          }
+          jobResults.push({
+            durationMs: iterDuration,
+            status: out.status,
+            provider: out.provider,
+            notes: out.notes || [],
+            error: out.status === "blocked" ? out.error || "Stage execution blocked" : undefined,
+          });
         } catch (err: unknown) {
-          failedJobs++;
-          lastError = (err as Error).message || String(err);
+          const iterDuration = performance.now() - iterStart;
+          jobResults.push({
+            durationMs: iterDuration,
+            status: "blocked",
+            provider: this.getStageDefaultProvider(stage),
+            notes: [],
+            error: (err as Error).message || String(err),
+          });
         }
       });
 
@@ -107,24 +105,68 @@ export class BenchmarkOrchestrator {
     }
 
     const wallClockDurationMs = performance.now() - measureStart;
+
+    // Deterministic post-settlement aggregation
+    const completedResults = jobResults.filter((j) => j.status !== "blocked");
+    const failedResults = jobResults.filter((j) => j.status === "blocked");
+    const completedJobs = completedResults.length;
+    const failedJobs = failedResults.length;
+
+    const iterationLatenciesMs = completedResults.map((j) => j.durationMs);
     const latencyMetrics = calculatePercentiles(iterationLatenciesMs);
+
+    // Deterministic final provider
+    const nonFixtureProviders = jobResults
+      .map((j) => j.provider)
+      .filter((p) => p && p !== "fixture");
+    const detectedProvider =
+      nonFixtureProviders.length > 0
+        ? nonFixtureProviders[0]
+        : jobResults[0]?.provider || "fixture";
+
+    // Deterministic stage status:
+    // If all jobs failed/blocked -> "blocked"
+    // If any job completed real inference -> "real_inference"
+    // If completed jobs are fixtures -> "fixture"
+    let detectedStatus: StageExecutionStatus;
+    if (completedJobs === 0) {
+      detectedStatus = "blocked";
+    } else {
+      const hasRealInference = completedResults.some((j) => j.status === "real_inference");
+      const hasCpuFallback = completedResults.some((j) => j.status === "cpu_fallback");
+      if (hasRealInference) {
+        detectedStatus = "real_inference";
+      } else if (hasCpuFallback) {
+        detectedStatus = "cpu_fallback";
+      } else {
+        detectedStatus = "fixture";
+      }
+    }
+
+    // Aggregate unique notes
+    const stageNotes: string[] = [];
+    for (const j of jobResults) {
+      for (const n of j.notes) {
+        if (!stageNotes.includes(n)) {
+          stageNotes.push(n);
+        }
+      }
+    }
+
+    // Last error if any failed
+    const lastError = failedResults[failedResults.length - 1]?.error;
 
     // Throughput: completed jobs per second of wall-clock duration
     const wallClockSec = Math.max(0.001, wallClockDurationMs / 1000);
     const throughputJobsPerSec = Number((completedJobs / wallClockSec).toFixed(3));
 
     // Realtime factor: media seconds processed per second of computation
-    // For fixture modes, do not present in-memory speed as genuine inference performance!
     let realtimeFactor: number | null = null;
     let realtimeFactorLabel = "N/A (fixture)";
 
-    if (
-      (detectedStatus as string) === "real_inference" &&
-      completedJobs > 0 &&
-      latencyMetrics.meanMs > 0
-    ) {
+    if (detectedStatus === "real_inference" && completedJobs > 0 && latencyMetrics.meanMs > 0) {
       realtimeFactor = Number((this.media.durationSec / (latencyMetrics.meanMs / 1000)).toFixed(2));
-      realtimeFactorLabel = `${realtimeFactor}�`;
+      realtimeFactorLabel = `${realtimeFactor}x`;
     } else if (detectedStatus === "fixture") {
       realtimeFactor = null;
       realtimeFactorLabel = "N/A (fixture)";
@@ -133,7 +175,9 @@ export class BenchmarkOrchestrator {
       realtimeFactorLabel = "N/A (blocked)";
     }
 
-    // Cost Breakdown with completedJobs scaling
+    // Cost Breakdown:
+    // Billable compute cost runs for wall-clock duration if any work took place
+    // Billable external API cost only accrues for completed jobs that executed real inference
     const cost = calculateStageCost({
       stage,
       status: detectedStatus,
@@ -168,7 +212,7 @@ export class BenchmarkOrchestrator {
     const { concurrency, iterations, warmup, stages } = this.config;
     const notes: string[] = [];
 
-    // Warm-up
+    // Warm-up E2E
     const warmupStart = performance.now();
     for (let w = 0; w < warmup; w++) {
       for (const st of stages) {
@@ -182,12 +226,14 @@ export class BenchmarkOrchestrator {
     const warmupDurationMs = performance.now() - warmupStart;
 
     // Measured E2E
-    const iterationLatenciesMs: number[] = [];
-    let completedJobs = 0;
-    let failedJobs = 0;
-    let lastError: string | undefined;
-    let overallStatus: StageExecutionStatus = "fixture";
+    interface E2EJobResult {
+      durationMs: number;
+      success: boolean;
+      hadRealInference: boolean;
+      error?: string;
+    }
 
+    const jobResults: E2EJobResult[] = [];
     const measureStart = performance.now();
     const totalJobs = Math.max(1, iterations);
 
@@ -196,39 +242,56 @@ export class BenchmarkOrchestrator {
       const batchPromises = Array.from({ length: batchSize }).map(async () => {
         const iterStart = performance.now();
         let jobSuccess = true;
+        let jobHadReal = false;
+        let jobErr: string | undefined;
 
         for (const st of stages) {
           try {
             const out = await this.dispatchStageWork(st);
             if (out.status === "blocked") {
               jobSuccess = false;
-              lastError = out.error || `${st} stage blocked`;
+              jobErr = out.error || `${st} stage blocked`;
               break;
             }
             if (out.status === "real_inference") {
-              overallStatus = "real_inference";
+              jobHadReal = true;
             }
           } catch (err: unknown) {
             jobSuccess = false;
-            lastError = (err as Error).message || String(err);
+            jobErr = (err as Error).message || String(err);
             break;
           }
         }
 
         const iterDuration = performance.now() - iterStart;
-        if (jobSuccess) {
-          completedJobs++;
-          iterationLatenciesMs.push(iterDuration);
-        } else {
-          failedJobs++;
-        }
+        jobResults.push({
+          durationMs: iterDuration,
+          success: jobSuccess,
+          hadRealInference: jobHadReal,
+          error: jobErr,
+        });
       });
 
       await Promise.allSettled(batchPromises);
     }
 
     const wallClockDurationMs = performance.now() - measureStart;
-    const latencyMetrics = calculatePercentiles(iterationLatenciesMs);
+
+    const completedJobs = jobResults.filter((j) => j.success).length;
+    const failedJobs = jobResults.filter((j) => !j.success).length;
+    const completedLatencies = jobResults.filter((j) => j.success).map((j) => j.durationMs);
+    const latencyMetrics = calculatePercentiles(completedLatencies);
+
+    let overallStatus: StageExecutionStatus;
+    if (completedJobs === 0) {
+      overallStatus = "blocked";
+    } else if (jobResults.some((j) => j.success && j.hadRealInference)) {
+      overallStatus = "real_inference";
+    } else {
+      overallStatus = "fixture";
+    }
+
+    const lastError = jobResults.filter((j) => !j.success).pop()?.error;
 
     const wallClockSec = Math.max(0.001, wallClockDurationMs / 1000);
     const throughputJobsPerSec = Number((completedJobs / wallClockSec).toFixed(3));
@@ -236,20 +299,20 @@ export class BenchmarkOrchestrator {
     let realtimeFactor: number | null = null;
     let realtimeFactorLabel = "N/A (fixture)";
 
-    if (
-      (overallStatus as string) === "real_inference" &&
-      completedJobs > 0 &&
-      latencyMetrics.meanMs > 0
-    ) {
+    if (overallStatus === "real_inference" && completedJobs > 0 && latencyMetrics.meanMs > 0) {
       realtimeFactor = Number((this.media.durationSec / (latencyMetrics.meanMs / 1000)).toFixed(2));
-      realtimeFactorLabel = `${realtimeFactor}�`;
+      realtimeFactorLabel = `${realtimeFactor}x`;
     }
 
-    const computeCost = (wallClockSec / 3600) * this.pricing.computeHourlyRateUsd;
+    const computeCost =
+      overallStatus === "blocked" && completedJobs === 0
+        ? 0
+        : (wallClockSec / 3600) * this.pricing.computeHourlyRateUsd;
+
     const mediaMinutes = this.media.durationSec / 60;
     let externalCost = 0;
 
-    if ((overallStatus as string) === "real_inference" && completedJobs > 0) {
+    if (overallStatus === "real_inference" && completedJobs > 0) {
       const totalMediaMinutes = completedJobs * mediaMinutes;
       if (stages.includes("captions") && this.config.transcriptionProvider !== "fixture") {
         externalCost += totalMediaMinutes * this.pricing.transcriptionPerMinuteUsd;
@@ -377,6 +440,21 @@ export class BenchmarkOrchestrator {
     } finally {
       // Guaranteed telemetry timer cleanup on both success and error
       this.telemetryCollector.stop();
+    }
+  }
+
+  private getStageDefaultProvider(stage: PipelineStage): string {
+    switch (stage) {
+      case "reframe":
+        return this.config.reframeProvider || "fixture";
+      case "avs":
+        return this.config.avsProvider || "fixture";
+      case "captions":
+        return this.config.transcriptionProvider || "fixture";
+      case "dubbing":
+        return this.config.dubbingProvider || "fixture";
+      default:
+        return "fixture";
     }
   }
 

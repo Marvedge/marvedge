@@ -38,11 +38,103 @@ describe("Benchmark Orchestrator", () => {
     expect(res.latency.p50Ms).toBeGreaterThanOrEqual(0);
     expect(res.warmupDurationMs).toBeGreaterThanOrEqual(0);
     expect(res.throughputJobsPerSec).toBeGreaterThan(0);
-    // Fixture speed must be labeled as N/A (fixture), not misleading real-time factor
     expect(res.realtimeFactor).toBeNull();
     expect(res.realtimeFactorLabel).toBe("N/A (fixture)");
     expect(res.cost.totalCostUsd).toBeGreaterThanOrEqual(0);
     expect(res.cost.costPerCompletedJobUsd).toBeGreaterThanOrEqual(0);
+  });
+
+  it("handles concurrent mixed success and blocked jobs deterministically without last-write-wins race", async () => {
+    const config: BenchmarkConfig = {
+      stages: ["captions"],
+      concurrency: 4,
+      iterations: 4,
+      warmup: 0,
+      gpuType: "L4",
+      transcriptionProvider: "whisper",
+      dubbingProvider: "fixture",
+    };
+
+    const orchestrator = new BenchmarkOrchestrator({
+      config,
+      inputMedia: sampleMedia,
+    });
+
+    let callCount = 0;
+    // Simulate concurrent jobs where 2 succeed with real inference and 2 block
+    // and complete in non-deterministic order
+    (orchestrator as unknown as Record<string, () => Promise<unknown>>).dispatchStageWork =
+      async () => {
+        const idx = ++callCount;
+        if (idx % 2 === 1) {
+          // Fast real inference success
+          await new Promise((r) => setTimeout(r, 10));
+          return {
+            stage: "captions",
+            status: "real_inference",
+            provider: "whisper",
+            notes: ["Mock whisper success"],
+          };
+        } else {
+          // Slower blocked job
+          await new Promise((r) => setTimeout(r, 25));
+          return {
+            stage: "captions",
+            status: "blocked",
+            provider: "whisper",
+            error: "Rate limit blocked",
+            notes: ["Mock whisper rate limit"],
+          };
+        }
+      };
+
+    const res = await orchestrator.runStage("captions");
+
+    // Must be deterministic:
+    expect(res.completedJobs).toBe(2);
+    expect(res.failedJobs).toBe(2);
+    expect(res.status).toBe("real_inference");
+    expect(res.provider).toBe("whisper");
+    // External billable API cost must reflect the 2 completed jobs * (10s / 60s) * $0.006/min
+    expect(res.cost.externalApiCostUsd).toBeGreaterThan(0);
+    expect(res.cost.costPerCompletedJobUsd).toBeGreaterThan(0);
+    expect(res.error).toBe("Rate limit blocked");
+  });
+
+  it("classifies all-blocked stage as blocked with zero billable API cost", async () => {
+    const config: BenchmarkConfig = {
+      stages: ["captions"],
+      concurrency: 2,
+      iterations: 2,
+      warmup: 0,
+      gpuType: "none",
+      transcriptionProvider: "whisper",
+      dubbingProvider: "fixture",
+    };
+
+    const orchestrator = new BenchmarkOrchestrator({
+      config,
+      inputMedia: sampleMedia,
+    });
+
+    (orchestrator as unknown as Record<string, () => Promise<unknown>>).dispatchStageWork =
+      async () => {
+        return {
+          stage: "captions",
+          status: "blocked",
+          provider: "whisper",
+          error: "OPENAI_API_KEY_UNSET",
+          notes: ["Key missing"],
+        };
+      };
+
+    const res = await orchestrator.runStage("captions");
+    expect(res.completedJobs).toBe(0);
+    expect(res.failedJobs).toBe(2);
+    expect(res.status).toBe("blocked");
+    expect(res.cost.externalApiCostUsd).toBe(0);
+    expect(res.cost.totalCostUsd).toBe(0);
+    expect(res.cost.costPerCompletedJobUsd).toBeNull();
   });
 
   it("runs end-to-end multi-stage pipeline successfully in fixture mode", async () => {
@@ -142,19 +234,16 @@ describe("Benchmark Orchestrator", () => {
       inputMedia: sampleMedia,
     });
 
-    // Force an internal error by mocking dispatchStageWork
     (orchestrator as unknown as Record<string, () => never>).dispatchStageWork = () => {
       throw new Error("Critical internal fatal error");
     };
 
-    // runStage catches job errors; force run() error during stage loop
     (orchestrator as unknown as Record<string, () => never>).runStage = () => {
       throw new Error("Fatal orchestrator stage failure");
     };
 
     await expect(orchestrator.run()).rejects.toThrow("Fatal orchestrator stage failure");
 
-    // Hardware telemetry should be cleanly retrievable and collector stopped
     const tele = orchestrator.telemetryCollector.getHardwareTelemetry();
     expect(tele.os.platform).toBeTruthy();
   });

@@ -1,3 +1,4 @@
+import fs from "fs";
 import os from "os";
 import path from "path";
 import { describe, expect, it } from "vitest";
@@ -43,33 +44,55 @@ describe("CLI Parsing & Exit Code Semantics", () => {
     const jsonPath = path.join(tmpDir, "report.json");
     const mdPath = path.join(tmpDir, "report.md");
 
-    const argv = [
-      "node",
-      "cloudCostBenchmark.ts",
-      "--stages=captions",
-      "--concurrency=1",
-      "--iterations=1",
-      "--warmup=0",
-      `--output-json=${jsonPath}`,
-      `--output-markdown=${mdPath}`,
-    ];
+    // Create a tiny dummy file as input to bypass ffmpeg in fast unit tests
+    const dummyFile = path.join(tmpDir, "dummy_cli_test.mp4");
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    fs.writeFileSync(dummyFile, "dummy media content for test");
 
-    const exitCode = await runBenchmarkCli(argv);
-    expect(exitCode).toBe(0);
-  });
+    try {
+      const argv = [
+        "node",
+        "cloudCostBenchmark.ts",
+        `--input=${dummyFile}`,
+        "--stages=captions",
+        "--concurrency=1",
+        "--iterations=1",
+        "--warmup=0",
+        `--output-json=${jsonPath}`,
+        `--output-markdown=${mdPath}`,
+      ];
+
+      const exitCode = await runBenchmarkCli(argv);
+      expect(exitCode).toBe(0);
+      expect(fs.existsSync(jsonPath)).toBe(true);
+      expect(fs.existsSync(mdPath)).toBe(true);
+    } finally {
+      if (fs.existsSync(dummyFile)) {
+        fs.unlinkSync(dummyFile);
+      }
+    }
+  }, 10000);
 
   it("returns exit code 1 when stage execution is blocked or failed", async () => {
     const oldKey = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
 
-    try {
-      const tmpDir = path.join(os.tmpdir(), "cli-fail-test-" + Date.now());
-      const jsonPath = path.join(tmpDir, "report.json");
-      const mdPath = path.join(tmpDir, "report.md");
+    const tmpDir = path.join(os.tmpdir(), "cli-fail-test-" + Date.now());
+    const jsonPath = path.join(tmpDir, "report.json");
+    const mdPath = path.join(tmpDir, "report.md");
+    const dummyFile = path.join(tmpDir, "dummy_cli_fail.mp4");
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    fs.writeFileSync(dummyFile, "dummy media content for test");
 
+    try {
       const argv = [
         "node",
         "cloudCostBenchmark.ts",
+        `--input=${dummyFile}`,
         "--stages=captions",
         "--provider-transcription=whisper", // missing key -> FAILED
         "--concurrency=1",
@@ -82,9 +105,12 @@ describe("CLI Parsing & Exit Code Semantics", () => {
       const exitCode = await runBenchmarkCli(argv);
       expect(exitCode).toBe(1);
     } finally {
+      if (fs.existsSync(dummyFile)) {
+        fs.unlinkSync(dummyFile);
+      }
       if (oldKey) {
         process.env.OPENAI_API_KEY = oldKey;
       }
     }
-  });
+  }, 10000);
 });

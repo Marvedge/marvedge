@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePercentiles, TelemetryCollector } from "../telemetry";
+import { calculatePercentiles, safeParseGpuMetric, TelemetryCollector } from "../telemetry";
 
 describe("Telemetry & Latency Calculations", () => {
   it("handles empty latency samples gracefully", () => {
@@ -40,7 +40,106 @@ describe("Telemetry & Latency Calculations", () => {
   });
 });
 
-describe("TelemetryCollector Lifecycle & Error Cleanup", () => {
+describe("safeParseGpuMetric", () => {
+  it("parses valid numeric values and floats", () => {
+    expect(safeParseGpuMetric("45.6")).toBe(45.6);
+    expect(safeParseGpuMetric("1200")).toBe(1200);
+    expect(safeParseGpuMetric(78.5)).toBe(78.5);
+  });
+
+  it("preserves actual numeric 0 as 0 and does not convert to null", () => {
+    expect(safeParseGpuMetric("0")).toBe(0);
+    expect(safeParseGpuMetric("0.0")).toBe(0);
+    expect(safeParseGpuMetric(0)).toBe(0);
+  });
+
+  it("safely strips trailing units", () => {
+    expect(safeParseGpuMetric("1024 MiB")).toBe(1024);
+    expect(safeParseGpuMetric("85 %")).toBe(85);
+    expect(safeParseGpuMetric("65 C")).toBe(65);
+    expect(safeParseGpuMetric("0 %")).toBe(0);
+  });
+
+  it("returns null for unsupported N/A variants", () => {
+    expect(safeParseGpuMetric("N/A")).toBeNull();
+    expect(safeParseGpuMetric("n/a")).toBeNull();
+    expect(safeParseGpuMetric(" [Not Supported] ")).toBeNull();
+    expect(safeParseGpuMetric("[NOT SUPPORTED]")).toBeNull();
+    expect(safeParseGpuMetric("NOT SUPPORTED")).toBeNull();
+  });
+
+  it("returns null for empty or malformed strings and non-finite numbers", () => {
+    expect(safeParseGpuMetric("")).toBeNull();
+    expect(safeParseGpuMetric("   ")).toBeNull();
+    expect(safeParseGpuMetric("invalid_str")).toBeNull();
+    expect(safeParseGpuMetric(NaN)).toBeNull();
+    expect(safeParseGpuMetric(Infinity)).toBeNull();
+    expect(safeParseGpuMetric(null)).toBeNull();
+    expect(safeParseGpuMetric(undefined)).toBeNull();
+  });
+});
+
+describe("TelemetryCollector GPU Aggregation & Lifecycle", () => {
+  it("calculates averages and peaks from valid numeric samples only", () => {
+    const collector = new TelemetryCollector({ checkGpu: false });
+    // Simulate detected GPU
+    (collector as unknown as { gpuAvailable: boolean; gpuModelName: string }).gpuAvailable = true;
+    (collector as unknown as { gpuModelName: string }).gpuModelName = "Test NVIDIA L4";
+
+    // Record mixed valid, zero, and N/A samples
+    collector.recordGpuSample({
+      memUsedMib: "500",
+      memTotalMib: "24000",
+      gpuUtilPct: "0", // actual zero
+      tempC: "45",
+    });
+    collector.recordGpuSample({
+      memUsedMib: "N/A", // unsupported metric
+      memTotalMib: "24000",
+      gpuUtilPct: "50 %",
+      tempC: "[Not Supported]",
+    });
+    collector.recordGpuSample({
+      memUsedMib: "1500 MiB",
+      memTotalMib: "24000",
+      gpuUtilPct: "100",
+      tempC: "55 C",
+    });
+
+    const tele = collector.getHardwareTelemetry();
+    expect(tele.gpu?.isAvailable).toBe(true);
+    expect(tele.gpu?.totalVramMib).toBe(24000);
+    // VRAM used: average of 500 and 1500 = 1000
+    expect(tele.gpu?.avgVramUsedMib).toBe(1000);
+    expect(tele.gpu?.peakVramUsedMib).toBe(1500);
+    // Util: 0, 50, 100 -> avg 50, peak 100
+    expect(tele.gpu?.avgGpuUtilPct).toBe(50);
+    expect(tele.gpu?.peakGpuUtilPct).toBe(100);
+    // Temp: 45, 55 -> max 55
+    expect(tele.gpu?.maxTempC).toBe(55);
+  });
+
+  it("reports null when no valid samples exist for a metric instead of fake zeroes", () => {
+    const collector = new TelemetryCollector({ checkGpu: false });
+    (collector as unknown as { gpuAvailable: boolean }).gpuAvailable = true;
+
+    collector.recordGpuSample({
+      memUsedMib: "N/A",
+      memTotalMib: "[Not Supported]",
+      gpuUtilPct: "N/A",
+      tempC: "N/A",
+    });
+
+    const tele = collector.getHardwareTelemetry();
+    expect(tele.gpu?.isAvailable).toBe(true);
+    expect(tele.gpu?.totalVramMib).toBeNull();
+    expect(tele.gpu?.avgVramUsedMib).toBeNull();
+    expect(tele.gpu?.peakVramUsedMib).toBeNull();
+    expect(tele.gpu?.avgGpuUtilPct).toBeNull();
+    expect(tele.gpu?.peakGpuUtilPct).toBeNull();
+    expect(tele.gpu?.maxTempC).toBeNull();
+  });
+
   it("collects CPU and Memory telemetry without crashing in CPU mode", async () => {
     const collector = new TelemetryCollector({
       pollIntervalMs: 50,
@@ -77,7 +176,6 @@ describe("TelemetryCollector Lifecycle & Error Cleanup", () => {
     let caughtError: Error | null = null;
     try {
       collector.start();
-      // Simulate failure mid-sampling
       throw new Error("Simulated pipeline crash");
     } catch (err: unknown) {
       caughtError = err as Error;
@@ -87,8 +185,6 @@ describe("TelemetryCollector Lifecycle & Error Cleanup", () => {
 
     expect(caughtError).not.toBeNull();
     expect(caughtError?.message).toBe("Simulated pipeline crash");
-
-    // Calling stop again must be idempotent and safe
     expect(() => collector.stop()).not.toThrow();
   });
 });

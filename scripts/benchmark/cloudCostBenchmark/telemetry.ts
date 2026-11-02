@@ -68,11 +68,50 @@ export function calculatePercentiles(samples: number[]): LatencyMetrics {
   };
 }
 
+/**
+ * Safely parses a raw metric string from nvidia-smi.
+ * Returns null for unsupported ("N/A", "[Not Supported]"), empty, non-finite, or malformed values.
+ * Preserves numeric 0 as 0.
+ */
+export function safeParseGpuMetric(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (
+    trimmed === "" ||
+    trimmed.toUpperCase() === "N/A" ||
+    trimmed.toUpperCase() === "[NOT SUPPORTED]" ||
+    trimmed.toUpperCase() === "NOT SUPPORTED" ||
+    trimmed.toUpperCase() === "NONE" ||
+    trimmed.toUpperCase() === "UNKNOWN"
+  ) {
+    return null;
+  }
+
+  // Remove trailing units if present (e.g. " MiB", " %", " C")
+  const cleaned = trimmed.replace(/\s*(MiB|GiB|B|%|C|W|MHz)\s*$/i, "").trim();
+  const parsed = Number(cleaned);
+
+  if (!Number.isFinite(parsed) || isNaN(parsed)) {
+    return null;
+  }
+
+  return parsed;
+}
+
 export interface GpuRawSample {
-  memUsedMib: number;
-  memTotalMib: number;
-  gpuUtilPct: number;
-  tempC: number;
+  memUsedMib: number | null;
+  memTotalMib: number | null;
+  gpuUtilPct: number | null;
+  tempC: number | null;
 }
 
 export class TelemetryCollector {
@@ -165,6 +204,20 @@ export class TelemetryCollector {
     this.sampleCpuAndMemory();
   }
 
+  public recordGpuSample(sample: {
+    memUsedMib?: unknown;
+    memTotalMib?: unknown;
+    gpuUtilPct?: unknown;
+    tempC?: unknown;
+  }): void {
+    this.gpuSamples.push({
+      memUsedMib: safeParseGpuMetric(sample.memUsedMib),
+      memTotalMib: safeParseGpuMetric(sample.memTotalMib),
+      gpuUtilPct: safeParseGpuMetric(sample.gpuUtilPct),
+      tempC: safeParseGpuMetric(sample.tempC),
+    });
+  }
+
   private sampleResources(pollGpu: boolean): void {
     this.sampleCpuAndMemory();
 
@@ -196,10 +249,10 @@ export class TelemetryCollector {
               .map((s) => s.trim());
             if (parts.length >= 4) {
               this.gpuSamples.push({
-                memUsedMib: parseFloat(parts[0]) || 0,
-                memTotalMib: parseFloat(parts[1]) || 0,
-                gpuUtilPct: parseFloat(parts[2]) || 0,
-                tempC: parseFloat(parts[3]) || 0,
+                memUsedMib: safeParseGpuMetric(parts[0]),
+                memTotalMib: safeParseGpuMetric(parts[1]),
+                gpuUtilPct: safeParseGpuMetric(parts[2]),
+                tempC: safeParseGpuMetric(parts[3]),
               });
             }
           }
@@ -271,21 +324,25 @@ export class TelemetryCollector {
 
     let gpuTele: GpuTelemetry | null = null;
     if (this.gpuAvailable) {
-      const peakVram =
-        this.gpuSamples.length > 0 ? Math.max(...this.gpuSamples.map((s) => s.memUsedMib)) : null;
-      const totalVram = this.gpuSamples.length > 0 ? this.gpuSamples[0].memTotalMib : null;
+      const validUsed = this.gpuSamples
+        .map((s) => s.memUsedMib)
+        .filter((v): v is number => v !== null);
+      const validTotal = this.gpuSamples
+        .map((s) => s.memTotalMib)
+        .filter((v): v is number => v !== null);
+      const validUtil = this.gpuSamples
+        .map((s) => s.gpuUtilPct)
+        .filter((v): v is number => v !== null);
+      const validTemp = this.gpuSamples.map((s) => s.tempC).filter((v): v is number => v !== null);
+
+      const peakVram = validUsed.length > 0 ? Math.max(...validUsed) : null;
+      const totalVram = validTotal.length > 0 ? validTotal[0] : null;
       const avgVram =
-        this.gpuSamples.length > 0
-          ? this.gpuSamples.reduce((a, s) => a + s.memUsedMib, 0) / this.gpuSamples.length
-          : null;
+        validUsed.length > 0 ? validUsed.reduce((a, b) => a + b, 0) / validUsed.length : null;
       const avgGpu =
-        this.gpuSamples.length > 0
-          ? this.gpuSamples.reduce((a, s) => a + s.gpuUtilPct, 0) / this.gpuSamples.length
-          : null;
-      const peakGpu =
-        this.gpuSamples.length > 0 ? Math.max(...this.gpuSamples.map((s) => s.gpuUtilPct)) : null;
-      const maxTemp =
-        this.gpuSamples.length > 0 ? Math.max(...this.gpuSamples.map((s) => s.tempC)) : null;
+        validUtil.length > 0 ? validUtil.reduce((a, b) => a + b, 0) / validUtil.length : null;
+      const peakGpu = validUtil.length > 0 ? Math.max(...validUtil) : null;
+      const maxTemp = validTemp.length > 0 ? Math.max(...validTemp) : null;
 
       gpuTele = {
         isAvailable: true,
