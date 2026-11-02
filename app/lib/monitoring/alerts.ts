@@ -2,6 +2,11 @@ import type { Gauge, Histogram } from "@prometheus-io/client";
 import type Redis from "ioredis";
 import { dubbingDurationSeconds, queueDepth, reframeInferenceDurationSeconds } from "./metrics";
 import { collectJobOutcomeWindowCounts, type JobOutcomeMetricsSources } from "./jobOutcomeMetrics";
+import {
+  sendExternalAlertNotification,
+  type ExternalNotificationConfig,
+} from "./externalNotifications";
+import { collectStuckQueueMetrics, type StuckQueueMetricSources } from "./stuckQueueMetrics";
 
 export type AlertPipeline = "reframe" | "dubbing";
 export type AlertSeverity = "warning";
@@ -13,7 +18,10 @@ export type AlertName =
   | "dubbing_job_failure_rate"
   | "reframe_queue_depth"
   | "dubbing_queue_depth"
+  | "reframe_stuck_queue"
+  | "dubbing_stuck_queue"
   | "gpu_hours_threshold"
+  | "gpu_spend_threshold"
   | "dubbing_vendor_spend_threshold"
   | "dubbing_vendor_usage_threshold";
 
@@ -38,9 +46,15 @@ export interface MonitoringAlertConfig {
   failureRateMinimumJobs: number;
   alertCooldownSeconds: number;
 
-  // GPU worker runtime alerts (measures active worker processing duration on GPU hosts, distinct from EC2 instance running time)
+  // Stuck queue alerts (measures age of oldest active/waiting job without false alarming when empty)
+  reframeStuckQueueThresholdSeconds?: number;
+  dubbingStuckQueueThresholdSeconds?: number;
+
+  // GPU worker runtime & estimated spend alerts
   gpuHoursThreshold?: number;
   gpuHoursObservationWindowSeconds?: number;
+  gpuSpendThresholdUsd?: number;
+  gpuHourlyRateUsd?: number;
 
   // Dubbing vendor spend / usage alerts
   dubbingVendorSpendThresholdUsd?: number;
@@ -48,8 +62,12 @@ export interface MonitoringAlertConfig {
   dubbingVendorObservationWindowSeconds?: number;
   dubbingVendorEstimatedUnitCostUsd?: number;
 
-  // Optional notification webhook
+  // External notification channels (Email / Webhook / Dry Run)
   alertWebhookUrl?: string;
+  alertEmailRecipient?: string;
+  alertEmailSender?: string;
+  resendApiKey?: string;
+  alertDryRun?: boolean;
 }
 
 export interface CostWindowData {
@@ -65,6 +83,8 @@ export interface AlertEvaluationOptions {
   failureRateQueues?: JobOutcomeMetricsSources;
   latencyWindowMeans?: Partial<Record<AlertPipeline, number>>;
   queueDepthAvailability?: Partial<Record<AlertPipeline, boolean>>;
+  stuckQueueAges?: Partial<Record<AlertPipeline, number>>;
+  stuckQueueQueues?: StuckQueueMetricSources;
   inferenceHistogram?: Pick<Histogram<"status">, "get">;
   dubbingHistogram?: Pick<Histogram<"status">, "get">;
   queueGauge?: Pick<Gauge<"pipeline" | "state">, "get">;
@@ -181,7 +201,26 @@ export function loadMonitoringAlertConfig(
     ),
   };
 
-  // GPU worker runtime configuration
+  // Stuck queue alerts configuration
+  const defaultStuckThreshold = readOptionalNumber(
+    environment,
+    "MONITORING_STUCK_QUEUE_THRESHOLD_SECONDS",
+    positiveInteger
+  );
+  const reframeStuckQueueThresholdSeconds =
+    readOptionalNumber(
+      environment,
+      "MONITORING_REFRAME_STUCK_QUEUE_THRESHOLD_SECONDS",
+      positiveInteger
+    ) ?? defaultStuckThreshold;
+  const dubbingStuckQueueThresholdSeconds =
+    readOptionalNumber(
+      environment,
+      "MONITORING_DUBBING_STUCK_QUEUE_THRESHOLD_SECONDS",
+      positiveInteger
+    ) ?? defaultStuckThreshold;
+
+  // GPU worker runtime & estimated spend configuration
   const gpuHoursThreshold = readOptionalNumber(
     environment,
     "MONITORING_GPU_HOURS_THRESHOLD",
@@ -192,9 +231,30 @@ export function loadMonitoringAlertConfig(
     "MONITORING_GPU_HOURS_OBSERVATION_WINDOW_SECONDS",
     wholeMinute
   );
+  const gpuSpendThresholdUsd = readOptionalNumber(
+    environment,
+    "MONITORING_GPU_SPEND_THRESHOLD_USD",
+    positive
+  );
+  const gpuHourlyRateUsd = readOptionalNumber(
+    environment,
+    "MONITORING_GPU_HOURLY_RATE_USD",
+    positive
+  );
 
   if (gpuHoursThreshold !== undefined && gpuHoursObservationWindowSeconds === undefined) {
     throw new MonitoringAlertConfigurationError("MONITORING_GPU_HOURS_OBSERVATION_WINDOW_SECONDS");
+  }
+
+  if (gpuSpendThresholdUsd !== undefined) {
+    if (gpuHoursObservationWindowSeconds === undefined) {
+      throw new MonitoringAlertConfigurationError(
+        "MONITORING_GPU_HOURS_OBSERVATION_WINDOW_SECONDS"
+      );
+    }
+    if (gpuHourlyRateUsd === undefined) {
+      throw new MonitoringAlertConfigurationError("MONITORING_GPU_HOURLY_RATE_USD");
+    }
   }
 
   // Dubbing vendor spend and usage configuration
@@ -238,7 +298,7 @@ export function loadMonitoringAlertConfig(
     );
   }
 
-  // Webhook URL validation
+  // External notification channels configuration
   let alertWebhookUrl: string | undefined;
   const rawWebhookUrl = environment.MONITORING_ALERT_WEBHOOK_URL?.trim();
   if (rawWebhookUrl) {
@@ -253,15 +313,37 @@ export function loadMonitoringAlertConfig(
     }
   }
 
+  const alertEmailRecipient = environment.MONITORING_ALERT_EMAIL_RECIPIENT?.trim() || undefined;
+  const alertEmailSender = environment.MONITORING_ALERT_EMAIL_SENDER?.trim() || undefined;
+  const resendApiKey =
+    environment.MONITORING_RESEND_API_KEY?.trim() ||
+    environment.RESEND_API_KEY?.trim() ||
+    undefined;
+
+  if (alertEmailRecipient && !resendApiKey) {
+    throw new MonitoringAlertConfigurationError("RESEND_API_KEY");
+  }
+
+  const rawDryRun = environment.MONITORING_ALERT_DRY_RUN?.trim().toLowerCase();
+  const alertDryRun = rawDryRun ? rawDryRun === "true" || rawDryRun === "1" : undefined;
+
   return {
     ...baseConfig,
+    reframeStuckQueueThresholdSeconds,
+    dubbingStuckQueueThresholdSeconds,
     gpuHoursThreshold,
     gpuHoursObservationWindowSeconds,
+    gpuSpendThresholdUsd,
+    gpuHourlyRateUsd,
     dubbingVendorSpendThresholdUsd,
     dubbingVendorUsageThreshold,
     dubbingVendorObservationWindowSeconds,
     dubbingVendorEstimatedUnitCostUsd,
     alertWebhookUrl,
+    alertEmailRecipient,
+    alertEmailSender,
+    resendApiKey,
+    alertDryRun,
   };
 }
 
@@ -339,7 +421,10 @@ const alertNames: AlertName[] = [
   "dubbing_job_failure_rate",
   "reframe_queue_depth",
   "dubbing_queue_depth",
+  "reframe_stuck_queue",
+  "dubbing_stuck_queue",
   "gpu_hours_threshold",
+  "gpu_spend_threshold",
   "dubbing_vendor_spend_threshold",
   "dubbing_vendor_usage_threshold",
 ];
@@ -363,7 +448,6 @@ export async function dispatchAlertWebhook(
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new Error("Protocol must be http: or https:");
     }
-    // Clean safe URL for logging without query params or secrets
     const safeUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
 
     const controller = new AbortController();
@@ -411,6 +495,7 @@ export function createMonitoringAlertEvaluator(
 
     const conditions: AlertCondition[] = [];
     const evaluated = new Set<AlertName>();
+
     const reframeLatency = options.latencyWindowMeans
       ? options.latencyWindowMeans.reframe
       : meanHistogramDuration(reframeHistogram, "marvedge_reframe_inference_duration_seconds");
@@ -488,8 +573,38 @@ export function createMonitoringAlertEvaluator(
       });
     }
 
+    // Stuck queues evaluation
+    if (
+      config.reframeStuckQueueThresholdSeconds !== undefined &&
+      options.stuckQueueAges?.reframe !== undefined
+    ) {
+      evaluated.add("reframe_stuck_queue");
+      conditions.push({
+        name: "reframe_stuck_queue",
+        pipeline: "reframe",
+        observedValue: options.stuckQueueAges.reframe,
+        threshold: config.reframeStuckQueueThresholdSeconds,
+      });
+    }
+
+    if (
+      config.dubbingStuckQueueThresholdSeconds !== undefined &&
+      options.stuckQueueAges?.dubbing !== undefined
+    ) {
+      evaluated.add("dubbing_stuck_queue");
+      conditions.push({
+        name: "dubbing_stuck_queue",
+        pipeline: "dubbing",
+        observedValue: options.stuckQueueAges.dubbing,
+        threshold: config.dubbingStuckQueueThresholdSeconds,
+      });
+    }
+
     // Cost / Usage metrics evaluation
-    if (config.gpuHoursThreshold !== undefined && options.costWindowData?.gpuJobDurationSeconds !== undefined) {
+    if (
+      config.gpuHoursThreshold !== undefined &&
+      options.costWindowData?.gpuJobDurationSeconds !== undefined
+    ) {
       const gpuHours = options.costWindowData.gpuJobDurationSeconds / 3600;
       evaluated.add("gpu_hours_threshold");
       conditions.push({
@@ -497,6 +612,22 @@ export function createMonitoringAlertEvaluator(
         pipeline: "reframe",
         observedValue: gpuHours,
         threshold: config.gpuHoursThreshold,
+      });
+    }
+
+    if (
+      config.gpuSpendThresholdUsd !== undefined &&
+      options.costWindowData?.gpuJobDurationSeconds !== undefined &&
+      config.gpuHourlyRateUsd !== undefined
+    ) {
+      const gpuSpend =
+        (options.costWindowData.gpuJobDurationSeconds / 3600) * config.gpuHourlyRateUsd;
+      evaluated.add("gpu_spend_threshold");
+      conditions.push({
+        name: "gpu_spend_threshold",
+        pipeline: "reframe",
+        observedValue: gpuSpend,
+        threshold: config.gpuSpendThresholdUsd,
       });
     }
 
@@ -538,6 +669,14 @@ export function createMonitoringAlertEvaluator(
     const events: MonitoringAlertEvent[] = [];
     const cooldownMs = config.alertCooldownSeconds * 1000;
 
+    const notificationConfig: ExternalNotificationConfig = {
+      alertWebhookUrl: config.alertWebhookUrl,
+      alertEmailRecipient: config.alertEmailRecipient,
+      alertEmailSender: config.alertEmailSender,
+      resendApiKey: config.resendApiKey,
+      alertDryRun: config.alertDryRun,
+    };
+
     for (const name of alertNames) {
       if (!evaluated.has(name)) {
         continue;
@@ -566,9 +705,7 @@ export function createMonitoringAlertEvaluator(
           };
           events.push(event);
           (options.emit ?? defaultEmit)(event);
-          if (config.alertWebhookUrl) {
-            void dispatchAlertWebhook(config.alertWebhookUrl, event);
-          }
+          void sendExternalAlertNotification(event, notificationConfig);
         }
         states.set(name, state);
       } else if (previous?.firing && condition) {
@@ -583,9 +720,7 @@ export function createMonitoringAlertEvaluator(
         };
         events.push(event);
         (options.emit ?? defaultEmit)(event);
-        if (config.alertWebhookUrl) {
-          void dispatchAlertWebhook(config.alertWebhookUrl, event);
-        }
+        void sendExternalAlertNotification(event, notificationConfig);
         states.set(name, { firing: false, lastFiringAt: previous.lastFiringAt });
       }
     }
@@ -615,10 +750,31 @@ export async function evaluateMonitoringAlerts(
     );
   }
 
+  let stuckQueueAges = options.stuckQueueAges;
+  if (
+    !stuckQueueAges &&
+    (config.reframeStuckQueueThresholdSeconds !== undefined ||
+      config.dubbingStuckQueueThresholdSeconds !== undefined)
+  ) {
+    let stuckQueues = options.stuckQueueQueues;
+    if (!stuckQueues) {
+      if (options.failureRateQueues) {
+        stuckQueues = options.failureRateQueues as unknown as StuckQueueMetricSources;
+      } else {
+        const { reframeQueue, dubbingQueue } = await import("../queue");
+        stuckQueues = { reframe: reframeQueue, dubbing: dubbingQueue };
+      }
+    }
+    stuckQueueAges = await collectStuckQueueMetrics(stuckQueues, now);
+  }
+
   let costWindowData = options.costWindowData;
   if (!costWindowData && options.costRedis) {
     costWindowData = {};
-    if (config.gpuHoursThreshold !== undefined && config.gpuHoursObservationWindowSeconds) {
+    if (
+      (config.gpuHoursThreshold !== undefined || config.gpuSpendThresholdUsd !== undefined) &&
+      config.gpuHoursObservationWindowSeconds
+    ) {
       const { collectCostWindowSum } = await import("./costWindowMetrics");
       costWindowData.gpuJobDurationSeconds = await collectCostWindowSum(
         options.costRedis,
@@ -647,6 +803,7 @@ export async function evaluateMonitoringAlerts(
     config,
     now,
     failureRateWindowCounts,
+    stuckQueueAges,
     costWindowData,
   });
 }

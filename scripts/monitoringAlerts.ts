@@ -57,6 +57,7 @@ async function main(): Promise<void> {
     await evaluateMonitoringAlerts({
       config: alertConfig,
       failureRateQueues: queues,
+      stuckQueueQueues: queues,
       latencyWindowMeans,
       queueDepthAvailability,
       costRedis: redis,
