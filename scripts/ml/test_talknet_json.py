@@ -47,7 +47,7 @@ def check(label, condition, reason="", warning=False):
 
 
 # ─── Test 1: Load & root schema ───────────────────────────────────────────────
-def test_load(json_path):
+def validate_load(json_path):
     print("\n📄 Test 1: File Load & Root Schema")
     try:
         with open(json_path) as f:
@@ -65,7 +65,7 @@ def test_load(json_path):
 
 
 # ─── Test 2: Metadata fields ──────────────────────────────────────────────────
-def test_metadata(data):
+def validate_metadata(data):
     print("\n🔧 Test 2: Metadata Fields")
     meta = data.get("metadata", {})
 
@@ -86,7 +86,7 @@ def test_metadata(data):
 
 
 # ─── Test 3: Speaker schema ───────────────────────────────────────────────────
-def test_speakers(data):
+def validate_speakers(data):
     print("\n👤 Test 3: Speaker Schema")
     speakers = data.get("speakers", [])
     check("At least 1 speaker found", len(speakers) > 0,
@@ -111,7 +111,7 @@ def test_speakers(data):
 
 
 # ─── Test 4: Frame schema ─────────────────────────────────────────────────────
-def test_frames(data, threshold):
+def validate_frames(data, threshold):
     print("\n🎞️  Test 4: Frame Schema & Value Ranges")
     speakers = data.get("speakers", [])
 
@@ -156,7 +156,7 @@ def test_frames(data, threshold):
 
 
 # ─── Test 5: Temporal ordering ────────────────────────────────────────────────
-def test_temporal_order(data):
+def validate_temporal_order(data):
     print("\n⏱️  Test 5: Temporal Ordering")
     for sp in data.get("speakers", []):
         sid = sp.get("speaker_id", "?")
@@ -181,15 +181,15 @@ def main():
     print(f"  File: {args.jsonPath}")
     print(f"{'='*60}")
 
-    data = test_load(args.jsonPath)
+    data = validate_load(args.jsonPath)
     if data is None:
         print("\nAborted: cannot load JSON.")
         sys.exit(1)
 
-    threshold, fps = test_metadata(data)
-    test_speakers(data)
-    test_frames(data, threshold)
-    test_temporal_order(data)
+    threshold, fps = validate_metadata(data)
+    validate_speakers(data)
+    validate_frames(data, threshold)
+    validate_temporal_order(data)
 
     total = results["pass"] + results["fail"] + results["warn"]
     print(f"\n{'='*60}")
