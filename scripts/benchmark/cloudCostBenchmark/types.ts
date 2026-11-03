@@ -105,6 +105,8 @@ export interface StageResult {
   cost: StageCostBreakdown;
   notes?: string[];
   error?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  outputArtifacts?: Record<string, any>;
 }
 
 export interface BenchmarkConfig {
@@ -118,7 +120,11 @@ export interface BenchmarkConfig {
   reframeProvider?: "fixture" | "autoflip";
   avsProvider?: "fixture" | "talknet";
   transcriptionProvider: "fixture" | "whisper" | "groq";
-  dubbingProvider: "fixture" | "elevenlabs";
+  dubbingProvider: "fixture" | "elevenlabs" | "voicestudio";
+  voiceStudioUrl?: string;
+  voiceStudioApiKey?: string;
+  voiceStudioModel?: string;
+  voiceStudioFallbackToPaid?: boolean;
   outputJsonPath?: string;
   outputMarkdownPath?: string;
   verbose?: boolean;
