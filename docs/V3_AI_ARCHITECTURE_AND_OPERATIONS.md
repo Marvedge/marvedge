@@ -1,11 +1,11 @@
 # Marvedge V3 AI/ML Architecture & Operations Guide
 
-**Document:** `docs/V3_AI_ARCHITECTURE_AND_OPERATIONS.md`  
-**Task:** Task-00106 — V3 AI Architecture & Operations Documentation  
-**Version:** 3.0.0 (Production & Operational Reference)  
-**Date:** November 2026  
-**Audience:** Platform Engineers, ML Engineers, SRE / On-Call Engineers, and Engineering Leadership  
-**Status:** Authoritative Engineering Reference (Ground Truth Reconciled)
+- **Document:** `docs/V3_AI_ARCHITECTURE_AND_OPERATIONS.md`
+- **Task:** Task-00106 — V3 AI Architecture & Operations Documentation
+- **Version:** 3.0.0 (Production & Operational Reference)
+- **Date:** November 2026
+- **Audience:** Platform Engineers, ML Engineers, SRE / On-Call Engineers, and Engineering Leadership
+- **Status:** Authoritative Engineering Reference (Ground Truth Reconciled)
 
 ---
 
@@ -40,7 +40,6 @@
    - 4.7 [Cloud Storage & CDN](#47-cloud-storage--cdn)
    - 4.8 [AWS & GPU Infrastructure](#48-aws--gpu-infrastructure)
    - 4.9 [Monitoring & Alerting Infrastructure](#49-monitoring--alerting-infrastructure)
-   - 4.10 [Benchmark Execution Parameters](#410-benchmark-execution-parameters)
 5. [Benchmark Execution](#5-benchmark-execution)
    - 5.1 [Prerequisites & Host Requirements](#51-prerequisites--host-requirements)
    - 5.2 [Cloud Cost Benchmark Harness (`scripts/benchmark/cloudCostBenchmark.ts`)](#52-cloud-cost-benchmark-harness-scriptsbenchmarkcloudcostbenchmarkts)
@@ -651,17 +650,18 @@ This reference documents the complete operational configuration across Marvedge 
 
 ### 4.6 Dubbing Providers & VoiceStudio
 
-| Variable Name                  | Purpose                                     | Required / Optional | Consuming Service       | Default Value             | Secret  | Configuration Notes                                                    |
-| :----------------------------- | :------------------------------------------ | :------------------ | :---------------------- | :------------------------ | :-----: | :--------------------------------------------------------------------- |
-| `DUBBING_PROVIDER`             | Active speech synthesis provider            | Optional            | Video Worker, Benchmark | `elevenlabs`              |   No    | Values: `elevenlabs` (default) or `voicestudio` (opt-in).              |
-| `ELEVENLABS_API_KEY`           | ElevenLabs commercial dubbing API key       | Required            | Video Worker, API       | None                      | **Yes** | Scale Tier account key. Never expose with `NEXT_PUBLIC_`.              |
-| `VOICESTUDIO_BASE_URL`         | Base URL of self-hosted VoiceStudio service | Optional            | VoiceStudio Adapter     | `http://127.0.0.1:3900`   |   No    | Bound to loopback interface on GPU host.                               |
-| `VOICESTUDIO_API_KEY`          | Bearer token for VoiceStudio container      | Optional            | VoiceStudio Adapter     | None                      | **Yes** | Shared authentication token for container API.                         |
-| `VOICESTUDIO_DEFAULT_MODEL`    | Default TTS model identifier                | Optional            | VoiceStudio Adapter     | `omnivoice`               |   No    | Default model checkpoint loaded in container.                          |
-| `VOICESTUDIO_DEFAULT_VOICE`    | Default speaker voice identifier            | Optional            | VoiceStudio Adapter     | `alloy`                   |   No    | Voice profile mapped in speech synthesis requests.                     |
-| `VOICESTUDIO_NUM_STEP`         | Diffusion / generation inference steps      | Optional            | VoiceStudio Adapter     | `16`                      |   No    | Tradeoff between RTF speed (16 steps) and audio quality.               |
-| `VOICESTUDIO_TIMEOUT_MS`       | VoiceStudio HTTP request timeout            | Optional            | VoiceStudio Adapter     | `120000` ($2\text{ min}$) |   No    | Aborts if container fails to respond within limit.                     |
-| `VOICESTUDIO_FALLBACK_TO_PAID` | Allows fallback to ElevenLabs on error      | Optional            | VoiceStudio Adapter     | `false`                   |   No    | **Must remain false** to prevent unexpected commercial billing surges. |
+| Variable Name                  | Purpose                                         | Required / Optional | Consuming Service       | Default Value           | Secret  | Configuration Notes                                                                       |
+| :----------------------------- | :---------------------------------------------- | :------------------ | :---------------------- | :---------------------- | :-----: | :---------------------------------------------------------------------------------------- |
+| `DUBBING_PROVIDER`             | Active speech synthesis provider                | Optional            | Video Worker, Benchmark | `elevenlabs`            |   No    | Values: `elevenlabs` (default) or `voicestudio` (opt-in).                                 |
+| `ELEVENLABS_API_KEY`           | ElevenLabs commercial dubbing API key           | Required            | Video Worker, API       | None                    | **Yes** | Scale Tier account key. Never expose with `NEXT_PUBLIC_`.                                 |
+| `VOICESTUDIO_API_URL`          | Primary runtime API URL for VoiceStudio service | Optional            | VoiceStudio Adapter     | `http://127.0.0.1:3900` |   No    | Runtime service URL on host loopback consumed by `app/lib/voicestudio/client.ts`.         |
+| `VOICESTUDIO_URL`              | Benchmark harness VoiceStudio service URL       | Optional            | Benchmark Scripts       | `http://127.0.0.1:3900` |   No    | Benchmark-specific URL consumed by `scripts/benchmark/cloudCostBenchmark.ts`.             |
+| `VOICESTUDIO_API_KEY`          | Bearer token for VoiceStudio container          | Optional            | VoiceStudio Adapter     | None                    | **Yes** | Shared authentication token for container API (`OMNIVOICE_API_KEY`).                      |
+| `VOICESTUDIO_MODEL`            | Runtime TTS model checkpoint identifier         | Optional            | VoiceStudio Adapter     | `omnivoice`             |   No    | Default model checkpoint loaded in container and requested by adapter.                    |
+| `VOICESTUDIO_FALLBACK_TO_PAID` | Allows fallback to ElevenLabs on error          | Optional            | VoiceStudio Adapter     | `false`                 |   No    | **Must remain false** to prevent unexpected commercial billing surges on container error. |
+
+> [!NOTE]
+> Voice synthesis parameters such as speaker voice (e.g. `voice: "alloy"`), diffusion steps (`num_step: 16`), and request timeout duration ($120\text{ s}$) are configured via typed adapter options (`SpeechRequestOptions`) rather than direct host environment variables.
 
 ### 4.7 Cloud Storage & CDN
 
@@ -714,14 +714,6 @@ This reference documents the complete operational configuration across Marvedge 
 | `MONITORING_ALERT_DRY_RUN`                           | Disables network dispatch of alerts         | Optional            | Alert Evaluator           | `false`                    |   No    | When `true`, formats alerts and logs to stdout without sending. |
 | `MONITORING_ALERT_STATE_TTL_SECONDS`                 | Redis TTL for persisted alert state keys    | Optional            | Alert Evaluator           | `604800` ($7\text{ days}$) |   No    | Prevents unbounded Redis memory growth for state keys.          |
 
-### 4.10 Benchmark Configuration Parameters
-
-| Variable Name           | Purpose                              | Required / Optional | Consuming Service | Default Value | Secret | Configuration Notes                              |
-| :---------------------- | :----------------------------------- | :------------------ | :---------------- | :------------ | :----: | :----------------------------------------------- |
-| `BENCHMARK_CONCURRENCY` | Concurrency for simulated load tests | Optional            | Benchmark Scripts | `1`           |   No   | Levels 1, 2, or 4 supported in load harness.     |
-| `BENCHMARK_ITERATIONS`  | Iteration count per benchmark stage  | Optional            | Benchmark Scripts | `1`           |   No   | Number of measurement cycles executed.           |
-| `BENCHMARK_WARMUP`      | Number of unmeasured warmup cycles   | Optional            | Benchmark Scripts | `0`           |   No   | Warms model weights in GPU VRAM prior to timing. |
-
 ---
 
 ## 5. Benchmark Execution
@@ -741,12 +733,29 @@ Executing benchmarks requires appropriate host tooling depending on whether offl
   - MediaPipe AutoFlip binary and TalkNet PyTorch checkpoints pre-staged in `/opt/marvedge`.
 
 > [!WARNING]
-> **Strict Operational Safeguard — Do Not Execute Live GPU Benchmarks Arbitrarily**:  
+> **Strict Operational Safeguard — Do Not Execute Live GPU Benchmarks Arbitrarily**:
 > Live GPU benchmarks incur active AWS compute billing ($0.7104/hr) and vendor API consumption ($0.00018–$0.00024/char). Never start the EC2 GPU instance or run live benchmarks without explicit CTO / Engineering Lead approval. For routine verification and CI/CD validation, use the offline fixture mode.
 
 ### 5.2 Cloud Cost Benchmark Harness (`scripts/benchmark/cloudCostBenchmark.ts`)
 
 The primary end-to-end benchmark harness measures throughput, latency percentiles, memory consumption, GPU metrics, and cost per minute across pipeline stages.
+
+#### Benchmark CLI Parameters Reference
+
+The benchmark suites are configured via command-line arguments rather than host environment variables:
+
+| CLI Option                 |  Type   |            Default             | Description                                                          |
+| :------------------------- | :-----: | :----------------------------: | :------------------------------------------------------------------- |
+| `--concurrency <int>`      | Integer |              `1`               | Number of simultaneous pipeline jobs executed (supports 1, 2, or 4). |
+| `--iterations <int>`       | Integer |              `1`               | Number of timed measurement iterations per stage.                    |
+| `--warmup <int>`           | Integer |              `0`               | Number of untimed warmup iterations to initialize GPU/model weights. |
+| `--stages <list>`          | String  | `reframe,avs,captions,dubbing` | Comma-separated list of pipeline stages to benchmark.                |
+| `--gpu-type <type>`        |  Enum   |              `L4`              | Target compute profile (`L4`, `T4`, `CPU`, `none`, `custom`).        |
+| `--hourly-rate <usd>`      |  Float  |        Provider Default        | Hourly compute rate override in USD (e.g., `0.7104` for Sydney T4).  |
+| `--provider-reframe`       |  Enum   |           `fixture`            | Reframe provider: `fixture` (synthetic) or `autoflip` (live).        |
+| `--provider-dubbing`       |  Enum   |           `fixture`            | Dubbing provider: `fixture`, `elevenlabs`, or `voicestudio`.         |
+| `--output-json <path>`     |  Path   |  `...cloud_cost_report.json`   | File destination for structured JSON telemetry.                      |
+| `--output-markdown <path>` |  Path   |   `...cloud_cost_report.md`    | File destination for human-readable Markdown report.                 |
 
 #### 1. Zero-Cost Offline Fixture Run (Recommended for CI & Local Validation)
 
