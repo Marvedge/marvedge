@@ -1,0 +1,26 @@
+[Unit]
+Description=Marvedge External Monitoring and Alert Evaluator
+After=network.target redis.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/marvedge
+EnvironmentFile=/etc/marvedge/monitoring.env
+ExecStart=/usr/bin/node node_modules/tsx/dist/cli.mjs scripts/monitoringAlerts.ts
+Restart=always
+RestartSec=10s
+TimeoutStopSec=30s
+KillMode=process
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=marvedge-monitoring-alerts
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

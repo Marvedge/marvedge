@@ -69,6 +69,8 @@ export class BenchmarkOrchestrator {
     let completedJobs = 0;
     let failedJobs = 0;
     let lastError: string | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let lastArtifacts: Record<string, any> | undefined;
 
     const measureStart = performance.now();
 
@@ -83,6 +85,9 @@ export class BenchmarkOrchestrator {
           const iterDuration = performance.now() - iterStart;
           detectedStatus = out.status;
           detectedProvider = out.provider;
+          if (out.outputArtifacts) {
+            lastArtifacts = out.outputArtifacts;
+          }
           if (out.notes) {
             for (const n of out.notes) {
               if (!stageNotes.includes(n)) {
@@ -161,6 +166,7 @@ export class BenchmarkOrchestrator {
       cost,
       notes: stageNotes,
       error: lastError,
+      outputArtifacts: lastArtifacts,
     };
   }
 
@@ -254,7 +260,11 @@ export class BenchmarkOrchestrator {
       if (stages.includes("captions") && this.config.transcriptionProvider !== "fixture") {
         externalCost += totalMediaMinutes * this.pricing.transcriptionPerMinuteUsd;
       }
-      if (stages.includes("dubbing") && this.config.dubbingProvider !== "fixture") {
+      if (
+        stages.includes("dubbing") &&
+        this.config.dubbingProvider !== "fixture" &&
+        this.config.dubbingProvider !== "voicestudio"
+      ) {
         externalCost += totalMediaMinutes * this.pricing.dubbingPerMinuteUsd;
       }
     }
@@ -389,7 +399,11 @@ export class BenchmarkOrchestrator {
       case "captions":
         return executeCaptionsStage(this.media, this.config.transcriptionProvider || "fixture");
       case "dubbing":
-        return executeDubbingStage(this.media, this.config.dubbingProvider || "fixture");
+        return executeDubbingStage(
+          this.media,
+          this.config.dubbingProvider || "fixture",
+          this.config
+        );
       default:
         throw new Error(`Unknown stage: ${stage}`);
     }

@@ -1,0 +1,54 @@
+# ==============================================================================
+# Marvedge VoiceStudio Isolated GPU Service (Task-00103)
+#
+# Dedicated container configuration for local, isolated speech generation.
+# Bound STRICTLY to loopback (127.0.0.1:3900) - NEVER exposed publicly.
+#
+# Usage:
+#   export VOICESTUDIO_API_KEY=$(openssl rand -hex 32)
+#   docker compose -f docker-compose.voicestudio.yml up -d
+#   docker compose -f docker-compose.voicestudio.yml ps
+#   docker compose -f docker-compose.voicestudio.yml logs -f
+# ==============================================================================
+
+services:
+  voicestudio:
+    # Explicitly pinned release tag to prevent silent upstream breaking changes
+    image: ghcr.io/debpalash/voicestudio:0.5.6
+    container_name: marvedge-voicestudio
+    restart: unless-stopped
+    ports:
+      # CRITICAL: Bound strictly to 127.0.0.1 loopback on host to prevent public / LAN exposure
+      - "127.0.0.1:3900:3900"
+    environment:
+      # Headless server mode enables API key validation and allows Docker bridge NAT
+      - OMNIVOICE_SERVER_MODE=1
+      # Administrator API key required for all authenticated endpoints
+      - OMNIVOICE_API_KEY=${VOICESTUDIO_API_KEY:?VOICESTUDIO_API_KEY must be configured before starting VoiceStudio}
+      # Stable persistence directory inside container
+      - OMNIVOICE_DATA_DIR=/app/omnivoice_data
+      # HuggingFace cache directory for k2-fsa/OmniVoice weights (~2.3 GB)
+      - HF_HOME=/app/omnivoice_data/huggingface
+      # Disable Inductor kernel compilation on Tesla T4 (Turing sm_75) to prevent runtime aborts
+      - TORCH_COMPILE_DISABLE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Named volumes keep model weights and state outside container lifecycle
+      - voicestudio-data:/app/omnivoice_data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3900/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+
+volumes:
+  voicestudio-data:
+    name: marvedge-voicestudio-data

@@ -139,7 +139,7 @@ export function calculateStageCost(options: CalculateStageCostOptions): StageCos
     const totalMediaMinutes = validJobs * mediaMinutes;
     if (stage === "captions" && provider !== "fixture") {
       externalCost = totalMediaMinutes * pricing.transcriptionPerMinuteUsd;
-    } else if (stage === "dubbing" && provider !== "fixture") {
+    } else if (stage === "dubbing" && provider !== "fixture" && provider !== "voicestudio") {
       externalCost = totalMediaMinutes * pricing.dubbingPerMinuteUsd;
     }
   }

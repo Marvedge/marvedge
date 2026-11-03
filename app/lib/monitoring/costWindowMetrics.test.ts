@@ -3,8 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   collectCostWindowSum,
   collectCostWindowSums,
-  costObservationKey,
-  formatMetricKey,
   recordCostObservation,
   recordCostObservationBestEffort,
 } from "./costWindowMetrics";
@@ -36,10 +34,7 @@ describe("Redis-backed cost window metrics", () => {
   });
 
   it("handles duplicate recording with idempotency key", async () => {
-    const evalScript = vi
-      .fn()
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(0);
+    const evalScript = vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0);
     const redis = { eval: evalScript } as unknown as Redis;
 
     const input = {

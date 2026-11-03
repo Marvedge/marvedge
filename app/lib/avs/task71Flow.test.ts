@@ -8,6 +8,28 @@ import { getServerSession } from "next-auth";
 import { dubbingQueue } from "@/app/lib/queue";
 import type { Prisma, VideoJob } from "@prisma/client";
 
+function mockVideoJobClient<T>(value: T): Prisma.Prisma__VideoJobClient<T> {
+  const p = Promise.resolve(value);
+  return {
+    then: p.then.bind(p),
+    catch: p.catch.bind(p),
+    finally: p.finally.bind(p),
+    demo: vi.fn(),
+    user: vi.fn(),
+    [Symbol.toStringTag]: "PrismaPromise" as const,
+  } as unknown as Prisma.Prisma__VideoJobClient<T>;
+}
+
+function mockPrismaPromise<T>(value: T): Prisma.PrismaPromise<T> {
+  const p = Promise.resolve(value);
+  return {
+    then: p.then.bind(p),
+    catch: p.catch.bind(p),
+    finally: p.finally.bind(p),
+    [Symbol.toStringTag]: "PrismaPromise" as const,
+  } as unknown as Prisma.PrismaPromise<T>;
+}
+
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
 }));
@@ -30,25 +52,6 @@ vi.mock("@/app/lib/queue", () => ({
     add: vi.fn(),
   },
 }));
-
-function toPrismaJobClient<T>(promise: Promise<T>): Prisma.Prisma__VideoJobClient<T, never> {
-  Object.defineProperty(promise, Symbol.toStringTag, {
-    value: "PrismaPromise",
-    configurable: true,
-  });
-  return Object.assign(promise, {
-    demo: vi.fn(),
-    user: vi.fn(),
-  }) as unknown as Prisma.Prisma__VideoJobClient<T, never>;
-}
-
-function toPrismaPromise<T>(promise: Promise<T>): Prisma.PrismaPromise<T> {
-  Object.defineProperty(promise, Symbol.toStringTag, {
-    value: "PrismaPromise",
-    configurable: true,
-  });
-  return promise as Prisma.PrismaPromise<T>;
-}
 
 describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", () => {
   it("successfully passes complete end-to-end flow with stubbed dubbing and prerecorded audio", async () => {
@@ -77,57 +80,50 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       userId,
     } as never);
 
-    vi.mocked(prisma.videoJob.create).mockImplementation(({ data }: Prisma.VideoJobCreateArgs) =>
-      toPrismaJobClient(
-        (async () => {
-          currentJob = {
-            id: jobId,
-            userId: (data as { userId: string }).userId ?? userId,
-            demoId: (data as { demoId?: string | null }).demoId ?? demoId,
-            status: data.status ?? "PENDING",
-            progress: data.progress ?? 0,
-            videoUrl: data.videoUrl,
-            jobData: (data.jobData as Prisma.JsonValue) ?? {},
-            exportedUrl: data.exportedUrl ?? null,
-            error: data.error ?? null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-          return currentJob;
-        })()
-      )
-    );
+    vi.mocked(prisma.videoJob.create).mockImplementation(({ data }: Prisma.VideoJobCreateArgs) => {
+      currentJob = {
+        id: jobId,
+        userId: (data as { userId: string }).userId ?? userId,
+        demoId: (data as { demoId?: string | null }).demoId ?? demoId,
+        status: data.status ?? "PENDING",
+        progress: data.progress ?? 0,
+        videoUrl: data.videoUrl,
+        jobData: (data.jobData as Prisma.JsonValue) ?? {},
+        exportedUrl: data.exportedUrl ?? null,
+        error: data.error ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      return mockVideoJobClient(currentJob);
+    });
 
     vi.mocked(prisma.videoJob.findUnique).mockImplementation(
       ({ where }: Prisma.VideoJobFindUniqueArgs) =>
-        toPrismaJobClient(Promise.resolve(where.id === jobId ? currentJob : null))
+        mockVideoJobClient(where.id === jobId ? currentJob : null)
     );
 
     vi.mocked(prisma.videoJob.updateMany).mockImplementation(
-      ({ where, data }: Prisma.VideoJobUpdateManyArgs) =>
-        toPrismaPromise(
-          (async () => {
-            if (where?.id === jobId && currentJob) {
-              const notIn =
-                where.status && typeof where.status === "object" && "notIn" in where.status
-                  ? (where.status.notIn as string[])
-                  : undefined;
-              if (notIn && notIn.includes(currentJob.status)) {
-                return { count: 0 };
-              }
-              currentJob = {
-                ...currentJob,
-                ...(data as Partial<VideoJob>),
-                jobData: (data.jobData !== undefined
-                  ? data.jobData
-                  : currentJob.jobData) as Prisma.JsonValue,
-                updatedAt: new Date(),
-              };
-              return { count: 1 };
-            }
-            return { count: 0 };
-          })()
-        )
+      ({ where, data }: Prisma.VideoJobUpdateManyArgs) => {
+        if (where?.id === jobId && currentJob) {
+          const notIn =
+            where.status && typeof where.status === "object" && "notIn" in where.status
+              ? (where.status.notIn as string[])
+              : undefined;
+          if (notIn && notIn.includes(currentJob.status)) {
+            return mockPrismaPromise({ count: 0 });
+          }
+          currentJob = {
+            ...currentJob,
+            ...(data as Partial<VideoJob>),
+            jobData: (data.jobData !== undefined
+              ? data.jobData
+              : currentJob.jobData) as Prisma.JsonValue,
+            updatedAt: new Date(),
+          };
+          return mockPrismaPromise({ count: 1 });
+        }
+        return mockPrismaPromise({ count: 0 });
+      }
     );
 
     let queuedPayload: any = null;
