@@ -39,7 +39,7 @@ export function resolveRedisConfig(
 
   const isTls = parsed.protocol === "rediss:";
   if (parsed.protocol !== "redis:" && parsed.protocol !== "rediss:") {
-    throw new Error(`nInvalid Redis protocol: "${parsed.protocol}". Must be redis: or rediss:`);
+    throw new Error(`Invalid Redis protocol: "${parsed.protocol}". Must be redis: or rediss:`);
   }
 
   const hostname = parsed.hostname.toLowerCase();

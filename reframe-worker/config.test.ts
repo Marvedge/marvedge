@@ -110,6 +110,21 @@ describe("Reframe Worker Config", () => {
       );
       expect(config.workerConcurrency).toBe(1);
     });
+
+    it("accepts valid rediss:// Upstash Redis URL in production", () => {
+      envMap.NODE_ENV = "production";
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.BACKEND_URL = "https://api.marvedge.com";
+      envMap.REFRAME_WORKER_CONCURRENCY = "4";
+      envMap.REDIS_URL =
+        "rediss://default:supersecrettoken@marvedge-sydney.upstash.io:6379";
+
+      const config = getReframeWorkerConfig();
+      expect(config.redisUrl).toBe(
+        "rediss://default:supersecrettoken@marvedge-sydney.upstash.io:6379"
+      );
+      expect(config.workerConcurrency).toBe(4);
+    });
   });
   describe("Queue configuration", () => {
     it("defaults queueName to production reframe-processing when REFRAME_QUEUE_NAME is unset", () => {

@@ -3,6 +3,7 @@ import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 import { Worker, Job } from "bullmq";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+import { getStandardRedisOptions } from "../app/lib/redisConfig";
 import { v2 as cloudinary } from "cloudinary";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
@@ -59,7 +60,7 @@ if (!ffmpegStatic) {
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+const connection = new Redis(redisUrl, getStandardRedisOptions());
 const workerConcurrency = validateWorkerConcurrency(
   process.env.WORKER_CONCURRENCY,
   "WORKER_CONCURRENCY",
@@ -1680,7 +1681,7 @@ const dubbingMetricsMaxDataPoints = getJobOutcomeMetricsMaxDataPoints();
 const dubbingLatencyObservationWindowSeconds = getJobOutcomeMetricsObservationWindowSeconds(
   process.env
 );
-const dubbingRedisConnection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+const dubbingRedisConnection = new Redis(redisUrl, getStandardRedisOptions());
 const dubbingMonitoringRedisConnection = createWorkerMonitoringRedis(redisUrl);
 if (dubbingMetricsMaxDataPoints === undefined) {
   console.warn(

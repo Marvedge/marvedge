@@ -8,6 +8,7 @@
 
 import { Worker, Job, type ConnectionOptions } from "bullmq";
 import Redis from "ioredis";
+import { getStandardRedisOptions } from "../app/lib/redisConfig";
 import type { ReframeJobPayload } from "../app/lib/reframe/service";
 import { jobsTotal } from "../app/lib/monitoring/metrics";
 import {
@@ -43,9 +44,7 @@ console.log(`Queue Name: ${config.queueName}`);
 
 const discardedJobs = new WeakSet<Job<ReframeJobPayload>>();
 
-const redisConnection = new Redis(config.redisUrl, {
-  maxRetriesPerRequest: null,
-});
+const redisConnection = new Redis(config.redisUrl, getStandardRedisOptions());
 const monitoringRedisConnection = createWorkerMonitoringRedis(config.redisUrl);
 
 const worker = new Worker<ReframeJobPayload>(
