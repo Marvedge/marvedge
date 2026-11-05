@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   findJob: vi.fn(),
   update: vi.fn(),
+  updateMany: vi.fn(),
   transaction: vi.fn(),
   queryRaw: vi.fn(),
   limited: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/app/lib/prisma", () => ({
       create: mocks.create,
       findUnique: mocks.findJob,
       update: mocks.update,
+      updateMany: mocks.updateMany,
     },
     $transaction: mocks.transaction,
   },
@@ -76,6 +78,20 @@ describe("export merge result validation", () => {
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.findJob.mockResolvedValue({ status: "PENDING" });
     mocks.update.mockResolvedValue({ id: "job-1" });
+    mocks.updateMany.mockImplementation(
+      async ({
+        where,
+        data,
+      }: {
+        where: { id: string; status: { notIn: string[] } };
+        data: Record<string, unknown>;
+      }) => {
+        expect(where.id).toBe("job-1");
+        expect(where.status.notIn).toEqual(["COMPLETED", "CANCELLED"]);
+        await mocks.update({ where: { id: where.id }, data });
+        return { count: 1 };
+      }
+    );
     mocks.transaction.mockImplementation(
       async (
         work: (tx: {
