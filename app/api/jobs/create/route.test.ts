@@ -27,7 +27,7 @@ vi.mock("@/app/lib/prisma", () => ({
       findFirst: vi.fn(),
     },
     videoJob: {
-      count: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
     },
@@ -132,9 +132,9 @@ describe("POST /api/jobs/create paywall race (#444)", () => {
         return [];
       }),
       videoJob: {
-        count: vi.fn(async () => {
-          order.push("count-job");
-          return 1;
+        findMany: vi.fn(async () => {
+          order.push("read-jobs");
+          return [{ status: "COMPLETED", jobData: {} }];
         }),
         create: vi.fn(async () => {
           order.push("create");
@@ -174,16 +174,9 @@ describe("POST /api/jobs/create paywall race (#444)", () => {
         : String(rawStrings);
     expect(rawQuery).toContain("FOR UPDATE");
 
-    expect(order).toEqual([
-      "transaction",
-      "lock",
-      "count-job",
-      "count-saved",
-      "count-job",
-      "create",
-    ]);
+    expect(order).toEqual(["transaction", "lock", "read-jobs", "count-saved", "create"]);
     // No allowance check outside the transaction (the race).
-    expect(vi.mocked(prisma.videoJob.count)).not.toHaveBeenCalled();
+    expect(vi.mocked(prisma.videoJob.findMany)).not.toHaveBeenCalled();
     expect(vi.mocked(prisma.exportedVideo.count)).not.toHaveBeenCalled();
     expect(vi.mocked(prisma.videoJob.create)).not.toHaveBeenCalled();
   });
@@ -192,7 +185,9 @@ describe("POST /api/jobs/create paywall race (#444)", () => {
     const tx = {
       $queryRaw: vi.fn(async () => []),
       videoJob: {
-        count: vi.fn(async () => 3),
+        findMany: vi.fn(async () =>
+          Array.from({ length: 3 }, () => ({ status: "COMPLETED", jobData: {} }))
+        ),
         create: vi.fn(async () => ({ id: "job-should-not-exist" })),
       },
       exportedVideo: {
@@ -280,7 +275,7 @@ describe("POST /api/jobs/create paywall race (#444)", () => {
       const tx = {
         $queryRaw: vi.fn(async () => []),
         videoJob: {
-          count: vi.fn(async () => 0),
+          findMany: vi.fn(async () => []),
           create: vi.fn(async () => ({ id: "job-own-upload" })),
         },
         exportedVideo: {

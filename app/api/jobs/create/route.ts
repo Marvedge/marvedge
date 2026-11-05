@@ -48,24 +48,42 @@ async function isExportAllowed(
     return true;
   }
 
-  const jobCount = await db.videoJob.count({
-    where: { userId, status: "COMPLETED" },
-  });
+  const jobs = (await db.videoJob.findMany({
+    where: {
+      userId,
+      status: { in: ["PENDING", "PROCESSING", "COMPLETED"] },
+    },
+    select: { status: true, jobData: true },
+  })) as Array<{ status: string; jobData: unknown }>;
+
+  let completedCount = 0;
+  let activeCount = 0;
+
+  for (const job of jobs) {
+    const data = job.jobData;
+    const kind =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, unknown>).kind
+        : undefined;
+
+    // Older exports have no kind. Explicitly tagged non-export jobs
+    // belong to other features and must not consume export allowance.
+    if (kind !== undefined && kind !== null && kind !== "EXPORT") {
+      continue;
+    }
+
+    if (job.status === "COMPLETED") {
+      completedCount++;
+    } else {
+      activeCount++;
+    }
+  }
+
   const savedCount = await db.exportedVideo.count({
     where: { userId },
   });
-  // Reserve allowance while accepted exports are still running.
-  // This check and job creation share the caller's User-row lock.
-  const activeCount = await db.videoJob.count({
-    where: {
-      userId,
-      status: { in: ["PENDING", "PROCESSING"] },
-    },
-  });
 
-  const exportCount = Math.max(jobCount, savedCount) + activeCount;
-
-  return exportCount < 3;
+  return Math.max(completedCount, savedCount) + activeCount < 3;
 }
 
 class FreeTrialLimitError extends Error {

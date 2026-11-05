@@ -27,7 +27,7 @@ vi.mock("@/app/lib/prisma", () => ({
       findFirst: vi.fn(),
     },
     videoJob: {
-      count: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
     },
@@ -131,7 +131,7 @@ describe("free export allowance reservations", () => {
       const tx = {
         $queryRaw: vi.fn(async () => []),
         videoJob: {
-          count: vi.fn(
+          findMany: vi.fn(
             async ({
               where,
             }: {
@@ -144,7 +144,7 @@ describe("free export allowance reservations", () => {
 
               return jobs.filter(
                 (job) => job.userId === where.userId && (!statuses || statuses.includes(job.status))
-              ).length;
+              );
             }
           ),
           create: vi.fn(async ({ data }: { data: { userId: string; status: string } }) => {
@@ -198,7 +198,7 @@ describe("free export allowance reservations", () => {
     const tx = {
       $queryRaw: vi.fn(async () => []),
       videoJob: {
-        count: vi.fn(
+        findMany: vi.fn(
           async ({
             where,
           }: {
@@ -211,7 +211,7 @@ describe("free export allowance reservations", () => {
 
             return jobs.filter(
               (job) => job.userId === where.userId && (!accepted || accepted.includes(job.status))
-            ).length;
+            );
           }
         ),
         create: vi.fn(async ({ data }: { data: { userId: string; status: string } }) => {
@@ -317,7 +317,7 @@ describe("free export allowance reservations", () => {
       const response = await POST(makeRequest(baseBody));
 
       expect(response.status).toBe(200);
-      expect(tx.videoJob.count).not.toHaveBeenCalled();
+      expect(tx.videoJob.findMany).not.toHaveBeenCalled();
       expect(tx.exportedVideo.count).not.toHaveBeenCalled();
       expect(tx.videoJob.create).toHaveBeenCalledTimes(1);
       expect(after).toHaveBeenCalledTimes(1);
