@@ -174,7 +174,14 @@ describe("POST /api/jobs/create paywall race (#444)", () => {
         : String(rawStrings);
     expect(rawQuery).toContain("FOR UPDATE");
 
-    expect(order).toEqual(["transaction", "lock", "count-job", "count-saved", "create"]);
+    expect(order).toEqual([
+      "transaction",
+      "lock",
+      "count-job",
+      "count-saved",
+      "count-job",
+      "create",
+    ]);
     // No allowance check outside the transaction (the race).
     expect(vi.mocked(prisma.videoJob.count)).not.toHaveBeenCalled();
     expect(vi.mocked(prisma.exportedVideo.count)).not.toHaveBeenCalled();
@@ -281,7 +288,9 @@ describe("POST /api/jobs/create paywall race (#444)", () => {
         },
       };
       const mockedTx = prisma.$transaction as unknown as {
-        mockImplementation: (fn: (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown>) => void;
+        mockImplementation: (
+          fn: (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown>
+        ) => void;
       };
       mockedTx.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(tx));
 
