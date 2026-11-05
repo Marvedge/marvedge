@@ -55,8 +55,12 @@ export async function mayResolveObject(
   userId: string
 ): Promise<boolean> {
   const uploadBucket = configuredUploadBucket();
-  if (uploadBucket && bucket === uploadBucket && isUserUploadObject(object, userId)) {
-    return true;
+
+  // Upload paths encode ownership. A saved reference must never override
+  // another user's prefix or authorize an upload in an unrelated bucket.
+  if (object === "uploads" || object.startsWith("uploads/")) {
+    return Boolean(uploadBucket && bucket === uploadBucket && isUserUploadObject(object, userId));
   }
+
   return isReferencedByUser(inputUrl, userId);
 }
