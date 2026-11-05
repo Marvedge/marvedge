@@ -93,6 +93,24 @@ function resolveWatermarkForPlan(
   return resolveWatermarkForIsPro(isWtmAllowed(plan), clientWatermark);
 }
 
+import type { Prisma } from "@prisma/client";
+
+// Keep the status check and write in the same database statement.
+async function updateUnsettledExportJob(
+  jobId: string,
+  data: Prisma.VideoJobUpdateManyMutationInput
+): Promise<boolean> {
+  const result = await prisma.videoJob.updateMany({
+    where: {
+      id: jobId,
+      status: { notIn: ["COMPLETED", "CANCELLED"] },
+    },
+    data,
+  });
+
+  return result.count > 0;
+}
+
 // Dispatches chunked processing to GCP Cloud Run workers and merges the result.
 async function dispatchVideoJob(
   jobId: string,
@@ -109,13 +127,14 @@ async function dispatchVideoJob(
       return;
     }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
+    if (
+      !(await updateUnsettledExportJob(jobId, {
         status: "PROCESSING",
         progress: 25,
-      },
-    });
+      }))
+    ) {
+      return;
+    }
 
     const chunkDuration = CHUNK_DURATION_SECONDS;
     const chunksCount = Math.min(MAX_CHUNKS, Math.max(1, Math.ceil(duration / chunkDuration)));
@@ -195,10 +214,9 @@ async function dispatchVideoJob(
       console.warn(`Skipped ${skippedCount} bad chunks with missing output`);
     }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: { progress: 80 },
-    });
+    if (!(await updateUnsettledExportJob(jobId, { progress: 80 }))) {
+      return;
+    }
 
     // Fail fast with a clear cause instead of merging an empty list.
     if (validChunkFilenames.length === 0) {
@@ -215,13 +233,10 @@ async function dispatchVideoJob(
 
     const exportedUrl = mergeResp.result?.exportedUrl || null;
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "COMPLETED",
-        progress: 100,
-        exportedUrl,
-      },
+    await updateUnsettledExportJob(jobId, {
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl,
     });
   } catch (dispatchError) {
     // Let the retry handler decide when failure is final.
@@ -250,12 +265,9 @@ async function dispatchVideoJobWithColdStartRetry(
     }
   } catch (dispatchError) {
     console.error("Job dispatch failed:", dispatchError);
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "FAILED",
-        error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
-      },
+    await updateUnsettledExportJob(jobId, {
+      status: "FAILED",
+      error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
     });
   }
 }
