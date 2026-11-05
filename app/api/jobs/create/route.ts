@@ -231,7 +231,13 @@ async function dispatchVideoJob(
       "/merge"
     );
 
-    const exportedUrl = mergeResp.result?.exportedUrl || null;
+    const rawExportedUrl: unknown = mergeResp.result?.exportedUrl;
+
+    if (typeof rawExportedUrl !== "string" || !rawExportedUrl.trim()) {
+      throw new Error("Merge worker returned no usable export URL");
+    }
+
+    const exportedUrl = rawExportedUrl.trim();
 
     await updateUnsettledExportJob(jobId, {
       status: "COMPLETED",
