@@ -54,7 +54,16 @@ async function isExportAllowed(
   const savedCount = await db.exportedVideo.count({
     where: { userId },
   });
-  const exportCount = Math.max(jobCount, savedCount);
+  // Reserve allowance while accepted exports are still running.
+  // This check and job creation share the caller's User-row lock.
+  const activeCount = await db.videoJob.count({
+    where: {
+      userId,
+      status: { in: ["PENDING", "PROCESSING"] },
+    },
+  });
+
+  const exportCount = Math.max(jobCount, savedCount) + activeCount;
 
   return exportCount < 3;
 }
