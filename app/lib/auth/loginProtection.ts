@@ -1,6 +1,7 @@
 ﻿import { createHash } from "node:crypto";
 
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { getClientIp } from "@/app/lib/http/clientIp";
 
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_EMAIL_LIMIT = 10;
@@ -12,14 +13,6 @@ function firstHeaderValue(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
-function getClientIp(headers: LoginRequestHeaders): string {
-  const forwardedFor = firstHeaderValue(headers["x-forwarded-for"]).split(",")[0]?.trim();
-
-  const realIp = firstHeaderValue(headers["x-real-ip"]).trim();
-
-  return forwardedFor || realIp || "unknown";
-}
-
 function hashIdentifier(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -29,7 +22,9 @@ export async function isLoginRateLimited(
   headers: LoginRequestHeaders
 ): Promise<boolean> {
   const normalizedEmail = email.trim().toLowerCase();
-  const clientIp = getClientIp(headers);
+  const clientIp = getClientIp({
+    get: (name) => firstHeaderValue(headers[name]),
+  });
 
   const emailKey = `auth:login:email:${hashIdentifier(normalizedEmail)}`;
   const ipKey = `auth:login:ip:${hashIdentifier(clientIp)}`;

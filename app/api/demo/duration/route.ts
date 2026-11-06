@@ -16,7 +16,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { id, duration } = await req.json();
-    if (!id || typeof duration !== "number" || !Number.isFinite(duration) || duration <= 0) {
+    if (
+      typeof id !== "string" ||
+      !id ||
+      typeof duration !== "number" ||
+      !Number.isFinite(duration) ||
+      duration <= 0
+    ) {
       return NextResponse.json({ error: "Invalid id or duration" }, { status: 400 });
     }
 

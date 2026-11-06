@@ -6,16 +6,9 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { PAYMENT_CURRENCY, PLANS, isPlanId } from "@/app/lib/plans";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { getClientIp } from "@/app/lib/http/clientIp";
 
 export const runtime = "nodejs";
-
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
 
 function signaturesMatch(expected: string, actual: string): boolean {
   const a = Buffer.from(expected);
@@ -36,7 +29,7 @@ export async function POST(req: Request) {
     // Preserve checkout availability when Redis is unavailable.
     if (
       await isRateLimited(
-        `verify-payment:${clientIp(req)}:${session.user.email.toLowerCase()}`,
+        `verify-payment:${getClientIp(req.headers)}:${session.user.email.toLowerCase()}`,
         5,
         900
       )

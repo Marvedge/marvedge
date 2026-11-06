@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { getClientIp } from "@/app/lib/http/clientIp";
 
 export interface TutorialRequestHeaders {
   get(name: string): string | null;
@@ -14,18 +15,10 @@ function hashIdentifier(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function clientIp(headers: TutorialRequestHeaders): string {
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-
-  const realIp = headers.get("x-real-ip")?.trim();
-
-  return forwarded || realIp || "unknown";
-}
-
 export function tutorialRateLimitKeys(accountIdentifier: string, headers: TutorialRequestHeaders) {
   return {
     accountKey: "tutorials:account:" + hashIdentifier(accountIdentifier.trim().toLowerCase()),
-    ipKey: "tutorials:ip:" + hashIdentifier(clientIp(headers)),
+    ipKey: "tutorials:ip:" + hashIdentifier(getClientIp(headers)),
   };
 }
 

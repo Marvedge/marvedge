@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { QR_SOURCE_VALUE } from "@/app/lib/share/qrTarget";
 
 export const runtime = "nodejs";
@@ -20,14 +21,6 @@ export const runtime = "nodejs";
  */
 function readViewSource(raw: unknown): typeof QR_SOURCE_VALUE | undefined {
   return raw === QR_SOURCE_VALUE ? QR_SOURCE_VALUE : undefined;
-}
-
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 // players heartbeat every 5s, so updates get a roomy budget while
@@ -77,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     const duration = body.duration;
     const source = body.source;
-    const ip = clientIp(req);
+    const ip = getClientIp(req.headers);
 
     if (viewId && duration !== undefined) {
       if (await isRateLimited(`views:update:${ip}`, UPDATE_LIMIT, WINDOW_SECONDS)) {
