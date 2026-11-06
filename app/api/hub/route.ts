@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { registerCustomDomain, deleteCustomDomain } from "@/app/lib/cloudflare";
+import { normalizeCustomDomain } from "@/app/lib/hub/customDomain";
 
 export async function GET() {
   try {
@@ -121,8 +122,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Validate the custom domain before any uniqueness query or Cloudflare call.
+    const customDomainResult = normalizeCustomDomain(customDomain);
+    if (!customDomainResult.ok) {
+      return NextResponse.json({ error: customDomainResult.error }, { status: 400 });
+    }
+    const cleanCustomDomain = customDomainResult.value;
+
     // Validate custom domain uniqueness if changed
-    const cleanCustomDomain = customDomain ? customDomain.trim().toLowerCase() : null;
     if (cleanCustomDomain && cleanCustomDomain !== user.hubSettings?.customDomain) {
       const existingCustomDomain = await prisma.hubSettings.findUnique({
         where: { customDomain: cleanCustomDomain },

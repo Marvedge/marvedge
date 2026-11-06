@@ -24,6 +24,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { readBoundedRequestText } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { isOverlaysEnabled } from "@/app/lib/overlays/flags";
 import { parsePlayerEventBatch, selectKnownEvents } from "@/app/lib/overlays/events";
 import { applySessionCookie, readOrMintSessionId } from "@/app/lib/overlays/session";
@@ -44,19 +45,6 @@ const MAX_BODY_BYTES = 64 * 1024;
 /** 204 is the only response this route produces. */
 function noContent(): NextResponse {
   return new NextResponse(null, { status: 204 });
-}
-
-/**
- * Best-effort client IP for rate limiting. Spoofable behind a proxy that does not
- * strip it, which is acceptable — the limiter fails open by design and this is a
- * write-only endpoint that authorises nothing.
- */
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export async function POST(req: NextRequest) {
@@ -94,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   // Keyed on IP + demoId, since there is no userId on a public endpoint.
   const limited = await isRateLimited(
-    `ovl:events:${clientIp(req)}:${demoId ?? exportedVideoId}`,
+    `ovl:events:${getClientIp(req.headers)}:${demoId ?? exportedVideoId}`,
     EVENTS_RATE_LIMIT,
     EVENTS_RATE_WINDOW_SECONDS
   );

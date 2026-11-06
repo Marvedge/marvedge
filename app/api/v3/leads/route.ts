@@ -40,6 +40,7 @@ import { prisma } from "@/app/lib/prisma";
 import { deliverLead } from "@/app/lib/crm/deliverLead";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { readBoundedRequestText } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { isOverlaysAllowed } from "@/app/lib/overlays/access";
 import { overlayConfigFromRow } from "@/app/lib/overlays/config";
 import { isValidEmail, isWorkEmail, normalizeEmail } from "@/app/lib/overlays/email";
@@ -76,19 +77,6 @@ const MAX_BODY_BYTES = 8 * 1024;
 
 /** Codes the form maps to a message. Never a description of the input. */
 type LeadError = "invalid" | "email" | "work_email" | "missing_fields" | "rate_limited";
-
-/**
- * Best-effort client IP for rate limiting. Spoofable behind a proxy that does
- * not strip the header, which is acceptable: the limiter fails open by design
- * and this endpoint authorises nothing.
- */
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
 
 export async function POST(req: NextRequest) {
   const viewer = readOrMintSessionId(req);
@@ -127,7 +115,7 @@ export async function POST(req: NextRequest) {
 
   // Before any database work.
   const limited = await isRateLimited(
-    `ovl:leads:${clientIp(req)}:${lead.demoId}`,
+    `ovl:leads:${getClientIp(req.headers)}:${lead.demoId}`,
     LEADS_RATE_LIMIT,
     LEADS_RATE_WINDOW_SECONDS
   );

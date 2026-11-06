@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { revalidatePath } from "next/cache";
 import { isSafeUrl } from "@/app/lib/safeUrl";
+import { sanitizeEditingPayload } from "@/app/lib/demos/editing";
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -132,6 +134,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Editing payload is too large" }, { status: 413 });
     }
 
+    // Validate before persisting: the blob is re-rendered on public share pages,
+    // so fields that become CSS or URLs must not be stored with arbitrary values.
+    const sanitizedEditing = sanitizeEditingPayload(editing);
+    if (!sanitizedEditing.ok) {
+      return NextResponse.json({ error: sanitizedEditing.error }, { status: 400 });
+    }
+
     const userId = session.user.id as string;
 
     // Check if a demo with the same title and videoUrl already exists for this user
@@ -159,7 +168,10 @@ export async function POST(req: NextRequest) {
         title,
         description: description || "",
         videoUrl,
-        editing: editing || null,
+        editing:
+          sanitizedEditing.value === null
+            ? Prisma.DbNull
+            : (sanitizedEditing.value as Prisma.InputJsonValue),
         userId, // attach logged-in user
         tags: Array.isArray(tags) ? tags : [],
         integrations: Array.isArray(integrations) ? integrations : [],
@@ -199,7 +211,7 @@ export async function PATCH(req: NextRequest) {
       featured,
     } = await req.json();
 
-    if (!id) {
+    if (typeof id !== "string" || !id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
@@ -238,10 +250,21 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Editing payload is too large" }, { status: 413 });
     }
 
+    let sanitizedEditingValue: unknown;
+    if (typeof editing !== "undefined") {
+      const sanitizedEditing = sanitizeEditingPayload(editing);
+      if (!sanitizedEditing.ok) {
+        return NextResponse.json({ error: sanitizedEditing.error }, { status: 400 });
+      }
+      sanitizedEditingValue = sanitizedEditing.value;
+    }
+
     // Use a single write to both enforce ownership and avoid extra round trips.
     const updateData: Record<string, unknown> = {
       ...(typeof exportedUrl === "string" ? { exportedUrl } : {}),
-      ...(typeof editing !== "undefined" ? { editing } : {}),
+      ...(typeof editing !== "undefined"
+        ? { editing: sanitizedEditingValue === null ? Prisma.DbNull : sanitizedEditingValue }
+        : {}),
       ...(typeof title === "string" ? { title } : {}),
       ...(typeof description === "string" ? { description } : {}),
       ...(Array.isArray(tags) ? { tags } : {}),

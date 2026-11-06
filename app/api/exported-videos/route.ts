@@ -83,6 +83,10 @@ export async function POST(req: NextRequest) {
       upsertByDemo = true,
     } = body;
 
+    if (demoId !== undefined && demoId !== null && typeof demoId !== "string") {
+      return NextResponse.json({ error: "Invalid demoId" }, { status: 400 });
+    }
+
     const userRecord = await prisma.user.findUnique({
       where: { id: userId },
       select: { plan: true },
