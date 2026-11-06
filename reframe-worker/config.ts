@@ -1,4 +1,5 @@
-import { resolveCallbackBaseUrl, isLoopbackHost } from "../app/lib/jobs/callbackClient";
+import { resolveCallbackBaseUrl } from "../app/lib/jobs/callbackClient";
+import { resolveRedisUrl } from "../app/lib/redisConfig";
 import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 // Configuration loader for the lightweight Reframe Worker (Task-00023 / Task-00029).
 //
@@ -56,23 +57,12 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
   }
 
   const isProduction = process.env.NODE_ENV === "production";
-  const rawRedis = process.env.REDIS_URL?.trim();
+  const allowLocalhostInProduction = process.env.ALLOW_LOCALHOST_REDIS_IN_PRODUCTION === "true";
 
-  if (isProduction) {
-    if (!rawRedis) {
-      throw new Error(
-        "Missing required production setting: REDIS_URL must point to the shared production Redis instance (e.g. AWS ElastiCache)."
-      );
-    }
-    const allowLocalhostRedis = process.env.ALLOW_LOCALHOST_REDIS_IN_PRODUCTION === "true";
-    if (!allowLocalhostRedis && isLoopbackHost(rawRedis)) {
-      throw new Error(
-        `Accidental localhost Redis target detected in production: "${rawRedis}". Configure a shared production Redis URL (e.g. AWS ElastiCache).`
-      );
-    }
-  }
-
-  const redisUrl = rawRedis || "redis://localhost:6379";
+  const redisUrl = resolveRedisUrl(process.env.REDIS_URL, {
+    isProduction,
+    allowLocalhostInProduction,
+  });
 
   // Queue name configuration: defaults to production "reframe-processing"
   const queueName = process.env.REFRAME_QUEUE_NAME?.trim() || "reframe-processing";

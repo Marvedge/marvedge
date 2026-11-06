@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { getStandardRedisOptions } from "../app/lib/redisConfig";
 
 describe("Video Worker Redis Connection Options", () => {
@@ -10,6 +10,11 @@ describe("Video Worker Redis Connection Options", () => {
   it("sets enableReadyCheck to false for managed Redis compatibility", () => {
     const options = getStandardRedisOptions();
     expect(options.enableReadyCheck).toBe(false);
+  });
+
+  it("sets connectTimeout to 5000ms to avoid indefinite connection hangs", () => {
+    const options = getStandardRedisOptions();
+    expect(options.connectTimeout).toBe(5000);
   });
 
   it("passes valid connection options to Worker configuration", () => {
@@ -24,6 +29,7 @@ describe("Video Worker Redis Connection Options", () => {
 
     expect(workerOptions.connection.maxRetriesPerRequest).toBeNull();
     expect(workerOptions.connection.enableReadyCheck).toBe(false);
+    expect(workerOptions.connection.connectTimeout).toBe(5000);
     expect(workerOptions.concurrency).toBe(2);
   });
 
@@ -39,6 +45,7 @@ describe("Video Worker Redis Connection Options", () => {
 
     expect(mockRedisClient.options.maxRetriesPerRequest).toBeNull();
     expect(mockRedisClient.options.enableReadyCheck).toBe(false);
+    expect(mockRedisClient.options.connectTimeout).toBe(5000);
     expect(mockRedisClient.options.tls).toBeDefined();
   });
 });
