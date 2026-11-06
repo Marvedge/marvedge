@@ -87,10 +87,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, cancelled: false, status: job.status });
     }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
+    // Check ownership, kind and active status in the same database write.
+    // Completion/failure may have happened since the earlier read.
+    const result = await prisma.videoJob.updateMany({
+      where: {
+        id: jobId,
+        userId: user.id,
+        status: { in: ["PENDING", "PROCESSING"] },
+        jobData: { path: ["kind"], equals: "SUBTITLES" },
+      },
       data: { status: "CANCELLED", error: "Cancelled by the user" },
     });
+
+    if (result.count === 0) {
+      const current = await prisma.videoJob.findUnique({
+        where: { id: jobId },
+        select: { userId: true, status: true },
+      });
+
+      if (!current || current.userId !== user.id) {
+        return NextResponse.json({ error: "Job not found" }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        cancelled: current.status === "CANCELLED",
+        status: current.status,
+      });
+    }
 
     return NextResponse.json({ success: true, cancelled: true, status: "CANCELLED" });
   } catch (err) {
