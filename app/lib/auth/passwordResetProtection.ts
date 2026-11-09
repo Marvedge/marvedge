@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { getClientIp } from "@/app/lib/http/clientIp";
 
 export type PasswordResetAction = "request-link" | "reset-attempt";
 
@@ -16,14 +17,6 @@ function hashIdentifier(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function clientIp(headers: PasswordResetRequestHeaders): string {
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-
-  const realIp = headers.get("x-real-ip")?.trim();
-
-  return forwarded || realIp || "unknown";
-}
-
 export function passwordResetRateLimitKeys(
   email: string,
   headers: PasswordResetRequestHeaders,
@@ -33,7 +26,7 @@ export function passwordResetRateLimitKeys(
 
   return {
     emailKey: `auth:password-reset:${action}:email:` + hashIdentifier(normalizedEmail),
-    ipKey: `auth:password-reset:${action}:ip:` + hashIdentifier(clientIp(headers)),
+    ipKey: `auth:password-reset:${action}:ip:` + hashIdentifier(getClientIp(headers)),
   };
 }
 

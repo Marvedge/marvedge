@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { Resend } from "resend";
 
 export const runtime = "nodejs";
@@ -18,19 +19,11 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 export async function POST(req: NextRequest) {
   // Slow down bots hammering this public endpoint. Closed mode: when Redis is
   // down, reject rather than let spam fill the database and burn email quota.
   // Other routes keep the default open mode so playback never breaks.
-  if (await isRateLimited(`contact:${clientIp(req)}`, 3, 60, true)) {
+  if (await isRateLimited(`contact:${getClientIp(req.headers)}`, 3, 60, true)) {
     return NextResponse.json(
       { error: "Too many requests, please try again shortly" },
       { status: 429 }

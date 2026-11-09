@@ -48,15 +48,42 @@ async function isExportAllowed(
     return true;
   }
 
-  const jobCount = await db.videoJob.count({
-    where: { userId, status: "COMPLETED" },
-  });
+  const jobs = (await db.videoJob.findMany({
+    where: {
+      userId,
+      status: { in: ["PENDING", "PROCESSING", "COMPLETED"] },
+    },
+    select: { status: true, jobData: true },
+  })) as Array<{ status: string; jobData: unknown }>;
+
+  let completedCount = 0;
+  let activeCount = 0;
+
+  for (const job of jobs) {
+    const data = job.jobData;
+    const kind =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, unknown>).kind
+        : undefined;
+
+    // Older exports have no kind. Explicitly tagged non-export jobs
+    // belong to other features and must not consume export allowance.
+    if (kind !== undefined && kind !== null && kind !== "EXPORT") {
+      continue;
+    }
+
+    if (job.status === "COMPLETED") {
+      completedCount++;
+    } else {
+      activeCount++;
+    }
+  }
+
   const savedCount = await db.exportedVideo.count({
     where: { userId },
   });
-  const exportCount = Math.max(jobCount, savedCount);
 
-  return exportCount < 3;
+  return Math.max(completedCount, savedCount) + activeCount < 3;
 }
 
 class FreeTrialLimitError extends Error {
@@ -93,6 +120,24 @@ function resolveWatermarkForPlan(
   return resolveWatermarkForIsPro(isWtmAllowed(plan), clientWatermark);
 }
 
+import type { Prisma } from "@prisma/client";
+
+// Keep the status check and write in the same database statement.
+async function updateUnsettledExportJob(
+  jobId: string,
+  data: Prisma.VideoJobUpdateManyMutationInput
+): Promise<boolean> {
+  const result = await prisma.videoJob.updateMany({
+    where: {
+      id: jobId,
+      status: { notIn: ["COMPLETED", "CANCELLED"] },
+    },
+    data,
+  });
+
+  return result.count > 0;
+}
+
 // Dispatches chunked processing to GCP Cloud Run workers and merges the result.
 async function dispatchVideoJob(
   jobId: string,
@@ -109,13 +154,14 @@ async function dispatchVideoJob(
       return;
     }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
+    if (
+      !(await updateUnsettledExportJob(jobId, {
         status: "PROCESSING",
         progress: 25,
-      },
-    });
+      }))
+    ) {
+      return;
+    }
 
     const chunkDuration = CHUNK_DURATION_SECONDS;
     const chunksCount = Math.min(MAX_CHUNKS, Math.max(1, Math.ceil(duration / chunkDuration)));
@@ -195,10 +241,9 @@ async function dispatchVideoJob(
       console.warn(`Skipped ${skippedCount} bad chunks with missing output`);
     }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: { progress: 80 },
-    });
+    if (!(await updateUnsettledExportJob(jobId, { progress: 80 }))) {
+      return;
+    }
 
     // Fail fast with a clear cause instead of merging an empty list.
     if (validChunkFilenames.length === 0) {
@@ -213,15 +258,18 @@ async function dispatchVideoJob(
       "/merge"
     );
 
-    const exportedUrl = mergeResp.result?.exportedUrl || null;
+    const rawExportedUrl: unknown = mergeResp.result?.exportedUrl;
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "COMPLETED",
-        progress: 100,
-        exportedUrl,
-      },
+    if (typeof rawExportedUrl !== "string" || !rawExportedUrl.trim()) {
+      throw new Error("Merge worker returned no usable export URL");
+    }
+
+    const exportedUrl = rawExportedUrl.trim();
+
+    await updateUnsettledExportJob(jobId, {
+      status: "COMPLETED",
+      progress: 100,
+      exportedUrl,
     });
   } catch (dispatchError) {
     // Let the retry handler decide when failure is final.
@@ -250,12 +298,9 @@ async function dispatchVideoJobWithColdStartRetry(
     }
   } catch (dispatchError) {
     console.error("Job dispatch failed:", dispatchError);
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "FAILED",
-        error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
-      },
+    await updateUnsettledExportJob(jobId, {
+      status: "FAILED",
+      error: dispatchError instanceof Error ? dispatchError.message : "Dispatch failed",
     });
   }
 }

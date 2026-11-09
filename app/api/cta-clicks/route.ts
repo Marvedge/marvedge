@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { applySessionCookie, readOrMintSessionId } from "@/app/lib/overlays/session";
 
 // The mv_sid anonymous identity cookie this route introduced now lives in
@@ -10,24 +11,23 @@ import { applySessionCookie, readOrMintSessionId } from "@/app/lib/overlays/sess
 // options rather than a second one that would split the funnel. Behaviour here is
 // unchanged: read it, mint one only when absent, set the cookie only when minted.
 
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { ctaId, demoId, label, referrer } = await req.json();
 
-    if (!ctaId || !demoId || !label) {
+    if (
+      typeof ctaId !== "string" ||
+      !ctaId ||
+      typeof demoId !== "string" ||
+      !demoId ||
+      typeof label !== "string" ||
+      !label
+    ) {
       return NextResponse.json({ error: "ctaId, demoId and label are required" }, { status: 400 });
     }
 
     // clicks stay anonymous (public viewers), but stay capped per ip
-    if (await isRateLimited(`cta-clicks:${clientIp(req)}`, 60, 60)) {
+    if (await isRateLimited(`cta-clicks:${getClientIp(req.headers)}`, 60, 60)) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 

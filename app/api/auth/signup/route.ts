@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { createHash } from "node:crypto";
 
 const MAX_AUTH_BODY_BYTES = 8 * 1024;
@@ -65,10 +66,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded
-      ? forwarded.split(",")[0].trim()
-      : req.headers.get("x-real-ip")?.trim() || "unknown";
+    const ip = getClientIp(req.headers);
     const emailKey = signupEmailKey(cleanEmail);
 
     const [ipLimited, emailLimited] = await Promise.all([
