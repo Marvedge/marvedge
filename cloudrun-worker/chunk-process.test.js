@@ -51,6 +51,18 @@ class MockFirestore {
 const Module = require("node:module");
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
+  if (request === "express") {
+    const mockApp = {
+      use: vi.fn(),
+      get: vi.fn(),
+      post: vi.fn(),
+      listen: vi.fn(),
+    };
+    const fn = () => mockApp;
+    fn.json = () => vi.fn();
+    fn.static = () => vi.fn();
+    return fn;
+  }
   if (request === "@aws-sdk/lib-dynamodb") {
     return {
       DynamoDBDocumentClient: {
