@@ -24,32 +24,11 @@ export const maxDuration = 300;
 // only stretch we cannot subdivide from here.
 const PROGRESS_QUEUED = 10;
 const PROGRESS_TRANSCRIBING = 40;
-const PROGRESS_PERSISTING = 80;
 const PROGRESS_DONE = 100;
 
 /**
- * Whether the user has cancelled this job since it was dispatched.
- *
- * THE WORKER CANNOT BE STOPPED. `/subtitles` is one long opaque HTTP call to
- * Cloud Run with no cancellation channel — once it is in flight it runs to
- * completion and bills for the transcription regardless. Cancelling is therefore
- * a decision to DISCARD the result, not to halt the work, and this is the check
- * that enforces it: read just before the result would be written, so a cancel
- * that lands mid-transcription still prevents cues appearing on a demo the user
- * has walked away from. The user-facing copy says exactly this — see the cancel
- * route and the toast in useSubtitles.ts.
- */
-async function isCancelled(jobId: string): Promise<boolean> {
-  const job = await prisma.videoJob
-    .findUnique({ where: { id: jobId }, select: { status: true } })
-    .catch(() => null);
-  return job?.status === "CANCELLED";
-}
-
-/**
- * Run the transcription and record the result. Invoked from `after()`, so it
- * runs *after* the response has been flushed: nothing it throws can reach the
- * client, and every exit path has to land in the job record instead.
+ * Persist completion and demo cues together. The conditional job write
+ * serializes with cancellation: whichever writes first decides the outcome.
  */
 async function dispatchSubtitleJob(
   jobId: string,
@@ -58,104 +37,102 @@ async function dispatchSubtitleJob(
   durationSeconds: number | null
 ) {
   try {
-    // Cancelled between the response being flushed and this running — rare, but
-    // it costs one read to not spend a transcription on it.
-    if (await isCancelled(jobId)) {
-      console.log(`[subtitles] Job ${jobId} cancelled before dispatch; not calling the worker.`);
-      return;
-    }
-
-    await prisma.videoJob.update({
-      where: { id: jobId },
+    const started = await prisma.videoJob.updateMany({
+      where: {
+        id: jobId,
+        status: { in: ["PENDING", "PROCESSING"] },
+      },
       data: { status: "PROCESSING", progress: PROGRESS_TRANSCRIBING },
     });
 
-    // invokeGcpSubtitles already retries 429/502/503/504 with backoff. The
-    // timeout scales with the source length — the 180s default is generous for a
-    // short demo and far too tight for an hour-long one, where it turns a slow
-    // success into a spurious abort.
+    if (started.count === 0) {
+      return;
+    }
+
+    // The worker cannot be stopped once dispatched. Cancellation discards
+    // its result rather than stopping the transcription or its billing.
     const rawCues = await invokeGcpSubtitles({
       videoUrl,
       language,
       timeoutMs: subtitleWorkerTimeoutMs(durationSeconds),
     });
-
-    // The expensive part is over. If the user cancelled while it ran, the cues
-    // are thrown away here rather than landing on their demo.
-    if (await isCancelled(jobId)) {
-      console.log(`[subtitles] Job ${jobId} cancelled during transcription; discarding cues.`);
-      return;
-    }
-
-    // The worker's cue clustering is well behaved, but the export path assumes
-    // sorted, non-overlapping cues and this is the last place that is cheap to
-    // guarantee. No duration here — the job record does not carry one — so this
-    // only sorts, de-overlaps and drops junk.
     const cues = normalizeCues(rawCues);
 
-    const job = await prisma.videoJob.update({
-      where: { id: jobId },
-      data: { progress: PROGRESS_PERSISTING },
-      select: { demoId: true },
-    });
-
-    if (job.demoId) {
-      // Written as a BARE ARRAY, not the old `{ provider, language, cues }`
-      // wrapper. app/hub/[domain]/page.tsx derives its subtitle search text from
-      // this column and the object shape made `Array.isArray` false forever, so
-      // hub subtitle search matched nothing. Readers go through `readCueList()`,
-      // which still accepts the wrapper, so demos written by the old code keep
-      // working — provider and language live on the job record and the track.
-      await prisma.demo.update({
-        where: { id: job.demoId },
-        data: { subtitles: cues },
+    const completed = await prisma.$transaction(async (tx) => {
+      const job = await tx.videoJob.findUnique({
+        where: { id: jobId },
+        select: { demoId: true },
       });
 
-      // Best-effort: park the cues in the per-language track table so PR 5 has a
-      // primary track to translate from. Nothing reads this yet, and the table
-      // may not exist on a database that has not run the migration, so a failure
-      // here must never fail a job whose cues are already safely persisted above.
-      await prisma.subtitleTrack
-        .upsert({
-          where: { demoId_language: { demoId: job.demoId, language } },
-          create: {
-            demoId: job.demoId,
-            language,
-            status: "READY",
-            source: "stt",
-            cues,
-          },
-          update: { status: "READY", source: "stt", cues },
-        })
-        .catch((e: unknown) => {
-          console.warn("SubtitleTrack upsert skipped:", e instanceof Error ? e.message : e);
-        });
-    }
+      if (!job) {
+        return null;
+      }
 
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "COMPLETED",
-        progress: PROGRESS_DONE,
-        jobData: {
-          kind: "SUBTITLES",
-          provider: "deepgram",
-          language,
-          subtitles: cues,
+      const result = await tx.videoJob.updateMany({
+        where: {
+          id: jobId,
+          status: { in: ["PENDING", "PROCESSING"] },
         },
-      },
+        data: {
+          status: "COMPLETED",
+          progress: PROGRESS_DONE,
+          jobData: {
+            kind: "SUBTITLES",
+            provider: "deepgram",
+            language,
+            subtitles: cues,
+          },
+        },
+      });
+
+      if (result.count === 0) {
+        return null;
+      }
+
+      if (job.demoId) {
+        // Keep the bare-array shape expected by existing subtitle readers.
+        await tx.demo.update({
+          where: { id: job.demoId },
+          data: { subtitles: cues },
+        });
+      }
+
+      return { demoId: job.demoId };
     });
-  } catch (err) {
-    console.error("Subtitle Job Dispatch Error:", err);
-    // A cancelled job that then fails stays cancelled: the user already knows
-    // they stopped it, and flipping it to FAILED would report an error for
-    // something they chose.
-    if (await isCancelled(jobId)) {
+
+    if (!completed?.demoId) {
       return;
     }
+
+    // Keep this optional write outside the transaction: an unmigrated
+    // track table must not roll back otherwise successful subtitle storage.
+    await prisma.subtitleTrack
+      .upsert({
+        where: {
+          demoId_language: { demoId: completed.demoId, language },
+        },
+        create: {
+          demoId: completed.demoId,
+          language,
+          status: "READY",
+          source: "stt",
+          cues,
+        },
+        update: { status: "READY", source: "stt", cues },
+      })
+      .catch((e: unknown) => {
+        console.warn("SubtitleTrack upsert skipped:", e instanceof Error ? e.message : e);
+      });
+  } catch (err) {
+    console.error("Subtitle Job Dispatch Error:", err);
+
+    // Cancellation or another terminal result may have won while work failed.
     await prisma.videoJob
-      .update({
-        where: { id: jobId },
+      .updateMany({
+        where: {
+          id: jobId,
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
         data: {
           status: "FAILED",
           error: err instanceof Error ? err.message : "Subtitle generation failed",
