@@ -76,6 +76,29 @@ describe("Reframe Worker Config", () => {
       );
     });
 
+    it("throws when REDIS_URL is empty or whitespace in production", () => {
+      envMap.NODE_ENV = "production";
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.REDIS_URL = "   ";
+
+      expect(() => getReframeWorkerConfig()).toThrow(
+        /Missing required production setting: REDIS_URL/
+      );
+    });
+
+    it("trims whitespace around REDIS_URL in production", () => {
+      envMap.NODE_ENV = "production";
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.BACKEND_URL = "https://api.marvedge.com";
+      envMap.REFRAME_WORKER_CONCURRENCY = "1";
+      envMap.REDIS_URL = "  rediss://default:supersecrettoken@marvedge-sydney.upstash.io:6379  ";
+
+      const config = getReframeWorkerConfig();
+      expect(config.redisUrl).toBe(
+        "rediss://default:supersecrettoken@marvedge-sydney.upstash.io:6379"
+      );
+    });
+
     it("throws when REDIS_URL points to localhost in production", () => {
       envMap.NODE_ENV = "production";
       envMap.CALLBACK_SECRET = "test-secret";
@@ -101,14 +124,27 @@ describe("Reframe Worker Config", () => {
       envMap.CALLBACK_SECRET = "test-secret";
       envMap.BACKEND_URL = "https://api.marvedge.com";
       envMap.REFRAME_WORKER_CONCURRENCY = "1";
-      envMap.REDIS_URL =
-        "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379";
+      envMap.REDIS_URL = "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379";
 
       const config = getReframeWorkerConfig();
       expect(config.redisUrl).toBe(
         "redis://marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379"
       );
       expect(config.workerConcurrency).toBe(1);
+    });
+
+    it("accepts valid rediss:// Upstash Redis URL in production", () => {
+      envMap.NODE_ENV = "production";
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.BACKEND_URL = "https://api.marvedge.com";
+      envMap.REFRAME_WORKER_CONCURRENCY = "4";
+      envMap.REDIS_URL = "rediss://default:supersecrettoken@marvedge-sydney.upstash.io:6379";
+
+      const config = getReframeWorkerConfig();
+      expect(config.redisUrl).toBe(
+        "rediss://default:supersecrettoken@marvedge-sydney.upstash.io:6379"
+      );
+      expect(config.workerConcurrency).toBe(4);
     });
   });
   describe("Queue configuration", () => {

@@ -18,6 +18,7 @@ import http from "node:http";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import { buildCallbackRecord } from "./callbackRecord.mjs";
+import { resolveLoadTestRedis } from "./loadTestRedis.mjs";
 import { Queue } from "bullmq";
 
 const args = process.argv.slice(2);
@@ -37,11 +38,7 @@ const videoUrl = getArg(
   "--video-url",
   process.env.TEST_VIDEO_URL || "https://marvedge-raw-ap2.s3.ap-southeast-2.amazonaws.com/test/1.mp4"
 );
-const redisHost = getArg(
-  "--redis-host",
-  process.env.REDIS_HOST || "marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com"
-);
-const redisPort = Number.parseInt(getArg("--redis-port", process.env.REDIS_PORT || "6379"), 10);
+const redisResolution = resolveLoadTestRedis(args, process.env);
 const outputPath = getArg("--output-json", "/tmp/in_vpc_load_test_results.json");
 const callbackPort = Number.parseInt(getArg("--callback-port", "3001"), 10);
 // The reframe-worker must be configured to send callbacks to this harness.
@@ -62,7 +59,7 @@ console.log(`Concurrency Level:   ${concurrency}`);
 console.log(`Total Jobs:          ${totalJobs}`);
 console.log(`Fault Injection:     ${faultInjection}`);
 console.log(`Watchdog Timeout:    ${timeoutSec}s`);
-console.log(`Redis Host:          ${redisHost}:${redisPort}`);
+console.log(`Redis Target:        ${redisResolution.displayTarget} (${redisResolution.source})`);
 console.log(`Video URL:           ${videoUrl.slice(0, 60)}...`);
 console.log(`Output Path:         ${outputPath}`);
 console.log(`Queue Name:          ${queueName}`);
@@ -161,7 +158,7 @@ async function run() {
   await startCallbackListener();
 
   const queue = new Queue(queueName, {
-    connection: { host: redisHost, port: redisPort },
+    connection: redisResolution.connection,
   });
 
   const testRunId = `task95-invpc-${Date.now()}`;

@@ -4,6 +4,7 @@ import {
   startMonitoringAlertLoop,
 } from "../app/lib/monitoring/alertLoop";
 import { evaluateMonitoringAlerts, loadMonitoringAlertConfig } from "../app/lib/monitoring/alerts";
+import { resolveRedisUrl } from "../app/lib/redisConfig";
 import { collectLatencyWindowMeans } from "../app/lib/monitoring/latencyWindowMetrics";
 import { collectQueueMetrics } from "../app/lib/monitoring/queueMetrics";
 import { Queue, type ConnectionOptions } from "bullmq";
@@ -26,7 +27,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const redis = new Redis(process.env.REDIS_URL?.trim() || "redis://localhost:6379", {
+  const redisUrl = resolveRedisUrl();
+  const redis = new Redis(redisUrl, {
     maxRetriesPerRequest: 1,
     commandTimeout: 5000,
   });
