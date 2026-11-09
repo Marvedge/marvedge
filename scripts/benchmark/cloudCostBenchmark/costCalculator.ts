@@ -1,28 +1,41 @@
 /**
- * Task-0102: Cost Accounting Engine
- * Calculates compute infrastructure costs and external provider API costs
- * with configurable rates, transparent assumptions, multi-iteration scaling,
- * and division-by-zero protection.
+ * Task-0127: Multi-Cloud Cost Accounting Engine (Schema 1.2.0)
+ * Calculates compute infrastructure costs across GCP, AWS, Azure, and local CPU
+ * with transparent pricing assumptions, spot vs on-demand tiering,
+ * multi-iteration scaling, and division-by-zero protection.
  */
 
-import type { PricingModel, StageCostBreakdown, StageExecutionStatus } from "./types";
+import type {
+  CloudProvider,
+  PricingModel,
+  PricingTier,
+  StageCostBreakdown,
+  StageExecutionStatus,
+} from "./types";
 
 export interface PricingOverrides {
   instanceType?: string;
   computeHourlyRateUsd?: number;
   transcriptionPerMinuteUsd?: number;
   dubbingPerMinuteUsd?: number;
+  cloudProvider?: CloudProvider;
+  pricingTier?: PricingTier;
 }
 
 /**
  * Standard baseline pricing configurations referenced in docs/GPU_COST_CONCURRENCY.md
+ * and Task-00127 multi-cloud benchmarks.
  */
 export const DEFAULT_PRICING_MODELS: Record<string, PricingModel> = {
+  // GCP Presets
   L4: {
     instanceType: "Cloud Run NVIDIA L4 (24GB)",
     computeHourlyRateUsd: 0.8,
     computeSource: "docs/GPU_COST_CONCURRENCY.md (Google Cloud Run Q3 2026)",
     computeIsAssumption: false,
+    cloudProvider: "gcp",
+    pricingTier: "standard",
+    pricingDate: "2026-Q3",
     transcriptionPerMinuteUsd: 0.006,
     transcriptionSource: "OpenAI Whisper API public tier reference",
     transcriptionIsAssumption: true,
@@ -35,6 +48,9 @@ export const DEFAULT_PRICING_MODELS: Record<string, PricingModel> = {
     computeHourlyRateUsd: 0.35,
     computeSource: "docs/GPU_COST_CONCURRENCY.md (Google Cloud Run Q3 2026)",
     computeIsAssumption: false,
+    cloudProvider: "gcp",
+    pricingTier: "standard",
+    pricingDate: "2026-Q3",
     transcriptionPerMinuteUsd: 0.006,
     transcriptionSource: "OpenAI Whisper API public tier reference",
     transcriptionIsAssumption: true,
@@ -42,11 +58,65 @@ export const DEFAULT_PRICING_MODELS: Record<string, PricingModel> = {
     dubbingSource: "ElevenLabs Dubbing API standard tier assumption",
     dubbingIsAssumption: true,
   },
+  // AWS Presets
+  AWS_G4DN_ONDEMAND: {
+    instanceType: "AWS EC2 g4dn.xlarge (T4 16GB) On-Demand",
+    computeHourlyRateUsd: 0.7104,
+    computeSource: "AWS EC2 On-Demand Sydney (ap-southeast-2) reference",
+    computeIsAssumption: false,
+    cloudProvider: "aws",
+    pricingTier: "ondemand",
+    pricingDate: "2026-Q3",
+    regionalLimitation: "Sydney (ap-southeast-2) reference rate. US regions typically ~$0.526/hr.",
+    transcriptionPerMinuteUsd: 0.006,
+    transcriptionSource: "OpenAI Whisper API public tier reference",
+    transcriptionIsAssumption: true,
+    dubbingPerMinuteUsd: 0.15,
+    dubbingSource: "ElevenLabs Dubbing API standard tier assumption",
+    dubbingIsAssumption: true,
+  },
+  AWS_G4DN_SPOT: {
+    instanceType: "AWS EC2 g4dn.xlarge (T4 16GB) Spot",
+    computeHourlyRateUsd: 0.22,
+    computeSource: "AWS EC2 Spot Instance average reference (~70% discount)",
+    computeIsAssumption: false,
+    cloudProvider: "aws",
+    pricingTier: "spot",
+    pricingDate: "2026-Q3",
+    regionalLimitation: "Spot rates fluctuate dynamically based on regional capacity.",
+    transcriptionPerMinuteUsd: 0.006,
+    transcriptionSource: "OpenAI Whisper API public tier reference",
+    transcriptionIsAssumption: true,
+    dubbingPerMinuteUsd: 0.15,
+    dubbingSource: "ElevenLabs Dubbing API standard tier assumption",
+    dubbingIsAssumption: true,
+  },
+  // Azure Preset
+  AZURE_NCAST4: {
+    instanceType: "Azure Standard_NC4as_T4_v3 (T4 16GB)",
+    computeHourlyRateUsd: 0.526,
+    computeSource: "Azure Linux Pay-As-You-Go pricing reference",
+    computeIsAssumption: false,
+    cloudProvider: "azure",
+    pricingTier: "standard",
+    pricingDate: "2026-Q3",
+    regionalLimitation: "Reference rate based on US East / standard zone availability.",
+    transcriptionPerMinuteUsd: 0.006,
+    transcriptionSource: "OpenAI Whisper API public tier reference",
+    transcriptionIsAssumption: true,
+    dubbingPerMinuteUsd: 0.15,
+    dubbingSource: "ElevenLabs Dubbing API standard tier assumption",
+    dubbingIsAssumption: true,
+  },
+  // Generic CPU Baseline
   CPU: {
     instanceType: "Cloud Run 4 vCPU / 16GB RAM",
     computeHourlyRateUsd: 0.09,
     computeSource: "Cloud Run general compute rate assumption",
     computeIsAssumption: true,
+    cloudProvider: "local",
+    pricingTier: "standard",
+    pricingDate: "2026-Q3",
     transcriptionPerMinuteUsd: 0.006,
     transcriptionSource: "OpenAI Whisper API public tier reference",
     transcriptionIsAssumption: true,
@@ -57,17 +127,36 @@ export const DEFAULT_PRICING_MODELS: Record<string, PricingModel> = {
 };
 
 export function resolvePricingModel(
-  gpuType: "L4" | "T4" | "custom" | "none" | "CPU",
+  gpuType: "L4" | "T4" | "custom" | "none" | "CPU" | string,
   overrides?: PricingOverrides
 ): PricingModel {
-  let baseKey = "CPU";
-  if (gpuType === "L4") {
-    baseKey = "L4";
-  } else if (gpuType === "T4") {
-    baseKey = "T4";
+  let base: PricingModel = DEFAULT_PRICING_MODELS.CPU;
+
+  const cloud = overrides?.cloudProvider?.toLowerCase();
+  const tier = overrides?.pricingTier?.toLowerCase();
+
+  if (cloud === "aws") {
+    base =
+      tier === "spot"
+        ? DEFAULT_PRICING_MODELS.AWS_G4DN_SPOT
+        : DEFAULT_PRICING_MODELS.AWS_G4DN_ONDEMAND;
+  } else if (cloud === "azure") {
+    base = DEFAULT_PRICING_MODELS.AZURE_NCAST4;
+  } else if (cloud === "gcp") {
+    base = gpuType === "T4" ? DEFAULT_PRICING_MODELS.T4 : DEFAULT_PRICING_MODELS.L4;
+  } else {
+    // Default / legacy fallback by gpuType
+    if (gpuType === "L4") {
+      base = DEFAULT_PRICING_MODELS.L4;
+    } else if (gpuType === "T4") {
+      base = tier === "spot" ? DEFAULT_PRICING_MODELS.AWS_G4DN_SPOT : DEFAULT_PRICING_MODELS.T4;
+    } else {
+      base = DEFAULT_PRICING_MODELS.CPU;
+    }
   }
 
-  const base = DEFAULT_PRICING_MODELS[baseKey] || DEFAULT_PRICING_MODELS.CPU;
+  const effectiveCloud = overrides?.cloudProvider ?? base.cloudProvider;
+  const effectiveTier = overrides?.pricingTier ?? base.pricingTier;
 
   return {
     instanceType: overrides?.instanceType ?? base.instanceType,
@@ -81,6 +170,10 @@ export function resolvePricingModel(
         : base.computeSource,
     computeIsAssumption:
       overrides?.computeHourlyRateUsd !== undefined ? false : base.computeIsAssumption,
+    cloudProvider: effectiveCloud,
+    pricingTier: effectiveTier,
+    pricingDate: base.pricingDate,
+    regionalLimitation: base.regionalLimitation,
 
     transcriptionPerMinuteUsd:
       overrides?.transcriptionPerMinuteUsd !== undefined
@@ -147,9 +240,6 @@ export function calculateStageCost(options: CalculateStageCostOptions): StageCos
   const totalCost = computeCost + externalCost;
 
   // 3. Normalized Per-Job and Per-Minute Metrics
-  // Avoid inflating cost per minute when running N iterations:
-  // costPerCompletedJob = totalCost / completedJobs
-  // costPerMinute = costPerCompletedJob / mediaMinutes = totalCost / (completedJobs * mediaMinutes)
   const costPerCompletedJob = validJobs > 0 ? Number((totalCost / validJobs).toFixed(6)) : null;
 
   const costPerMinute =

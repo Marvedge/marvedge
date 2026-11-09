@@ -140,34 +140,39 @@ export async function executeAvsStage(
   const notes: string[] = [];
 
   if (providerMode === "talknet" || providerMode === "real") {
-    // 1. Verify model weights presence before inference
-    const weightPaths = [
-      path.join(process.cwd(), "talknet", "weights", "sfd_face.pth"),
-      path.join(process.cwd(), "talknet", "weights", "pretrain_TalkSet.model"),
-    ];
+    const serviceUrl = process.env.TALKNET_SERVICE_URL || process.env.ML_GATEWAY_URL;
 
-    const missingWeights = weightPaths.filter((p) => !fs.existsSync(p));
-    if (missingWeights.length > 0) {
+    // In remote mode (serviceUrl configured), the service hosts its own weights.
+    // Local weight verification is only enforced when running without a remote service endpoint.
+    if (!serviceUrl) {
+      const weightPaths = [
+        path.join(process.cwd(), "talknet", "weights", "sfd_face.pth"),
+        path.join(process.cwd(), "talknet", "weights", "pretrain_TalkSet.model"),
+      ];
+
+      const missingWeights = weightPaths.filter((p) => !fs.existsSync(p));
+      if (missingWeights.length > 0) {
+        return {
+          stage: "avs",
+          status: "blocked",
+          provider: "talknet",
+          notes: [
+            `TalkNet model weights missing: ${missingWeights.map((p) => path.basename(p)).join(", ")}`,
+            "Automatic model weight download is disabled per Task-0102 policy.",
+            "Preflight blocked: Place weights in talknet/weights/ before running real AVS inference.",
+          ],
+          error: "TALKNET_WEIGHTS_MISSING",
+        };
+      }
+
       return {
         stage: "avs",
         status: "blocked",
         provider: "talknet",
         notes: [
-          `TalkNet model weights missing: ${missingWeights.map((p) => path.basename(p)).join(", ")}`,
-          "Automatic model weight download is disabled per Task-0102 policy.",
-          "Preflight blocked: Place weights in talknet/weights/ before running real AVS inference.",
+          "TalkNet model weights verified locally, but neither TALKNET_SERVICE_URL nor ML_GATEWAY_URL is configured.",
+          "Preflight blocked: Configure TALKNET_SERVICE_URL to connect to the TalkNet service.",
         ],
-        error: "TALKNET_WEIGHTS_MISSING",
-      };
-    }
-
-    const serviceUrl = process.env.TALKNET_SERVICE_URL || process.env.ML_GATEWAY_URL;
-    if (!serviceUrl) {
-      return {
-        stage: "avs",
-        status: "blocked",
-        provider: "talknet",
-        notes: ["TalkNet model weights verified, but TALKNET_SERVICE_URL is not set."],
         error: "TALKNET_SERVICE_URL_UNSET",
       };
     }
@@ -374,7 +379,10 @@ export async function executeDubbingStage(
 
   if (providerMode === "voicestudio") {
     const vsUrl =
-      config?.voiceStudioUrl || process.env.VOICESTUDIO_API_URL || "http://127.0.0.1:3900";
+      config?.voiceStudioUrl ||
+      process.env.VOICESTUDIO_URL ||
+      process.env.VOICESTUDIO_API_URL ||
+      "http://127.0.0.1:3900";
     const vsApiKey = config?.voiceStudioApiKey || process.env.VOICESTUDIO_API_KEY;
     const vsModel = config?.voiceStudioModel || process.env.VOICESTUDIO_MODEL || "omnivoice";
 
@@ -411,7 +419,7 @@ export async function executeDubbingStage(
         provider: "voicestudio",
         notes: [
           `VoiceStudio health check failed at ${vsUrl}: ${(err as Error).message}`,
-          "Ensure VoiceStudio container is running on 127.0.0.1:3900.",
+          "Ensure VoiceStudio is running and reachable (for Docker connecting to host, consider host.docker.internal:3900).",
         ],
         error: "VOICESTUDIO_UNAVAILABLE",
       };

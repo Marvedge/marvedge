@@ -1,6 +1,6 @@
 /**
- * Task-0102: JSON & Markdown Benchmark Report Generator
- * Formats structured JSON (Schema 1.1.0) and human-readable Markdown reports.
+ * Task-0127: JSON & Markdown Benchmark Report Generator (Schema 1.2.0)
+ * Formats structured JSON and human-readable Markdown reports with hardware provenance classification.
  */
 
 import fs from "fs";
@@ -12,20 +12,27 @@ export function generateJsonReport(report: BenchmarkRunReport): string {
 }
 
 export function generateMarkdownReport(report: BenchmarkRunReport): string {
-  const { config, hardware, inputMedia, pricing, stages, endToEnd, summary } = report;
+  const { config, hardware, inputMedia, pricing, provenance, stages, endToEnd, summary } = report;
 
   const lines: string[] = [];
 
-  lines.push("# Cloud Cost Benchmark Report � Task-0102");
+  lines.push("# Cloud Cost Benchmark Report \uFFFD Task-0102");
   lines.push("");
   lines.push(`**Generated:** ${report.timestamp}  `);
   lines.push(`**Schema Version:** ${report.schemaVersion}  `);
   lines.push(`**Overall Status:** ${summary.overallStatus}  `);
+  if (provenance) {
+    lines.push(
+      `**Hardware Verification Status:** **${provenance.verificationStatus.toUpperCase()}**  `
+    );
+  }
   lines.push(
     `**Input Media:** \`${path.basename(inputMedia.path)}\` (${inputMedia.durationSec}s, ${(inputMedia.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB, synthetic: ${inputMedia.isSynthetic})  `
   );
   lines.push(
-    `**Execution Mode:** Concurrency ${config.concurrency} | Iterations ${config.iterations} | Warmup ${config.warmup}  `
+    `**Execution Mode:** Concurrency ${config.concurrency} | Iterations ${config.iterations} | Warmup ${config.warmup}${
+      provenance ? ` | Environment: ${provenance.executionEnvironment}` : ""
+    }  `
   );
   lines.push("");
   lines.push("---");
@@ -50,13 +57,52 @@ export function generateMarkdownReport(report: BenchmarkRunReport): string {
     `| **Cost per Media Minute** | **${summary.totalCostPerMinuteUsd !== null ? `$${summary.totalCostPerMinuteUsd.toFixed(6)} USD/min` : "N/A"}** |`
   );
   lines.push(`| **Overall Status** | **${summary.overallStatus}** |`);
+  if (provenance) {
+    lines.push(`| **Verification Status** | **${provenance.verificationStatus}** |`);
+  }
   lines.push("");
   lines.push("---");
   lines.push("");
 
-  // Hardware Telemetry
+  // Hardware & Environment Telemetry (including Provenance)
   lines.push("## 2. Hardware & Environment Telemetry");
   lines.push("");
+
+  if (provenance) {
+    const isSim = provenance.verificationStatus === "fixture_simulation";
+    lines.push(
+      `> **Hardware Provenance & Classification:** \`${provenance.verificationStatus.toUpperCase()}\` — ${
+        isSim
+          ? "Offline fixture simulation running in-memory (zero external cloud spend)."
+          : "Live pipeline inference execution."
+      }`
+    );
+    lines.push("");
+    lines.push("| Provenance Field | Value | Classification / Details |");
+    lines.push("| :--- | :--- | :--- |");
+    lines.push(
+      `| **Execution Runtime** | ${provenance.executionEnvironment} | ${provenance.containerized ? "Docker container runtime" : "Bare-metal host"} |`
+    );
+    lines.push(
+      `| **Cloud Provider** | ${provenance.cloudProvider.toUpperCase()} | Pricing tier: \`${provenance.pricingTier}\` |`
+    );
+    lines.push(
+      `| **Instance Type / Preset** | ${provenance.instanceType} | Rate: $${pricing.computeHourlyRateUsd}/hr |`
+    );
+    lines.push(`| **Host CPU** | ${provenance.cpuModel} | ${provenance.cpuCores} cores |`);
+    lines.push(`| **System Memory** | ${(provenance.memoryTotalBytes / 1e9).toFixed(2)} GB | |`);
+    lines.push(
+      `| **GPU Model** | ${provenance.gpuModel || "None / CPU Mode"} | VRAM: ${provenance.gpuMemoryTotalBytes ? (provenance.gpuMemoryTotalBytes / (1024 * 1024)).toFixed(0) + " MiB" : "N/A"} |`
+    );
+    lines.push(
+      `| **GPU Driver & CUDA** | Driver: ${provenance.gpuDriverVersion || "N/A"} | CUDA: ${provenance.cudaVersion || "N/A"} |`
+    );
+    lines.push(
+      `| **Software Runtime** | Node: ${provenance.nodeVersion} | Python: ${provenance.pythonVersion || "N/A"} | Docker: ${provenance.dockerVersion || "N/A"} |`
+    );
+    lines.push("");
+  }
+
   lines.push("| Subsystem | Parameter | Measured Value |");
   lines.push("| :--- | :--- | :--- |");
   lines.push(
@@ -87,7 +133,7 @@ export function generateMarkdownReport(report: BenchmarkRunReport): string {
     lines.push(
       `| | Avg / Peak GPU Util | ${hardware.gpu.avgGpuUtilPct ?? "N/A"}% / ${hardware.gpu.peakGpuUtilPct ?? "N/A"}% |`
     );
-    lines.push(`| | Max Temperature | ${hardware.gpu.maxTempC ?? "N/A"} �C |`);
+    lines.push(`| | Max Temperature | ${hardware.gpu.maxTempC ?? "N/A"} °C |`);
   } else {
     lines.push(
       "| **GPU** | Availability | **Unavailable / CPU Fallback** (no nvidia-smi detected) |"
@@ -166,8 +212,11 @@ export function generateMarkdownReport(report: BenchmarkRunReport): string {
     `- **Compute Instance:** ${pricing.instanceType} @ **$${pricing.computeHourlyRateUsd}/hr**  `
   );
   lines.push(
-    `  *Source:* ${pricing.computeSource} (Is assumption: \`${pricing.computeIsAssumption}\`)  `
+    `  *Source:* ${pricing.computeSource} (Is assumption: \`${pricing.computeIsAssumption}\`, Pricing Date: \`${pricing.pricingDate}\`)  `
   );
+  if (pricing.regionalLimitation) {
+    lines.push(`  *Regional limitation:* ${pricing.regionalLimitation}  `);
+  }
   lines.push(`- **Transcription Rate:** **$${pricing.transcriptionPerMinuteUsd}/min**  `);
   lines.push(
     `  *Source:* ${pricing.transcriptionSource} (Is assumption: \`${pricing.transcriptionIsAssumption}\`)  `

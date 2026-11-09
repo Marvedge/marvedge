@@ -18,6 +18,8 @@ import type {
   BenchmarkConfig,
   BenchmarkRunReport,
   EndToEndResult,
+  HardwareProvenance,
+  HardwareVerificationStatus,
   InputMediaMetadata,
   PipelineStage,
   PricingModel,
@@ -41,6 +43,8 @@ export class BenchmarkOrchestrator {
     this.media = options.inputMedia;
     this.pricing = resolvePricingModel(this.config.gpuType, {
       computeHourlyRateUsd: this.config.hourlyRateUsd,
+      cloudProvider: this.config.cloudProvider,
+      pricingTier: this.config.pricingTier,
     });
     this.telemetryCollector = new TelemetryCollector({
       checkGpu: this.config.gpuType !== "none",
@@ -355,9 +359,14 @@ export class BenchmarkOrchestrator {
 
       const caveatsAndNotes: string[] = [
         `Pricing model: ${this.pricing.instanceType} ($${this.pricing.computeHourlyRateUsd}/hr) [Source: ${this.pricing.computeSource}]`,
+        `Cloud provider: ${this.pricing.cloudProvider} (tier: ${this.pricing.pricingTier})`,
         `Transcription provider: ${this.config.transcriptionProvider} ($${this.pricing.transcriptionPerMinuteUsd}/min)`,
         `Dubbing provider: ${this.config.dubbingProvider} ($${this.pricing.dubbingPerMinuteUsd}/min)`,
       ];
+
+      if (this.pricing.regionalLimitation) {
+        caveatsAndNotes.push(`Regional note: ${this.pricing.regionalLimitation}`);
+      }
 
       if (hardwareTelemetry.gpu?.isAvailable === false) {
         caveatsAndNotes.push(
@@ -365,8 +374,55 @@ export class BenchmarkOrchestrator {
         );
       }
 
+      const containerized = this.telemetryCollector.isContainerized();
+      const executionEnvironment = containerized ? "container" : "bare-metal";
+      const cloudProvider = this.config.cloudProvider || this.pricing.cloudProvider || "unknown";
+      const pricingTier = this.config.pricingTier || this.pricing.pricingTier || "standard";
+
+      let verificationStatus: HardwareVerificationStatus = "fixture_simulation";
+      const isAllFixture = executedStages.every((s) => s.status === "fixture");
+      const hasRealInference = executedStages.some((s) => s.status === "real_inference");
+      const hasBlocked = executedStages.some((s) => s.status === "blocked");
+
+      if (isAllFixture) {
+        verificationStatus = "fixture_simulation";
+      } else if (hasRealInference && hardwareTelemetry.gpu?.isAvailable) {
+        verificationStatus = "verified_hardware";
+      } else if (hasRealInference || hasBlocked) {
+        verificationStatus = "partially_verified";
+      } else {
+        verificationStatus = "unknown";
+      }
+
+      const provenance: HardwareProvenance = {
+        containerized,
+        executionEnvironment,
+        cloudProvider,
+        instanceType: this.pricing.instanceType,
+        pricingTier,
+        verificationStatus,
+        cpuModel: hardwareTelemetry.cpu.model,
+        cpuCores: hardwareTelemetry.cpu.cores,
+        memoryTotalBytes: hardwareTelemetry.memory.totalBytes,
+        gpuModel: hardwareTelemetry.gpu?.modelName || null,
+        gpuMemoryTotalBytes:
+          hardwareTelemetry.gpu?.totalVramMib !== null &&
+          hardwareTelemetry.gpu?.totalVramMib !== undefined
+            ? hardwareTelemetry.gpu.totalVramMib * 1024 * 1024
+            : null,
+        gpuAvailable: hardwareTelemetry.gpu?.isAvailable || false,
+        osPlatform: hardwareTelemetry.os.platform,
+        architecture: hardwareTelemetry.os.arch,
+        nodeVersion: hardwareTelemetry.runtime.nodeVersion,
+        pythonVersion: this.telemetryCollector.getPythonVersion(),
+        cudaVersion: hardwareTelemetry.gpu?.cudaVersion || null,
+        gpuDriverVersion: hardwareTelemetry.gpu?.driverVersion || null,
+        dockerVersion: this.telemetryCollector.getDockerVersion(),
+        benchmarkTimestamp: new Date().toISOString(),
+      };
+
       return {
-        schemaVersion: "1.1.0",
+        schemaVersion: "1.2.0",
         timestamp: new Date().toISOString(),
         totalDurationMs: Number(totalDurationMs.toFixed(2)),
         totalWarmupDurationMs: Number(totalWarmupMs.toFixed(2)),
@@ -374,6 +430,7 @@ export class BenchmarkOrchestrator {
         config: this.config,
         pricing: this.pricing,
         hardware: hardwareTelemetry,
+        provenance,
         stages: stageResults,
         endToEnd: endToEndResult,
         summary: {
