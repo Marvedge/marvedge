@@ -7,15 +7,16 @@
 **Task Branch:** `task/task-00127-portable-cloud-benchmark`  
 **Author:** AI Engineering & Infrastructure QA  
 **Date:** 9 November 2026  
-**Status:** ✅ **Implementation & Verification Complete**  
+**Status:** ✅ **Implementation & Verification Complete**
 
 ---
 
 ## 1. Executive Summary
 
-Task-00127 addresses portability, reproducibility, and hardware provenance in the Marvedge Cloud Cost Benchmark harness (`scripts/benchmark/cloudCostBenchmark.ts`), originally established under Task-00102. 
+Task-00127 addresses portability, reproducibility, and hardware provenance in the Marvedge Cloud Cost Benchmark harness (`scripts/benchmark/cloudCostBenchmark.ts`), originally established under Task-00102.
 
 The harness has been hardened to:
+
 1. **Run portably across any cloud provider (AWS, GCP, Azure, or local/Docker)** via environment variables or CLI arguments without code changes.
 2. **Decouple remote service execution from local machine dependencies**, allowing remote TalkNet endpoints to be called without requiring gigabytes of model weights to be downloaded or present on the benchmark host.
 3. **Capture comprehensive hardware provenance (Schema 1.2.0)** for every run, recording containerization status, CPU cores/model, host RAM, GPU model/driver/VRAM, Python runtime, CUDA availability, and Docker versions.
@@ -27,6 +28,7 @@ The harness has been hardened to:
 ## 2. Work Completed Across Phases
 
 ### 2.1 Phase 1: Comprehensive Baseline Audit
+
 - Conducted full audit of Task-00102 consolidation baseline on `master` at `87bd0ef`.
 - Identified 4 portability blockers:
   - Missing `.dockerignore` causing bloated images (copying `.git`, `node_modules`, `benchmark_results`).
@@ -36,6 +38,7 @@ The harness has been hardened to:
 - Documented baseline in [`TASK-00127-PHASE-1-AUDIT.md`](../TASK-00127-PHASE-1-AUDIT.md).
 
 ### 2.2 Phase 2A: Docker & CLI Hardening
+
 - **Created `.dockerignore`:** Excludes `node_modules`, `.git`, `.next`, `dist`, `coverage`, `benchmark_results`, `.env*`, and Python caches (`__pycache__`, `*.pyc`).
 - **Hardened `Dockerfile.benchmark`:**
   - Pinned immutable digest: `node:20.18.0-slim@sha256:28fbbb764069c698ead61d6a739a7615e8f0e07a4b8fe1473ceca70c1c3d6aaa`.
@@ -50,6 +53,7 @@ The harness has been hardened to:
   - Normalized VoiceStudio endpoint resolution to use canonical `VOICESTUDIO_URL` with backward-compatible `VOICESTUDIO_API_URL` fallback.
 
 ### 2.3 Phase 2B: Provider Decoupling & Multi-Cloud Pricing
+
 - **Decoupled TalkNet Preflight:**
   - When running with remote service URL (`TALKNET_SERVICE_URL` or `ML_GATEWAY_URL`), the harness verifies HTTP connectivity without demanding local disk weights in `talknet/weights/`.
   - When running standalone without remote URL, local weight verification is preserved and automatic background downloads remain strictly forbidden.
@@ -59,6 +63,7 @@ The harness has been hardened to:
   - Preserved custom hourly rate overrides (`--hourly-rate`).
 
 ### 2.4 Phase 2C: Hardware Provenance & Schema 1.2.0
+
 - **Extended Types (`types.ts`):**
   - Added `HardwareProvenance`, `HardwareVerificationStatus`, `CloudProvider`, `PricingTier`.
   - Extended `BenchmarkRunReport` schema version to `"1.1.0" | "1.2.0"`.
@@ -71,6 +76,7 @@ The harness has been hardened to:
   - Formatted hardware provenance table directly in Section 2 while strictly maintaining legacy top-level markdown section anchors (`## 1`, `## 2`, `## 3`, `## 4`).
 
 ### 2.5 Phase 2D: Vitest Test Suite & Regression Verification
+
 - Created `scripts/benchmark/cloudCostBenchmark/__tests__/task127Portability.test.ts` covering 18 focused test cases across all 6 problem domains.
 - Verified all 9 test suites pass: **56 out of 56 tests passing**.
 - Verified repository type-checking: `npx tsc --noEmit` **0 errors**.
@@ -81,18 +87,18 @@ The harness has been hardened to:
 
 ## 3. Test Verification Matrix
 
-| Test Suite File | Tests | Status | Scope |
-| :--- | :--- | :--- | :--- |
-| `task127Portability.test.ts` | 18 | ✅ PASS | Dockerfile, .dockerignore, CLI precedence, aliases, remote preflight, telemetry, Schema 1.2.0 |
-| `costCalculator.test.ts` | 7 | ✅ PASS | Multi-cloud pricing models, fixture zero spend, cost scaling across iterations |
-| `cli.test.ts` | 3 | ✅ PASS | CLI parsing, exit codes (0 for success, 1 for failure/blocked) |
-| `orchestrator.test.ts` | 4 | ✅ PASS | Multi-stage pipeline execution, warmup separation, concurrency, error recovery |
-| `providers.test.ts` | 8 | ✅ PASS | Reframe, TalkNet, Whisper, ElevenLabs guardrails & fixture outputs |
-| `reporting.test.ts` | 3 | ✅ PASS | Schema 1.1.0/1.2.0 compatibility, JSON and Markdown generation |
-| `syntheticMedia.test.ts` | 2 | ✅ PASS | Offline synthetic MP4 generation for deterministic testing |
-| `telemetry.test.ts` | 5 | ✅ PASS | Percentile calculations, non-blocking polling, GPU query |
-| `voicestudioBenchmark.test.ts` | 6 | ✅ PASS | Local VoiceStudio client integration, health checks, fallback |
-| **Total** | **56** | **✅ 100% PASS** | **Zero failures, zero regressions** |
+| Test Suite File                | Tests  | Status           | Scope                                                                                         |
+| :----------------------------- | :----- | :--------------- | :-------------------------------------------------------------------------------------------- |
+| `task127Portability.test.ts`   | 18     | ✅ PASS          | Dockerfile, .dockerignore, CLI precedence, aliases, remote preflight, telemetry, Schema 1.2.0 |
+| `costCalculator.test.ts`       | 7      | ✅ PASS          | Multi-cloud pricing models, fixture zero spend, cost scaling across iterations                |
+| `cli.test.ts`                  | 3      | ✅ PASS          | CLI parsing, exit codes (0 for success, 1 for failure/blocked)                                |
+| `orchestrator.test.ts`         | 4      | ✅ PASS          | Multi-stage pipeline execution, warmup separation, concurrency, error recovery                |
+| `providers.test.ts`            | 8      | ✅ PASS          | Reframe, TalkNet, Whisper, ElevenLabs guardrails & fixture outputs                            |
+| `reporting.test.ts`            | 3      | ✅ PASS          | Schema 1.1.0/1.2.0 compatibility, JSON and Markdown generation                                |
+| `syntheticMedia.test.ts`       | 2      | ✅ PASS          | Offline synthetic MP4 generation for deterministic testing                                    |
+| `telemetry.test.ts`            | 5      | ✅ PASS          | Percentile calculations, non-blocking polling, GPU query                                      |
+| `voicestudioBenchmark.test.ts` | 6      | ✅ PASS          | Local VoiceStudio client integration, health checks, fallback                                 |
+| **Total**                      | **56** | **✅ 100% PASS** | **Zero failures, zero regressions**                                                           |
 
 ---
 

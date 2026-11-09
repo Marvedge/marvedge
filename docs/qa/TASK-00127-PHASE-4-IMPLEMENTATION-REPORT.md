@@ -6,7 +6,7 @@
 **Branch:** `task/task-00127-portable-cloud-benchmark`  
 **Baseline Commit:** `f82fda7`  
 **Date:** 9 November 2026  
-**Status:** ✅ **Implemented & Verified (All 66 Tests Passing)**  
+**Status:** ✅ **Implemented & Verified (All 66 Tests Passing)**
 
 ---
 
@@ -15,6 +15,7 @@
 This report documents the resolution of all findings identified in `TASK-00127-PHASE-3-INDEPENDENT-REVIEW.md`.
 
 All identified defects have been remediated:
+
 1. **C1 (Docker Packaging Defect):** Moved `"tsx": "^4.23.13"` from `"devDependencies"` to `"dependencies"` in `package.json` and updated `package-lock.json`, ensuring `npm ci --omit=dev` installs `tsx` cleanly for offline and container execution.
 2. **C2 (Execution Provenance vs. Pricing Conflation):** Refactored `HardwareProvenance` and `reporting.ts` so that physical execution environment metadata (`actualCloudProvider: null`, `actualInstanceType: null`, host CPU, host GPU) is completely decoupled from the modeled pricing configuration (`modeledPricing`).
 3. **H1 (Superficial GPU Verification):** Redesigned `verificationStatus` with rigorous stage-attributed evidence requirements, introducing explicit classifications: `verified_gpu`, `verified_cpu`, `external_api`, `fixture_simulation`, and `partially_verified`. Host GPU detection alone never upgrades a run to GPU-verified.
@@ -29,6 +30,7 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
 ## 2. Audit Findings & Detailed Resolutions
 
 ### Finding C1: Container Build Packaging Defect (`tsx` in `devDependencies`)
+
 - **Root Cause:** `Dockerfile.benchmark` runs `npm ci --omit=dev`, but `tsx` was placed under `"devDependencies"` in `package.json`. In an isolated container environment without public npm registry access, container execution would fail.
 - **Resolution:**
   - Relocated `"tsx": "^4.23.13"` to `"dependencies"` in `package.json`.
@@ -36,6 +38,7 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
   - Added a dedicated regression test in `task127Portability.test.ts` verifying that `package.json.dependencies["tsx"]` is defined and `devDependencies["tsx"]` is undefined.
 
 ### Finding C2: Conflation of Modeled Pricing with Physical Hardware Provenance
+
 - **Root Cause:** User CLI arguments like `--cloud=aws --pricing-tier=spot` populated `provenance.cloudProvider` and `provenance.instanceType`. When run on a Windows machine with an AMD CPU and RTX 5050 GPU, the report asserted AWS EC2 g4dn.xlarge under Section 2 ("Hardware Provenance").
 - **Resolution:**
   - Extended `HardwareProvenance` in `types.ts` with explicit `actualCloudProvider: CloudProvider | null` and `actualInstanceType: string | null`. These fields are strictly `null` (or set only via independent instance metadata discovery).
@@ -44,6 +47,7 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
   - Refactored `reporting.ts` Section 2 to display "Host Execution Provider: Unverified / Local Host" and "Host Instance Type: Physical / Local Hardware", moving target pricing to a dedicated subsection: `### 2.2 Modeled Cloud Pricing Configuration (Cost Model Only)`.
 
 ### Finding H1: Superficial GPU Verification Semantics
+
 - **Root Cause:** `orchestrator.ts` assigned `verified_hardware` whenever `hasRealInference && hardwareTelemetry.gpu?.isAvailable`. If a run called Groq Whisper API or ran CPU fallback on a machine equipped with an NVIDIA GPU, it was falsely marked as GPU-verified.
 - **Resolution:**
   - Expanded `HardwareVerificationStatus` to:
@@ -56,6 +60,7 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
   - Added 5 new targeted Vitest tests covering every classification branch.
 
 ### Finding H2: Unannotated Historical PyTorch Metadata ("PyTorch 2.14")
+
 - **Root Cause:** `TASK-00127-HARDWARE-PROVENANCE.md` copied "PyTorch 2.14" from `task97_benchmark_summary.md` without technical qualification. PyTorch releases follow semantic versioning (2.1.0, 2.1.2, 2.2.0, 2.3.0, 2.4.0, 2.5.0, 2.6.0); version 2.14 does not exist.
 - **Resolution:**
   - Preserved the raw historical entry `"CUDA 12.2 / PyTorch 2.14 [1]"` in Table 2.1.
@@ -63,6 +68,7 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
     > "The raw historical benchmark record (docs/qa/task97_benchmark_summary.md) literally documents 'PyTorch 2.14'. In PyTorch release history, version 2.14 does not exist... This value is preserved unedited as raw historical data from the October 2026 record, but is explicitly annotated as unverified and likely a historical clerical/transcription typo (plausibly referring to PyTorch 2.1.2 or 2.4.x)."
 
 ### Finding M1: CLI Parsing Fail-Safe on Invalid Arguments
+
 - **Root Cause:** `parseStages` and provider parsers silently fell back to defaults when unparseable or misspelled flags were passed.
 - **Resolution:**
   - In `cloudCostBenchmark.ts`, `parseStages` now validates all stage tokens against `["reframe", "avs", "captions", "dubbing"]` and throws `Invalid stage(s): '<token>'...`.
@@ -71,6 +77,7 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
   - Added unit tests for invalid CLI stages, invalid providers, and exit code 1 behavior.
 
 ### Finding M2: Fixture-Mode Throughput Labeling
+
 - **Root Cause:** In fixture mode, `throughputJobsPerSec` calculated in-memory execution speed (e.g., 1000 jobs/s) and displayed it in the Markdown table.
 - **Resolution:**
   - Added `throughputLabel: string` to `StageResult` and `EndToEndResult`.
@@ -81,16 +88,16 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
 
 ## 3. Files Modified and Purpose
 
-| File | Change Type | Purpose |
-| :--- | :--- | :--- |
-| `package.json` | Modified | Move `"tsx"` from `devDependencies` to `dependencies` |
-| `package-lock.json` | Modified | Update lockfile to remove `dev: true` from `node_modules/tsx` |
-| `scripts/benchmark/cloudCostBenchmark/types.ts` | Modified | Refactor `HardwareProvenance`, add `actualCloudProvider`, `modeledPricing`, update `HardwareVerificationStatus`, add `throughputLabel` |
-| `scripts/benchmark/cloudCostBenchmark/orchestrator.ts` | Modified | Implement stage-attributed GPU verification logic, throughput labels, and decoupled provenance construction |
-| `scripts/benchmark/cloudCostBenchmark/reporting.ts` | Modified | Separate physical execution telemetry from modeled pricing, render `N/A (fixture)` in fixture throughput table |
-| `scripts/benchmark/cloudCostBenchmark.ts` | Modified | Add strict argument validation with actionable error messages and exit code 1 |
-| `scripts/benchmark/cloudCostBenchmark/__tests__/task127Portability.test.ts` | Modified | Add 10 new tests (28 total) covering production dependency, invalid CLI arguments, provenance separation, and all 5 verification classifications |
-| `docs/qa/TASK-00127-HARDWARE-PROVENANCE.md` | Modified | Annotate raw PyTorch 2.14 historical record with technical clarification footnote |
+| File                                                                        | Change Type | Purpose                                                                                                                                          |
+| :-------------------------------------------------------------------------- | :---------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`                                                              | Modified    | Move `"tsx"` from `devDependencies` to `dependencies`                                                                                            |
+| `package-lock.json`                                                         | Modified    | Update lockfile to remove `dev: true` from `node_modules/tsx`                                                                                    |
+| `scripts/benchmark/cloudCostBenchmark/types.ts`                             | Modified    | Refactor `HardwareProvenance`, add `actualCloudProvider`, `modeledPricing`, update `HardwareVerificationStatus`, add `throughputLabel`           |
+| `scripts/benchmark/cloudCostBenchmark/orchestrator.ts`                      | Modified    | Implement stage-attributed GPU verification logic, throughput labels, and decoupled provenance construction                                      |
+| `scripts/benchmark/cloudCostBenchmark/reporting.ts`                         | Modified    | Separate physical execution telemetry from modeled pricing, render `N/A (fixture)` in fixture throughput table                                   |
+| `scripts/benchmark/cloudCostBenchmark.ts`                                   | Modified    | Add strict argument validation with actionable error messages and exit code 1                                                                    |
+| `scripts/benchmark/cloudCostBenchmark/__tests__/task127Portability.test.ts` | Modified    | Add 10 new tests (28 total) covering production dependency, invalid CLI arguments, provenance separation, and all 5 verification classifications |
+| `docs/qa/TASK-00127-HARDWARE-PROVENANCE.md`                                 | Modified    | Annotate raw PyTorch 2.14 historical record with technical clarification footnote                                                                |
 
 ---
 
@@ -107,10 +114,13 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
 ## 5. Verification Commands and Test Outcomes
 
 ### A. Vitest Test Suite Execution
+
 ```bash
 & ".\node_modules\.bin\vitest.cmd" run scripts/benchmark/cloudCostBenchmark/__tests__
 ```
+
 **Outcome:** ✅ **ALL 9 TEST SUITES (66 TESTS) PASSED**
+
 - `costCalculator.test.ts`: 7 passed
 - `reporting.test.ts`: 3 passed
 - `telemetry.test.ts`: 5 passed
@@ -122,18 +132,23 @@ All 9 test suites (66 tests) pass cleanly in Vitest, and `npx tsc --noEmit` repo
 - `task127Portability.test.ts`: 28 passed
 
 ### B. TypeScript Compilation
+
 ```bash
 & ".\node_modules\.bin\tsc.cmd" --noEmit
 ```
+
 **Outcome:** ✅ **PASSED with 0 errors**
 
 ### C. Prettier Formatting
+
 ```bash
 & ".\node_modules\.bin\prettier.cmd" --check "scripts/benchmark/cloudCostBenchmark/**/*.ts" "scripts/benchmark/cloudCostBenchmark.ts" "package.json" "docs/qa/TASK-00127-HARDWARE-PROVENANCE.md"
 ```
+
 **Outcome:** ✅ **All matched files use Prettier code style!**
 
 ### D. CLI Validation Tests
+
 1. Invalid stage:
    `npx tsx scripts/benchmark/cloudCostBenchmark.ts --stages invalid_stage`  
    **Result:** `[CLI ERROR]: Invalid stage(s): 'invalid_stage'...` (Exit code 1).
