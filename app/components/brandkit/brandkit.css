@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ==============================================================================
+   Marvedge Official Brand Kit Design System
+   Core 4 Colors:
+     - Pure Black:      #000000 (rgb 0, 0, 0)
+     - Deep Slate Blue: #7895B2 (rgb 120, 149, 178)
+     - Slate Mist:      #AEBDCA (rgb 174, 189, 202)
+     - Warm Sand:       #E8DFCA (rgb 232, 223, 202)
+   Utility:
+     - Pure White:      #FFFFFF (rgb 255, 255, 255)
+
+   Core 2 Fonts:
+     - Display:         "Instrument Serif", Georgia, serif
+     - Interface/Body:  "Inter", -apple-system, BlinkMacSystemFont, sans-serif
+   ============================================================================== */
+
+:root {
+  /* 2 Core Typefaces */
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* 4 Core Palette Colors */
+  --color-black: #000000;
+  --color-slate-blue: #7895b2;
+  --color-slate-mist: #aebdca;
+  --color-warm-sand: #e8dfca;
+  --color-white: #ffffff;
+
+  /* Tints & Translucencies */
+  --color-slate-blue-hover: #5d7c9c;
+  --color-slate-blue-subtle: rgba(120, 149, 178, 0.14);
+  --color-slate-mist-subtle: rgba(174, 189, 202, 0.28);
+  --color-warm-sand-soft: #f4ede1;
+  --color-warm-sand-dark: #d6ccb5;
+
+  /* Surfaces */
+  --canvas-bg: #e8dfca;
+  --card-bg: #ffffff;
+  --card-border: #d6ccb5;
+  --card-hairline: rgba(0, 0, 0, 0.08);
+
+  /* Typography Colors */
+  --text-primary: #000000;
+  --text-secondary: #4a4740;
+  --text-muted: #757168;
+  --text-light: #ffffff;
+
+  /* Elevation */
+  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 12px 30px -4px rgba(0, 0, 0, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.04);
+  --shadow-slate-glow: 0 0 20px rgba(120, 149, 178, 0.35);
+  --shadow-black-glow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+/* Base utility overrides */
+body {
+  background-color: var(--canvas-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-serif-brand {
+  font-family: var(--font-serif);
+}
+
+.font-sans-brand {
+  font-family: var(--font-sans);
+}
+
+/* Button styles */
+.btn-pure-black {
+  background-color: #000000;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.btn-pure-black:hover {
+  background-color: #1a1a1a;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.btn-slate-blue {
+  background-color: #7895b2;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(120, 149, 178, 0.3);
+}
+.btn-slate-blue:hover {
+  background-color: #5d7c9c;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(120, 149, 178, 0.45);
+}
+
+.btn-warm-sand {
+  background-color: #e8dfca;
+  color: #000000;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  border: 1px solid #d6ccb5;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-warm-sand:hover {
+  background-color: #f4ede1;
+  border-color: #c4b9a0;
+  transform: translateY(-1px);
+}
+
+.btn-outline-mist {
+  background-color: transparent;
+  color: #000000;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  border: 1px solid #aebdca;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-outline-mist:hover {
+  background-color: rgba(174, 189, 202, 0.18);
+  border-color: #7895b2;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #e8dfca;
+}
+::-webkit-scrollbar-thumb {
+  background: #aebdca;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7895b2;
+}
