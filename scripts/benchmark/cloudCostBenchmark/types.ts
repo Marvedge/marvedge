@@ -17,7 +17,10 @@ export type CloudProvider = "aws" | "gcp" | "azure" | "local" | "unknown";
 export type PricingTier = "ondemand" | "spot" | "standard";
 
 export type HardwareVerificationStatus =
+  | "verified_gpu"
   | "verified_hardware"
+  | "verified_cpu"
+  | "external_api"
   | "fixture_simulation"
   | "partially_verified"
   | "unknown";
@@ -65,13 +68,20 @@ export interface HardwareTelemetry {
   gpu: GpuTelemetry | null;
 }
 
-export interface HardwareProvenance {
-  containerized: boolean;
-  executionEnvironment: "container" | "bare-metal";
+export interface ModeledPricingConfig {
   cloudProvider: CloudProvider;
   instanceType: string;
   pricingTier: PricingTier;
+  computeHourlyRateUsd: number;
+}
+
+export interface HardwareProvenance {
+  containerized: boolean;
+  executionEnvironment: "container" | "bare-metal";
+  actualCloudProvider: CloudProvider | null;
+  actualInstanceType: string | null;
   verificationStatus: HardwareVerificationStatus;
+  verificationNotes?: string[];
   cpuModel: string;
   cpuCores: number;
   memoryTotalBytes: number;
@@ -86,6 +96,14 @@ export interface HardwareProvenance {
   gpuDriverVersion: string | null;
   dockerVersion: string | null;
   benchmarkTimestamp: string;
+
+  // Independent modeled pricing configuration
+  modeledPricing?: ModeledPricingConfig;
+
+  // Backward-compatibility aliases (represent modeled pricing configuration)
+  cloudProvider?: CloudProvider;
+  instanceType?: string;
+  pricingTier?: PricingTier;
 }
 
 export interface LatencyMetrics {
@@ -137,6 +155,7 @@ export interface StageResult {
   completedJobs: number;
   failedJobs: number;
   throughputJobsPerSec: number;
+  throughputLabel?: string;
   realtimeFactor: number | null;
   realtimeFactorLabel: string;
   cost: StageCostBreakdown;
@@ -187,6 +206,7 @@ export interface EndToEndResult {
   completedJobs: number;
   failedJobs: number;
   throughputJobsPerSec: number;
+  throughputLabel?: string;
   realtimeFactor: number | null;
   realtimeFactorLabel: string;
   cost: StageCostBreakdown;

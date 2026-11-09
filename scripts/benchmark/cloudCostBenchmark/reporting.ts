@@ -78,16 +78,16 @@ export function generateMarkdownReport(report: BenchmarkRunReport): string {
       }`
     );
     lines.push("");
-    lines.push("| Provenance Field | Value | Classification / Details |");
+    lines.push("| Hardware & Telemetry Field | Observed Value | Classification / Details |");
     lines.push("| :--- | :--- | :--- |");
     lines.push(
       `| **Execution Runtime** | ${provenance.executionEnvironment} | ${provenance.containerized ? "Docker container runtime" : "Bare-metal host"} |`
     );
     lines.push(
-      `| **Cloud Provider** | ${provenance.cloudProvider.toUpperCase()} | Pricing tier: \`${provenance.pricingTier}\` |`
+      `| **Host Execution Provider** | ${provenance.actualCloudProvider ?? "Unverified / Local Host"} | Independent discovery: ${provenance.actualCloudProvider ? "verified" : "none"} |`
     );
     lines.push(
-      `| **Instance Type / Preset** | ${provenance.instanceType} | Rate: $${pricing.computeHourlyRateUsd}/hr |`
+      `| **Host Instance Type** | ${provenance.actualInstanceType ?? "Physical / Local Hardware"} | Not inferred from pricing configuration |`
     );
     lines.push(`| **Host CPU** | ${provenance.cpuModel} | ${provenance.cpuCores} cores |`);
     lines.push(`| **System Memory** | ${(provenance.memoryTotalBytes / 1e9).toFixed(2)} GB | |`);
@@ -99,6 +99,22 @@ export function generateMarkdownReport(report: BenchmarkRunReport): string {
     );
     lines.push(
       `| **Software Runtime** | Node: ${provenance.nodeVersion} | Python: ${provenance.pythonVersion || "N/A"} | Docker: ${provenance.dockerVersion || "N/A"} |`
+    );
+    lines.push("");
+
+    lines.push("### 2.2 Modeled Cloud Pricing Configuration (Cost Model Only)");
+    lines.push("");
+    lines.push(
+      "> **Notice:** The following target profile was selected by configuration for compute cost modeling. It does **not** assert the physical execution environment."
+    );
+    lines.push("");
+    lines.push("| Modeled Pricing Field | Configured Target | Details |");
+    lines.push("| :--- | :--- | :--- |");
+    lines.push(
+      `| **Target Cloud Provider** | ${(pricing.cloudProvider ?? config.cloudProvider ?? "generic").toUpperCase()} | Pricing tier: \`${pricing.pricingTier ?? config.pricingTier ?? "standard"}\` |`
+    );
+    lines.push(
+      `| **Target Instance Profile** | ${pricing.instanceType} | Rate: $${pricing.computeHourlyRateUsd}/hr |`
     );
     lines.push("");
   }
@@ -158,14 +174,22 @@ export function generateMarkdownReport(report: BenchmarkRunReport): string {
       lines.push(`| \`${sk}\` | *skipped* | - | 0/0 | - | - | - | - | - |`);
       continue;
     }
+    const throughputDisplay =
+      s.status === "fixture"
+        ? s.throughputLabel || "N/A (fixture)"
+        : `${s.throughputJobsPerSec} jobs/s`;
     lines.push(
-      `| \`${s.stage}\` | \`${s.status}\` | ${s.provider} | ${s.completedJobs}/${s.failedJobs} | ${s.latency.p50Ms} ms | ${s.latency.p95Ms} ms | ${s.latency.maxMs} ms | ${s.throughputJobsPerSec} jobs/s | ${s.realtimeFactorLabel} |`
+      `| \`${s.stage}\` | \`${s.status}\` | ${s.provider} | ${s.completedJobs}/${s.failedJobs} | ${s.latency.p50Ms} ms | ${s.latency.p95Ms} ms | ${s.latency.maxMs} ms | ${throughputDisplay} | ${s.realtimeFactorLabel} |`
     );
   }
 
   if (endToEnd) {
+    const e2eThroughputDisplay =
+      endToEnd.status === "fixture"
+        ? endToEnd.throughputLabel || "N/A (fixture)"
+        : `${endToEnd.throughputJobsPerSec} jobs/s`;
     lines.push(
-      `| **End-to-End Pipeline** | \`${endToEnd.status}\` | multi-stage | ${endToEnd.completedJobs}/${endToEnd.failedJobs} | ${endToEnd.latency.p50Ms} ms | ${endToEnd.latency.p95Ms} ms | ${endToEnd.latency.maxMs} ms | ${endToEnd.throughputJobsPerSec} jobs/s | ${endToEnd.realtimeFactorLabel} |`
+      `| **End-to-End Pipeline** | \`${endToEnd.status}\` | multi-stage | ${endToEnd.completedJobs}/${endToEnd.failedJobs} | ${endToEnd.latency.p50Ms} ms | ${endToEnd.latency.p95Ms} ms | ${endToEnd.latency.maxMs} ms | ${e2eThroughputDisplay} | ${endToEnd.realtimeFactorLabel} |`
     );
   }
 

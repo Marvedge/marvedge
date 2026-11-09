@@ -138,37 +138,109 @@ export function parseCliArgs(argv: string[]): {
     } else if (arg.startsWith("--gpu=")) {
       gpuType = arg.split("=")[1];
     } else if ((arg === "--cloud" || arg === "--cloud-provider") && i + 1 < args.length) {
-      cloudProvider = args[++i].toLowerCase() as CloudProvider;
+      const val = args[++i].toLowerCase();
+      if (!["aws", "gcp", "azure", "local"].includes(val)) {
+        throw new Error(
+          `Invalid cloud provider: '${val}'. Valid options are: aws, gcp, azure, local.`
+        );
+      }
+      cloudProvider = val as CloudProvider;
     } else if (arg.startsWith("--cloud=")) {
-      cloudProvider = arg.split("=")[1].toLowerCase() as CloudProvider;
+      const val = arg.split("=")[1].toLowerCase();
+      if (!["aws", "gcp", "azure", "local"].includes(val)) {
+        throw new Error(
+          `Invalid cloud provider: '${val}'. Valid options are: aws, gcp, azure, local.`
+        );
+      }
+      cloudProvider = val as CloudProvider;
     } else if (arg.startsWith("--cloud-provider=")) {
-      cloudProvider = arg.split("=")[1].toLowerCase() as CloudProvider;
+      const val = arg.split("=")[1].toLowerCase();
+      if (!["aws", "gcp", "azure", "local"].includes(val)) {
+        throw new Error(
+          `Invalid cloud provider: '${val}'. Valid options are: aws, gcp, azure, local.`
+        );
+      }
+      cloudProvider = val as CloudProvider;
     } else if (arg === "--pricing-tier" && i + 1 < args.length) {
-      pricingTier = args[++i].toLowerCase() as PricingTier;
+      const val = args[++i].toLowerCase();
+      if (!["ondemand", "spot", "standard"].includes(val)) {
+        throw new Error(
+          `Invalid pricing tier: '${val}'. Valid options are: ondemand, spot, standard.`
+        );
+      }
+      pricingTier = val as PricingTier;
     } else if (arg.startsWith("--pricing-tier=")) {
-      pricingTier = arg.split("=")[1].toLowerCase() as PricingTier;
+      const val = arg.split("=")[1].toLowerCase();
+      if (!["ondemand", "spot", "standard"].includes(val)) {
+        throw new Error(
+          `Invalid pricing tier: '${val}'. Valid options are: ondemand, spot, standard.`
+        );
+      }
+      pricingTier = val as PricingTier;
     } else if (arg === "--hourly-rate" && i + 1 < args.length) {
       hourlyRateUsd = parseFloat(args[++i]) || undefined;
     } else if (arg.startsWith("--hourly-rate=")) {
       hourlyRateUsd = parseFloat(arg.split("=")[1]) || undefined;
     } else if (arg === "--provider-reframe" && i + 1 < args.length) {
-      reframeProvider = args[++i] as NonNullable<BenchmarkConfig["reframeProvider"]>;
+      const val = args[++i];
+      if (!["fixture", "autoflip"].includes(val)) {
+        throw new Error(
+          `Invalid reframe provider: '${val}'. Valid options are: fixture, autoflip.`
+        );
+      }
+      reframeProvider = val as NonNullable<BenchmarkConfig["reframeProvider"]>;
     } else if (arg.startsWith("--provider-reframe=")) {
-      reframeProvider = arg.split("=")[1] as NonNullable<BenchmarkConfig["reframeProvider"]>;
+      const val = arg.split("=")[1];
+      if (!["fixture", "autoflip"].includes(val)) {
+        throw new Error(
+          `Invalid reframe provider: '${val}'. Valid options are: fixture, autoflip.`
+        );
+      }
+      reframeProvider = val as NonNullable<BenchmarkConfig["reframeProvider"]>;
     } else if (arg === "--provider-avs" && i + 1 < args.length) {
-      avsProvider = args[++i] as NonNullable<BenchmarkConfig["avsProvider"]>;
+      const val = args[++i];
+      if (!["fixture", "talknet"].includes(val)) {
+        throw new Error(`Invalid AVS provider: '${val}'. Valid options are: fixture, talknet.`);
+      }
+      avsProvider = val as NonNullable<BenchmarkConfig["avsProvider"]>;
     } else if (arg.startsWith("--provider-avs=")) {
-      avsProvider = arg.split("=")[1] as NonNullable<BenchmarkConfig["avsProvider"]>;
+      const val = arg.split("=")[1];
+      if (!["fixture", "talknet"].includes(val)) {
+        throw new Error(`Invalid AVS provider: '${val}'. Valid options are: fixture, talknet.`);
+      }
+      avsProvider = val as NonNullable<BenchmarkConfig["avsProvider"]>;
     } else if (arg === "--provider-transcription" && i + 1 < args.length) {
-      transcriptionProvider = args[++i] as NonNullable<BenchmarkConfig["transcriptionProvider"]>;
+      const val = args[++i];
+      if (!["fixture", "whisper", "groq"].includes(val)) {
+        throw new Error(
+          `Invalid transcription provider: '${val}'. Valid options are: fixture, whisper, groq.`
+        );
+      }
+      transcriptionProvider = val as NonNullable<BenchmarkConfig["transcriptionProvider"]>;
     } else if (arg.startsWith("--provider-transcription=")) {
-      transcriptionProvider = arg.split("=")[1] as NonNullable<
-        BenchmarkConfig["transcriptionProvider"]
-      >;
+      const val = arg.split("=")[1];
+      if (!["fixture", "whisper", "groq"].includes(val)) {
+        throw new Error(
+          `Invalid transcription provider: '${val}'. Valid options are: fixture, whisper, groq.`
+        );
+      }
+      transcriptionProvider = val as NonNullable<BenchmarkConfig["transcriptionProvider"]>;
     } else if (arg === "--provider-dubbing" && i + 1 < args.length) {
-      dubbingProvider = args[++i] as NonNullable<BenchmarkConfig["dubbingProvider"]>;
+      const val = args[++i];
+      if (!["fixture", "elevenlabs", "voicestudio"].includes(val)) {
+        throw new Error(
+          `Invalid dubbing provider: '${val}'. Valid options are: fixture, elevenlabs, voicestudio.`
+        );
+      }
+      dubbingProvider = val as NonNullable<BenchmarkConfig["dubbingProvider"]>;
     } else if (arg.startsWith("--provider-dubbing=")) {
-      dubbingProvider = arg.split("=")[1] as NonNullable<BenchmarkConfig["dubbingProvider"]>;
+      const val = arg.split("=")[1];
+      if (!["fixture", "elevenlabs", "voicestudio"].includes(val)) {
+        throw new Error(
+          `Invalid dubbing provider: '${val}'. Valid options are: fixture, elevenlabs, voicestudio.`
+        );
+      }
+      dubbingProvider = val as NonNullable<BenchmarkConfig["dubbingProvider"]>;
     } else if (arg === "--voicestudio-url" && i + 1 < args.length) {
       voiceStudioUrl = args[++i];
     } else if (arg.startsWith("--voicestudio-url=")) {
@@ -228,13 +300,20 @@ function parseStages(raw: string): PipelineStage[] {
   if (raw.toLowerCase() === "all") {
     return ["reframe", "avs", "captions", "dubbing"];
   }
-  const valid: PipelineStage[] = ["reframe", "avs", "captions", "dubbing"];
-  const parsed = raw
+  const validStages: PipelineStage[] = ["reframe", "avs", "captions", "dubbing"];
+  const tokens = raw
     .split(",")
     .map((s) => s.trim().toLowerCase())
-    .filter((s): s is PipelineStage => valid.includes(s as PipelineStage));
+    .filter(Boolean);
 
-  return parsed.length > 0 ? parsed : valid;
+  const invalid = tokens.filter((t) => !validStages.includes(t as PipelineStage));
+  if (invalid.length > 0) {
+    throw new Error(
+      `Invalid stage(s): ${invalid.map((s) => `'${s}'`).join(", ")}. Valid stages are: reframe, avs, captions, dubbing (or 'all').`
+    );
+  }
+
+  return tokens as PipelineStage[];
 }
 
 function printUsageAndExit(): never {
@@ -276,7 +355,14 @@ Environment Variables:
 }
 
 export async function runBenchmarkCli(argv: string[]): Promise<number> {
-  const { config, outputJsonPath, outputMarkdownPath } = parseCliArgs(argv);
+  let parsed;
+  try {
+    parsed = parseCliArgs(argv);
+  } catch (err: unknown) {
+    console.error(`\n[CLI ERROR]: ${(err as Error).message}\n`);
+    return 1;
+  }
+  const { config, outputJsonPath, outputMarkdownPath } = parsed;
 
   console.log("================================================================");
   console.log("       MARVEDGE CLOUD COST BENCHMARK HARNESS (Task-0127)        ");

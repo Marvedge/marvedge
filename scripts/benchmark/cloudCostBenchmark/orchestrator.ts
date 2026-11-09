@@ -142,6 +142,9 @@ export class BenchmarkOrchestrator {
       realtimeFactorLabel = "N/A (blocked)";
     }
 
+    const isFixture = detectedStatus === "fixture";
+    const throughputLabel = isFixture ? "N/A (fixture)" : `${throughputJobsPerSec} jobs/s`;
+
     // Cost Breakdown with completedJobs scaling
     const cost = calculateStageCost({
       stage,
@@ -165,6 +168,7 @@ export class BenchmarkOrchestrator {
       completedJobs,
       failedJobs,
       throughputJobsPerSec,
+      throughputLabel,
       realtimeFactor,
       realtimeFactorLabel,
       cost,
@@ -242,6 +246,8 @@ export class BenchmarkOrchestrator {
 
     const wallClockSec = Math.max(0.001, wallClockDurationMs / 1000);
     const throughputJobsPerSec = Number((completedJobs / wallClockSec).toFixed(3));
+    const isE2eFixture = overallStatus === "fixture";
+    const e2eThroughputLabel = isE2eFixture ? "N/A (fixture)" : `${throughputJobsPerSec} jobs/s`;
 
     let realtimeFactor: number | null = null;
     let realtimeFactorLabel = "N/A (fixture)";
@@ -292,6 +298,7 @@ export class BenchmarkOrchestrator {
       completedJobs,
       failedJobs,
       throughputJobsPerSec,
+      throughputLabel: e2eThroughputLabel,
       realtimeFactor,
       realtimeFactorLabel,
       cost: {
@@ -376,31 +383,99 @@ export class BenchmarkOrchestrator {
 
       const containerized = this.telemetryCollector.isContainerized();
       const executionEnvironment = containerized ? "container" : "bare-metal";
-      const cloudProvider = this.config.cloudProvider || this.pricing.cloudProvider || "unknown";
-      const pricingTier = this.config.pricingTier || this.pricing.pricingTier || "standard";
+      const modeledCloud = this.config.cloudProvider || this.pricing.cloudProvider || "local";
+      const modeledTier = this.config.pricingTier || this.pricing.pricingTier || "standard";
 
-      let verificationStatus: HardwareVerificationStatus = "fixture_simulation";
-      const isAllFixture = executedStages.every((s) => s.status === "fixture");
-      const hasRealInference = executedStages.some((s) => s.status === "real_inference");
-      const hasBlocked = executedStages.some((s) => s.status === "blocked");
+      // Classify execution verification based on stage-attributed evidence (never host presence alone)
+      const externalApiProviders = new Set(["whisper", "groq", "elevenlabs"]);
+      const isAllFixture =
+        executedStages.length > 0 && executedStages.every((s) => s.status === "fixture");
+      const hasBlocked = executedStages.some((s) => s.status === "blocked" || s.failedJobs > 0);
+      const realInferenceStages = executedStages.filter((s) => s.status === "real_inference");
+
+      let verificationStatus: HardwareVerificationStatus = "unknown";
+      const verificationNotes: string[] = [];
 
       if (isAllFixture) {
         verificationStatus = "fixture_simulation";
-      } else if (hasRealInference && hardwareTelemetry.gpu?.isAvailable) {
-        verificationStatus = "verified_hardware";
-      } else if (hasRealInference || hasBlocked) {
+        verificationNotes.push(
+          "Offline simulation using deterministic fixtures (zero external compute or API spend)."
+        );
+      } else if (hasBlocked && realInferenceStages.length === 0) {
         verificationStatus = "partially_verified";
-      } else {
-        verificationStatus = "unknown";
+        verificationNotes.push(
+          "One or more benchmark stages failed or were blocked before inference completed."
+        );
+      } else if (realInferenceStages.length > 0) {
+        // Stage-attributed GPU evidence check
+        const stageAttributedGpu = realInferenceStages.some((s) => {
+          const artifacts = s.outputArtifacts;
+          return (
+            artifacts?.isGpu === true ||
+            artifacts?.device === "cuda" ||
+            artifacts?.acceleration === "cuda"
+          );
+        });
+
+        // Stage-attributed CPU check
+        const stageAttributedCpu = realInferenceStages.some((s) => {
+          const artifacts = s.outputArtifacts;
+          return (
+            s.status === "cpu_fallback" || artifacts?.isGpu === false || artifacts?.device === "cpu"
+          );
+        });
+
+        const allExternalApis = realInferenceStages.every((s) =>
+          externalApiProviders.has(s.provider.toLowerCase())
+        );
+
+        if (stageAttributedGpu && hardwareTelemetry.gpu?.isAvailable) {
+          verificationStatus = "verified_gpu";
+          verificationNotes.push(
+            "Local GPU execution verified via stage-attributed provider telemetry."
+          );
+        } else if (allExternalApis) {
+          verificationStatus = "external_api";
+          if (hardwareTelemetry.gpu?.isAvailable) {
+            verificationNotes.push(
+              "Host GPU detected via nvidia-smi, but all live inference executed through external cloud APIs (Groq/OpenAI/ElevenLabs)."
+            );
+          } else {
+            verificationNotes.push("Live inference executed through external cloud APIs.");
+          }
+        } else if (stageAttributedCpu || !hardwareTelemetry.gpu?.isAvailable) {
+          verificationStatus = "verified_cpu";
+          if (hardwareTelemetry.gpu?.isAvailable) {
+            verificationNotes.push(
+              "Host GPU detected via nvidia-smi, but stage execution ran on CPU fallback."
+            );
+          } else {
+            verificationNotes.push(
+              "Live inference executed locally on host CPU (no GPU available)."
+            );
+          }
+        } else if (hasBlocked) {
+          verificationStatus = "partially_verified";
+          verificationNotes.push(
+            "Partial execution: Some stages completed while others were blocked or failed."
+          );
+        } else {
+          // GPU detected on host, but provider gave no stage-attributed GPU evidence
+          verificationStatus = "partially_verified";
+          verificationNotes.push(
+            "Host GPU detected via nvidia-smi, but running provider supplied no stage-attributed GPU execution evidence."
+          );
+        }
       }
 
       const provenance: HardwareProvenance = {
         containerized,
         executionEnvironment,
-        cloudProvider,
-        instanceType: this.pricing.instanceType,
-        pricingTier,
+        // Actual execution cloud/instance is NEVER inferred from user pricing choices
+        actualCloudProvider: null,
+        actualInstanceType: null,
         verificationStatus,
+        verificationNotes,
         cpuModel: hardwareTelemetry.cpu.model,
         cpuCores: hardwareTelemetry.cpu.cores,
         memoryTotalBytes: hardwareTelemetry.memory.totalBytes,
@@ -419,6 +494,19 @@ export class BenchmarkOrchestrator {
         gpuDriverVersion: hardwareTelemetry.gpu?.driverVersion || null,
         dockerVersion: this.telemetryCollector.getDockerVersion(),
         benchmarkTimestamp: new Date().toISOString(),
+
+        // Independent modeled pricing profile
+        modeledPricing: {
+          cloudProvider: modeledCloud,
+          instanceType: this.pricing.instanceType,
+          pricingTier: modeledTier,
+          computeHourlyRateUsd: this.pricing.computeHourlyRateUsd,
+        },
+
+        // Backward-compatibility aliases
+        cloudProvider: modeledCloud,
+        instanceType: this.pricing.instanceType,
+        pricingTier: modeledTier,
       };
 
       return {

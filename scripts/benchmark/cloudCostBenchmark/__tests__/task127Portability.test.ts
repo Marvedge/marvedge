@@ -1,13 +1,13 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { parseCliArgs } from "../../cloudCostBenchmark";
+import { parseCliArgs, runBenchmarkCli } from "../../cloudCostBenchmark";
 import { DEFAULT_PRICING_MODELS, resolvePricingModel } from "../costCalculator";
 import { BenchmarkOrchestrator } from "../orchestrator";
 import { executeAvsStage } from "../providers";
 import { generateMarkdownReport } from "../reporting";
 import { TelemetryCollector } from "../telemetry";
-import type { InputMediaMetadata } from "../types";
+import type { InputMediaMetadata, StageResult } from "../types";
 
 describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () => {
   const dummyMedia: InputMediaMetadata = {
@@ -54,9 +54,23 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
       // Must set path or have VOLUME
       expect(content).toContain('VOLUME ["/app/benchmark_results"]');
     });
+
+    it("declares tsx in production dependencies for deterministic container execution", () => {
+      const packageJsonPath = path.resolve(process.cwd(), "package.json");
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+
+      // tsx must be in dependencies so npm ci --omit=dev installs it into the container
+      expect(packageJson.dependencies).toBeDefined();
+      expect(packageJson.dependencies["tsx"]).toBeDefined();
+
+      // tsx must NOT be in devDependencies
+      if (packageJson.devDependencies) {
+        expect(packageJson.devDependencies["tsx"]).toBeUndefined();
+      }
+    });
   });
 
-  describe("2. CLI & Environment Precedence Hierarchy", () => {
+  describe("2. CLI & Environment Precedence Hierarchy & Validation", () => {
     it("treats --gpu and --gpu-type as identical aliases", () => {
       const parsedWithGpuType = parseCliArgs(["node", "cloudCostBenchmark.ts", "--gpu-type=T4"]);
       const parsedWithGpu = parseCliArgs(["node", "cloudCostBenchmark.ts", "--gpu=T4"]);
@@ -153,13 +167,11 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
       const origApiUrl = process.env.VOICESTUDIO_API_URL;
 
       try {
-        // When only VOICESTUDIO_API_URL is set
         delete process.env.VOICESTUDIO_URL;
         process.env.VOICESTUDIO_API_URL = "http://legacy-host:3900";
         const parsedLegacy = parseCliArgs(["node", "cloudCostBenchmark.ts"]);
         expect(parsedLegacy.config.voiceStudioUrl).toBe("http://legacy-host:3900");
 
-        // When VOICESTUDIO_URL is set, it takes precedence
         process.env.VOICESTUDIO_URL = "http://canonical-host:3900";
         const parsedCanonical = parseCliArgs(["node", "cloudCostBenchmark.ts"]);
         expect(parsedCanonical.config.voiceStudioUrl).toBe("http://canonical-host:3900");
@@ -170,6 +182,47 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
         if (origApiUrl !== undefined) process.env.VOICESTUDIO_API_URL = origApiUrl;
         else delete process.env.VOICESTUDIO_API_URL;
       }
+    });
+
+    it("throws actionable errors when invalid stages are passed to parseCliArgs", () => {
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--stages=reframe,invalid_stage"]);
+      }).toThrow(/Invalid stage\(s\): 'invalid_stage'/);
+    });
+
+    it("throws actionable errors when invalid provider values are passed to parseCliArgs", () => {
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--provider-reframe=invalid"]);
+      }).toThrow(/Invalid reframe provider: 'invalid'/);
+
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--provider-avs=invalid"]);
+      }).toThrow(/Invalid AVS provider: 'invalid'/);
+
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--provider-transcription=invalid"]);
+      }).toThrow(/Invalid transcription provider: 'invalid'/);
+
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--provider-dubbing=invalid"]);
+      }).toThrow(/Invalid dubbing provider: 'invalid'/);
+
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--cloud=invalid"]);
+      }).toThrow(/Invalid cloud provider: 'invalid'/);
+
+      expect(() => {
+        parseCliArgs(["node", "cloudCostBenchmark.ts", "--pricing-tier=invalid"]);
+      }).toThrow(/Invalid pricing tier: 'invalid'/);
+    });
+
+    it("returns exit code 1 from runBenchmarkCli when invalid arguments are provided", async () => {
+      const exitCode = await runBenchmarkCli([
+        "node",
+        "cloudCostBenchmark.ts",
+        "--stages=invalid_foo",
+      ]);
+      expect(exitCode).toBe(1);
     });
   });
 
@@ -254,11 +307,9 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
       const oldTalknetUrl = process.env.TALKNET_SERVICE_URL;
 
       try {
-        // Point to an unreachable mock endpoint
         process.env.TALKNET_SERVICE_URL = "http://127.0.0.1:59999/unreachable";
 
         const res = await executeAvsStage(dummyMedia, "talknet");
-        // Preflight passes weights check, fails at connection/network step rather than weights
         expect(res.error).not.toBe("TALKNET_WEIGHTS_MISSING");
       } finally {
         if (oldTalknetUrl) process.env.TALKNET_SERVICE_URL = oldTalknetUrl;
@@ -284,8 +335,8 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
     });
   });
 
-  describe("6. Hardware Provenance & Schema 1.2.0 Formatting", () => {
-    it("produces Schema 1.2.0 report with fixture_simulation provenance", async () => {
+  describe("6. Hardware Provenance Separation & Schema 1.2.0 Formatting", () => {
+    it("strictly separates actual execution environment from modeled pricing configuration", async () => {
       const orchestrator = new BenchmarkOrchestrator({
         config: {
           stages: ["captions"],
@@ -305,15 +356,52 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
 
       expect(report.schemaVersion).toBe("1.2.0");
       expect(report.provenance).toBeDefined();
-      expect(report.provenance?.verificationStatus).toBe("fixture_simulation");
+
+      // Actual execution provider/instance is NOT inferred from user pricing choice!
+      expect(report.provenance?.actualCloudProvider).toBeNull();
+      expect(report.provenance?.actualInstanceType).toBeNull();
+
+      // Modeled pricing is captured independently
+      expect(report.provenance?.modeledPricing).toBeDefined();
+      expect(report.provenance?.modeledPricing?.cloudProvider).toBe("aws");
+      expect(report.provenance?.modeledPricing?.pricingTier).toBe("spot");
+      expect(report.provenance?.modeledPricing?.instanceType).toContain("AWS EC2 g4dn.xlarge");
+
+      // Backward-compatibility aliases work as modeled pricing
       expect(report.provenance?.cloudProvider).toBe("aws");
       expect(report.provenance?.pricingTier).toBe("spot");
       expect(report.provenance?.instanceType).toContain("AWS EC2 g4dn.xlarge");
-      expect(typeof report.provenance?.containerized).toBe("boolean");
-      expect(report.provenance?.executionEnvironment).toBeDefined();
     });
 
-    it("formats Hardware Provenance section in Markdown report correctly", async () => {
+    it("labels fixture-mode throughput explicitly as N/A (fixture) rather than misleading physical throughput", async () => {
+      const orchestrator = new BenchmarkOrchestrator({
+        config: {
+          stages: ["captions"],
+          concurrency: 1,
+          iterations: 1,
+          warmup: 0,
+          gpuType: "T4",
+          cloudProvider: "aws",
+          pricingTier: "spot",
+          transcriptionProvider: "fixture",
+          dubbingProvider: "fixture",
+        },
+        inputMedia: dummyMedia,
+      });
+
+      const report = await orchestrator.run();
+      const captionsStage = report.stages.captions;
+      expect(captionsStage).not.toBeNull();
+      expect(captionsStage?.status).toBe("fixture");
+      expect(captionsStage?.throughputLabel).toBe("N/A (fixture)");
+
+      const md = generateMarkdownReport(report);
+      // Markdown table for captions must display N/A (fixture) in throughput column
+      expect(md).toContain("| `captions` | `fixture` | fixture | 1/0 |");
+      expect(md).toContain("N/A (fixture)");
+    });
+
+    it("formats Hardware Provenance section distinguishing actual telemetry from modeled pricing", async () => {
       const orchestrator = new BenchmarkOrchestrator({
         config: {
           stages: ["captions"],
@@ -333,9 +421,289 @@ describe("Task-00127: Portable Multi-Cloud Benchmark & Hardware Provenance", () 
       const md = generateMarkdownReport(report);
 
       expect(md).toContain("## 2. Hardware & Environment Telemetry");
-      expect(md).toContain("**Hardware Provenance & Classification:** `FIXTURE_SIMULATION`");
+      expect(md).toContain("| **Host Execution Provider** | Unverified / Local Host |");
+      expect(md).toContain("| **Host Instance Type** | Physical / Local Hardware |");
+      expect(md).toContain("### 2.2 Modeled Cloud Pricing Configuration (Cost Model Only)");
+      expect(md).toContain("| **Target Cloud Provider** | AWS |");
       expect(md).toContain("AWS EC2 g4dn.xlarge (T4 16GB) Spot");
-      expect(md).toContain("Rate: $0.22/hr");
+    });
+  });
+
+  describe("7. GPU Verification Semantics & Provider Classification", () => {
+    it("classifies pure fixture execution as fixture_simulation", async () => {
+      const orchestrator = new BenchmarkOrchestrator({
+        config: {
+          stages: ["captions", "reframe"],
+          concurrency: 1,
+          iterations: 1,
+          warmup: 0,
+          gpuType: "T4",
+          reframeProvider: "fixture",
+          transcriptionProvider: "fixture",
+          dubbingProvider: "fixture",
+        },
+        inputMedia: dummyMedia,
+      });
+
+      const report = await orchestrator.run();
+      expect(report.provenance?.verificationStatus).toBe("fixture_simulation");
+      expect(report.provenance?.verificationNotes?.[0]).toContain("Offline simulation");
+    });
+
+    it("classifies external API inference (e.g. Whisper/Groq) as external_api, even if host has an NVIDIA GPU", async () => {
+      const orchestrator = new BenchmarkOrchestrator({
+        config: {
+          stages: ["captions"],
+          concurrency: 1,
+          iterations: 1,
+          warmup: 0,
+          gpuType: "T4",
+          transcriptionProvider: "groq",
+          dubbingProvider: "fixture",
+        },
+        inputMedia: dummyMedia,
+      });
+
+      // Mock runStage to simulate a live external API result
+      const mockCaptionsResult: StageResult = {
+        stage: "captions",
+        status: "real_inference",
+        provider: "groq",
+        wallClockDurationMs: 500,
+        warmupDurationMs: 0,
+        iterations: 1,
+        concurrency: 1,
+        latency: {
+          count: 1,
+          p50Ms: 500,
+          p95Ms: 500,
+          minMs: 500,
+          maxMs: 500,
+          meanMs: 500,
+          stdDevMs: 0,
+          rawLatenciesMs: [500],
+        },
+        completedJobs: 1,
+        failedJobs: 0,
+        throughputJobsPerSec: 2,
+        throughputLabel: "2 jobs/s",
+        realtimeFactor: 20,
+        realtimeFactorLabel: "20x",
+        cost: {
+          measuredComputeDurationSec: 0.5,
+          computeCostUsd: 0.0001,
+          externalApiCostUsd: 0.001,
+          totalCostUsd: 0.0011,
+          costPerCompletedJobUsd: 0.0011,
+          costPerMinuteUsd: 0.006,
+        },
+      };
+
+      // Spy on runStage
+      orchestrator.runStage = async () => mockCaptionsResult;
+
+      const report = await orchestrator.run();
+      // External API must NEVER be classified as verified_gpu / verified_hardware!
+      expect(report.provenance?.verificationStatus).toBe("external_api");
+      expect(
+        report.provenance?.verificationNotes?.some((n) => n.includes("external cloud APIs"))
+      ).toBe(true);
+    });
+
+    it("classifies local CPU fallback as verified_cpu, even if host has an NVIDIA GPU", async () => {
+      const orchestrator = new BenchmarkOrchestrator({
+        config: {
+          stages: ["dubbing"],
+          concurrency: 1,
+          iterations: 1,
+          warmup: 0,
+          gpuType: "T4",
+          transcriptionProvider: "fixture",
+          dubbingProvider: "voicestudio",
+        },
+        inputMedia: dummyMedia,
+      });
+
+      // Mock a local CPU inference result
+      const mockDubbingCpuResult: StageResult = {
+        stage: "dubbing",
+        status: "real_inference",
+        provider: "voicestudio",
+        wallClockDurationMs: 1200,
+        warmupDurationMs: 0,
+        iterations: 1,
+        concurrency: 1,
+        latency: {
+          count: 1,
+          p50Ms: 1200,
+          p95Ms: 1200,
+          minMs: 1200,
+          maxMs: 1200,
+          meanMs: 1200,
+          stdDevMs: 0,
+          rawLatenciesMs: [1200],
+        },
+        completedJobs: 1,
+        failedJobs: 0,
+        throughputJobsPerSec: 0.8,
+        throughputLabel: "0.8 jobs/s",
+        realtimeFactor: 8.3,
+        realtimeFactorLabel: "8.3x",
+        cost: {
+          measuredComputeDurationSec: 1.2,
+          computeCostUsd: 0.0002,
+          externalApiCostUsd: 0,
+          totalCostUsd: 0.0002,
+          costPerCompletedJobUsd: 0.0002,
+          costPerMinuteUsd: 0.0012,
+        },
+        outputArtifacts: {
+          device: "cpu",
+          isGpu: false,
+        },
+      };
+
+      orchestrator.runStage = async () => mockDubbingCpuResult;
+
+      const report = await orchestrator.run();
+      expect(report.provenance?.verificationStatus).toBe("verified_cpu");
+      expect(
+        report.provenance?.verificationNotes?.some(
+          (n) => n.includes("CPU fallback") || n.includes("CPU")
+        )
+      ).toBe(true);
+    });
+
+    it("classifies live local GPU inference as verified_gpu when stage provides explicit GPU evidence", async () => {
+      const orchestrator = new BenchmarkOrchestrator({
+        config: {
+          stages: ["dubbing"],
+          concurrency: 1,
+          iterations: 1,
+          warmup: 0,
+          gpuType: "T4",
+          transcriptionProvider: "fixture",
+          dubbingProvider: "voicestudio",
+        },
+        inputMedia: dummyMedia,
+      });
+
+      const mockDubbingGpuResult: StageResult = {
+        stage: "dubbing",
+        status: "real_inference",
+        provider: "voicestudio",
+        wallClockDurationMs: 300,
+        warmupDurationMs: 0,
+        iterations: 1,
+        concurrency: 1,
+        latency: {
+          count: 1,
+          p50Ms: 300,
+          p95Ms: 300,
+          minMs: 300,
+          maxMs: 300,
+          meanMs: 300,
+          stdDevMs: 0,
+          rawLatenciesMs: [300],
+        },
+        completedJobs: 1,
+        failedJobs: 0,
+        throughputJobsPerSec: 3.3,
+        throughputLabel: "3.3 jobs/s",
+        realtimeFactor: 33.3,
+        realtimeFactorLabel: "33.3x",
+        cost: {
+          measuredComputeDurationSec: 0.3,
+          computeCostUsd: 0.00005,
+          externalApiCostUsd: 0,
+          totalCostUsd: 0.00005,
+          costPerCompletedJobUsd: 0.00005,
+          costPerMinuteUsd: 0.0003,
+        },
+        outputArtifacts: {
+          device: "cuda",
+          isGpu: true,
+        },
+      };
+
+      orchestrator.runStage = async () => mockDubbingGpuResult;
+
+      const report = await orchestrator.run();
+      // If host has GPU available, it is verified_gpu. If host has no GPU, verified_cpu.
+      if (report.hardware.gpu?.isAvailable) {
+        expect(report.provenance?.verificationStatus).toBe("verified_gpu");
+        expect(
+          report.provenance?.verificationNotes?.some((n) => n.includes("GPU execution verified"))
+        ).toBe(true);
+      } else {
+        expect(report.provenance?.verificationStatus).toBe("verified_cpu");
+      }
+    });
+
+    it("classifies execution as partially_verified when GPU is detected but stage provides no GPU evidence", async () => {
+      const orchestrator = new BenchmarkOrchestrator({
+        config: {
+          stages: ["reframe"],
+          concurrency: 1,
+          iterations: 1,
+          warmup: 0,
+          gpuType: "T4",
+          reframeProvider: "autoflip",
+          transcriptionProvider: "fixture",
+          dubbingProvider: "fixture",
+        },
+        inputMedia: dummyMedia,
+      });
+
+      const mockAmbiguousResult: StageResult = {
+        stage: "reframe",
+        status: "real_inference",
+        provider: "autoflip",
+        wallClockDurationMs: 400,
+        warmupDurationMs: 0,
+        iterations: 1,
+        concurrency: 1,
+        latency: {
+          count: 1,
+          p50Ms: 400,
+          p95Ms: 400,
+          minMs: 400,
+          maxMs: 400,
+          meanMs: 400,
+          stdDevMs: 0,
+          rawLatenciesMs: [400],
+        },
+        completedJobs: 1,
+        failedJobs: 0,
+        throughputJobsPerSec: 2.5,
+        throughputLabel: "2.5 jobs/s",
+        realtimeFactor: 25,
+        realtimeFactorLabel: "25x",
+        cost: {
+          measuredComputeDurationSec: 0.4,
+          computeCostUsd: 0.00008,
+          externalApiCostUsd: 0,
+          totalCostUsd: 0.00008,
+          costPerCompletedJobUsd: 0.00008,
+          costPerMinuteUsd: 0.00048,
+        },
+        // No device or isGpu artifact provided
+        outputArtifacts: {
+          cropTargetsCount: 5,
+        },
+      };
+
+      orchestrator.runStage = async () => mockAmbiguousResult;
+
+      const report = await orchestrator.run();
+      if (report.hardware.gpu?.isAvailable) {
+        expect(report.provenance?.verificationStatus).toBe("partially_verified");
+        expect(
+          report.provenance?.verificationNotes?.some((n) =>
+            n.includes("no stage-attributed GPU execution evidence")
+          )
+        ).toBe(true);
+      }
     });
   });
 });
