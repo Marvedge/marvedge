@@ -19,6 +19,7 @@ import { runClipScoringJob } from "../app/lib/clips/jobs";
 import { postJobCallbackWithRetry, processDubbingJob, defaultUploadToCloudinary } from "../app/lib/avs/dubbingProcessor";
 import { runSubtitleJobWithRetry } from "./subtitleRetry";
 import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
+import { parseDubbingWatermark } from "./dubbingConfig";
 import { updateCompletedJobProgress } from "./completedJobProgress";
 import {
   getJobOutcomeMetricsMaxDataPoints,
@@ -1780,8 +1781,14 @@ export const dubbingWorker = new Worker(
         });
         await job.updateProgress(10);
 
+        const watermark = parseDubbingWatermark();
         const dubbingJob =
-          reusableDubbingJob ?? (await createDubbingJob({ sourceUrl, targetLanguage }));
+          reusableDubbingJob ??
+          (await createDubbingJob({
+            sourceUrl,
+            targetLanguage,
+            ...(watermark !== undefined ? { watermark } : {}),
+          }));
         await prisma.videoJob.update({
           where: { id: jobId },
           data: {
