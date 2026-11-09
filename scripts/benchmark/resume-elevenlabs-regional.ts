@@ -36,7 +36,7 @@ async function main() {
 
   const result = await getDubbedAudio(checkpoint.dubbingId, "hi");
 
-  const extension = result.mediaKind === "video" ? "mp4" : getAudioExtension(result.contentType);
+  const extension = getAudioExtension(result.contentType);
 
   const outputPath = path.join(
     path.dirname(checkpointPath),

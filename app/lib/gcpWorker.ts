@@ -74,9 +74,19 @@ class GcpWorkerHttpError extends Error {
   }
 }
 
-function getGcpWorkerUrl() {
+/**
+ * Resolves the video worker base URL.
+ * Prefers provider-neutral VIDEO_WORKER_URL, falling back to legacy GCP_VIDEO_WORKER_URL.
+ */
+export function getVideoWorkerUrl(): string {
+  const neutral = (process.env.VIDEO_WORKER_URL || "").trim();
+  if (neutral) {
+    return neutral;
+  }
   return (process.env.GCP_VIDEO_WORKER_URL || "").trim();
 }
+
+export const getGcpWorkerUrl = getVideoWorkerUrl;
 
 /**
  * Returns the resolved service URL for AVS dubbing.
