@@ -18,6 +18,29 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Monitoring alert evaluation
+
+Run `npm run monitoring:alerts` as a separate long-running Node process alongside
+the Next.js app and the BullMQ workers. This dedicated process periodically
+refreshes the reframe and dubbing queue-depth gauges, reads shared Redis-backed
+latency and final-outcome windows, and invokes the existing alert evaluator.
+Alerts are emitted as structured process logs; this command does not send
+external notifications.
+
+Configure the thresholds, observation window, cooldown, and
+`MONITORING_ALERT_EVALUATION_INTERVAL_SECONDS` in the process environment. The
+interval must be a positive whole number of seconds. Evaluation runs once at
+startup and then serially after each configured interval; a slow or failed
+evaluation does not overlap the next one or stop later retries. Configure
+exactly one monitoring process replica because cooldown state is process-local.
+
+Latency is aggregated into minute buckets in Redis using only pipeline, outcome
+status, and time bucket in keys/fields; individual job or user identifiers are
+not stored. The local Prometheus histograms remain process-local for exposition.
+Redis bucket boundaries make latency and BullMQ failure-rate windows approximate
+by up to one minute. Missing latency history, insufficient failure-rate history,
+or failed queue collection is skipped rather than treated as a firing condition.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## AI Script, Voiceover & Audio Sync (AVS)
@@ -63,13 +86,15 @@ prefix.
 | `NEXT_PUBLIC_AVS_ENABLED` | Next app (client)         | Shows the "AI Voice" sidebar panel. Set to `true` to enable.          |
 | `OPENAI_API_KEY`          | Next app (server)         | OpenAI script tone rewrite (`/api/avs/script`).                       |
 | `GCP_VIDEO_WORKER_URL`    | Next app (server)         | Reaches the Cloud Run worker for Aura TTS, subtitles, and alignment.  |
+| `WORKER_SECRET`          | Next app + Cloud Run worker | Required shared bearer secret for every worker processing request.      |
 | `DEEPGRAM_API_KEY`        | **Cloud Run worker only** | Deepgram transcription + Aura TTS. The Next app never holds this key. |
 
 To enable AVS for a staging/QA environment, set both `AVS_ENABLED=true` and
 `NEXT_PUBLIC_AVS_ENABLED=true` there (plus `OPENAI_API_KEY` and
-`GCP_VIDEO_WORKER_URL`), and make sure the worker has `DEEPGRAM_API_KEY`. Leave
-all of these blank/unset in production until the feature is signed off. See
-`.env.example` for the full list.
+`GCP_VIDEO_WORKER_URL`), and make sure the worker has `DEEPGRAM_API_KEY`.
+Configure the same non-empty `WORKER_SECRET` in both the Next app and Cloud Run
+worker in every environment that processes jobs. Keep AVS feature flags disabled
+in production until the feature is signed off. See `.env.example` for the full list.
 
 ## Watermarking & Camera Bubble (WTM)
 

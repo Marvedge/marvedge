@@ -4,6 +4,61 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import cloudinary from "@/app/lib/cloudinary";
 import type { UploadApiOptions } from "cloudinary";
+import { isTutorialUploadRateLimited } from "@/app/lib/tutorials/abuseProtection";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
+
+const TUTORIAL_SAVE_ERROR = "Failed to save tutorial";
+const TUTORIAL_FETCH_ERROR = "Failed to fetch tutorials";
+
+// A 5MB decoded image requires roughly 7MB after base64 encoding. This
+// leaves room for JSON metadata while preventing an unbounded body read.
+const MAX_TUTORIAL_BODY_BYTES = 8 * 1024 * 1024;
+
+// Mirror the hardened app/api/upload/route.ts caps: tutorial slides are
+// Cloudinary uploads with resource_type auto, so without these an attacker
+// can push arbitrary counts, sizes, and file types through it.
+const MAX_SLIDES = 30;
+const MAX_SLIDE_BYTES = 5 * 1024 * 1024; // 5MB decoded per slide
+const MAX_TOTAL_SLIDE_BYTES = 5 * 1024 * 1024; // 5MB decoded total
+
+const ALLOWED_SLIDE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+// 5MB decoded ≈ 6.8MB base64. Reject oversized payloads on the raw string
+// BEFORE Buffer.from decodes them, so a giant base64 blob cannot force a
+// full in-memory decode before the 5MB cap fires.
+const MAX_IMAGE_DATA_CHARS = 7 * 1024 * 1024;
+
+// Sniff real content — data-URL prefixes and client MIME hints are not trusted.
+function detectSlideMime(buffer: Buffer): string | null {
+  if (!buffer || buffer.length < 12) {
+    return null;
+  }
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return "image/png";
+  }
+
+  // GIF87a / GIF89a
+  const gifHeader = buffer.subarray(0, 6).toString("ascii");
+  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") {
+    return "image/gif";
+  }
+
+  // WEBP: RIFF....WEBP
+  const riff = buffer.subarray(0, 4).toString("ascii");
+  const webp = buffer.subarray(8, 12).toString("ascii");
+  if (riff === "RIFF" && webp === "WEBP") {
+    return "image/webp";
+  }
+
+  return null;
+}
 
 interface SlideData {
   title: string;
@@ -28,15 +83,42 @@ interface TutorialPayload {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await req.json()) as TutorialPayload;
-    const { title, description, slides } = body;
+    // Apply independent account and IP limits before reading the body. Each
+    // accepted request can trigger up to 30 paid Cloudinary operations.
+    if (await isTutorialUploadRateLimited(session.user.id || session.user.email, req.headers)) {
+      return NextResponse.json(
+        { error: "Too many requests, please try again shortly" },
+        { status: 429 }
+      );
+    }
 
-    if (!title || !slides || slides.length === 0) {
+    const bodyResult = await readBoundedRequestJsonObject(req, MAX_TUTORIAL_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error:
+            bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request body",
+        },
+        {
+          status: bodyResult.reason === "too_large" ? 413 : 400,
+        }
+      );
+    }
+
+    const { title, description, slides } = bodyResult.value as unknown as TutorialPayload;
+
+    if (!title || !slides || !Array.isArray(slides) || slides.length === 0) {
       return NextResponse.json({ error: "Title and slides are required" }, { status: 400 });
+    }
+
+    if (slides.length > MAX_SLIDES) {
+      return NextResponse.json({ error: `Too many slides (max ${MAX_SLIDES})` }, { status: 413 });
     }
 
     const user = await prisma.user.findUnique({
@@ -45,6 +127,38 @@ export async function POST(req: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Validate every slide before any upload: decoded size + magic bytes.
+    let totalSlideBytes = 0;
+    for (const slide of slides) {
+      if (!slide || typeof slide.imageData !== "string" || slide.imageData.length === 0) {
+        return NextResponse.json({ error: "Invalid slide image" }, { status: 400 });
+      }
+      if (slide.imageData.length > MAX_IMAGE_DATA_CHARS) {
+        return NextResponse.json({ error: "Slide image too large (max 5MB)" }, { status: 413 });
+      }
+      let buffer: Buffer;
+      try {
+        const base64Data = slide.imageData.split(",")[1] || slide.imageData;
+        buffer = Buffer.from(base64Data, "base64");
+      } catch {
+        return NextResponse.json({ error: "Invalid slide image" }, { status: 400 });
+      }
+      if (buffer.length === 0) {
+        return NextResponse.json({ error: "Invalid slide image" }, { status: 400 });
+      }
+      if (buffer.length > MAX_SLIDE_BYTES) {
+        return NextResponse.json({ error: "Slide image too large (max 5MB)" }, { status: 413 });
+      }
+      totalSlideBytes += buffer.length;
+      if (totalSlideBytes > MAX_TOTAL_SLIDE_BYTES) {
+        return NextResponse.json({ error: "Slides too large (max 5MB total)" }, { status: 413 });
+      }
+      const detected = detectSlideMime(buffer);
+      if (!detected || !ALLOWED_SLIDE_MIME.has(detected)) {
+        return NextResponse.json({ error: "Only JPEG, PNG, WEBP or GIF allowed" }, { status: 400 });
+      }
     }
 
     const uploadedSlides = await Promise.all(
@@ -56,7 +170,7 @@ export async function POST(req: NextRequest) {
           return new Promise<{ imageUrl: string; slide: SlideData }>((resolve, reject) => {
             const uploadOptions: UploadApiOptions = {
               folder: "tutorial_slides",
-              resource_type: "auto",
+              resource_type: "image",
               upload_preset: process.env.CLOUDINARY_UPLOAD_PRESET,
             };
 
@@ -102,15 +216,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(tutorial);
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to save tutorial";
+    // Retain diagnostic details in server logs without exposing Prisma,
+    // database or infrastructure information to the client.
     console.error("Tutorial save error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+
+    return NextResponse.json({ error: TUTORIAL_SAVE_ERROR }, { status: 500 });
   }
 }
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -131,8 +248,10 @@ export async function GET() {
 
     return NextResponse.json(tutorials);
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Failed to fetch tutorials";
+    // Retain diagnostic details in server logs without exposing Prisma,
+    // database or infrastructure information to the client.
     console.error("Tutorial fetch error:", err);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+
+    return NextResponse.json({ error: TUTORIAL_FETCH_ERROR }, { status: 500 });
   }
 }

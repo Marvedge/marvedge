@@ -1,0 +1,79 @@
+services:
+  ml-gateway:
+    build:
+      context: ./ml-gateway
+      dockerfile: Dockerfile
+    container_name: marvedge-ml-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTOFILP_SERVICE_URL=http://autoflip:8000
+      - TALKNET_SERVICE_URL=http://talknet:8000
+      - GATEWAY_TIMEOUT_SEC=180.0
+      - GATEWAY_HEALTH_TIMEOUT_SEC=5.0
+      # Required in production: the gateway fails closed without it. Set in
+      # your shell or .env file; both the worker and gateway must share it.
+      - ML_GATEWAY_TOKEN=${ML_GATEWAY_TOKEN:-}
+      # Local development only; never set this on an exposed deployment.
+      - ML_GATEWAY_ALLOW_INSECURE=${ML_GATEWAY_ALLOW_INSECURE:-}
+    depends_on:
+      - autoflip
+      - talknet
+    networks:
+      - marvedge-ml-net
+
+  autoflip:
+    build:
+      context: .
+      dockerfile: autoflip/Dockerfile.service
+    container_name: marvedge-autoflip
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - AUTOFILP_TIMEOUT_SEC=150
+      - DOWNLOAD_TIMEOUT_SEC=60
+    networks:
+      - marvedge-ml-net
+
+  talknet:
+    build:
+      context: ./talknet
+      dockerfile: Dockerfile
+    container_name: marvedge-talknet
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - TALKNET_S3FD_WEIGHTS=/app/weights/sfd_face.pth
+      - TALKNET_MODEL_WEIGHTS=/app/weights/pretrain_TalkSet.model
+      - TALKNET_TIMEOUT_SEC=150
+      - DOWNLOAD_TIMEOUT_SEC=60
+    volumes:
+      - ${TALKNET_HOST_WEIGHTS_DIR:-./talknet/weights}:/app/weights:ro
+    networks:
+      - marvedge-ml-net
+
+  benchmark:
+    profiles:
+      - benchmark
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    container_name: marvedge-benchmark
+    restart: "no"
+    environment:
+      - NODE_ENV=benchmark
+      - AUTOFILP_SERVICE_URL=http://autoflip:8000
+      - TALKNET_SERVICE_URL=http://talknet:8000
+      - ML_GATEWAY_URL=http://ml-gateway:8000
+    volumes:
+      - ./benchmark_results:/app/benchmark_results
+    networks:
+      - marvedge-ml-net
+
+networks:
+  marvedge-ml-net:
+    name: marvedge-ml-net
+    driver: bridge

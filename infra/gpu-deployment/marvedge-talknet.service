@@ -1,0 +1,24 @@
+[Unit]
+Description=Marvedge TalkNet Active Speaker Detection Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/marvedge/talknet
+EnvironmentFile=/etc/marvedge/worker.env
+ExecStart=/usr/local/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --workers 1
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=marvedge-talknet
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

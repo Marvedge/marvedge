@@ -45,10 +45,14 @@ export const useResetPassword = () => {
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isLoading) {
+      return;
+    }
     setIsLoading(true);
+    // Trim email and token, leave passwords raw.
     const formData = {
-      email: emailRef.current?.value.trim(),
-      token: searchParams.get("token") || "",
+      email: (emailRef.current?.value ?? "").trim(),
+      token: (searchParams.get("token") || "").trim(),
       password: passwordRef.current?.value,
       confirmPassword: confirmPasswordRef.current?.value,
     };
@@ -62,7 +66,7 @@ export const useResetPassword = () => {
     } catch (err) {
       const message =
         err instanceof z.ZodError
-          ? err.errors[0].message
+          ? err.issues[0].message
           : (axios.isAxiosError(err) && err.response?.data?.error) || "Reset failed.";
       toast.error(message);
     } finally {

@@ -23,6 +23,7 @@
 // turns a silent, invisible corruption into a visible, retryable error.
 
 import type { SubtitleCue } from "./types";
+import { localizeTranslatedCues } from "./resizing";
 
 /**
  * Cues per OpenAI request.
@@ -156,15 +157,61 @@ export function parseTranslationBatch(content: string, expectedCount: number): s
 }
 
 /**
+ * Options for `applyTranslations` — both are opt-in to preserve
+ * backward compatibility: existing callers that pass no options get
+ * the original behaviour (timings copied, text replaced, nothing else).
+ */
+export interface LocalizeOptions {
+  /**
+   * Run `localizeTranslatedCues` to auto-scale fonts and retime dense cues.
+   * Pass the track-level `fontSizePct` as `baseFontSizePct` when enabling.
+   */
+  localize?: boolean;
+  /** Font-size percentage used as the base for per-cue scaling. */
+  baseFontSizePct?: number;
+  /** Video length ceiling for last-cue retiming. */
+  videoDurationSeconds?: number;
+}
+
+/**
+ * Minimum on-screen duration enforced for cues in a *translated* track, in
+ * seconds.
+ *
+ * The localization engine (Task-00061) shortens some cues when the translated
+ * text is shorter than the source — fast single-word utterances can drop below
+ * 200 ms, producing a flicker that is imperceptible in the source language but
+ * very visible in Tamil and German where cue timing is already tight. 300 ms is
+ * the threshold below which human perception reliably registers flicker.
+ *
+ * This is intentionally higher than `MIN_CUE_SECONDS` (200 ms), which is a
+ * structural floor for user-editable cues. The structural floor is just enough
+ * to prevent zero-width cues; 300 ms is the readability floor for translated
+ * content that is never manually reviewed.
+ */
+export const MIN_TRANSLATED_CUE_SECONDS = 0.3;
+
+/**
  * Rebuild a cue list with translated text and the ORIGINAL timings.
  *
  * `translations` must be positionally aligned with `cues` — which is what
  * `parseTranslationBatch` guarantees per batch. The length check is a last
  * backstop against a caller concatenating batches wrongly.
+ *
+ * When `options.localize` is true, the result is additionally processed by
+ * `localizeTranslatedCues`, which:
+ *   - retimes cues whose character density exceeds the readability threshold
+ *     (borrows from silence gaps, never overlaps adjacent cues), and
+ *   - attaches a per-cue `fontSizePct` override when the translated text is
+ *     significantly longer than the source.
+ *
+ * Enforces `MIN_TRANSLATED_CUE_SECONDS` on each output cue so that cues that
+ * are very short in the source language do not flicker on screen in the
+ * translated track.
  */
 export function applyTranslations(
   cues: readonly SubtitleCue[],
-  translations: readonly string[]
+  translations: readonly string[],
+  options: LocalizeOptions = {}
 ): SubtitleCue[] {
   if (cues.length !== translations.length) {
     throw new TranslationAlignmentError(
@@ -172,13 +219,27 @@ export function applyTranslations(
         "Refusing to save a misaligned track."
     );
   }
-  return cues.map((cue, i) => ({
+  const raw = cues.map((cue, i) => {
     // Timings are copied, never derived and never round-tripped through the
     // model. A translated track is the source track with different words.
-    start: cue.start,
-    end: cue.end,
-    text: translations[i],
-  }));
+    const start = cue.start;
+    // Task-00079: clamp the cue to a minimum duration to prevent flicker in
+    // translated tracks. We stretch end forward, never start backward, so the
+    // cue stays aligned with the audio it describes.
+    const end = Math.max(cue.end, start + MIN_TRANSLATED_CUE_SECONDS);
+    return { start, end, text: translations[i] };
+  });
+
+  if (options.localize) {
+    return localizeTranslatedCues(
+      cues,
+      raw,
+      options.baseFontSizePct ?? 5, // DEFAULT_SUBTITLE_STYLE.fontSizePct
+      options.videoDurationSeconds
+    );
+  }
+
+  return raw;
 }
 
 /** System prompt. Kept here so the rules and the validation live side by side. */

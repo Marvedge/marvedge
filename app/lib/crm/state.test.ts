@@ -1,4 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// These tests exercise the retry state machine, not host resolution. Stub the
+// pre-delivery DNS check so the fixture URL never depends on real DNS (and so a
+// fail-closed resolver cannot mask a retry-behaviour regression).
+vi.mock("./deliveryCheck", () => ({
+  deliveryHostIsPublic: vi.fn(async () => true),
+}));
 
 import {
   MAX_ATTEMPTS_PER_RUN,

@@ -1,10 +1,45 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
+import { createHash } from "node:crypto";
+
+const MAX_AUTH_BODY_BYTES = 8 * 1024;
+
+const SIGNUP_SUCCESS_MESSAGE =
+  "If this email is available, your account has been created. You can now sign in.";
+
+function signupResponse() {
+  return NextResponse.json({ message: SIGNUP_SUCCESS_MESSAGE }, { status: 200 });
+}
+
+function signupEmailKey(email: string): string {
+  return createHash("sha256").update(email.toLowerCase()).digest("hex");
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
 
 export async function POST(req: Request) {
+  const bodyResult = await readBoundedRequestJsonObject(req, MAX_AUTH_BODY_BYTES);
+
+  if (!bodyResult.ok) {
+    return NextResponse.json(
+      {
+        error: bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request",
+      },
+      {
+        status: bodyResult.reason === "too_large" ? 413 : 400,
+      }
+    );
+  }
+
+  const body = bodyResult.value;
+
   try {
-    const body = await req.json();
     const { name, email, password } = body || {};
 
     if (!name || !email || !password) {
@@ -14,45 +49,88 @@ export async function POST(req: Request) {
       );
     }
 
-     if (typeof password !== "string" || password.length < 6) {
-      return NextResponse.json(
-        { error: "Password must be at least 6 characters" },
-        { status: 400 }
-      );
-    } 
-
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return NextResponse.json({ error: "User already exists" }, { status: 400 });
+    if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
     }
 
+    // Trim once and reuse below: the check above must judge the same address
+    // the lookup and save use. Case is left alone on purpose so existing
+    // mixed-case accounts keep working.
+    const cleanEmail = email.trim();
+    const cleanName = typeof name === "string" ? name.trim() : "";
+
+    if (!cleanName) {
+      return NextResponse.json(
+        { error: "Name, email, and password are required" },
+        { status: 400 }
+      );
+    }
+
+    const ip = getClientIp(req.headers);
+    const emailKey = signupEmailKey(cleanEmail);
+
+    const [ipLimited, emailLimited] = await Promise.all([
+      isRateLimited(`signup:ip:${ip}`, 20, 900, true),
+      isRateLimited(`signup:email:${emailKey}`, 5, 900, true),
+    ]);
+
+    if (ipLimited || emailLimited) {
+      return NextResponse.json(
+        { error: "Too many attempts, please try again later" },
+        { status: 429 }
+      );
+    }
+
+    if (typeof password !== "string" || password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
+    }
+
+    if (password.length > 72) {
+      return NextResponse.json({ error: "Password is too long" }, { status: 400 });
+    }
+
+    // Perform the expensive hash for both existing and new accounts so response
+    // timing does not immediately reveal whether the email is registered.
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: {
+          equals: cleanEmail,
+          mode: "insensitive",
+        },
       },
     });
 
-    const response = {
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
-    };
+    if (existingUser) {
+      return signupResponse();
+    }
 
-    return NextResponse.json(response, { status: 201 });
+    try {
+      await prisma.user.create({
+        data: {
+          name: cleanName,
+          email: cleanEmail.toLowerCase(),
+          password: hashedPassword,
+        },
+      });
+    } catch (error) {
+      // A concurrent signup may create the same account after our lookup.
+      // Return the same response so the unique constraint cannot become an
+      // account-enumeration oracle.
+      if (isUniqueConstraintError(error)) {
+        return signupResponse();
+      }
+
+      throw error;
+    }
+
+    return signupResponse();
   } catch (error) {
     console.error("Signup error:", error);
-    return NextResponse.json(
-      {
-        error: "Failed to create user",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
 }

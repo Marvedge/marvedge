@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { revalidatePath } from "next/cache";
+import { isSafeUrl } from "@/app/lib/safeUrl";
+import { sanitizeEditingPayload } from "@/app/lib/demos/editing";
+
+const MAX_TITLE_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 2000;
+// The editing blob is persisted as JSON and re-broadcast to workers — cap it
+// so one oversized save can't fill the row or the downstream payload.
+const MAX_EDITING_BYTES = 512 * 1024;
+
+function editingPayloadSize(editing: unknown): number {
+  if (editing === undefined || editing === null) {
+    return 0;
+  }
+  try {
+    // Byte length, not string length: multibyte characters (e.g. emoji are
+    // 4 bytes but 2 UTF-16 code units) must count toward the cap.
+    const serialized = JSON.stringify(editing);
+    return serialized === undefined ? 0 : Buffer.byteLength(serialized);
+  } catch {
+    return 0;
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,7 +41,9 @@ export async function GET(req: NextRequest) {
     }
     const id = req.nextUrl.searchParams.get("id");
     if (id) {
-      const demo = await prisma.demo.findUnique({
+      // findFirst: { id, userId } is not a unique selector, so findUnique
+      // would throw here. id is globally unique, so this matches at most one row.
+      const demo = await prisma.demo.findFirst({
         where: { id, userId: user.id },
       });
       return demo
@@ -82,6 +107,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Title, videoUrl are required" }, { status: 400 });
     }
 
+    if (typeof title !== "string" || typeof videoUrl !== "string") {
+      return NextResponse.json({ error: "Title and videoUrl must be strings" }, { status: 400 });
+    }
+
+    if (title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { error: `Title must be under ${MAX_TITLE_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    if (typeof description === "string" && description.length > MAX_DESCRIPTION_LENGTH) {
+      return NextResponse.json(
+        { error: `Description must be under ${MAX_DESCRIPTION_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    // Persisted and later fetched by workers/players — internal addresses stop here.
+    if (!isSafeUrl(videoUrl)) {
+      return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+    }
+
+    if (editingPayloadSize(editing) > MAX_EDITING_BYTES) {
+      return NextResponse.json({ error: "Editing payload is too large" }, { status: 413 });
+    }
+
+    // Validate before persisting: the blob is re-rendered on public share pages,
+    // so fields that become CSS or URLs must not be stored with arbitrary values.
+    const sanitizedEditing = sanitizeEditingPayload(editing);
+    if (!sanitizedEditing.ok) {
+      return NextResponse.json({ error: sanitizedEditing.error }, { status: 400 });
+    }
+
     const userId = session.user.id as string;
 
     // Check if a demo with the same title and videoUrl already exists for this user
@@ -109,7 +168,10 @@ export async function POST(req: NextRequest) {
         title,
         description: description || "",
         videoUrl,
-        editing: editing || null,
+        editing:
+          sanitizedEditing.value === null
+            ? Prisma.DbNull
+            : (sanitizedEditing.value as Prisma.InputJsonValue),
         userId, // attach logged-in user
         tags: Array.isArray(tags) ? tags : [],
         integrations: Array.isArray(integrations) ? integrations : [],
@@ -149,7 +211,7 @@ export async function PATCH(req: NextRequest) {
       featured,
     } = await req.json();
 
-    if (!id) {
+    if (typeof id !== "string" || !id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
@@ -166,10 +228,43 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
 
+    if (typeof exportedUrl === "string" && !isSafeUrl(exportedUrl)) {
+      return NextResponse.json({ error: "Exported URL is not allowed" }, { status: 400 });
+    }
+
+    if (typeof title === "string" && title.length > MAX_TITLE_LENGTH) {
+      return NextResponse.json(
+        { error: `Title must be under ${MAX_TITLE_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    if (typeof description === "string" && description.length > MAX_DESCRIPTION_LENGTH) {
+      return NextResponse.json(
+        { error: `Description must be under ${MAX_DESCRIPTION_LENGTH} characters` },
+        { status: 413 }
+      );
+    }
+
+    if (editingPayloadSize(editing) > MAX_EDITING_BYTES) {
+      return NextResponse.json({ error: "Editing payload is too large" }, { status: 413 });
+    }
+
+    let sanitizedEditingValue: unknown;
+    if (typeof editing !== "undefined") {
+      const sanitizedEditing = sanitizeEditingPayload(editing);
+      if (!sanitizedEditing.ok) {
+        return NextResponse.json({ error: sanitizedEditing.error }, { status: 400 });
+      }
+      sanitizedEditingValue = sanitizedEditing.value;
+    }
+
     // Use a single write to both enforce ownership and avoid extra round trips.
     const updateData: Record<string, unknown> = {
       ...(typeof exportedUrl === "string" ? { exportedUrl } : {}),
-      ...(typeof editing !== "undefined" ? { editing } : {}),
+      ...(typeof editing !== "undefined"
+        ? { editing: sanitizedEditingValue === null ? Prisma.DbNull : sanitizedEditingValue }
+        : {}),
       ...(typeof title === "string" ? { title } : {}),
       ...(typeof description === "string" ? { description } : {}),
       ...(Array.isArray(tags) ? { tags } : {}),

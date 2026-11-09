@@ -1,0 +1,708 @@
+"""
+Unit tests for the Internal ML API Gateway (Task-00029).
+Tests routing, aggregate health, error translation, and timeouts with mocked downstreams.
+"""
+
+import logging
+import os
+import sys
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+import httpx
+import pytest
+
+# Ensure ml-gateway directory is in path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
+from server import app
+
+client = TestClient(app)
+
+TEST_GATEWAY_TOKEN = "test-gateway-token"
+AUTH_HEADERS = {"x-gateway-token": TEST_GATEWAY_TOKEN}
+
+
+@pytest.fixture(autouse=True)
+def _default_gateway_token(monkeypatch):
+    """Run every test with a configured token; auth-specific tests override this."""
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", TEST_GATEWAY_TOKEN)
+    monkeypatch.delenv("ML_GATEWAY_ALLOW_INSECURE", raising=False)
+
+
+# ---------------------------------------------------------------------------
+# Health endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_health_all_healthy(monkeypatch):
+    """Test A: Both healthy -> HTTP 200, status ok, both ready."""
+    async def mock_check(client, name, url):
+        return "healthy"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["services"]["autoflip"] == "healthy"
+    assert data["services"]["talknet"] == "healthy"
+    assert data["ready"]["reframe"] is True
+    assert data["ready"]["talknet"] is True
+
+
+def test_health_autoflip_healthy_talknet_unhealthy(monkeypatch):
+    """Test B: AutoFlip healthy + TalkNet unhealthy -> HTTP 200, status degraded, reframe ready, talknet not ready."""
+    async def mock_check(client, name, url):
+        if name == "talknet":
+            return "unhealthy (timeout)"
+        return "healthy"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["services"]["autoflip"] == "healthy"
+    assert data["services"]["talknet"] == "unhealthy (timeout)"
+    assert data["ready"]["reframe"] is True
+    assert data["ready"]["talknet"] is False
+
+
+def test_health_autoflip_healthy_talknet_degraded(monkeypatch):
+    """Test C: AutoFlip healthy + TalkNet degraded -> HTTP 200, status degraded, reframe ready, talknet not ready."""
+    async def mock_check(client, name, url):
+        if name == "talknet":
+            return "degraded"
+        return "healthy"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["services"]["autoflip"] == "healthy"
+    assert data["services"]["talknet"] == "degraded"
+    assert data["ready"]["reframe"] is True
+    assert data["ready"]["talknet"] is False
+
+
+def test_health_autoflip_unhealthy_talknet_healthy(monkeypatch):
+    """Test D: AutoFlip unhealthy + TalkNet healthy -> HTTP 503, status degraded, reframe false, talknet true."""
+    async def mock_check(client, name, url):
+        if name == "autoflip":
+            return "unhealthy (connection error)"
+        return "healthy"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["services"]["autoflip"] == "unhealthy (connection error)"
+    assert data["services"]["talknet"] == "healthy"
+    assert data["ready"]["reframe"] is False
+    assert data["ready"]["talknet"] is True
+
+
+def test_health_both_unhealthy(monkeypatch):
+    """Test E: Both unhealthy -> HTTP 503, both readiness flags false."""
+    async def mock_check(client, name, url):
+        return "unhealthy (connection error)"
+
+    monkeypatch.setattr("server.check_service_health", mock_check)
+
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["services"]["autoflip"] == "unhealthy (connection error)"
+    assert data["services"]["talknet"] == "unhealthy (connection error)"
+    assert data["ready"]["reframe"] is False
+    assert data["ready"]["talknet"] is False
+
+
+@pytest.mark.asyncio
+async def test_check_service_health_status_semantics():
+    from server import check_service_health
+
+    # downstream 200 + {"status": "ok"} -> healthy
+    async def handler_ok(request):
+        return httpx.Response(200, json={"status": "ok"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_ok)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "healthy"
+
+    # downstream 200 + {"status": "degraded"} -> degraded
+    async def handler_degraded(request):
+        return httpx.Response(200, json={"status": "degraded", "weights": {"model": False}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_degraded)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "degraded"
+
+    # downstream 200 + {"status": "unhealthy"} -> unhealthy (unhealthy)
+    async def handler_unhealthy(request):
+        return httpx.Response(200, json={"status": "unhealthy"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_unhealthy)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (unhealthy)"
+
+    # downstream 200 + {"status": "error"} -> unhealthy (error)
+    async def handler_error(request):
+        return httpx.Response(200, json={"status": "error"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_error)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (error)"
+
+    # Test F: Downstream health payload missing "status" -> unhealthy (invalid response)
+    async def handler_missing(request):
+        return httpx.Response(200, json={"other": "value"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_missing)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Test G: Downstream health payload contains unknown status -> unhealthy (invalid response)
+    async def handler_unknown(request):
+        return httpx.Response(200, json={"status": "ready"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_unknown)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Test H: Downstream health response is malformed JSON -> unhealthy (invalid response)
+    async def handler_malformed(request):
+        return httpx.Response(200, content=b"{not valid json")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_malformed)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Test I: Downstream health response is valid JSON but not an object -> unhealthy (invalid response)
+    async def handler_non_object(request):
+        return httpx.Response(200, json=["status", "ok"])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_non_object)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+    # Non-200 HTTP response -> preserve unhealthy (status N)
+    async def handler_500(request):
+        return httpx.Response(500, json={"status": "internal server error"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_500)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (status 500)"
+
+    # Timeout -> preserve unhealthy (timeout)
+    async def handler_timeout(request):
+        raise httpx.TimeoutException("Downstream timeout")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_timeout)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (timeout)"
+
+    # Connection error -> preserve unhealthy (connection error)
+    async def handler_conn_err(request):
+        raise httpx.ConnectError("Connection refused")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler_conn_err)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (connection error)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_payload_missing_status():
+    """Test F: Downstream health payload missing 'status' -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, json={"foo": "bar"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_payload_unknown_status():
+    """Test G: Downstream health payload contains unknown status -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, json={"status": "unknown_state"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_malformed_json():
+    """Test H: Downstream health response is malformed JSON -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, content=b"<not-json>")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "autoflip", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+@pytest.mark.asyncio
+async def test_downstream_health_non_object_json():
+    """Test I: Downstream health response is valid JSON but not an object -> unhealthy (invalid response)."""
+    from server import check_service_health
+
+    async def handler(request):
+        return httpx.Response(200, json=["status", "ok"])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cl:
+        res = await check_service_health(cl, "talknet", "http://test:8000")
+        assert res == "unhealthy (invalid response)"
+
+
+# ---------------------------------------------------------------------------
+# /reframe proxy tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_reframe_success(monkeypatch):
+    fake_crop_targets = {
+        "ok": True,
+        "crop_targets": {
+            "schema_version": "1.0",
+            "crop_window": {"target_width": 720, "target_height": 1280},
+            "tracks": [],
+        },
+    }
+
+    def mock_handler(request: httpx.Request):
+        assert request.url.path == "/reframe"
+        return httpx.Response(200, json=fake_crop_targets)
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    payload = {"videoUrl": "https://example.com/video.mp4", "targetAspectRatio": "9:16"}
+    resp = client.post("/reframe", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json() == fake_crop_targets
+
+
+@pytest.mark.asyncio
+async def test_reframe_timeout(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        raise httpx.TimeoutException("Downstream timeout")
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 504
+    data = resp.json()
+    assert data["ok"] is False
+    assert "timed out" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_reframe_connection_failure(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        raise httpx.ConnectError("Connection refused")
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 502
+    data = resp.json()
+    assert data["ok"] is False
+    assert "unavailable" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_reframe_downstream_error_forwarded(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        return httpx.Response(400, json={"ok": False, "error": "Invalid aspect ratio"})
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4", "targetAspectRatio": "invalid"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 400
+    assert resp.json()["ok"] is False
+    assert resp.json()["error"] == "Invalid aspect ratio"
+
+
+@pytest.mark.asyncio
+async def test_reframe_malformed_downstream_response(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        return httpx.Response(200, content=b"Not valid JSON")
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert "Malformed response" in resp.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# /talknet proxy tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_talknet_success(monkeypatch):
+    fake_talknet_resp = {
+        "ok": True,
+        "video_info": {"fps": 25.0, "duration_sec": 4.0},
+        "speakers": [
+            {
+                "track_id": "00000",
+                "start_time_sec": 0.0,
+                "end_time_sec": 4.0,
+                "average_confidence": 0.9,
+                "frames": [],
+            }
+        ],
+    }
+
+    def mock_handler(request: httpx.Request):
+        assert request.url.path == "/detect"
+        return httpx.Response(200, json=fake_talknet_resp)
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json() == fake_talknet_resp
+
+
+@pytest.mark.asyncio
+async def test_talknet_timeout(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        raise httpx.TimeoutException("Downstream timeout")
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 504
+    data = resp.json()
+    assert data["ok"] is False
+    assert "timed out" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_talknet_connection_failure(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        raise httpx.ConnectError("Connection refused")
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 502
+    data = resp.json()
+    assert data["ok"] is False
+    assert "unavailable" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_talknet_downstream_error_forwarded(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        return httpx.Response(503, json={"ok": False, "error": "Model weights missing"})
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 503
+    assert resp.json()["ok"] is False
+    assert resp.json()["error"] == "Model weights missing"
+
+
+@pytest.mark.asyncio
+async def test_talknet_malformed_downstream_response(monkeypatch):
+    def mock_handler(request: httpx.Request):
+        return httpx.Response(200, content=b"Server error not JSON")
+
+    mock_transport = httpx.MockTransport(mock_handler)
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert "Malformed response" in resp.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# Gateway token auth tests (ML_GATEWAY_TOKEN / X-Gateway-Token)
+# ---------------------------------------------------------------------------
+
+def _mock_downstream_ok(monkeypatch, body):
+    mock_transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=body)
+    )
+    orig_async_client = httpx.AsyncClient
+
+    def custom_client(*args, **kwargs):
+        kwargs["transport"] = mock_transport
+        return orig_async_client(*args, **kwargs)
+
+    monkeypatch.setattr("httpx.AsyncClient", custom_client)
+
+
+def test_reframe_rejects_missing_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post("/reframe", json={"videoUrl": "https://example.com/video.mp4"})
+    assert resp.status_code == 401
+    assert resp.json()["ok"] is False
+
+
+def test_reframe_rejects_wrong_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_reframe_accepts_valid_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    _mock_downstream_ok(monkeypatch, {"ok": True, "crop_targets": {}})
+    resp = client.post(
+        "/reframe",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "secret-123"},
+    )
+    assert resp.status_code == 200
+
+
+def test_talknet_rejects_missing_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post("/talknet", json={"videoUrl": "https://example.com/video.mp4"})
+    assert resp.status_code == 401
+
+
+def test_talknet_accepts_valid_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    _mock_downstream_ok(monkeypatch, {"ok": True})
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "secret-123"},
+    )
+    assert resp.status_code == 200
+
+
+def test_endpoints_fail_closed_without_token(monkeypatch):
+    """No token and no explicit dev flag: both proxy endpoints must refuse."""
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.delenv("ML_GATEWAY_ALLOW_INSECURE", raising=False)
+    _mock_downstream_ok(monkeypatch, {"ok": True})
+
+    for path in ("/reframe", "/talknet"):
+        resp = client.post(path, json={"a": 1})
+        assert resp.status_code == 503
+        assert resp.json()["ok"] is False
+        assert "not configured" in resp.json()["error"]
+
+
+@pytest.mark.parametrize("flag", ["1", "true", "TRUE", "True"])
+def test_endpoints_open_with_explicit_insecure_flag(monkeypatch, flag):
+    """The explicit ML_GATEWAY_ALLOW_INSECURE escape hatch allows local dev."""
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", flag)
+    _mock_downstream_ok(monkeypatch, {"ok": True})
+
+    assert client.post("/reframe", json={"a": 1}).status_code == 200
+    assert client.post("/talknet", json={"a": 1}).status_code == 200
+
+
+@pytest.mark.parametrize("flag", ["0", "false", "yes", "", "  "])
+def test_endpoints_fail_closed_with_non_accepting_flag(monkeypatch, flag):
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", flag)
+
+    resp = client.post("/reframe", json={"a": 1})
+    assert resp.status_code == 503
+
+
+def test_insecure_flag_does_not_override_configured_token(monkeypatch):
+    """A configured token always wins; the dev flag cannot disable auth."""
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", "1")
+
+    resp = client.post("/reframe", json={"a": 1})
+    assert resp.status_code == 401
+
+
+def test_talknet_rejects_wrong_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    resp = client.post(
+        "/talknet",
+        json={"videoUrl": "https://example.com/video.mp4"},
+        headers={"x-gateway-token": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_non_ascii_token_header_is_rejected_without_crashing(monkeypatch):
+    import asyncio
+
+    from starlette.requests import Request
+
+    import server
+
+    monkeypatch.setenv("ML_GATEWAY_TOKEN", "secret-123")
+    # httpx refuses to encode non-ASCII header values client-side, so build the
+    # ASGI request directly with raw bytes. Starlette decodes headers as
+    # latin-1; the gateway must still compare safely instead of raising.
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/reframe",
+            "headers": [(b"x-gateway-token", b"s\xebcret")],
+        }
+    )
+    response = asyncio.run(server.require_gateway_auth(request))
+    assert response is not None
+    assert response.status_code == 401
+
+
+def test_startup_log_fails_closed_without_token(monkeypatch, caplog):
+    import server
+
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.delenv("ML_GATEWAY_ALLOW_INSECURE", raising=False)
+    with caplog.at_level(logging.ERROR, logger="ml-gateway"):
+        server._log_auth_startup()
+
+    assert any(
+        "failing closed" in record.getMessage() for record in caplog.records
+    )
+
+
+def test_startup_log_warns_loudly_for_insecure_mode(monkeypatch, caplog):
+    import server
+
+    monkeypatch.delenv("ML_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("ML_GATEWAY_ALLOW_INSECURE", "1")
+    with caplog.at_level(logging.WARNING, logger="ml-gateway"):
+        server._log_auth_startup()
+
+    assert any(
+        "UNAUTHENTICATED" in record.getMessage() for record in caplog.records
+    )

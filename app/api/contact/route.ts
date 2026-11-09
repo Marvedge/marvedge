@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { Resend } from "resend";
 
 export const runtime = "nodejs";
+
+const MAX_BODY_BYTES = 16 * 1024;
 
 // escape user input before putting it into the notification email
 function escapeHtml(value: string): string {
@@ -15,17 +19,11 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 export async function POST(req: NextRequest) {
-  // slow down bots hammering this public endpoint
-  if (await isRateLimited(`contact:${clientIp(req)}`, 3, 60)) {
+  // Slow down bots hammering this public endpoint. Closed mode: when Redis is
+  // down, reject rather than let spam fill the database and burn email quota.
+  // Other routes keep the default open mode so playback never breaks.
+  if (await isRateLimited(`contact:${getClientIp(req.headers)}`, 3, 60, true)) {
     return NextResponse.json(
       { error: "Too many requests, please try again shortly" },
       { status: 429 }
@@ -33,7 +31,40 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { name, email, message, company, productUrl, turnstileToken } = await req.json();
+    const bodyResult = await readBoundedRequestJson(req, MAX_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error: bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request",
+        },
+        {
+          status: bodyResult.reason === "too_large" ? 413 : 400,
+        }
+      );
+    }
+
+    if (
+      typeof bodyResult.value !== "object" ||
+      bodyResult.value === null ||
+      Array.isArray(bodyResult.value)
+    ) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+
+    const body = bodyResult.value as Record<string, unknown>;
+
+    const name = typeof body.name === "string" ? body.name : "";
+
+    const email = typeof body.email === "string" ? body.email : "";
+
+    const message = typeof body.message === "string" ? body.message : "";
+
+    const company = typeof body.company === "string" ? body.company : "";
+
+    const productUrl = typeof body.productUrl === "string" ? body.productUrl : "";
+
+    const turnstileToken = typeof body.turnstileToken === "string" ? body.turnstileToken : "";
 
     if (!name || !email) {
       return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
@@ -50,6 +81,15 @@ export async function POST(req: NextRequest) {
     }
 
     // verify captcha when the client sends one and we can check it
+    // Require token when secret is set so bots cannot skip the check.
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (typeof turnstileToken !== "string" || turnstileToken.length === 0) {
+        return NextResponse.json(
+          { error: "Captcha check failed, please try again" },
+          { status: 400 }
+        );
+      }
+    }
     if (
       typeof turnstileToken === "string" &&
       turnstileToken.length > 0 &&
@@ -89,9 +129,19 @@ export async function POST(req: NextRequest) {
             `Product URL: ${productUrl || "Not provided"}`,
           ].join("\n");
 
+    // Trim spaces so saved details have no surrounding spaces. Case is left
+    // alone on purpose.
+    const cleanName = String(name).trim();
+    const cleanEmail = String(email).trim();
+
+    // Simple shape check, same regex as signup.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+    }
+
     // escape everything the user typed before it goes into the html email
-    const safeName = escapeHtml(String(name));
-    const safeEmail = escapeHtml(String(email));
+    const safeName = escapeHtml(cleanName);
+    const safeEmail = escapeHtml(cleanEmail);
     const safeCompany = escapeHtml(
       typeof company === "string" && company.trim().length > 0 ? company : "Not provided"
     );
@@ -102,8 +152,8 @@ export async function POST(req: NextRequest) {
 
     await prisma.contactMessage.create({
       data: {
-        name,
-        email,
+        name: cleanName,
+        email: cleanEmail,
         message: normalizedMessage,
       },
     });
@@ -112,8 +162,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          message:
-            "Saved request, but email service is not configured (missing RESEND_API_KEY or RESEND_FROM_EMAIL).",
+          message: "Saved request, email is queued.",
         },
         { status: 200 }
       );

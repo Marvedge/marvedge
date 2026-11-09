@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { exceedsTextLimits } from "@/app/lib/ai/abuseProtection";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpVoiceover } from "@/app/lib/gcpWorker";
@@ -11,6 +13,12 @@ import type { PronunciationRule } from "@/app/types/avs";
 
 // Aura TTS + ffmpeg concat runs in the worker; give the round-trip headroom.
 export const maxDuration = 120;
+
+// Same shape as the script route's MAX_SCRIPT_* limits (see
+// app/lib/ai/abuseProtection.ts): TTS costs real money per character, so an
+// unbounded lines array is an unbounded bill.
+const MAX_VOICEOVER_LINES = 200;
+const MAX_VOICEOVER_CHARACTERS = 50_000;
 
 interface LineInput {
   stepId: string;
@@ -75,7 +83,7 @@ export async function POST(req: NextRequest) {
         session.user.email ? { email: session.user.email } : undefined,
       ].filter(Boolean) as Array<{ id?: string; email?: string }>,
     },
-    select: { plan: true },
+    select: { id: true, plan: true },
   });
 
   if (!user) {
@@ -90,6 +98,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // TTS synthesis costs per character — bound synthesis requests per user.
+  if (await isRateLimited(`avs-voiceover:${user.id}`, 20, 15 * 60)) {
+    return NextResponse.json({ error: "Too many voiceover requests" }, { status: 429 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -100,6 +113,18 @@ export async function POST(req: NextRequest) {
   const lines = parseLines(body.lines);
   if (lines.length === 0) {
     return NextResponse.json({ error: "No script text to synthesize" }, { status: 400 });
+  }
+
+  // Mirror the script route's 413s: too many lines or too much text is rejected
+  // before the worker is invoked.
+  if (
+    exceedsTextLimits(
+      lines.map((line) => line.text),
+      MAX_VOICEOVER_LINES,
+      MAX_VOICEOVER_CHARACTERS
+    )
+  ) {
+    return NextResponse.json({ error: "Voiceover script is too large" }, { status: 413 });
   }
 
   // Clamp to an allowed Aura voice (worker also validates + defaults).

@@ -60,6 +60,16 @@ function errorMessage(error: unknown): string {
  *  exists). */
 async function failClip(db: AudioClipDb, clipId: string, error: string): Promise<void> {
   try {
+    // Terminal guard: do not overwrite a clip that already finished.
+    const current = await withDbRetry(() => db.audioClip.findUnique({ where: { id: clipId } }));
+    const currentStatus = current?.status as string | undefined;
+    if (
+      currentStatus === "READY" ||
+      currentStatus === "COMPLETED" ||
+      currentStatus === "CANCELLED"
+    ) {
+      return;
+    }
     await withDbRetry(() =>
       db.audioClip.update({
         where: { id: clipId },

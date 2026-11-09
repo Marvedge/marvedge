@@ -50,6 +50,15 @@ function buildVideoCardStyle(layout: PreviewLayout, isDark: boolean): React.CSSP
   const { previewFrameAspectRatio, stageHeight, stageMaxWidth, hasCanvasBackground } = layout;
   const { browserFrameBorder, browserFrameShadow } = layout;
 
+  // computePreviewLayout collapses both toggles to "none" when off; dark mode
+  // mirrors the same toggles (gradient border + purple glow).
+  const drawBorder = browserFrameBorder !== "none";
+  const drawShadow = browserFrameShadow !== "none";
+
+  const darkCardFill = hasCanvasBackground
+    ? "linear-gradient(#F6F3FF, #F6F3FF)"
+    : "linear-gradient(#000000, #000000)";
+
   return {
     width: "auto",
     aspectRatio: previewFrameAspectRatio,
@@ -62,13 +71,17 @@ function buildVideoCardStyle(layout: PreviewLayout, isDark: boolean): React.CSSP
     borderRadius: "1.25rem",
     overflow: "hidden",
     background: isDark
-      ? `${hasCanvasBackground ? "linear-gradient(#F6F3FF, #F6F3FF)" : "linear-gradient(#000000, #000000)"} padding-box, linear-gradient(135deg, #6c4cff, #8b73ff) border-box`
+      ? drawBorder
+        ? `${darkCardFill} padding-box, linear-gradient(135deg, #6c4cff, #8b73ff) border-box`
+        : darkCardFill
       : hasCanvasBackground
         ? "#F6F3FF"
         : "#000000",
-    border: isDark ? "1px solid transparent" : browserFrameBorder,
+    border: isDark ? (drawBorder ? "1px solid transparent" : "none") : browserFrameBorder,
     boxShadow: isDark
-      ? "0 0 30px rgba(62, 47, 217, 0.25), 0 10px 40px rgba(0, 0, 0, 0.7)"
+      ? drawShadow
+        ? "0 14px 34px rgba(255, 255, 255, 0.22), 0 0 22px rgba(139, 115, 255, 0.28)"
+        : "none"
       : browserFrameShadow,
     transition: "width 0.3s ease, height 0.3s ease",
   };

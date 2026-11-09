@@ -1,0 +1,90 @@
+AutoFlip Evaluation — Raw Run Log
+Task-00009
+
+Docker image:
+marvedge-autoflip
+
+Target aspect ratio:
+9:16
+
+Official sample runs:
+
+Test 01
+Input: public/icons/1.mp4
+Output: public/icons/autoflip_1_9x16.mp4
+Result: Success!
+Exit code: 0
+
+Test 02
+Input: public/icons/2.mp4
+Output: public/icons/autoflip_2_9x16.mp4
+Result: Success!
+Exit code: 0
+
+Supplementary VCD sample runs:
+
+Test 01
+Input: autoflip/input/test_01_landscape.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 02
+Input: autoflip/input/test_02_landscape.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 03
+Input: autoflip/input/test_03_blurred_bg.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 04
+Input: autoflip/input/test_04_portrait.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 05
+Input: autoflip/input/test_05_portrait.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 06
+Input: autoflip/input/test_06_landscape.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 07
+Input: autoflip/input/test_07_landscape.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 08
+Input: autoflip/input/test_08_landscape.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 09
+Input: autoflip/input/test_09_hand_movement.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 10
+Input: autoflip/input/test_10_landscape.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0
+
+Test 11
+Input: autoflip/input/test_11_portrait.mp4
+Target: 9:16
+Result: Success!
+Exit code: 0

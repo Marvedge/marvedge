@@ -12,8 +12,18 @@ export async function POST(req: Request) {
 
     const { rating, content } = await req.json();
 
-    if (!rating || !content) {
+    if (
+      typeof rating !== "number" ||
+      !Number.isFinite(rating) ||
+      rating < 1 ||
+      rating > 5 ||
+      typeof content !== "string" ||
+      !content.trim()
+    ) {
       return NextResponse.json({ error: "Missing rating or content" }, { status: 400 });
+    }
+    if (content.length > 5000) {
+      return NextResponse.json({ error: "Review is too long" }, { status: 413 });
     }
 
     const existingReview = await prisma.review.findFirst({

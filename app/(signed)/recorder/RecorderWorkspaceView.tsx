@@ -9,6 +9,7 @@ import CameraBubblePreview from "@/app/components/CameraBubblePreview";
 import { useRecorderStore } from "@/app/store/recorderStore";
 import { useBlobStore } from "@/app/store/blobStore";
 import { UPLOAD_VIDEO_ACCEPT, validateVideoUpload } from "@/app/lib/subtitles";
+import { uploadEditorVideoFile } from "@/app/(signed)/editor/hooks/useEditorVideoUpload";
 
 interface RecorderWorkspaceViewProps {
   initials: string;
@@ -150,27 +151,16 @@ export default function RecorderWorkspaceView({
         accept={UPLOAD_VIDEO_ACCEPT}
         ref={fileInputRef}
         className="hidden"
-        onChange={(e) => {
+        onChange={async (e) => {
           const file = e.target.files?.[0];
           if (file) {
-            // Same limits as the initial recorder view (PRD §6.1) — this is the
-            // second file input in the product and it reached the same store
-            // with no validation at all.
-            const check = validateVideoUpload({
-              filename: file.name,
-              contentType: file.type,
-              size: file.size,
+            await uploadEditorVideoFile(file, {
+              setUploadedFileUrl,
+              setUploadedFileType,
+              setBlob,
+              setTitle: (t) => useBlobStore.getState().setTitle(t),
             });
-            if (!check.ok) {
-              toast.error(check.error);
-              e.target.value = "";
-              return;
-            }
-            const fileUrl = URL.createObjectURL(file);
-            setUploadedFileUrl(fileUrl);
-            setUploadedFileType(file.type);
-            setBlob(file);
-            toast.success("File uploaded successfully!");
+            e.target.value = "";
           }
         }}
       />

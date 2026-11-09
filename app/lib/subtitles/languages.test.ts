@@ -49,6 +49,8 @@ describe("the language table", () => {
 
   it("marks only Arabic as right-to-left", () => {
     expect(isRtlLanguage("ar")).toBe(true);
+    expect(isRtlLanguage("ar-EG")).toBe(true);
+    expect(isRtlLanguage("ar-SA")).toBe(true);
     for (const code of ["en", "hi", "es", "fr", "de", "ja"]) {
       expect(isRtlLanguage(code), code).toBe(false);
     }

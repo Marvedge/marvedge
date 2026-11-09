@@ -36,7 +36,7 @@ function buildPublicUrl(request: NextRequest, slug: string) {
   return `${origin}/share/${slug}`;
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const owned = await resolveOwnedDemo(id);
   if ("error" in owned) {

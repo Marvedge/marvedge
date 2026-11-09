@@ -4,6 +4,9 @@ import os
 import json
 import tempfile
 import cv2
+import logging
+
+logger = logging.getLogger("ml-worker")
 
 def run_validation(out_dir):
     """Run test_preprocess_faces.py and return a structured summary dict."""
@@ -135,6 +138,81 @@ with gr.Blocks(title="Marvedge Face Tracking Demo", theme=gr.themes.Soft()) as d
     
     btn.click(fn=process_video, inputs=video_in, outputs=[meta_out, video_out])
 
+def _flag_enabled(value) -> bool:
+    """Returns True only for an explicit, unambiguous opt-in flag value."""
+    return isinstance(value, str) and value.strip().lower() in {"1", "true"}
+
+
+def resolve_gradio_launch_config(env=None):
+    """
+    Resolve Gradio credentials and bind settings, failing closed by default.
+
+    Returns (auth, server_name, server_port), where auth is either a
+    (username, password) tuple or None.
+
+    Security contract:
+    - Both GRADIO_USERNAME and GRADIO_PASSWORD are required to launch.
+    - Without them, launch is refused unless GRADIO_ALLOW_INSECURE=1/true is
+      explicitly set for local development.
+    - Insecure mode always forces the bind address to 127.0.0.1 so an
+      unauthenticated UI can never be reached from another host.
+    - Authenticated mode defaults to 127.0.0.1 for direct runs; Docker sets
+      GRADIO_SERVER_NAME=0.0.0.0 so the loopback-only host port mapping works.
+    """
+    env = os.environ if env is None else env
+
+    username = (env.get("GRADIO_USERNAME") or "").strip()
+    password = (env.get("GRADIO_PASSWORD") or "").strip()
+    allow_insecure = _flag_enabled(env.get("GRADIO_ALLOW_INSECURE", ""))
+
+    server_name = (env.get("GRADIO_SERVER_NAME") or "127.0.0.1").strip()
+    if not server_name:
+        server_name = "127.0.0.1"
+
+    raw_port = (env.get("GRADIO_SERVER_PORT") or "8080").strip()
+    try:
+        server_port = int(raw_port)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(
+            f"ERROR: GRADIO_SERVER_PORT must be an integer, got {raw_port!r}"
+        ) from exc
+    if not 1 <= server_port <= 65535:
+        raise SystemExit(
+            f"ERROR: GRADIO_SERVER_PORT must be between 1 and 65535, got {server_port}"
+        )
+
+    if username and password:
+        return (username, password), server_name, server_port
+
+    if allow_insecure:
+        logger.warning(
+            "SECURITY WARNING: GRADIO_USERNAME/GRADIO_PASSWORD are not both set "
+            "and GRADIO_ALLOW_INSECURE=%s. Launching an UNAUTHENTICATED Gradio UI "
+            "bound to 127.0.0.1 only. Local development use only.",
+            env.get("GRADIO_ALLOW_INSECURE", ""),
+        )
+        return None, "127.0.0.1", server_port
+
+    raise SystemExit(
+        "ERROR: GRADIO_USERNAME and GRADIO_PASSWORD must both be set; refusing "
+        "to start an unauthenticated Gradio UI. For local development only, set "
+        "GRADIO_ALLOW_INSECURE=1 (the server is then forced to bind to 127.0.0.1)."
+    )
+
+
+def launch_demo(demo, env=None):
+    """Launch the Gradio demo after enforcing the authentication policy."""
+    auth, server_name, server_port = resolve_gradio_launch_config(env)
+    demo.queue().launch(
+        server_name=server_name,
+        server_port=server_port,
+        auth=auth,
+    )
+
+
 if __name__ == "__main__":
-    # Expose on 0.0.0.0:8080 for Docker / Cloud Run compatibility
-    demo.queue().launch(server_name="0.0.0.0", server_port=8080)
+    # The Gradio port is loopback-published by ml-worker/docker-compose.yml.
+    # Credentials never live in code — they come from GRADIO_USERNAME /
+    # GRADIO_PASSWORD. Missing credentials fail closed unless the explicit
+    # GRADIO_ALLOW_INSECURE=1 local-dev flag is set.
+    launch_demo(demo)

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { registerCustomDomain, deleteCustomDomain } from "@/app/lib/cloudflare";
+import { normalizeCustomDomain } from "@/app/lib/hub/customDomain";
 
 export async function GET() {
   try {
@@ -73,6 +74,36 @@ export async function POST(req: NextRequest) {
       customDomain,
     } = body;
 
+    // The logo is rendered on public hub pages — only server-fetchable https
+    // URLs are stored, never javascript:/data: or protocol-relative input.
+    if (typeof logoUrl === "string" && logoUrl.trim()) {
+      let parsedLogo: URL;
+      try {
+        parsedLogo = new URL(logoUrl.trim());
+      } catch {
+        return NextResponse.json({ error: "Logo URL must be a valid https URL" }, { status: 400 });
+      }
+      if (parsedLogo.protocol !== "https:") {
+        return NextResponse.json({ error: "Logo URL must be a valid https URL" }, { status: 400 });
+      }
+    }
+
+    // Hex colours land in inline styles on public pages — anything else is rejected.
+    if (typeof brandColor === "string" && brandColor && !/^#[0-9a-fA-F]{6}$/.test(brandColor)) {
+      return NextResponse.json(
+        { error: "Brand color must be a hex color like #7C5CFC" },
+        { status: 400 }
+      );
+    }
+
+    const cleanHubTitle = typeof hubTitle === "string" ? hubTitle.trim() : hubTitle;
+    if (typeof cleanHubTitle === "string" && cleanHubTitle.length > 200) {
+      return NextResponse.json(
+        { error: "Hub title must be under 200 characters" },
+        { status: 400 }
+      );
+    }
+
     // Enforce static unique ID suffix on subdomain
     const cleanPrefix = subdomain
       ? subdomain
@@ -91,8 +122,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Validate the custom domain before any uniqueness query or Cloudflare call.
+    const customDomainResult = normalizeCustomDomain(customDomain);
+    if (!customDomainResult.ok) {
+      return NextResponse.json({ error: customDomainResult.error }, { status: 400 });
+    }
+    const cleanCustomDomain = customDomainResult.value;
+
     // Validate custom domain uniqueness if changed
-    const cleanCustomDomain = customDomain ? customDomain.trim().toLowerCase() : null;
     if (cleanCustomDomain && cleanCustomDomain !== user.hubSettings?.customDomain) {
       const existingCustomDomain = await prisma.hubSettings.findUnique({
         where: { customDomain: cleanCustomDomain },
@@ -143,7 +180,7 @@ export async function POST(req: NextRequest) {
         brandColor: brandColor || "#7C5CFC",
         textColor: textColor || "#111827",
         accentColor: accentColor || "#F3F0FC",
-        hubTitle: hubTitle || `${user.name || "My"} Product Hub`,
+        hubTitle: cleanHubTitle || `${user.name || "My"} Product Hub`,
         hubDescription: hubDescription || "",
         subdomain: finalSubdomain,
         customDomain: cleanCustomDomain,
@@ -156,7 +193,7 @@ export async function POST(req: NextRequest) {
         brandColor: brandColor || "#7C5CFC",
         textColor: textColor || "#111827",
         accentColor: accentColor || "#F3F0FC",
-        hubTitle: hubTitle || `${user.name || "My"} Product Hub`,
+        hubTitle: cleanHubTitle || `${user.name || "My"} Product Hub`,
         hubDescription: hubDescription || "",
         subdomain: finalSubdomain,
         customDomain: cleanCustomDomain,

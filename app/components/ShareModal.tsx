@@ -33,7 +33,7 @@ export default function ShareModal({ apiPath, title, onClose }: Props) {
         setLoading(true);
         setError(null);
         const res = await fetch(apiPath, {
-          method: "GET",
+          method: "PUT",
         });
         if (!res.ok) {
           throw new Error("Failed to generate share link");

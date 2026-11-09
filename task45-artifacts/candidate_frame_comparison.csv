@@ -1,0 +1,19 @@
+candidate_source,sample_position,static_crop,mean_absolute_pixel_difference_0_255,interpretation
+public/icons/1.mp4,0.1,left,43.6309,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.1,center,56.5511,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.1,right,36.5509,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.5,left,38.8376,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.5,center,49.4287,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.5,right,49.0469,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.9,left,58.716,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.9,center,52.399,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/1.mp4,0.9,right,62.7489,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.1,left,51.7271,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.1,center,58.4707,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.1,right,60.9631,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.5,left,47.4475,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.5,center,61.6092,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.5,right,57.3444,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.9,left,46.5065,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.9,center,67.4285,Exploratory similarity only; does not prove source provenance or pipeline quality.
+public/icons/2.mp4,0.9,right,69.6884,Exploratory similarity only; does not prove source provenance or pipeline quality.

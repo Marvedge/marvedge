@@ -3,12 +3,48 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const http = require("node:http");
-const https = require("node:https");
+const {
+  fetchSafeUrl,
+  MAX_REDIRECTS,
+  readPositiveIntEnv,
+  writeCappedResponseBody,
+} = require("./safe-download.cjs");
 const ffmpeg = require("fluent-ffmpeg");
 
-ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
-ffmpeg.setFfprobePath("/usr/bin/ffprobe");
+const FFMPEG_BIN =
+  process.env.FFMPEG_PATH ||
+  (() => {
+    try {
+      return require("ffmpeg-static");
+    } catch {
+      return "/usr/bin/ffmpeg";
+    }
+  })() ||
+  "/usr/bin/ffmpeg";
+const FFPROBE_BIN =
+  process.env.FFPROBE_PATH ||
+  (() => {
+    try {
+      return require("ffprobe-static").path;
+    } catch {
+      return "/usr/bin/ffprobe";
+    }
+  })() ||
+  "/usr/bin/ffprobe";
+
+ffmpeg.setFfmpegPath(FFMPEG_BIN);
+ffmpeg.setFfprobePath(FFPROBE_BIN);
+
+const {
+  buildSplitScreenBlurFilter,
+  buildSplitScreenFilterGraph,
+  evaluateSplitScreen,
+  getSplitScreenDecision,
+  loadSpeakerTracks,
+  parseSpeakerTracks,
+} = require("./split-screen-blur");
+
+const storageLib = require("./storage.cjs");
 
 const EPS = 0.001;
 
@@ -355,7 +391,12 @@ function remapSubtitleCuesToTrimmedTimeline(rawCues, keepSegments, removeSegment
 }
 
 function ffmpegEscapeFilterValue(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+  let str = String(value).replace(/\\/g, "/");
+  if (/^[a-zA-Z]:/.test(str)) {
+    str = str[0] + "\\:" + str.slice(2);
+
+  }
+  return str;
 }
 
 function resolveFontForDrawtext(fontFamily) {
@@ -525,6 +566,20 @@ const SUBTITLE_DEFAULT_OUTLINE_RATIO = 1 / 16;
 const SUBTITLE_LEGACY_BACK_COLOUR = "&H64000000";
 const SUBTITLE_LEGACY_SECONDARY_COLOUR = "&H000000FF";
 const SUBTITLE_MARGIN_H_PX = 60;
+const SUBTITLE_MARGIN_H_MIN_PX = 16;
+const SUBTITLE_MARGIN_H_RATIO = 0.05;
+
+function computeSubtitleMarginHPx(frameWidth) {
+  const w = Number(frameWidth);
+  if (!Number.isFinite(w) || w <= 0) {
+    return SUBTITLE_MARGIN_H_PX;
+  }
+  return Math.max(
+    SUBTITLE_MARGIN_H_MIN_PX,
+    Math.min(SUBTITLE_MARGIN_H_PX, Math.round(w * SUBTITLE_MARGIN_H_RATIO))
+  );
+}
+
 // PRD size range, as a percentage of frame height at a 1080p reference.
 const SUBTITLE_FONT_PCT_MIN = (12 / 1080) * 100;
 const SUBTITLE_FONT_PCT_MAX = (72 / 1080) * 100;
@@ -556,14 +611,32 @@ function subtitleAssColour(hex, opacity) {
   return `&H${subtitleHexPair(alpha)}${subtitleHexPair(b)}${subtitleHexPair(g)}${subtitleHexPair(r)}`;
 }
 
+const SUBTITLE_BOX_PADDING_BASE_RATIO = 0.15;
+const SUBTITLE_BOX_PADDING_MIN_PX = 2;
+
+function computeSubtitleBoxPaddingPx(fontPx, outlineWidth = 0) {
+  const widthRatio = Number.isFinite(Number(outlineWidth)) ? Math.max(0, Number(outlineWidth)) : 0;
+  return Math.max(
+    SUBTITLE_BOX_PADDING_MIN_PX,
+    Math.round(fontPx * (SUBTITLE_BOX_PADDING_BASE_RATIO + widthRatio))
+  );
+}
+
 // The one place a style becomes pixels. The font clamp is master's [20, 58],
 // scaled by the size the user asked for relative to the default — so the default
 // clamps exactly as master does, while a deliberately large choice is not capped
 // away. See the long note on subtitleMetrics() in style.ts.
-function subtitleMetrics(style, h) {
+// Task-00061: cueFontSizePct is an optional per-cue override. When set, it
+// replaces style.fontSizePct for font-size calculations only — the same logic
+// as the third arg added to subtitleMetrics() in style.ts. The caller
+// (writeAssSubtitles) passes cue.fontSizePct here to produce the px value
+// that drives the inline {\fs<n>} ASS override tag.
+function subtitleMetrics(style, h, w, cueFontSizePct) {
   const height = Math.max(1, Number(h) || 0);
+  const width =
+    Number.isFinite(Number(w)) && Number(w) > 0 ? Number(w) : Math.round((height * 16) / 9);
   const pct = subtitleClamp(
-    style && style.fontSizePct,
+    cueFontSizePct != null ? cueFontSizePct : (style && style.fontSizePct),
     SUBTITLE_FONT_PCT_MIN,
     SUBTITLE_FONT_PCT_MAX,
     SUBTITLE_DEFAULT_FONT_PCT
@@ -581,12 +654,14 @@ function subtitleMetrics(style, h) {
     SUBTITLE_DEFAULT_OUTLINE_RATIO
   );
   const shadowDepth = subtitleClamp(style && style.shadowDepth, 0, 0.25, 0);
+  const hasBox = typeof (style && style.backgroundColor) === "string" && style.backgroundColor.length > 0;
   return {
     fontPx,
     marginVPx,
-    marginHPx: SUBTITLE_MARGIN_H_PX,
+    marginHPx: computeSubtitleMarginHPx(width),
     outlinePx: Math.round(fontPx * outlineWidth),
     shadowPx: Math.round(fontPx * shadowDepth),
+    boxPaddingPx: hasBox ? computeSubtitleBoxPaddingPx(fontPx, outlineWidth) : 0,
   };
 }
 
@@ -594,7 +669,7 @@ function subtitleMetrics(style, h) {
 // BorderStyle 1, BackColour is the (unused, Shadow: 0) shadow colour.
 function subtitleAssStyleLine(style, w, h) {
   const s = style || {};
-  const m = subtitleMetrics(s, h);
+  const m = subtitleMetrics(s, h, w);
   const font = SUBTITLE_FONT_NAMES[String(s.fontFamily || "arial").toLowerCase()] || "Arial";
   const hasBox = typeof s.backgroundColor === "string" && s.backgroundColor.length > 0;
   const backColour = hasBox
@@ -603,6 +678,7 @@ function subtitleAssStyleLine(style, w, h) {
         s.backgroundOpacity === undefined ? 0.6 : s.backgroundOpacity
       )
     : SUBTITLE_LEGACY_BACK_COLOUR;
+  const outlinePx = hasBox ? m.boxPaddingPx : m.outlinePx;
   return [
     "Style: Default",
     font,
@@ -620,7 +696,7 @@ function subtitleAssStyleLine(style, w, h) {
     0,
     0,
     hasBox ? 3 : 1,
-    m.outlinePx,
+    outlinePx,
     m.shadowPx,
     SUBTITLE_ASS_ALIGNMENT[s.alignment] || 2,
     m.marginHPx,
@@ -643,7 +719,7 @@ function subtitleAssOverrideTags(style, w, h) {
     return "{\\t(0,150,\\fscx110\\fscy110)\\t(150,300,\\fscx100\\fscy100)}";
   }
   if (animation === "slide") {
-    const m = subtitleMetrics(style, h);
+    const m = subtitleMetrics(style, h, w);
     const x = Math.round(w / 2);
     const alignment = style && style.alignment;
     const y =
@@ -668,6 +744,30 @@ function subtitleAssOverrideTags(style, w, h) {
 // left unreachable from the UI — RTL_RENDERING_VERIFIED in languages.ts holds
 // every RTL language out of both pickers until someone confirms a real render.
 const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
+
+// Indic scripts rendered by libass are visually larger than Latin text at the
+// same pixel size — glyphs are taller and the script's ascenders/descenders
+// together look bolder and more space-filling. A raw \fs override set by the
+// localization engine therefore over-sizes Indic captions relative to what the
+// editor's Latin preview shows. We correct this by multiplying the per-cue
+// font-size percentage by a scale-down factor before converting to pixels, so
+// the rendered visual size matches the Latin reference at all frame heights.
+//
+// Languages covered: Hindi (hi), Tamil (ta), Odia (or), Bengali (bn),
+// Telugu (te), Kannada (kn), Malayalam (ml).
+const INDIC_SCRIPT_LANGUAGES = new Set(["hi", "ta", "or", "bn", "te", "kn", "ml"]);
+
+// 0.85 empirically matches the visual stroke weight of Noto Sans Devanagari
+// against Arial at the same px value on a 1280-px-tall 9:16 frame.
+const SUBTITLE_INDIC_FONT_SCALE = 0.85;
+
+function isIndicSubtitleLanguage(language) {
+  const code = String(language || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0];
+  return INDIC_SCRIPT_LANGUAGES.has(code);
+}
 
 function isRtlSubtitleLanguage(language) {
   const code = String(language || "")
@@ -703,12 +803,25 @@ function writeAssSubtitles(tempDir, cues, w, h, style, language) {
     styleLine = `Style: Default,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,${outline},0,2,60,60,${marginV},1`;
   }
 
+  // WrapStyle controls libass's line-breaking behaviour.
+  //   0 = smart (tries to balance line lengths),
+  //   1 = end-of-line (wraps at the right margin, top-to-bottom),
+  //   2 = no-wrap (a single long line that bleeds off the frame).
+  //
+  // The legacy/unstyled branch used WrapStyle 2 because original English cues
+  // are short enough that they never exceed the frame width. Translated text
+  // is frequently 20-40% longer — German and Tamil especially — and WrapStyle 2
+  // causes it to spill off the right edge. Switch to WrapStyle 1 whenever a
+  // language code is present, so every translated track wraps cleanly within
+  // the PlayResX boundary without changing anything for non-translated exports.
+  const wrapStyle = language ? 1 : 2;
+
   const header = [
     "[Script Info]",
     "ScriptType: v4.00+",
     `PlayResX: ${w}`,
     `PlayResY: ${h}`,
-    "WrapStyle: 2",
+    `WrapStyle: ${wrapStyle}`,
     "ScaledBorderAndShadow: yes",
     "",
     "[V4+ Styles]",
@@ -726,13 +839,35 @@ function writeAssSubtitles(tempDir, cues, w, h, style, language) {
   // Absent language → untouched text, so every existing demo's Dialogue lines
   // are byte-for-byte what they were.
   const rtl = isRtlSubtitleLanguage(language);
+  const indic = isIndicSubtitleLanguage(language);
 
   const lines = cues.map((c) => {
     const start = formatAssTime(c.start);
     const end = formatAssTime(c.end);
     const escaped = escapeAssText(c.text);
     const t = rtl ? applyRtlBidi(escaped) : escaped;
-    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${tags}${t}`;
+
+    // Task-00061: per-cue font-size override for translated tracks.
+    // Task-00061: per-cue font-size override for translated tracks.
+    // When localizeTranslatedCues() detected that this cue's translation is
+    // significantly longer than the source, it stored a smaller fontSizePct on
+    // the cue object. We convert that to pixels here and emit a {\fs<n>} ASS
+    // override tag that libass applies to this Dialogue line only, leaving the
+    // track-level Style: Default unchanged so un-overridden cues are unaffected.
+    //
+    // Task-00079: for Indic scripts, multiply the stored fontSizePct by
+    // SUBTITLE_INDIC_FONT_SCALE before converting to pixels, correcting the
+    // visual over-sizing of Devanagari/Tamil/Odia glyphs vs. the Latin preview.
+    let cueTags = tags;
+    if (typeof c.fontSizePct === "number" && c.fontSizePct > 0) {
+      const effectivePct = indic
+        ? c.fontSizePct * SUBTITLE_INDIC_FONT_SCALE
+        : c.fontSizePct;
+      const cueMetrics = subtitleMetrics(style, h, w, effectivePct);
+      cueTags = `{\\fs${cueMetrics.fontPx}}${tags}`;
+    }
+
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${cueTags}${t}`;
   });
 
   const assPath = path.join(tempDir, "subtitles.ass");
@@ -764,26 +899,55 @@ function overlapSliceAbsolute(items, chunkStart, chunkEnd, mapItem) {
   return out;
 }
 
-function downloadFile(url, outputPath) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const transport = u.protocol === "https:" ? https : http;
-    const req = transport.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        downloadFile(res.headers.location, outputPath).then(resolve).catch(reject);
-        return;
+// Downloads a remote background/watermark asset to disk.
+//
+// Security: every URL (including each redirect hop) is validated with
+// fetchSafeUrl before any bytes are fetched � non-http(s) schemes, blocked
+// hosts, and hostnames resolving to private/link-local addresses are refused.
+// Redirects are capped at MAX_REDIRECTS (5), the whole download is bounded
+// by DOWNLOAD_TIMEOUT_MS, and the body is consumed incrementally (never
+// fully buffered) with an enforced MAX_DOWNLOAD_BYTES cap. `options`
+// ({ timeoutMs, maxRedirects, maxBytes, fetchImpl, lookupImpl }) exists for
+// unit tests; production callers pass nothing.
+const DOWNLOAD_TIMEOUT_MS = readPositiveIntEnv("DOWNLOAD_TIMEOUT_MS", 30000);
+const MAX_DOWNLOAD_BYTES = readPositiveIntEnv(
+  "DOWNLOAD_MAX_BYTES",
+  1073741824
+);
+
+function downloadFile(url, outputPath, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
+  const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS ?? 5;
+  const maxBytes = options.maxBytes ?? MAX_DOWNLOAD_BYTES;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const doFetch = options.fetchImpl
+    ? (target, init) =>
+        options.fetchImpl(target, { ...(init || {}), signal: controller.signal })
+    : (target, init) =>
+        globalThis.fetch(target, { ...(init || {}), signal: controller.signal });
+  return (async () => {
+    try {
+      const response = await fetchSafeUrl(url, {
+        fetchImpl: doFetch,
+        lookupImpl: options.lookupImpl,
+        maxRedirects,
+      });
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
       }
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        reject(new Error(`Download failed: ${res.statusCode}`));
-        return;
+      await writeCappedResponseBody(response, outputPath, maxBytes);
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(
+          `Download timed out after ${timeoutMs}ms: ${String(url).slice(0, 200)}`
+        );
       }
-      const ws = fs.createWriteStream(outputPath);
-      res.pipe(ws);
-      ws.on("finish", resolve);
-      ws.on("error", reject);
-    });
-    req.on("error", reject);
-  });
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
 }
 
 function pickCompression(recipe) {
@@ -827,6 +991,7 @@ async function renderChunkFromRecipe({
   chunkDurationSecs,
   startTime,
   duration,
+  speakerTracksUri,
 }) {
   const renderStartMs = Date.now();
   const tempDir = path.dirname(outputPath);
@@ -1072,13 +1237,60 @@ async function renderChunkFromRecipe({
   const drawCardBorder = Boolean(recipe.browserFrame?.drawBorder);
   const previewPadColor = hasBackgroundCanvas ? "0xF1ECFF" : "black";
 
-  // Keep this exactly aligned with local video-worker behavior:
-  // always normalize into target canvas first, preserving full source frame.
-  filters.push(
-    `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-      `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+  // Task 36: Load speaker tracks and evaluate split-screen trigger.
+  const tracksUri = speakerTracksUri || recipe?.speakerTracksUri;
+  let tracksSource = tracksUri;
+
+  if (
+    typeof tracksUri === "string" &&
+    /^(gs|s3):\/\//i.test(tracksUri.trim())
+  ) {
+    const tracksPath = path.join(tempDir, "speaker-tracks.json");
+
+    try {
+      await storageLib.downloadFromUri({
+        uri: tracksUri.trim(),
+        destinationPath: tracksPath,
+      });
+      tracksSource = tracksPath;
+    } catch (error) {
+      console.warn(
+        "[split-screen] Unable to download speaker tracks; using normal crop:",
+        error?.message || error
+      );
+        tracksSource = null;
+    }
+  }
+
+  const splitDecision = evaluateSplitScreen(
+    tracksSource,
+    probe.sourceWidth
   );
-  videoOut = "[res]";
+
+  if (
+    splitDecision.splitScreen &&
+    splitDecision.speakers?.length >= 2
+  ) {
+    const splitGraph = buildSplitScreenFilterGraph({
+      sourceWidth: probe.sourceWidth,
+      sourceHeight: probe.sourceHeight,
+      targetWidth,
+      targetHeight,
+      speaker1: splitDecision.speakers[0],
+      speaker2: splitDecision.speakers[1],
+      blurStrength: recipe?.splitScreenBlurStrength || 20,
+    });
+
+    filters.push(splitGraph.filter);
+    videoOut = "[split_res]";
+  } else {
+    // Keep the existing normal single-speaker crop/pad code here unchanged.
+    filters.push(
+      `${videoOut}scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+       `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:${previewPadColor},setsar=1[res]`
+    );
+    videoOut = "[res]";
+  }
 
   if (remappedZoomEffects.length > 0) {
     const sortedZooms = [...remappedZoomEffects].sort((a, b) => a.startTime - b.startTime);
@@ -1417,6 +1629,12 @@ async function renderChunkFromRecipe({
 
 module.exports = {
   renderChunkFromRecipe,
+  downloadFile,
+  buildSplitScreenBlurFilter,
+  evaluateSplitScreen,
+  getSplitScreenDecision,
+  loadSpeakerTracks,
+  parseSpeakerTracks,
   // Exported for app/lib/subtitles/workerParity.test.ts, which asserts this
   // file's ASS mapping stays byte-identical to app/lib/subtitles/style.ts.
   writeAssSubtitles,

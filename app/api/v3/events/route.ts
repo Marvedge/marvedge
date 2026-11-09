@@ -23,6 +23,8 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestText } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { isOverlaysEnabled } from "@/app/lib/overlays/flags";
 import { parsePlayerEventBatch, selectKnownEvents } from "@/app/lib/overlays/events";
 import { applySessionCookie, readOrMintSessionId } from "@/app/lib/overlays/session";
@@ -45,19 +47,6 @@ function noContent(): NextResponse {
   return new NextResponse(null, { status: 204 });
 }
 
-/**
- * Best-effort client IP for rate limiting. Spoofable behind a proxy that does not
- * strip it, which is acceptable — the limiter fails open by design and this is a
- * write-only endpoint that authorises nothing.
- */
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 export async function POST(req: NextRequest) {
   // Every exit below returns this same response object, so the cookie is set
   // exactly once and the status never varies.
@@ -74,17 +63,13 @@ export async function POST(req: NextRequest) {
 
   // sendBeacon with a Blob does not reliably set application/json, and req.json()
   // is content-type sensitive. Read the raw text and parse it ourselves.
-  let rawBody: string;
-  try {
-    rawBody = await req.text();
-  } catch {
-    return respond();
-  }
-  if (rawBody.length === 0 || rawBody.length > MAX_BODY_BYTES) {
+  const bodyResult = await readBoundedRequestText(req, MAX_BODY_BYTES);
+
+  if (!bodyResult.ok) {
     return respond();
   }
 
-  const parsed = parsePlayerEventBatch(rawBody);
+  const parsed = parsePlayerEventBatch(bodyResult.value);
   if (!parsed.ok) {
     return respond();
   }
@@ -97,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   // Keyed on IP + demoId, since there is no userId on a public endpoint.
   const limited = await isRateLimited(
-    `ovl:events:${clientIp(req)}:${demoId ?? exportedVideoId}`,
+    `ovl:events:${getClientIp(req.headers)}:${demoId ?? exportedVideoId}`,
     EVENTS_RATE_LIMIT,
     EVENTS_RATE_WINDOW_SECONDS
   );

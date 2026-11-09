@@ -39,6 +39,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { isOverlaysAllowed } from "@/app/lib/overlays/access";
 import { overlayConfigFromRow } from "@/app/lib/overlays/config";
 import {
@@ -62,19 +63,6 @@ export const runtime = "nodejs";
  */
 const MEDIA_RATE_LIMIT = 30;
 const MEDIA_RATE_WINDOW_SECONDS = 60;
-
-/**
- * Best-effort client IP for rate limiting. Spoofable behind a proxy that does
- * not strip the header, which is acceptable: the limiter fails open by design
- * and the 403 below is what actually protects the media.
- */
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
 
 /** One 404 for every kind of miss, so the endpoint cannot be probed. */
 function notFound(): NextResponse {
@@ -104,7 +92,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ demo
 
   if (
     await isRateLimited(
-      `ovl:media:${clientIp(req)}:${demoId}`,
+      `ovl:media:${getClientIp(req.headers)}:${demoId}`,
       MEDIA_RATE_LIMIT,
       MEDIA_RATE_WINDOW_SECONDS
     )

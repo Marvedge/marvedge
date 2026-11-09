@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { promises as dns } from "node:dns";
 
 import { SIGNATURE_HEADER, TIMESTAMP_HEADER, verifyWebhookSignature } from "./signature";
 import { WEBHOOK_EVENT, WEBHOOK_VERSION, deliverToWebhook } from "./webhook";
@@ -23,6 +24,7 @@ interface Captured {
   url: string;
   headers: Record<string, string>;
   body: string;
+  init: RequestInit | undefined;
 }
 
 /**
@@ -30,16 +32,25 @@ interface Captured {
  * signature the way a CUSTOMER would: against the raw bytes and the timestamp
  * header, with no access to our serialisation.
  */
-function mockReceiver(status = 200) {
+function mockReceiver(
+  status = 200,
+  responseBody = "",
+  headers: HeadersInit = {}
+) {
   const captured: Captured[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const headers: Record<string, string> = {};
+    const requestHeaders: Record<string, string> = {};
     new Headers(init?.headers).forEach((value, key) => {
-      headers[key.toLowerCase()] = value;
+      requestHeaders[key.toLowerCase()] = value;
     });
-    captured.push({ url: String(input), headers, body: String(init?.body ?? "") });
-    return new Response("", { status });
+    captured.push({
+      url: String(input),
+      headers: requestHeaders,
+      body: String(init?.body ?? ""),
+      init,
+    });
+    return new Response(responseBody, { status, headers });
   }) as typeof fetch;
   return {
     captured,
@@ -48,6 +59,19 @@ function mockReceiver(status = 200) {
     },
   };
 }
+
+let lookupSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  // deliveryHostIsPublic performs a real DNS lookup; keep the suite hermetic.
+  lookupSpy = vi.spyOn(dns, "lookup").mockResolvedValue([
+    { address: "93.184.216.34", family: 4 },
+  ] as never);
+});
+
+afterEach(() => {
+  lookupSpy.mockRestore();
+});
 
 describe("deliverToWebhook", () => {
   it("posts a signed envelope a receiver can verify from the raw body", async () => {
@@ -60,6 +84,7 @@ describe("deliverToWebhook", () => {
       const [sent] = receiver.captured;
       expect(sent.url).toBe(CREDENTIALS.url);
       expect(sent.headers["content-type"]).toBe("application/json");
+      expect(sent.init?.redirect).toBe("manual");
 
       const timestamp = sent.headers[TIMESTAMP_HEADER.toLowerCase()];
       const signature = sent.headers[SIGNATURE_HEADER.toLowerCase()];
@@ -124,6 +149,38 @@ describe("deliverToWebhook", () => {
       expect(outcome).toMatchObject({ ok: false, retryable: false });
     } finally {
       client.restore();
+    }
+  });
+
+  it("treats a 3xx as a completed non-retryable delivery and never follows or reads it", async () => {
+    const receiver = mockReceiver(302, "internal-secret", {
+      location: "http://169.254.169.254/latest/meta-data",
+    });
+    try {
+      const outcome = await deliverToWebhook(CREDENTIALS, "lead_1", CONTACT);
+
+      expect(outcome).toMatchObject({ ok: false, retryable: false });
+      expect(outcome).toHaveProperty(
+        "error",
+        "Receiver responded 302 (redirects are not followed)"
+      );
+      expect(JSON.stringify(outcome)).not.toContain("internal-secret");
+      expect(receiver.captured).toHaveLength(1);
+      expect(receiver.captured[0].init?.redirect).toBe("manual");
+    } finally {
+      receiver.restore();
+    }
+  });
+
+  it("still reads a short snippet from a non-3xx error response", async () => {
+    const receiver = mockReceiver(400, "missing signature");
+    try {
+      const outcome = await deliverToWebhook(CREDENTIALS, "lead_1", CONTACT);
+
+      expect(outcome).toMatchObject({ ok: false, retryable: false });
+      expect(outcome).toHaveProperty("error", "Receiver responded 400: missing signature");
+    } finally {
+      receiver.restore();
     }
   });
 

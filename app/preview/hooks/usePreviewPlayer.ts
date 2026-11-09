@@ -1,7 +1,20 @@
 import React, { useState, useEffect } from "react";
 import ReactPlayer from "react-player";
 import { toast } from "sonner";
-import { downloadVideoAs } from "../utils/previewHelpers";
+import { downloadVideoAs, isSafePreviewUrl } from "../utils/previewHelpers";
+
+/**
+ * Resolve the `?video=` query param to a renderable URL. Only http(s) URLs
+ * of sane length pass; `javascript:`, `data:`, protocol-relative and
+ * short/garbage inputs resolve to `null` so the page renders NoVideoFound
+ * instead of feeding an attacker-controlled URL to the player.
+ */
+export function resolvePreviewVideoUrl(raw: string | null | undefined): string | null {
+  if (!isSafePreviewUrl(raw)) {
+    return null;
+  }
+  return raw.trim();
+}
 
 export function usePreviewPlayer() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -10,7 +23,7 @@ export function usePreviewPlayer() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setVideoUrl(params.get("video"));
+    setVideoUrl(resolvePreviewVideoUrl(params.get("video")));
     setTitle(params.get("title") || "Video Preview");
     setDescription(params.get("description") || "");
   }, []);

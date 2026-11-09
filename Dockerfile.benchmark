@@ -1,0 +1,28 @@
+# Dockerfile.benchmark (Task-0102: Cloud Cost Benchmark Runner)
+# Lightweight, reproducible benchmark runner supporting CPU fallback and optional NVIDIA GPU.
+FROM node:20-slim
+
+# Install ffmpeg and ca-certificates for synthetic media generation
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy dependency manifests
+COPY package*.json ./
+COPY tsconfig*.json ./
+
+# Install dependencies (production + tsx for script execution)
+RUN npm install --omit=dev && npm install -g tsx
+
+# Copy source
+COPY . .
+
+# Benchmark output volume mount point
+VOLUME ["/app/benchmark_results"]
+
+# Default entrypoint runs the cloud cost benchmark CLI
+ENTRYPOINT ["npx", "tsx", "scripts/benchmark/cloudCostBenchmark.ts"]
+CMD ["--stages", "reframe,avs,captions,dubbing", "--concurrency", "1", "--iterations", "1", "--warmup", "0"]

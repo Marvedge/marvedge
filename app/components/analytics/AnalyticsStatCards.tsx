@@ -1,12 +1,20 @@
 import React from "react";
-import { Eye, CheckCircle2, Clock, MousePointerClick, TrendingUp } from "lucide-react";
+import {
+  Eye,
+  CheckCircle2,
+  Clock,
+  MousePointerClick,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+} from "lucide-react";
+import type { Trend } from "@/app/lib/analytics/metrics";
 
 interface AnalyticsCard {
   id: string;
   label: string;
   value: string;
-  trend: string;
-  trendLabel: string;
+  trend: Trend;
   icon: React.ReactNode;
   /** pastel card background (Figma card fill, light mode) */
   cardBg: string;
@@ -18,11 +26,20 @@ interface AnalyticsCard {
   largeValue: boolean;
 }
 
+export interface AnalyticsTrends {
+  views: Trend;
+  completion: Trend;
+  duration: Trend;
+  ctr: Trend;
+}
+
 interface AnalyticsStatCardsProps {
   totalViews: number;
   completionRate: string;
   avgDuration: string;
   ctaClickRate: string;
+  /** Real month-over-month deltas, computed on the server from the same rows. */
+  trends: AnalyticsTrends;
   isVisible: boolean;
 }
 
@@ -31,6 +48,7 @@ const AnalyticsStatCards = ({
   completionRate,
   avgDuration,
   ctaClickRate,
+  trends,
   isVisible,
 }: AnalyticsStatCardsProps) => {
   const cards: AnalyticsCard[] = [
@@ -38,8 +56,7 @@ const AnalyticsStatCards = ({
       id: "views",
       label: "Total Views",
       value: totalViews.toString(),
-      trend: "+23.2%",
-      trendLabel: "vs last month",
+      trend: trends.views,
       icon: <Eye className="h-5 w-5 text-[#8A76FC] dark:text-[#8b55ff]" />,
       cardBg: "bg-[rgba(197,182,241,0.19)]",
       iconBg: "bg-[rgba(138,118,252,0.14)]",
@@ -50,8 +67,7 @@ const AnalyticsStatCards = ({
       id: "completion",
       label: "Completion Rate",
       value: completionRate,
-      trend: "+5.2%",
-      trendLabel: "vs last month",
+      trend: trends.completion,
       icon: <CheckCircle2 className="h-5 w-5 text-[#2F80EC] dark:text-[#3f9bff]" />,
       cardBg: "bg-[rgba(155,225,248,0.14)]",
       iconBg: "bg-[rgba(21,101,216,0.12)]",
@@ -62,8 +78,7 @@ const AnalyticsStatCards = ({
       id: "duration",
       label: "Avg Duration",
       value: avgDuration,
-      trend: "+12s",
-      trendLabel: "vs last month",
+      trend: trends.duration,
       icon: <Clock className="h-5 w-5 text-[#62408F] dark:text-[#8b55ff]" />,
       cardBg: "bg-[rgba(38,23,83,0.06)]",
       iconBg: "bg-[rgba(98,64,143,0.13)]",
@@ -74,8 +89,7 @@ const AnalyticsStatCards = ({
       id: "ctr",
       label: "Click through rate",
       value: ctaClickRate,
-      trend: "+0.3%",
-      trendLabel: "vs last month",
+      trend: trends.ctr,
       icon: <MousePointerClick className="h-5 w-5 text-[#E33629] dark:text-[#ff454b]" />,
       cardBg: "bg-[rgba(222,97,14,0.10)]",
       iconBg: "bg-[rgba(222,97,14,0.15)]",
@@ -113,20 +127,36 @@ const AnalyticsStatCards = ({
             >
               {card.value}
             </p>
-            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold md:text-sm">
-              <TrendingUp
-                className="h-4 w-4 shrink-0 text-[#36B37E] dark:text-[#25ec7c]"
-                strokeWidth={2.4}
-              />
-              <span className="text-[#36B37E] dark:text-[#25ec7c]">{card.trend}</span>
-              <span className="truncate font-normal text-gray-400 dark:text-white/50">
-                {card.trendLabel}
-              </span>
-            </p>
+            <TrendRow trend={card.trend} />
           </div>
         </div>
       ))}
     </div>
+  );
+};
+
+/**
+ * The month-over-month line under a card's value.
+ *
+ * The arrow and colour follow the DIRECTION of the real delta — a loss must not
+ * render as a green up-arrow. A dash (no baseline to compare against) is drawn
+ * neutral rather than dressed up as growth.
+ */
+const TrendRow = ({ trend }: { trend: Trend }) => {
+  const palette =
+    trend.direction === "up"
+      ? { icon: TrendingUp, text: "text-[#36B37E] dark:text-[#25ec7c]" }
+      : trend.direction === "down"
+        ? { icon: TrendingDown, text: "text-[#E33629] dark:text-[#ff454b]" }
+        : { icon: Minus, text: "text-gray-400 dark:text-white/50" };
+  const Icon = palette.icon;
+
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold md:text-sm">
+      <Icon className={`h-4 w-4 shrink-0 ${palette.text}`} strokeWidth={2.4} />
+      <span className={palette.text}>{trend.value}</span>
+      <span className="truncate font-normal text-gray-400 dark:text-white/50">vs last month</span>
+    </p>
   );
 };
 

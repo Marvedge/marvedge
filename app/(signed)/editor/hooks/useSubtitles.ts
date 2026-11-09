@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast";
 import { useShallow } from "zustand/react/shallow";
 
 import { uploadBlobToGcs } from "@/app/lib/gcsUploadClient";
+import { cloudinaryUpload, isCloudinaryUploadConfigured } from "@/app/lib/cloudinaryUpload";
 import { AUTO_DETECT_LANGUAGE, findActiveCue, validateSubtitleDuration } from "@/app/lib/subtitles";
 import { useSubtitleStore } from "@/app/store/editor/subtitleStore";
 import { SubtitleCue } from "../types";
@@ -114,6 +115,56 @@ async function pollSubtitleJob(jobId: string, isCancelled: () => boolean): Promi
   return { status: "failed", error: "Subtitle generation timed out" };
 }
 
+/**
+ * Resolve the video URL passed to the transcription service.
+ *
+ * In local development (or when Cloudinary is configured without GCS),
+ * browser blob URLs are uploaded to Cloudinary so local development does not
+ * require GCP/GCS credentials or buckets. Existing HTTPS URLs (Cloudinary or
+ * otherwise) bypass upload entirely. Future/production GCP support is preserved
+ * via uploadBlobToGcs when in production or when NEXT_PUBLIC_USE_GCS is set.
+ * Invariant (Task-00044 & Task-00047):
+ * - HTTPS videoUrl (including Cloudinary HTTPS URLs from upload or auto-reframe):
+ *   passed directly to /api/subtitles/create; uploadBlobToGcs() is NEVER called.
+ * - blob: URLs: preserve existing production GCS fallback.
+ */
+export async function resolveSubtitleSourceUrl(
+  videoUrl: string,
+  options?: {
+    isLocalDev?: boolean;
+    useGcs?: boolean;
+  }
+): Promise<string> {
+  if (!videoUrl.startsWith("blob:")) {
+    return videoUrl;
+  }
+
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) {
+    throw new Error("Failed to read recorded video blob");
+  }
+  const blob = await resp.blob();
+
+  const preferGcs =
+    options?.useGcs ?? (process.env.NEXT_PUBLIC_USE_GCS === "true");
+
+  if (!preferGcs && isCloudinaryUploadConfigured()) {
+    const secureUrl = await cloudinaryUpload(blob, {
+      folder: "subtitles_source",
+      filename: "subtitle_source.webm",
+      contentType: blob.type || "video/webm",
+    });
+    return secureUrl;
+  }
+
+  const upload = await uploadBlobToGcs({
+    blob,
+    filename: "subtitle_source.webm",
+    kind: "subtitle-source",
+  });
+  return upload.url;
+}
+
 export function useSubtitles({ editorState }: UseSubtitlesProps) {
   const { params, videoUrl, currentTime, savedDemoId, duration } = editorState;
   const {
@@ -215,8 +266,9 @@ export function useSubtitles({ editorState }: UseSubtitlesProps) {
     }
   }, [postCancel]);
 
-  const handleAddSubtitles = async () => {
-    if (!videoUrl) {
+  const handleAddSubtitles = async (overrideUrl?: string) => {
+    const activeUrl = overrideUrl || videoUrl;
+    if (!activeUrl) {
       toast.error("No video available for subtitles");
       return;
     }
@@ -238,20 +290,14 @@ export function useSubtitles({ editorState }: UseSubtitlesProps) {
     cancelledRef.current = false;
     jobIdRef.current = null;
     try {
-      let subtitleSourceUrl = videoUrl;
-      if (videoUrl.startsWith("blob:")) {
+      if (activeUrl.startsWith("blob:")) {
         toast.loading("Uploading audio source...", { id: toastId });
-        const resp = await fetch(videoUrl);
-        if (!resp.ok) {
-          throw new Error("Failed to read recorded video blob");
-        }
-        const blob = await resp.blob();
-        const upload = await uploadBlobToGcs({
-          blob,
-          filename: "subtitle_source.webm",
-          kind: "subtitle-source",
-        });
-        subtitleSourceUrl = upload.url;
+      }
+      const subtitleSourceUrl = await resolveSubtitleSourceUrl(activeUrl);
+
+      if (cancelledRef.current) {
+        toast("Subtitle generation cancelled", { id: toastId });
+        return;
       }
 
       // SUB PR 5: the chosen generation language, replacing a hardcoded

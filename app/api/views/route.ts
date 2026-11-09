@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
+import { getClientIp } from "@/app/lib/http/clientIp";
 import { QR_SOURCE_VALUE } from "@/app/lib/share/qrTarget";
 
 export const runtime = "nodejs";
@@ -21,25 +23,54 @@ function readViewSource(raw: unknown): typeof QR_SOURCE_VALUE | undefined {
   return raw === QR_SOURCE_VALUE ? QR_SOURCE_VALUE : undefined;
 }
 
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 // players heartbeat every 5s, so updates get a roomy budget while
 // creates stay tight enough to blunt refresh spam
 const CREATE_LIMIT = 30;
 const UPDATE_LIMIT = 300;
 const WINDOW_SECONDS = 60;
 const MAX_DURATION = 86400;
+const MAX_BODY_BYTES = 8 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
-    const { demoId, exportedVideoId, duration, viewId, source } = await req.json();
-    const ip = clientIp(req);
+    const bodyResult = await readBoundedRequestJson(req, MAX_BODY_BYTES);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        {
+          error:
+            bodyResult.reason === "too_large" ? "Request body too large" : "Invalid request body",
+        },
+        {
+          status: bodyResult.reason === "too_large" ? 413 : 400,
+        }
+      );
+    }
+
+    if (
+      typeof bodyResult.value !== "object" ||
+      bodyResult.value === null ||
+      Array.isArray(bodyResult.value)
+    ) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    const body = bodyResult.value as Record<string, unknown>;
+
+    const demoId =
+      typeof body.demoId === "string" && body.demoId.length > 0 ? body.demoId : undefined;
+
+    const exportedVideoId =
+      typeof body.exportedVideoId === "string" && body.exportedVideoId.length > 0
+        ? body.exportedVideoId
+        : undefined;
+
+    const viewId =
+      typeof body.viewId === "string" && body.viewId.length > 0 ? body.viewId : undefined;
+
+    const duration = body.duration;
+    const source = body.source;
+    const ip = getClientIp(req.headers);
 
     if (viewId && duration !== undefined) {
       if (await isRateLimited(`views:update:${ip}`, UPDATE_LIMIT, WINDOW_SECONDS)) {
@@ -59,13 +90,21 @@ export async function POST(req: NextRequest) {
       if (!existing) {
         return NextResponse.json({ error: "View not found" }, { status: 404 });
       }
+      // A viewId alone proves nothing — it is returned to any visitor — so the
+      // caller must also claim the demo or video the row belongs to. Both ids
+      // are public on share pages, so anonymous heartbeats with the matching
+      // id keep working; a missing or mismatched claim is forbidden.
+      const claimedDemoId = typeof demoId === "string" && demoId ? demoId : null;
+      const claimedVideoId =
+        typeof exportedVideoId === "string" && exportedVideoId ? exportedVideoId : null;
+      if (!claimedDemoId && !claimedVideoId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       if (
-        (typeof demoId === "string" && demoId && existing.demoId !== demoId) ||
-        (typeof exportedVideoId === "string" &&
-          exportedVideoId &&
-          existing.exportedVideoId !== exportedVideoId)
+        (claimedDemoId && existing.demoId !== claimedDemoId) ||
+        (claimedVideoId && existing.exportedVideoId !== claimedVideoId)
       ) {
-        return NextResponse.json({ error: "View not found" }, { status: 404 });
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       // Update existing view with new duration
       const updatedView = await prisma.view.update({
