@@ -46,6 +46,7 @@ describe("isSafeUrl", () => {
   it("passes internal storage uris untouched", () => {
     expect(isSafeUrl("r2://bucket/hls/demo/master.m3u8")).toBe(true);
     expect(isSafeUrl("gs://bucket/object.mp4")).toBe(true);
+    expect(isSafeUrl("s3://bucket/object.mp4")).toBe(true);
   });
 
   it("passes normal public urls", () => {
