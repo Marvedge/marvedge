@@ -27,16 +27,19 @@ export const audioQueue = new Queue("audio-processing", {
   defaultJobOptions,
 });
 
-export const reframeQueue = new Queue("reframe-processing", {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  connection: connection as any,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: 100,
-    removeOnFail: 500,
-  },
-});
+export const reframeQueue = new Queue(
+  process.env.REFRAME_QUEUE_NAME?.trim() || "reframe-processing",
+  {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    connection: connection as any,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 2000 },
+      removeOnComplete: 100,
+      removeOnFail: 500,
+    },
+  }
+);
 
 export const dubbingQueue = new Queue("dubbing-processing", {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
