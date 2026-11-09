@@ -1,9 +1,11 @@
 # Task-00107: Speaker-Tracks Contract Design
 
 ## Status
+
 Proposed — ownership and schema agreement required.
 
 ## Context
+
 TalkNet currently returns `ok`, `video_info` and `speakers`. Each speaker contains `track_id`, `start_time_sec`, `end_time_sec`, `average_confidence` and per-frame `frame`, `timestamp_sec`, `bbox`, `speaking_score` and `is_speaking`.
 
 The CloudRun split-screen consumer accepts legacy representations, including `speaker_id`/`bbox`, simplified `x` coordinates and TalkNet-style per-frame records. The current TalkNet response does not include an explicit schema version.
