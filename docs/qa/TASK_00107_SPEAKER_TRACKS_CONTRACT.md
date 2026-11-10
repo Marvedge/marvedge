@@ -52,8 +52,8 @@ Each speaker track contains:
 
 ### Field definition
 
-| Field | Type | Location | Optionality |
-|---|---|---|---|
+| Field              | Type     | Location                                            | Optionality                                                     |
+| ------------------ | -------- | --------------------------------------------------- | --------------------------------------------------------------- |
 | `speakerTracksUri` | `string` | `GcpWorkerPayload` (`app/lib/gcpWorker.ts` line 13) | Optional. Omitted when not provided; no default is substituted. |
 
 ### Propagation path
