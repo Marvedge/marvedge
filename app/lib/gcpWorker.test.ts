@@ -118,6 +118,58 @@ describe("gcpWorker - AVS Dubbing Service URL Resolution & Routing", () => {
 
       expect(authorization).toBe("Bearer worker-secret-123");
     });
+
+    // Task-108: verify that speakerTracksUri from GcpWorkerPayload is
+    // serialised into the request body sent to the worker.
+    it("includes speakerTracksUri in the request body when provided", async () => {
+      process.env.GCP_VIDEO_WORKER_URL = "https://production-gcp-worker.run.app";
+      process.env.WORKER_SECRET = "worker-secret-123";
+
+      let capturedBody: Record<string, unknown> = {};
+
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(
+          typeof init?.body === "string" ? init.body : "{}"
+        ) as Record<string, unknown>;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, result: { recipeId: "process" } }),
+        };
+      });
+
+      await invokeGcpWorker(
+        {
+          recipeId: "process",
+          speakerTracksUri: "gs://my-bucket/speaker-tracks.json",
+        },
+        "/process"
+      );
+
+      expect(capturedBody.speakerTracksUri).toBe("gs://my-bucket/speaker-tracks.json");
+    });
+
+    it("does not include speakerTracksUri in the request body when absent", async () => {
+      process.env.GCP_VIDEO_WORKER_URL = "https://production-gcp-worker.run.app";
+      process.env.WORKER_SECRET = "worker-secret-123";
+
+      let capturedBody: Record<string, unknown> = {};
+
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(
+          typeof init?.body === "string" ? init.body : "{}"
+        ) as Record<string, unknown>;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, result: { recipeId: "process" } }),
+        };
+      });
+
+      await invokeGcpWorker({ recipeId: "process" }, "/process");
+
+      expect(Object.prototype.hasOwnProperty.call(capturedBody, "speakerTracksUri")).toBe(false);
+    });
   });
 
   describe("invokeGcpDubSync Routing Execution", () => {
