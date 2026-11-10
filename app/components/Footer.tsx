@@ -311,6 +311,25 @@ const FooterBrandContent: React.FC<{ isInView: boolean }> = ({ isInView }) => (
       Transform your product URLs into compelling demo videos with the power of AI. Boost
       conversations and save time with automated video creation.
     </p>
+
+    {/* 2nd Logo: Orithm Technologies Pvt. Ltd. */}
+    <div className="mt-5 pt-4 border-t border-[rgba(165,139,255,0.16)] flex flex-col items-start gap-2">
+      <span
+        className="text-[11px] uppercase tracking-wider text-gray-400 font-medium opacity-85"
+        style={{ fontFamily: "var(--font-raleway)" }}
+      >
+        A Product of
+      </span>
+      <div className="relative group inline-flex items-center">
+        <Image
+          src="/images/orithm_logo_dark.png"
+          alt="Orithm Technologies Pvt. Ltd."
+          width={802}
+          height={925}
+          className="h-16 sm:h-20 w-auto object-contain transition-transform duration-200 group-hover:scale-105 drop-shadow-[0_2px_12px_rgba(255,180,0,0.15)]"
+        />
+      </div>
+    </div>
   </motion.div>
 );
 
