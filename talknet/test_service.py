@@ -21,6 +21,11 @@ if CURRENT_DIR not in sys.path:
 
 from server import app
 from service import (
+    CANONICAL_SCHEMA,
+    CANONICAL_SCHEMA_VERSION,
+    DEFAULT_FPS,
+    DEFAULT_FRAME_HEIGHT,
+    DEFAULT_FRAME_WIDTH,
     DownloadError,
     ExecutionError,
     MissingWeightsError,
@@ -30,8 +35,10 @@ from service import (
     check_deadline,
     check_weights_available,
     download_video,
+    extract_video_metadata,
     get_inference_device,
     process_detect,
+    run_talknet_pipeline,
     track_shot,
     validate_detect_request,
     validate_url_target,
@@ -498,17 +505,28 @@ def test_successful_detect_response_contract(mock_dns, mock_weights, mock_dl, mo
     mock_dl.return_value = None
     mock_pipe.return_value = {
         "ok": True,
+        "schema": CANONICAL_SCHEMA,
+        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "source": {
+            "width": 1920,
+            "height": 1080,
+            "fps": 25.0,
+            "duration_sec": 4.0,
+        },
         "video_info": {"fps": 25.0, "duration_sec": 4.0},
         "speakers": [
             {
                 "track_id": "00000",
+                "start_sec": 0.0,
                 "start_time_sec": 0.0,
+                "end_sec": 4.0,
                 "end_time_sec": 4.0,
                 "average_confidence": 0.85,
                 "frames": [
                     {
                         "frame": 0,
                         "timestamp_sec": 0.0,
+                        "timestamp": 0.0,
                         "bbox": [100.0, 50.0, 200.0, 150.0],
                         "speaking_score": 1.2,
                         "is_speaking": True,
@@ -525,13 +543,109 @@ def test_successful_detect_response_contract(mock_dns, mock_weights, mock_dl, mo
     assert res.status_code == 200
     data = res.json()
     assert data["ok"] is True
+    assert data["schema"] == CANONICAL_SCHEMA
+    assert data["schema_version"] == CANONICAL_SCHEMA_VERSION
+    assert data["source"]["width"] == 1920
+    assert data["source"]["height"] == 1080
+    assert data["source"]["fps"] == 25.0
+    assert data["source"]["duration_sec"] == 4.0
     assert data["video_info"]["fps"] == 25.0
     assert len(data["speakers"]) == 1
     speaker = data["speakers"][0]
     assert speaker["track_id"] == "00000"
+    assert speaker["start_sec"] == 0.0
+    assert speaker["start_time_sec"] == 0.0
+    assert speaker["end_sec"] == 4.0
+    assert speaker["end_time_sec"] == 4.0
     assert speaker["average_confidence"] == 0.85
     assert len(speaker["frames"]) == 1
+    assert speaker["frames"][0]["frame"] == 0
+    assert speaker["frames"][0]["timestamp_sec"] == 0.0
+    assert speaker["frames"][0]["timestamp"] == 0.0
+    assert speaker["frames"][0]["bbox"] == [100.0, 50.0, 200.0, 150.0]
     assert speaker["frames"][0]["is_speaking"] is True
+
+
+def test_extract_video_metadata_with_frame_fallback(tmp_path):
+    # Create a synthetic 640x480 JPEG frame
+    import cv2
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    frame_path = str(tmp_path / "000001.jpg")
+    cv2.imwrite(frame_path, img)
+
+    meta = extract_video_metadata(
+        video_path="non_existent.mp4",
+        first_frame_path=frame_path,
+        total_frames=100,
+        fps=25.0,
+    )
+    assert meta["width"] == 640
+    assert meta["height"] == 480
+    assert meta["fps"] == 25.0
+    assert meta["duration_sec"] == 4.0
+
+
+def test_extract_video_metadata_defaults_on_missing():
+    meta = extract_video_metadata(
+        video_path="non_existent.mp4",
+        first_frame_path=None,
+        total_frames=0,
+        fps=25.0,
+    )
+    assert meta["width"] == DEFAULT_FRAME_WIDTH
+    assert meta["height"] == DEFAULT_FRAME_HEIGHT
+    assert meta["fps"] == 25.0
+    assert meta["duration_sec"] == 0.0
+
+
+@patch("service.subprocess.run")
+@patch("service.glob.glob")
+def test_run_talknet_pipeline_empty_frames_canonical_contract(mock_glob, mock_sub, tmp_path):
+    mock_glob.return_value = []
+    res = run_talknet_pipeline(
+        work_dir=str(tmp_path),
+        raw_video_path="fake_video.mp4",
+    )
+    assert res["ok"] is True
+    assert res["schema"] == CANONICAL_SCHEMA
+    assert res["schema_version"] == CANONICAL_SCHEMA_VERSION
+    assert res["source"]["width"] == DEFAULT_FRAME_WIDTH
+    assert res["source"]["height"] == DEFAULT_FRAME_HEIGHT
+    assert res["source"]["duration_sec"] == 0.0
+    assert res["speakers"] == []
+    assert res["video_info"]["fps"] == 25.0
+    assert res["video_info"]["duration_sec"] == 0.0
+
+
+@patch("service.subprocess.run")
+@patch("service.glob.glob")
+@patch("service.S3FD")
+def test_run_talknet_pipeline_no_tracks_canonical_contract(mock_s3fd, mock_glob, mock_sub, tmp_path):
+    # Simulate 2 frames with no detected faces
+    fake_frames = [str(tmp_path / "000001.jpg"), str(tmp_path / "000002.jpg")]
+    for p in fake_frames:
+        with open(p, "wb") as f:
+            f.write(b"fake")
+    mock_glob.return_value = fake_frames
+
+    mock_detector = MagicMock()
+    mock_detector.detect_faces.return_value = []
+    mock_s3fd.return_value = mock_detector
+
+    with patch("service.cv2.imread", return_value=np.zeros((720, 1280, 3), dtype=np.uint8)):
+        res = run_talknet_pipeline(
+            work_dir=str(tmp_path),
+            raw_video_path="fake_video.mp4",
+        )
+    assert res["ok"] is True
+    assert res["schema"] == CANONICAL_SCHEMA
+    assert res["schema_version"] == CANONICAL_SCHEMA_VERSION
+    assert res["source"]["width"] == 1280
+    assert res["source"]["height"] == 720
+    assert res["source"]["duration_sec"] == 0.08
+    assert res["speakers"] == []
+    assert res["video_info"]["fps"] == 25.0
+    assert res["video_info"]["duration_sec"] == 0.08
 
 
 # ---------------------------------------------------------------------------
