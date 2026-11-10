@@ -61,43 +61,43 @@ Task-107 defines a formal, versioned contract with a canonical discriminator, en
 
 #### Root Envelope
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `schema` | `string` | Yes | Must be exactly `"marvedge.speaker-tracks"`. |
-| `schema_version` | `integer` | Yes | Must be integer `1`. |
-| `source` | `object` | Yes | Video metadata envelope (`width`, `height`, `fps`, `duration_sec`). |
-| `speakers` | `array` | Yes | Array of speaker track objects (empty array `[]` when no speakers detected). |
-| `ok` | `boolean` | Compatibility | Preserved as `true` in TalkNet responses for legacy consumers. |
-| `video_info` | `object` | Compatibility | Preserved containing `{ fps, duration_sec }`. |
+| Field            | Type      | Required      | Description                                                                  |
+| ---------------- | --------- | ------------- | ---------------------------------------------------------------------------- |
+| `schema`         | `string`  | Yes           | Must be exactly `"marvedge.speaker-tracks"`.                                 |
+| `schema_version` | `integer` | Yes           | Must be integer `1`.                                                         |
+| `source`         | `object`  | Yes           | Video metadata envelope (`width`, `height`, `fps`, `duration_sec`).          |
+| `speakers`       | `array`   | Yes           | Array of speaker track objects (empty array `[]` when no speakers detected). |
+| `ok`             | `boolean` | Compatibility | Preserved as `true` in TalkNet responses for legacy consumers.               |
+| `video_info`     | `object`  | Compatibility | Preserved containing `{ fps, duration_sec }`.                                |
 
 #### Source Metadata
 
-| Field | Type | Constraints | Description |
-|---|---|---|---|
-| `width` | `integer` | `> 0` | Source video frame width in pixels. |
-| `height` | `integer` | `> 0` | Source video frame height in pixels. |
-| `fps` | `number` | `> 0` | Video frame rate. |
-| `duration_sec` | `number` | `>= 0` | Total video duration in seconds. |
+| Field          | Type      | Constraints | Description                          |
+| -------------- | --------- | ----------- | ------------------------------------ |
+| `width`        | `integer` | `> 0`       | Source video frame width in pixels.  |
+| `height`       | `integer` | `> 0`       | Source video frame height in pixels. |
+| `fps`          | `number`  | `> 0`       | Video frame rate.                    |
+| `duration_sec` | `number`  | `>= 0`      | Total video duration in seconds.     |
 
 #### Speaker Track
 
-| Field | Type | Description |
-|---|---|---|
-| `track_id` | `string` | Stable identifier within the result (e.g. `"00000"`). |
-| `start_sec` / `start_time_sec` | `number` | Track start time in seconds. |
-| `end_sec` / `end_time_sec` | `number` | Track end boundary in seconds. |
-| `average_confidence` | `number` | Aggregate speech confidence score. |
-| `frames` | `array` | Chronologically ordered per-frame observations. |
+| Field                          | Type     | Description                                           |
+| ------------------------------ | -------- | ----------------------------------------------------- |
+| `track_id`                     | `string` | Stable identifier within the result (e.g. `"00000"`). |
+| `start_sec` / `start_time_sec` | `number` | Track start time in seconds.                          |
+| `end_sec` / `end_time_sec`     | `number` | Track end boundary in seconds.                        |
+| `average_confidence`           | `number` | Aggregate speech confidence score.                    |
+| `frames`                       | `array`  | Chronologically ordered per-frame observations.       |
 
 #### Frame Observation
 
-| Field | Type | Constraints | Description |
-|---|---|---|---|
-| `frame` | `integer` | `>= 0` | Absolute frame index. |
-| `timestamp_sec` / `timestamp` | `number` | `>= 0` | Timestamp in seconds. |
-| `bbox` | `array[4]` | `x2 > x1, y2 > y1` | Face bounding box coordinates `[x1, y1, x2, y2]`. Must represent positive area. |
-| `speaking_score` | `number` | Finite | TalkNet model output score for active speech. |
-| `is_speaking` | `boolean` | `true \| false` | Binary active speech decision based on threshold. |
+| Field                         | Type       | Constraints        | Description                                                                     |
+| ----------------------------- | ---------- | ------------------ | ------------------------------------------------------------------------------- |
+| `frame`                       | `integer`  | `>= 0`             | Absolute frame index.                                                           |
+| `timestamp_sec` / `timestamp` | `number`   | `>= 0`             | Timestamp in seconds.                                                           |
+| `bbox`                        | `array[4]` | `x2 > x1, y2 > y1` | Face bounding box coordinates `[x1, y1, x2, y2]`. Must represent positive area. |
+| `speaking_score`              | `number`   | Finite             | TalkNet model output score for active speech.                                   |
+| `is_speaking`                 | `boolean`  | `true \| false`    | Binary active speech decision based on threshold.                               |
 
 ---
 
@@ -146,7 +146,9 @@ The contract was validated with regression tests across both Python and JavaScri
 ```bash
 npm test -- cloudrun-worker/split-screen-blur.test.js
 ```
+
 **Result:** 26/26 tests passed.
+
 - Valid version-1 canonical payload acceptance and split-screen trigger.
 - Close-speaker fallback within threshold.
 - Empty speakers array handling (`speakers: []`).
@@ -160,9 +162,11 @@ npm test -- cloudrun-worker/split-screen-blur.test.js
 - Legacy top-level array and `speaker_id` / `track_id` compatibility.
 
 All CloudRun worker test suites:
+
 ```bash
 npx vitest run cloudrun-worker/
 ```
+
 **Result:** 160/160 tests passed across 8 test suites.
 
 ### TalkNet Tests (`pytest`)
@@ -170,7 +174,9 @@ npx vitest run cloudrun-worker/
 ```bash
 python -m pytest talknet/test_service.py -q
 ```
+
 **Result:** 39/39 tests passed.
+
 - Successful detect response schema contract validation (`schema`, `schema_version`, `source`).
 - Frame and VideoCapture metadata extraction with safe resource cleanup.
 - Fallback metadata behavior on missing or unreadable inputs.
