@@ -45,3 +45,47 @@ Each speaker track contains:
 2. The job-contract owner is explicitly identified.
 3. Producer and consumer compatibility requirements are documented.
 4. Follow-up implementation adds tests for valid version 1 data, malformed data and unsupported versions.
+
+---
+
+## Task-108: `speakerTracksUri` job/worker contract (implemented)
+
+### Field definition
+
+| Field | Type | Location | Optionality |
+|---|---|---|---|
+| `speakerTracksUri` | `string` | `GcpWorkerPayload` (`app/lib/gcpWorker.ts` line 13) | Optional. Omitted when not provided; no default is substituted. |
+
+### Propagation path
+
+```
+POST /api/jobs/create
+  → route.ts: destructures `speakerTracksUri` from request body, trims whitespace
+  → stored in `normalizedPayload` (spread-conditional: only present when non-empty)
+  → stored in `videoJob.jobData` JSON column via Prisma transaction
+  → dispatchVideoJobWithColdStartRetry reads `normalizedPayload.speakerTracksUri`
+  → invokeGcpWorker({ ..., speakerTracksUri }) → POST /process body
+  → cloudrun-worker/server.js: destructures `speakerTracksUri` from req.body
+  → processChunkJob → renderChunkFromRecipe(speakerTracksUri)
+  → cloudrun-worker/render.js: const tracksUri = speakerTracksUri || recipe?.speakerTracksUri
+  → loadSpeakerTracks(tracksUri) → evaluateSplitScreen(...)
+```
+
+### Fallback behavior
+
+- When `speakerTracksUri` is absent or an empty/whitespace string: the field is **not set** in the worker payload. The worker falls back to the existing single-speaker crop path (`recipe?.speakerTracksUri`, then no split-screen).
+- No breaking change to legacy job payloads without this field.
+
+### Naming
+
+`speakerTracksUri` is the established convention across the full propagation path. `tracksUri` and `tracksFile` are **not** used at the job/API boundary.
+
+### Test coverage (Task-108)
+
+- `app/api/jobs/create/dispatch-retry.test.ts` — three new tests in `describe("speakerTracksUri propagation through job dispatch")`:
+  1. URI supplied → present in `/process` payload.
+  2. URI absent → field is `undefined` in `/process` payload.
+  3. URI with surrounding whitespace → trimmed before propagation.
+- `app/lib/gcpWorker.test.ts` — two new tests in `describe("invokeGcpWorker authentication")`:
+  1. `speakerTracksUri` present in `GcpWorkerPayload` → serialised into the HTTP request body.
+  2. `speakerTracksUri` absent from `GcpWorkerPayload` → key not present in the HTTP request body.
