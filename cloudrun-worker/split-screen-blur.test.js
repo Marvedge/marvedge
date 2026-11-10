@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
+  CANONICAL_SCHEMA,
+  CANONICAL_SCHEMA_VERSION,
   buildSplitScreenBlurFilter,
   getSplitScreenDecision,
   parseSpeakerTracks,
@@ -182,6 +184,358 @@ describe("Task 36: Split-Screen & Blur Helpers", () => {
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe("Task-107: Canonical Versioned Speaker-Tracks Contract", () => {
+    const validCanonicalPayload = {
+      schema: CANONICAL_SCHEMA,
+      schema_version: CANONICAL_SCHEMA_VERSION,
+      source: {
+        width: 1920,
+        height: 1080,
+        fps: 25.0,
+        duration_sec: 4.0,
+      },
+      speakers: [
+        {
+          track_id: "00000",
+          start_sec: 0.0,
+          end_sec: 4.0,
+          average_confidence: 0.92,
+          frames: [
+            {
+              frame: 0,
+              timestamp_sec: 0.0,
+              bbox: [200, 100, 400, 300], // center x = 300
+              speaking_score: 1.5,
+              is_speaking: true,
+            },
+          ],
+        },
+        {
+          track_id: "00001",
+          start_sec: 0.0,
+          end_sec: 4.0,
+          average_confidence: 0.88,
+          frames: [
+            {
+              frame: 0,
+              timestamp_sec: 0.0,
+              bbox: [1000, 100, 1200, 300], // center x = 1100
+              speaking_score: 1.2,
+              is_speaking: true,
+            },
+          ],
+        },
+      ],
+    };
+
+    it("accepts a valid canonical version-1 payload and triggers split-screen beyond threshold", () => {
+      const parsed = parseSpeakerTracks(validCanonicalPayload);
+      expect(parsed.valid).toBe(true);
+      expect(parsed.speakers).toHaveLength(2);
+      expect(parsed.speakers[0].track_id).toBe("00000");
+      expect(parsed.speakers[0].x).toBe(300);
+      expect(parsed.speakers[1].track_id).toBe("00001");
+      expect(parsed.speakers[1].x).toBe(1100);
+
+      const result = evaluateSplitScreen(validCanonicalPayload);
+      expect(result.splitScreen).toBe(true);
+      expect(result.fallback).toBe(false);
+      expect(result.horizontalDistance).toBe(800);
+      expect(result.threshold).toBe(672); // 35% of 1920
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it("evaluates a valid canonical payload within threshold as fallback without errors", () => {
+      const closeSpeakersPayload = {
+        ...validCanonicalPayload,
+        speakers: [
+          {
+            ...validCanonicalPayload.speakers[0],
+            frames: [
+              {
+                frame: 0,
+                timestamp_sec: 0.0,
+                bbox: [600, 100, 800, 300], // center x = 700
+                speaking_score: 1.5,
+                is_speaking: true,
+              },
+            ],
+          },
+          validCanonicalPayload.speakers[1], // center x = 1100, distance = 400 < 672
+        ],
+      };
+
+      const result = evaluateSplitScreen(closeSpeakersPayload);
+      expect(result.splitScreen).toBe(false);
+      expect(result.fallback).toBe(true);
+      expect(result.horizontalDistance).toBe(400);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it("handles a valid empty-speakers canonical payload safely", () => {
+      const emptyPayload = {
+        schema: "marvedge.speaker-tracks",
+        schema_version: 1,
+        source: {
+          width: 1920,
+          height: 1080,
+          fps: 25.0,
+          duration_sec: 0.0,
+        },
+        speakers: [],
+      };
+
+      const parsed = parseSpeakerTracks(emptyPayload);
+      expect(parsed.valid).toBe(true);
+      expect(parsed.speakers).toHaveLength(0);
+
+      const result = evaluateSplitScreen(emptyPayload);
+      expect(result.splitScreen).toBe(false);
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toBe("no_speakers");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("No speaker track coordinates available; falling back to normal single-speaker crop")
+      );
+    });
+
+    it("safely rejects an unsupported canonical schema version", () => {
+      const badVersionPayload = {
+        ...validCanonicalPayload,
+        schema_version: 2,
+      };
+
+      const parsed = parseSpeakerTracks(badVersionPayload);
+      expect(parsed.valid).toBe(false);
+      expect(parsed.reason).toBe("unsupported_schema_version");
+
+      const result = evaluateSplitScreen(badVersionPayload);
+      expect(result.splitScreen).toBe(false);
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toBe("unsupported_schema_version");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Unsupported schema version "2"')
+      );
+    });
+
+    it("safely rejects an unknown explicit schema discriminator", () => {
+      const unknownSchemaPayload = {
+        ...validCanonicalPayload,
+        schema: "other.speaker-tracks",
+      };
+
+      const parsed = parseSpeakerTracks(unknownSchemaPayload);
+      expect(parsed.valid).toBe(false);
+      expect(parsed.reason).toBe("unsupported_schema");
+
+      const result = evaluateSplitScreen(unknownSchemaPayload);
+      expect(result.splitScreen).toBe(false);
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toBe("unsupported_schema");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Unsupported schema "other.speaker-tracks"')
+      );
+    });
+
+    it("safely rejects malformed canonical source metadata", () => {
+      const badSourcePayloads = [
+        { ...validCanonicalPayload, source: null },
+        { ...validCanonicalPayload, source: { width: 0, height: 1080, fps: 25, duration_sec: 4 } },
+        { ...validCanonicalPayload, source: { width: 1920, height: -10, fps: 25, duration_sec: 4 } },
+        { ...validCanonicalPayload, source: { width: 1920, height: 1080, fps: 0, duration_sec: 4 } },
+        { ...validCanonicalPayload, source: { width: 1920, height: 1080, fps: 25, duration_sec: -1 } },
+        { ...validCanonicalPayload, source: "invalid" },
+      ];
+
+      for (const payload of badSourcePayloads) {
+        const parsed = parseSpeakerTracks(payload);
+        expect(parsed.valid).toBe(false);
+        expect(parsed.reason).toBe("invalid_schema");
+
+        const result = evaluateSplitScreen(payload);
+        expect(result.splitScreen).toBe(false);
+        expect(result.fallback).toBe(true);
+        expect(result.reason).toBe("invalid_schema");
+      }
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Invalid canonical source metadata")
+      );
+    });
+
+    it("safely rejects non-array speakers in canonical payload", () => {
+      const nonArraySpeakers = {
+        ...validCanonicalPayload,
+        speakers: "invalid",
+      };
+
+      const parsed = parseSpeakerTracks(nonArraySpeakers);
+      expect(parsed.valid).toBe(false);
+      expect(parsed.reason).toBe("invalid_schema");
+
+      const result = evaluateSplitScreen(nonArraySpeakers);
+      expect(result.splitScreen).toBe(false);
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toBe("invalid_schema");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Canonical 'speakers' must be an array")
+      );
+    });
+
+    it("safely rejects malformed speaker and frame data in canonical payload", () => {
+      const invalidSpeakerPayloads = [
+        {
+          ...validCanonicalPayload,
+          speakers: [{ ...validCanonicalPayload.speakers[0], track_id: "" }],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [{ ...validCanonicalPayload.speakers[0], average_confidence: "high" }],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [{ ...validCanonicalPayload.speakers[0], frames: null }],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [
+            {
+              ...validCanonicalPayload.speakers[0],
+              frames: [{ ...validCanonicalPayload.speakers[0].frames[0], frame: 1.5 }],
+            },
+          ],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [
+            {
+              ...validCanonicalPayload.speakers[0],
+              frames: [{ ...validCanonicalPayload.speakers[0].frames[0], frame: -1 }],
+            },
+          ],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [
+            {
+              ...validCanonicalPayload.speakers[0],
+              frames: [{ ...validCanonicalPayload.speakers[0].frames[0], timestamp_sec: -0.5 }],
+            },
+          ],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [
+            {
+              ...validCanonicalPayload.speakers[0],
+              frames: [{ ...validCanonicalPayload.speakers[0].frames[0], is_speaking: "yes" }],
+            },
+          ],
+        },
+        {
+          ...validCanonicalPayload,
+          speakers: [
+            {
+              ...validCanonicalPayload.speakers[0],
+              frames: [{ ...validCanonicalPayload.speakers[0].frames[0], speaking_score: NaN }],
+            },
+          ],
+        },
+      ];
+
+      for (const payload of invalidSpeakerPayloads) {
+        const parsed = parseSpeakerTracks(payload);
+        expect(parsed.valid).toBe(false);
+        expect(parsed.reason).toBe("invalid_schema");
+
+        const result = evaluateSplitScreen(payload);
+        expect(result.splitScreen).toBe(false);
+        expect(result.fallback).toBe(true);
+        expect(result.reason).toBe("invalid_schema");
+      }
+    });
+
+    it("safely rejects invalid bounding boxes with non-positive area or invalid coordinates", () => {
+      const invalidBboxPayloads = [
+        [400, 100, 200, 300], // inverted x
+        [200, 100, 200, 300], // zero width
+        [200, 300, 400, 100], // inverted y
+        [200, 100, 400, 100], // zero height
+        [200, 100, 400], // wrong length
+        [200, 100, "400", 300], // non-numeric coordinate
+      ];
+
+      for (const bbox of invalidBboxPayloads) {
+        const payload = {
+          ...validCanonicalPayload,
+          speakers: [
+            {
+              ...validCanonicalPayload.speakers[0],
+              frames: [{ ...validCanonicalPayload.speakers[0].frames[0], bbox }],
+            },
+          ],
+        };
+
+        const parsed = parseSpeakerTracks(payload);
+        expect(parsed.valid).toBe(false);
+        expect(parsed.reason).toBe("invalid_schema");
+
+        const result = evaluateSplitScreen(payload);
+        expect(result.splitScreen).toBe(false);
+        expect(result.fallback).toBe(true);
+        expect(result.reason).toBe("invalid_schema");
+      }
+    });
+
+    it("preserves Task-00016 crop_targets payloads as legacy compatibility", () => {
+      const cropTargetsPayload = {
+        crop_targets: [
+          { source: "speaker", crop: { x: 200, width: 200 } }, // center = 300
+          { source: "speaker", crop: { x: 1000, width: 200 } }, // center = 1100
+        ],
+        source: { width: 1920, height: 1080 },
+      };
+
+      const parsed = parseSpeakerTracks(cropTargetsPayload);
+      expect(parsed.speakers).toHaveLength(2);
+      expect(parsed.speakers[0].x).toBe(300);
+      expect(parsed.speakers[1].x).toBe(1100);
+
+      const result = evaluateSplitScreen(cropTargetsPayload);
+      expect(result.splitScreen).toBe(true);
+      expect(result.horizontalDistance).toBe(800);
+    });
+
+    it("preserves top-level array legacy payloads", () => {
+      const arrayPayload = [
+        { id: "spk_1", x: 200 },
+        { id: "spk_2", x: 900 },
+      ];
+
+      const parsed = parseSpeakerTracks(arrayPayload, 1280);
+      expect(parsed.speakers).toHaveLength(2);
+      expect(parsed.speakers[0].x).toBe(200);
+      expect(parsed.speakers[1].x).toBe(900);
+
+      const result = evaluateSplitScreen(arrayPayload, 1280);
+      expect(result.splitScreen).toBe(true);
+      expect(result.horizontalDistance).toBe(700);
+    });
+
+    it("preserves track_id in legacy payloads while maintaining fallback", () => {
+      const legacyWithTrackId = {
+        speakers: [
+          { track_id: "trk_alpha", x: 250 },
+          { speaker_id: "spk_beta", x: 850 },
+        ],
+        width: 1280,
+      };
+
+      const parsed = parseSpeakerTracks(legacyWithTrackId);
+      expect(parsed.speakers).toHaveLength(2);
+      expect(parsed.speakers[0].id).toBe("trk_alpha");
+      expect(parsed.speakers[1].id).toBe("spk_beta");
     });
   });
 });

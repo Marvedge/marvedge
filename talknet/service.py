@@ -30,6 +30,13 @@ from models.talkNet import talkNet
 
 logger = logging.getLogger("talknet-service")
 
+# Canonical Speaker-Tracks Contract (Task-00107)
+CANONICAL_SCHEMA = "marvedge.speaker-tracks"
+CANONICAL_SCHEMA_VERSION = 1
+DEFAULT_FRAME_WIDTH = 1280
+DEFAULT_FRAME_HEIGHT = 720
+DEFAULT_FPS = 25.0
+
 # Environment-configurable weight paths and timeouts
 DEFAULT_S3FD_WEIGHTS = os.environ.get(
     "TALKNET_S3FD_WEIGHTS", "/app/weights/sfd_face.pth"
@@ -812,6 +819,75 @@ def evaluate_talknet_scores(
     return all_scores
 
 
+def extract_video_metadata(
+    video_path: str,
+    first_frame_path: Optional[str] = None,
+    total_frames: int = 0,
+    fps: float = DEFAULT_FPS,
+) -> Dict[str, Any]:
+    """
+    Extracts video resolution, framerate, and duration metadata.
+    Prioritizes inspecting extracted frame or cv2.VideoCapture with safe resource release.
+    Falls back to documented defaults (1280x720, 25.0 fps) if extraction fails.
+    """
+    width = 0
+    height = 0
+    resolved_fps = float(fps) if fps > 0 else DEFAULT_FPS
+    duration_sec = round(float(total_frames) / resolved_fps, 3) if total_frames > 0 else 0.0
+
+    # 1. Try reading dimensions from the first extracted frame
+    if first_frame_path and os.path.isfile(first_frame_path):
+        try:
+            img = cv2.imread(first_frame_path)
+            if img is not None and len(img.shape) >= 2:
+                height, width = int(img.shape[0]), int(img.shape[1])
+        except Exception as e:
+            logger.warning("Failed to extract dimensions from frame %s: %s", first_frame_path, e)
+
+    # 2. Try VideoCapture if width/height not resolved
+    if width <= 0 or height <= 0:
+        cap = None
+        try:
+            if video_path and os.path.isfile(video_path):
+                cap = cv2.VideoCapture(video_path)
+                if cap.isOpened():
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    if w > 0 and h > 0:
+                        width, height = w, h
+                    f = float(cap.get(cv2.CAP_PROP_FPS))
+                    if f > 0:
+                        resolved_fps = round(f, 3)
+                    cnt = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    if cnt > 0 and duration_sec == 0.0:
+                        duration_sec = round(float(cnt) / resolved_fps, 3)
+        except Exception as e:
+            logger.warning("Failed to extract video metadata via cv2.VideoCapture: %s", e)
+        finally:
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+
+    # 3. Documented fallback if dimensions could not be determined
+    if width <= 0 or height <= 0:
+        logger.info(
+            "Video dimensions could not be determined; using fallback %sx%s",
+            DEFAULT_FRAME_WIDTH,
+            DEFAULT_FRAME_HEIGHT,
+        )
+        width = DEFAULT_FRAME_WIDTH
+        height = DEFAULT_FRAME_HEIGHT
+
+    return {
+        "width": int(width),
+        "height": int(height),
+        "fps": float(resolved_fps),
+        "duration_sec": float(duration_sec),
+    }
+
+
 def run_talknet_pipeline(
     work_dir: str,
     raw_video_path: str,
@@ -909,9 +985,18 @@ def run_talknet_pipeline(
     duration_sec = round(total_frames / fps, 3) if total_frames > 0 else 0.0
 
     if total_frames == 0:
+        source_meta = extract_video_metadata(
+            video_path=raw_video_path,
+            first_frame_path=None,
+            total_frames=0,
+            fps=fps,
+        )
         return {
             "ok": True,
-            "video_info": {"fps": fps, "duration_sec": 0.0},
+            "schema": CANONICAL_SCHEMA,
+            "schema_version": CANONICAL_SCHEMA_VERSION,
+            "source": source_meta,
+            "video_info": {"fps": source_meta["fps"], "duration_sec": 0.0},
             "speakers": [],
         }
 
@@ -974,9 +1059,18 @@ def run_talknet_pipeline(
             all_tracks.extend(tracks)
 
     if not all_tracks:
+        source_meta = extract_video_metadata(
+            video_path=raw_video_path,
+            first_frame_path=flist[0] if flist else None,
+            total_frames=total_frames,
+            fps=fps,
+        )
         return {
             "ok": True,
-            "video_info": {"fps": fps, "duration_sec": duration_sec},
+            "schema": CANONICAL_SCHEMA,
+            "schema_version": CANONICAL_SCHEMA_VERSION,
+            "source": source_meta,
+            "video_info": {"fps": source_meta["fps"], "duration_sec": duration_sec},
             "speakers": [],
         }
 
@@ -1036,6 +1130,7 @@ def run_talknet_pipeline(
                 {
                     "frame": int(f_num),
                     "timestamp_sec": ts,
+                    "timestamp": ts,
                     "bbox": bb,
                     "speaking_score": round(score, 2),
                     "is_speaking": is_speaking,
@@ -1049,18 +1144,30 @@ def run_talknet_pipeline(
         speakers_result.append(
             {
                 "track_id": f"{idx:05d}",
+                "start_sec": start_sec,
                 "start_time_sec": start_sec,
+                "end_sec": end_sec,
                 "end_time_sec": end_sec,
                 "average_confidence": avg_conf,
                 "frames": frame_entries,
             }
         )
 
+    source_meta = extract_video_metadata(
+        video_path=raw_video_path,
+        first_frame_path=flist[0] if flist else None,
+        total_frames=total_frames,
+        fps=fps,
+    )
+
     return {
         "ok": True,
+        "schema": CANONICAL_SCHEMA,
+        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "source": source_meta,
         "video_info": {
-            "fps": fps,
-            "duration_sec": duration_sec,
+            "fps": source_meta["fps"],
+            "duration_sec": source_meta["duration_sec"],
         },
         "speakers": speakers_result,
     }
