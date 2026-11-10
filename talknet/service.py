@@ -867,8 +867,11 @@ def extract_video_metadata(
             if cap is not None:
                 try:
                     cap.release()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Failed to release video capture after metadata extraction: %s",
+                        e,
+                    )
 
     # 3. Documented fallback if dimensions could not be determined
     if width <= 0 or height <= 0:
