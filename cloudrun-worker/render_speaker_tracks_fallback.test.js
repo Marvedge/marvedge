@@ -22,14 +22,14 @@ const storageMock = {
           start_sec: 0,
           end_sec: 10,
           average_confidence: 0.9,
-          frames: [{ frame: 0, timestamp_sec: 0, bbox: [150,100,250,300], speaking_score: 1, is_speaking: true }],
+          frames: [{ frame: 0, timestamp_sec: 0, bbox: [150, 100, 250, 300], speaking_score: 1, is_speaking: true }],
         },
         {
           track_id: "speaker-1",
           start_sec: 0,
           end_sec: 10,
           average_confidence: 0.9,
-          frames: [{ frame: 0, timestamp_sec: 0, bbox: [750,100,850,300], speaking_score: 1, is_speaking: true }],
+          frames: [{ frame: 0, timestamp_sec: 0, bbox: [750, 100, 850, 300], speaking_score: 1, is_speaking: true }],
         },
       ],
     };
@@ -106,10 +106,10 @@ describe("renderChunkFromRecipe speaker‑track fallback scenarios", () => {
     expect(storageMock.downloadFromUri).not.toHaveBeenCalled();
     // evaluateSplitScreen receives undefined and fallback flag set
     // Verify evaluateSplitScreen was called with undefined URI and a numeric width
-const callArgs = splitMock.evaluateSplitScreen.mock.calls[0];
-expect(callArgs[0]).toBeUndefined();
-expect(typeof callArgs[1]).toBe("number");
-expect(callArgs).toHaveLength(2); // No config argument expected when speakerTracksUri is missing
+    const callArgs = splitMock.evaluateSplitScreen.mock.calls[0];
+    expect(callArgs[0]).toBeUndefined();
+    expect(typeof callArgs[1]).toBe("number");
+    expect(callArgs).toHaveLength(2); // No config argument expected when speakerTracksUri is missing
     const result = splitMock.evaluateSplitScreen.mock.results[0].value;
     expect(result.fallback).toBe(true);
     expect(result.splitScreen).toBe(false);
@@ -120,7 +120,7 @@ expect(callArgs).toHaveLength(2); // No config argument expected when speakerTra
 
   it("handles empty speaker‑tracks file with safe fallback", async () => {
     storageMock.downloadFromUri.mockImplementationOnce(async ({ destinationPath }) => {
-      fs.writeFileSync(destinationPath, "{}", "utf8"); // empty content
+      fs.writeFileSync(destinationPath, "", "utf8"); // empty content
     });
     await renderChunkFromRecipe({
       inputPath,
@@ -134,8 +134,7 @@ expect(callArgs).toHaveLength(2); // No config argument expected when speakerTra
     });
     expect(storageMock.downloadFromUri).toHaveBeenCalledOnce();
     const argPath = splitMock.evaluateSplitScreen.mock.calls[0][0];
-    const parsed = JSON.parse(fs.readFileSync(argPath, "utf8"));
-    expect(parsed).toEqual({});
+    expect(fs.readFileSync(argPath, "utf8")).toBe("");
     const evalResult = splitMock.evaluateSplitScreen.mock.results[0].value;
     expect(evalResult.fallback).toBe(true);
     expect(evalResult.splitScreen).toBe(false);
