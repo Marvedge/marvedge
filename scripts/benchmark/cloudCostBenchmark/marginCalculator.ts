@@ -41,10 +41,24 @@ export interface InfrastructureEconomicsInput {
   pricingSource: string;
   /** Fixed startup, idle or orchestration overhead in seconds per job (default: 0) */
   sharedOverheadSec?: number;
-  /** Hypothetical concurrency divider for shared compute (default: 1.0 = single stream) */
+  /**
+   * Concurrency factor representing multiple jobs sharing instance hardware (default: 1.0 = single stream).
+   * Note: Concurrency does NOT reduce an individual job's execution runtime or compute duration.
+   */
   concurrencyFactor?: number;
-  /** Explicitly flag whether concurrency is a hypothetical capacity scenario */
+  /**
+   * Informational flag documenting that concurrency represents a hypothetical capacity model.
+   * This flag alone does NOT alter per-job runtime or compute costs.
+   */
   isHypotheticalConcurrency?: boolean;
+  /**
+   * Explicit opt-in flag to calculate shared instance billing allocation.
+   * When false (default), each job's compute duration and compute cost reflect dedicated instance runtime.
+   * When true, allocated compute cost is calculated separately under `sharedAllocation`,
+   * dividing hourly billed instance charges across concurrent streams while keeping
+   * individual job compute duration unadjusted.
+   */
+  enableSharedInstanceAllocation?: boolean;
   /** Monthly persistent storage fee in USD (e.g., $9.60 for 100 GB gp3; default: 0) */
   monthlyStorageFeeUsd?: number;
   /** Expected monthly media minutes processed for storage amortization (default: 0 = unallocated) */
@@ -65,6 +79,20 @@ export interface StageEconomicsResult {
   totalStageCostUsd: number;
   totalStageCostPerMinuteUsd: number;
   percentageOfTotal: number;
+  notes: string[];
+  /** Allocated compute cost under shared instance billing (only populated when enableSharedInstanceAllocation is true) */
+  allocatedComputeCostUsd?: number;
+}
+
+export interface SharedInstanceAllocationResult {
+  concurrencyFactor: number;
+  allocatedComputeCostUsd: number;
+  allocatedComputeCostPerMinuteUsd: number;
+  allocatedSharedOverheadCostUsd: number;
+  allocatedIncrementalCostUsd: number;
+  allocatedIncrementalCostPerMinuteUsd: number;
+  costReductionUsd: number;
+  costReductionPct: number;
   notes: string[];
 }
 
@@ -91,6 +119,12 @@ export interface PipelineEconomicsResult {
     costUsd: number;
     percentage: number;
   };
+  /**
+   * Shared instance billing allocation (available only when `enableSharedInstanceAllocation` is true).
+   * Models the hypothetical scenario where simultaneous jobs divide hourly instance compute billing.
+   * Does NOT alter the standard per-job compute duration or per-job costs above.
+   */
+  sharedAllocation?: SharedInstanceAllocationResult;
 }
 
 export interface MarginScenarioInput {
@@ -144,6 +178,9 @@ export function calculatePipelineEconomics(
   const ratePerSecond = hourlyRate / 3600;
   const rawConcurrency = sanitizeNonNegative(infrastructure.concurrencyFactor, 1.0);
   const concurrency = rawConcurrency > 0 ? rawConcurrency : 1.0;
+  const enableSharedAllocation = Boolean(
+    infrastructure.enableSharedInstanceAllocation && concurrency > 1.0
+  );
 
   let totalComputeCost = 0;
   let totalApiCost = 0;
@@ -163,6 +200,7 @@ export function calculatePipelineEconomics(
     totalStageCostUsd: number;
     totalStageCostPerMinuteUsd: number;
     notes: string[];
+    allocatedComputeCostUsd?: number;
   }> = [];
 
   for (const s of stages) {
@@ -178,9 +216,11 @@ export function calculatePipelineEconomics(
       computeSec = safeMediaSec * rtf;
     }
 
-    // Apply concurrency divider if applicable
-    const effectiveComputeSec = computeSec / concurrency;
-    const stageComputeCost = effectiveComputeSec * ratePerSecond;
+    // Per-job compute duration and compute cost are NEVER divided by concurrency
+    const stageComputeCost = computeSec * ratePerSecond;
+    const stageAllocatedComputeCost = enableSharedAllocation
+      ? stageComputeCost / concurrency
+      : undefined;
 
     const apiRatePerMin = sanitizeNonNegative(s.apiCostPerMediaMinuteUsd, 0);
     const stageApiCost = mediaDurationMinutes * apiRatePerMin;
@@ -210,12 +250,17 @@ export function calculatePipelineEconomics(
       totalStageCostUsd: Number(totalStageCost.toFixed(6)),
       totalStageCostPerMinuteUsd: Number(totalStageCostPerMinute.toFixed(6)),
       notes,
+      allocatedComputeCostUsd:
+        stageAllocatedComputeCost !== undefined
+          ? Number(stageAllocatedComputeCost.toFixed(6))
+          : undefined,
     });
   }
 
   // Shared compute overhead (startup, orchestration, idle between stages)
+  // Per-job baseline overhead is unreduced; shared allocation models amortized billing separately
   const overheadSec = sanitizeNonNegative(infrastructure.sharedOverheadSec, 0);
-  const sharedOverheadCost = (overheadSec / concurrency) * ratePerSecond;
+  const sharedOverheadCost = overheadSec * ratePerSecond;
   const sharedOverheadCostPerMinute =
     mediaDurationMinutes > 0 ? sharedOverheadCost / mediaDurationMinutes : 0;
 
@@ -233,6 +278,36 @@ export function calculatePipelineEconomics(
   const totalCostWithStorage = totalIncrementalCost + allocatedStorageCost;
   const totalCostWithStoragePerMinute =
     totalIncrementalCostPerMinute + allocatedStorageCostPerMinute;
+
+  // Separate shared instance billing allocation (opt-in only)
+  let sharedAllocation: SharedInstanceAllocationResult | undefined = undefined;
+  if (enableSharedAllocation) {
+    const allocatedComputeCost = totalComputeCost / concurrency;
+    const allocatedComputeCostPerMinute =
+      mediaDurationMinutes > 0 ? allocatedComputeCost / mediaDurationMinutes : 0;
+    const allocatedOverheadCost = sharedOverheadCost / concurrency;
+    const allocatedIncrementalCost = allocatedComputeCost + totalApiCost + allocatedOverheadCost;
+    const allocatedIncrementalCostPerMinute =
+      mediaDurationMinutes > 0 ? allocatedIncrementalCost / mediaDurationMinutes : 0;
+    const costReductionUsd = totalIncrementalCost - allocatedIncrementalCost;
+    const costReductionPct =
+      totalIncrementalCost > 0 ? (costReductionUsd / totalIncrementalCost) * 100 : 0;
+
+    sharedAllocation = {
+      concurrencyFactor: concurrency,
+      allocatedComputeCostUsd: Number(allocatedComputeCost.toFixed(6)),
+      allocatedComputeCostPerMinuteUsd: Number(allocatedComputeCostPerMinute.toFixed(6)),
+      allocatedSharedOverheadCostUsd: Number(allocatedOverheadCost.toFixed(6)),
+      allocatedIncrementalCostUsd: Number(allocatedIncrementalCost.toFixed(6)),
+      allocatedIncrementalCostPerMinuteUsd: Number(allocatedIncrementalCostPerMinute.toFixed(6)),
+      costReductionUsd: Number(costReductionUsd.toFixed(6)),
+      costReductionPct: Number(costReductionPct.toFixed(2)),
+      notes: [
+        `Hypothetical shared instance billing model: divides hourly billed instance charges across ${concurrency} simultaneous streams.`,
+        "Assumes zero memory contention, no thermal throttling, and sufficient queue depth; physical multi-stream throughput remains unverified.",
+      ],
+    };
+  }
 
   // Second pass: compute percentage of total for each stage
   let dominantCost = 0;
@@ -283,6 +358,49 @@ export function calculatePipelineEconomics(
     totalCostWithStorageUsd: Number(totalCostWithStorage.toFixed(6)),
     totalCostWithStoragePerMinuteUsd: Number(totalCostWithStoragePerMinute.toFixed(6)),
     dominantCostDriver: dominantDriver,
+    sharedAllocation,
+  };
+}
+
+/**
+ * Calculates a hypothetical shared instance billing allocation for a given pipeline result and concurrency factor.
+ * Keeps individual job execution duration and external API charges strictly unchanged.
+ */
+export function calculateSharedInstanceAllocation(
+  economics: PipelineEconomicsResult,
+  concurrencyFactor: number
+): SharedInstanceAllocationResult {
+  const safeConcurrency = concurrencyFactor > 1.0 ? concurrencyFactor : 1.0;
+  const mediaDurationMinutes = economics.mediaDurationMinutes;
+  const totalComputeCost = economics.computeCostUsd;
+  const totalApiCost = economics.externalApiCostUsd;
+  const sharedOverheadCost = economics.sharedOverheadCostUsd;
+  const totalIncrementalCost = economics.totalIncrementalCostUsd;
+
+  const allocatedComputeCost = totalComputeCost / safeConcurrency;
+  const allocatedComputeCostPerMinute =
+    mediaDurationMinutes > 0 ? allocatedComputeCost / mediaDurationMinutes : 0;
+  const allocatedOverheadCost = sharedOverheadCost / safeConcurrency;
+  const allocatedIncrementalCost = allocatedComputeCost + totalApiCost + allocatedOverheadCost;
+  const allocatedIncrementalCostPerMinute =
+    mediaDurationMinutes > 0 ? allocatedIncrementalCost / mediaDurationMinutes : 0;
+  const costReductionUsd = totalIncrementalCost - allocatedIncrementalCost;
+  const costReductionPct =
+    totalIncrementalCost > 0 ? (costReductionUsd / totalIncrementalCost) * 100 : 0;
+
+  return {
+    concurrencyFactor: safeConcurrency,
+    allocatedComputeCostUsd: Number(allocatedComputeCost.toFixed(6)),
+    allocatedComputeCostPerMinuteUsd: Number(allocatedComputeCostPerMinute.toFixed(6)),
+    allocatedSharedOverheadCostUsd: Number(allocatedOverheadCost.toFixed(6)),
+    allocatedIncrementalCostUsd: Number(allocatedIncrementalCost.toFixed(6)),
+    allocatedIncrementalCostPerMinuteUsd: Number(allocatedIncrementalCostPerMinute.toFixed(6)),
+    costReductionUsd: Number(costReductionUsd.toFixed(6)),
+    costReductionPct: Number(costReductionPct.toFixed(2)),
+    notes: [
+      `Hypothetical shared instance billing model: divides hourly billed instance charges across ${safeConcurrency} simultaneous streams.`,
+      "Assumes zero memory contention, no thermal throttling, and sufficient queue depth; physical multi-stream throughput remains unverified.",
+    ],
   };
 }
 

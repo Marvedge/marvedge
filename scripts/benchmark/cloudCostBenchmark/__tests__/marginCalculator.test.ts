@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateGrossMargins,
   calculatePipelineEconomics,
+  calculateSharedInstanceAllocation,
   DEPLOYMENT_PROFILES,
   generateProfileMarginReport,
   STANDARD_SELLING_PRICE_SCENARIOS,
@@ -275,7 +276,7 @@ describe("Task-00129: Margin Calculator & Unit Economics Engine", () => {
       expect(isNaN(margins[0].grossMarginPct)).toBe(false);
     });
 
-    it("correctly models hypothetical concurrency divider without affecting external API charges", () => {
+    it("keeps per-job compute duration, compute cost, and API billing unchanged under concurrency by default", () => {
       const concurrentInfra: InfrastructureEconomicsInput = {
         ...baseInfrastructure,
         concurrencyFactor: 3.0,
@@ -302,11 +303,77 @@ describe("Task-00129: Margin Calculator & Unit Economics Engine", () => {
       const singleRun = calculatePipelineEconomics(600, stages, baseInfrastructure);
       const concurrentRun = calculatePipelineEconomics(600, stages, concurrentInfra);
 
-      // Compute cost must be divided by 3
-      expect(concurrentRun.computeCostUsd).toBeCloseTo(singleRun.computeCostUsd / 3, 4);
+      // Per-job compute duration must remain strictly unchanged (concurrency is NOT a 3x runtime speedup)
+      expect(concurrentRun.stages[0].computeDurationSec).toBe(
+        singleRun.stages[0].computeDurationSec
+      );
+      expect(concurrentRun.stages[0].computeDurationSec).toBeCloseTo(729.6, 1);
 
-      // External API cost must remain unchanged (ElevenLabs bills per media minute, not per GPU hour!)
-      expect(concurrentRun.externalApiCostUsd).toBeCloseTo(singleRun.externalApiCostUsd, 4);
+      // Per-job compute cost must remain unchanged by default (no silent cost reduction)
+      expect(concurrentRun.stages[0].computeCostUsd).toBe(singleRun.stages[0].computeCostUsd);
+      expect(concurrentRun.computeCostUsd).toBe(singleRun.computeCostUsd);
+
+      // External API cost must remain unchanged (ElevenLabs bills per media minute, not per GPU hour)
+      expect(concurrentRun.externalApiCostUsd).toBe(singleRun.externalApiCostUsd);
+
+      // Total incremental cost must remain unchanged by default
+      expect(concurrentRun.totalIncrementalCostUsd).toBe(singleRun.totalIncrementalCostUsd);
+
+      // Shared allocation should be undefined when enableSharedInstanceAllocation is false/unspecified
+      expect(concurrentRun.sharedAllocation).toBeUndefined();
+    });
+
+    it("models shared instance billing allocation separately when explicitly opted in", () => {
+      const optInInfra: InfrastructureEconomicsInput = {
+        ...baseInfrastructure,
+        concurrencyFactor: 3.0,
+        isHypotheticalConcurrency: true,
+        enableSharedInstanceAllocation: true,
+      };
+
+      const stages: StageEconomicsInput[] = [
+        {
+          stage: "avs",
+          name: "TalkNet",
+          provider: "talknet",
+          provenance: "measured_physical_gpu",
+          realtimeFactor: 1.216,
+        },
+        {
+          stage: "dubbing",
+          name: "ElevenLabs",
+          provider: "elevenlabs",
+          provenance: "measured_external_api",
+          apiCostPerMediaMinuteUsd: 0.15,
+        },
+      ];
+
+      const singleRun = calculatePipelineEconomics(600, stages, baseInfrastructure);
+      const allocatedRun = calculatePipelineEconomics(600, stages, optInInfra);
+
+      // Dedicated per-job compute duration and baseline compute cost remain unreduced
+      expect(allocatedRun.stages[0].computeDurationSec).toBe(
+        singleRun.stages[0].computeDurationSec
+      );
+      expect(allocatedRun.computeCostUsd).toBe(singleRun.computeCostUsd);
+      expect(allocatedRun.externalApiCostUsd).toBe(singleRun.externalApiCostUsd);
+
+      // Shared allocation is populated separately with divided instance billing
+      expect(allocatedRun.sharedAllocation).toBeDefined();
+      const shared = allocatedRun.sharedAllocation!;
+      expect(shared.concurrencyFactor).toBe(3.0);
+      expect(shared.allocatedComputeCostUsd).toBeCloseTo(singleRun.computeCostUsd / 3, 4);
+
+      // External API charges are NOT divided by concurrency in shared allocation
+      expect(shared.allocatedIncrementalCostUsd).toBeCloseTo(
+        singleRun.computeCostUsd / 3 + singleRun.externalApiCostUsd,
+        4
+      );
+
+      // Standalone helper matches inline opt-in result
+      const standalone = calculateSharedInstanceAllocation(singleRun, 3.0);
+      expect(standalone.allocatedComputeCostUsd).toBe(shared.allocatedComputeCostUsd);
+      expect(standalone.allocatedIncrementalCostUsd).toBe(shared.allocatedIncrementalCostUsd);
     });
   });
 });
