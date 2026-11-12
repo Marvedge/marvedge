@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
 import { getClientIp } from "@/app/lib/http/clientIp";
+import { hasCookie } from "@/app/lib/http/cookies";
 import { QR_SOURCE_VALUE } from "@/app/lib/share/qrTarget";
 
 export const runtime = "nodejs";
@@ -144,9 +145,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check a simple cookie to prevent spamming views on refresh
-    const cookieHeader = req.headers.get("cookie") || "";
     const hasViewedKey = `viewed_${exportedVideoId || demoId}`;
-    if (cookieHeader.includes(hasViewedKey) && !viewId) {
+    if (hasCookie(req.headers.get("cookie"), hasViewedKey) && !viewId) {
       // Return success but don't record a new view (simple deduplication)
       // We'll still return a dummy viewId so the client can "update" it, but we won't actually hit the DB
       return NextResponse.json({ success: true, viewId: "deduped" });

@@ -25,10 +25,13 @@ import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { POST } from "./route";
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, cookie?: string): NextRequest {
   return new NextRequest("http://localhost:3000/api/views", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { cookie } : {}),
+    },
     body: JSON.stringify(body),
   });
 }
@@ -108,6 +111,29 @@ describe("POST /api/views updates", () => {
     expect(res.status).toBe(404);
     expect(prisma.view.update).not.toHaveBeenCalled();
   });
+  it("dedupes a view when the exact cookie is present", async () => {
+    vi.mocked(prisma.demo.findUnique).mockResolvedValue({ id: "demo-1" } as never);
+
+    const res = await POST(makeRequest({ demoId: "demo-1" }, "viewed_demo-1=1"));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, viewId: "deduped" });
+    expect(prisma.view.create).not.toHaveBeenCalled();
+  });
+
+  it("does not dedupe on a cookie whose name merely contains the key", async () => {
+    vi.mocked(prisma.demo.findUnique).mockResolvedValue({ id: "demo-1" } as never);
+    vi.mocked(prisma.view.create).mockResolvedValue({ id: "view-2" } as never);
+
+    for (const cookie of ["not_viewed_demo-1=1", "viewed_demo-1_extra=1", "note=viewed_demo-1"]) {
+      const res = await POST(makeRequest({ demoId: "demo-1" }, cookie));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true, viewId: "view-2" });
+    }
+    expect(prisma.view.create).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects an oversized request before rate limiting or database work", async () => {
     const request = new NextRequest("http://localhost:3000/api/views", {
       method: "POST",
