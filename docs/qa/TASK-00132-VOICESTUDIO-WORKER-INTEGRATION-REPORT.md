@@ -96,6 +96,7 @@ $ git diff --stat
 $ npx tsc --noEmit
 # Exit code: 0 (Zero errors)
 ```
+
 The repository's root `tsconfig.json` compiles with **0 errors**.
 
 ### 2.2 Worker-Specific Type Inspection
@@ -112,19 +113,19 @@ In `tsconfig.json`, `video-worker` is excluded from the Next.js bundle because t
 
 A line-by-line inspection of the VoiceStudio execution path in `video-worker/index.ts` was conducted against the implementation requirements:
 
-| Checklist Item | Code Reference / Implementation | Verification Status |
-| :--- | :--- | :--- |
-| **Provider Resolution** | `const provider = resolveDubbingProvider();` dynamically evaluates `process.env.DUBBING_PROVIDER`. | **VERIFIED** |
-| **VoiceStudio Health Check** | `const health = await client.checkHealth(); if (!health.isReady) throw new VoiceStudioUnavailableError(...);` | **VERIFIED** |
-| **Timed-Step Synthesis** | `adapter.synthesizeTimedSteps(steps, { language: targetLanguage });` maps steps and produces combined WAV audio. | **VERIFIED** |
-| **WAV Buffer Handling** | `fs.promises.writeFile(tempFile, synthesisResult.audioBuffer)` handles raw binary PCM buffer safely. | **VERIFIED** |
-| **Temp File Lifecycle** | `fs.promises.mkdtemp` creates an isolated directory in `os.tmpdir()`; cleaned up in `finally { fs.promises.rm(tempDir, { recursive: true, force: true }) }`. | **VERIFIED** |
-| **Cloudinary Upload** | `defaultUploadToCloudinary(tempFile)` uploads to folder `dubbed_exports` and extracts `secure_url`. | **VERIFIED** |
-| **Preservation of `stepTimings`** | `synthesisResult.stepTimings.map((st) => ({ stepId: st.stepId, start: st.start, end: st.end }))` is explicitly preserved. | **VERIFIED** |
-| **AVS Alignment Handoff** | Dispatches to `processDubbingJob` with `{ jobId, videoUrl: sourceUrl, dubUrl: audioUrl, steps, dubTimings, sourceDuration }`. | **VERIFIED** |
-| **Database Status Updates** | Updates `status: "PROCESSING"` at 10% and 25%; updates `status: "COMPLETED", exportedUrl: finalExportedUrl, provider: "voicestudio"` at 100%. | **VERIFIED** |
-| **BullMQ Progress Updates** | Updates BullMQ job progress at 10%, 25%, mapped 50%–95%, and final 100% via `updateCompletedJobProgress`. | **VERIFIED** |
-| **Zero Paid Provider Leakage** | The VoiceStudio execution path terminates with `return;`. ElevenLabs functions (`createDubbingJob`, `waitForDubbingCompletion`, `api.elevenlabs.io`) are unreachable. | **VERIFIED** |
+| Checklist Item                    | Code Reference / Implementation                                                                                                                                       | Verification Status |
+| :-------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------ |
+| **Provider Resolution**           | `const provider = resolveDubbingProvider();` dynamically evaluates `process.env.DUBBING_PROVIDER`.                                                                    | **VERIFIED**        |
+| **VoiceStudio Health Check**      | `const health = await client.checkHealth(); if (!health.isReady) throw new VoiceStudioUnavailableError(...);`                                                         | **VERIFIED**        |
+| **Timed-Step Synthesis**          | `adapter.synthesizeTimedSteps(steps, { language: targetLanguage });` maps steps and produces combined WAV audio.                                                      | **VERIFIED**        |
+| **WAV Buffer Handling**           | `fs.promises.writeFile(tempFile, synthesisResult.audioBuffer)` handles raw binary PCM buffer safely.                                                                  | **VERIFIED**        |
+| **Temp File Lifecycle**           | `fs.promises.mkdtemp` creates an isolated directory in `os.tmpdir()`; cleaned up in `finally { fs.promises.rm(tempDir, { recursive: true, force: true }) }`.          | **VERIFIED**        |
+| **Cloudinary Upload**             | `defaultUploadToCloudinary(tempFile)` uploads to folder `dubbed_exports` and extracts `secure_url`.                                                                   | **VERIFIED**        |
+| **Preservation of `stepTimings`** | `synthesisResult.stepTimings.map((st) => ({ stepId: st.stepId, start: st.start, end: st.end }))` is explicitly preserved.                                             | **VERIFIED**        |
+| **AVS Alignment Handoff**         | Dispatches to `processDubbingJob` with `{ jobId, videoUrl: sourceUrl, dubUrl: audioUrl, steps, dubTimings, sourceDuration }`.                                         | **VERIFIED**        |
+| **Database Status Updates**       | Updates `status: "PROCESSING"` at 10% and 25%; updates `status: "COMPLETED", exportedUrl: finalExportedUrl, provider: "voicestudio"` at 100%.                         | **VERIFIED**        |
+| **BullMQ Progress Updates**       | Updates BullMQ job progress at 10%, 25%, mapped 50%–95%, and final 100% via `updateCompletedJobProgress`.                                                             | **VERIFIED**        |
+| **Zero Paid Provider Leakage**    | The VoiceStudio execution path terminates with `return;`. ElevenLabs functions (`createDubbingJob`, `waitForDubbingCompletion`, `api.elevenlabs.io`) are unreachable. | **VERIFIED**        |
 
 ---
 
@@ -151,15 +152,15 @@ Inspection of `video-worker/dubbingRetry.ts`:
 
 All 4 primary test suites and full repository worker suites were re-executed:
 
-| Test Suite File | Tests Count | Result | Coverage Area |
-| :--- | :--- | :--- | :--- |
-| `video-worker/dubbingWorker.test.ts` | 9 tests | **PASS (100%)** | VoiceStudio routing, health check failure, Cloudinary upload, AVS handoff, payload compatibility, ElevenLabs preservation. |
-| `video-worker/dubbingRetry.test.ts` | 10 tests | **PASS (100%)** | Transient vs unrecoverable error classification for VoiceStudio & ElevenLabs. |
-| `app/lib/voicestudio/__tests__/dubbingAdapter.test.ts` | 5 tests | **PASS (100%)** | Provider resolution, WAV buffer concatenation, step timing mapping. |
-| `app/lib/avs/dubbingProcessor.test.ts` | 23 tests | **PASS (100%)** | AVS alignment orchestration, Cloudinary upload, retry fallback. |
-| **Combined Dubbing Suites Total** | **47 tests** | **PASS (100%)** | Core dubbing pipeline verification. |
-| **All `video-worker/` Test Suites** | **79 tests** | **PASS (100%)** | Safe download, dubbing metrics, completed progress, split-screen blur, subtitle retry, redis connection. |
-| **All `app/lib/voicestudio/` Test Suites** | **21 tests** | **PASS (100%)** | Client health check, audio validation, synthesis error mapping. |
+| Test Suite File                                        | Tests Count  | Result          | Coverage Area                                                                                                              |
+| :----------------------------------------------------- | :----------- | :-------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| `video-worker/dubbingWorker.test.ts`                   | 9 tests      | **PASS (100%)** | VoiceStudio routing, health check failure, Cloudinary upload, AVS handoff, payload compatibility, ElevenLabs preservation. |
+| `video-worker/dubbingRetry.test.ts`                    | 10 tests     | **PASS (100%)** | Transient vs unrecoverable error classification for VoiceStudio & ElevenLabs.                                              |
+| `app/lib/voicestudio/__tests__/dubbingAdapter.test.ts` | 5 tests      | **PASS (100%)** | Provider resolution, WAV buffer concatenation, step timing mapping.                                                        |
+| `app/lib/avs/dubbingProcessor.test.ts`                 | 23 tests     | **PASS (100%)** | AVS alignment orchestration, Cloudinary upload, retry fallback.                                                            |
+| **Combined Dubbing Suites Total**                      | **47 tests** | **PASS (100%)** | Core dubbing pipeline verification.                                                                                        |
+| **All `video-worker/` Test Suites**                    | **79 tests** | **PASS (100%)** | Safe download, dubbing metrics, completed progress, split-screen blur, subtitle retry, redis connection.                   |
+| **All `app/lib/voicestudio/` Test Suites**             | **21 tests** | **PASS (100%)** | Client health check, audio validation, synthesis error mapping.                                                            |
 
 ---
 
@@ -178,6 +179,7 @@ To run VoiceStudio in a staging or production worker deployment:
 
 > [!IMPORTANT]
 > **Unit Test Scope vs. Production Deployment:**
+>
 > - The unit tests verified in this report execute in an isolated Node.js/Vitest environment using mocked HTTP client responses and Cloudinary endpoints.
 > - **Unit tests do NOT prove live deployment configuration, network VPC reachability, or live BullMQ-to-GPU execution.**
 > - Live GPU synthesis on the NVIDIA Tesla T4 hardware was validated separately in Phase 4 of Task-00132 and documented in `TASK-00132-VOICESTUDIO-GPU-DUBBING-VALIDATION.md`.
@@ -188,6 +190,7 @@ To run VoiceStudio in a staging or production worker deployment:
 ## 7. Audit Conclusion & Next Steps
 
 Task-00132 implementation and read-only verification are **complete**:
+
 - The worker syntax defect is fixed.
 - Provider selection is safely gated by `DUBBING_PROVIDER`.
 - Strict isolation prevents accidental ElevenLabs charges.
