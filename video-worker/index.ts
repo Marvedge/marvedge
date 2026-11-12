@@ -1,3 +1,4 @@
+import { runClaimedAvsDubJob } from "./avsDubClaim";
 import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Worker, Job } from "bullmq";
@@ -1694,60 +1695,67 @@ export const dubbingWorker = new Worker(
   withDubbingJobMetrics(
   async (job: Job) => {
     if (job.name === "avs-dub") {
-      const maxAttempts =
-        typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
-      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+      const jobId: unknown = job.data?.jobId;
+      if (typeof jobId !== "string" || !jobId.trim()) {
+        throw new Error("Invalid AVS dub job: missing jobId");
+      }
 
-      try {
-        await processDubbingJob(job.data, {
-          isFinalAttempt,
-          updateProgress: async (pct: number) => {
-            await job.updateProgress(pct);
-          },
-        });
-      } catch (error) {
-        const fallbackJobId = typeof job.data?.jobId === "string" ? job.data.jobId : "";
-        const fallbackVideoUrl = typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
-
-        if (!isFinalAttempt || !fallbackJobId.trim() || !fallbackVideoUrl.trim()) {
-          throw error;
-        }
-
-        const reason = error instanceof Error ? error.message : String(error);
-        const fallbackPayload = {
-          jobId: fallbackJobId,
-          status: "COMPLETED" as const,
-          alignedVideoUrl: fallbackVideoUrl,
-          duration:
-            typeof job.data.sourceDuration === "number" &&
-            Number.isFinite(job.data.sourceDuration) &&
-            job.data.sourceDuration >= 0
-              ? job.data.sourceDuration
-              : 0,
-          fallback: true,
-          fallbackStage: "DUBBING",
-          fallbackReason: reason,
-          attemptsMade: job.attemptsMade + 1,
-        };
+      await runClaimedAvsDubJob(prisma.videoJob, jobId, async () => {
+        const maxAttempts =
+          typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
+        const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
 
         try {
-          await postJobCallbackWithRetry(fallbackPayload);
-        } catch (callbackError) {
-          console.error(
-            `[dubbing-worker] Final fallback callback failed for job ${job.id}:`,
-            callbackError
-          );
-          throw new AggregateError(
-            [error, callbackError],
-            `Dubbing failed and source-video fallback callback could not be delivered for job ${job.id}`
+          await processDubbingJob(job.data, {
+            isFinalAttempt,
+            updateProgress: async (pct: number) => {
+              await job.updateProgress(pct);
+            },
+          });
+        } catch (error) {
+          const fallbackJobId = typeof job.data?.jobId === "string" ? job.data.jobId : "";
+          const fallbackVideoUrl = typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
+
+          if (!isFinalAttempt || !fallbackJobId.trim() || !fallbackVideoUrl.trim()) {
+            throw error;
+          }
+
+          const reason = error instanceof Error ? error.message : String(error);
+          const fallbackPayload = {
+            jobId: fallbackJobId,
+            status: "COMPLETED" as const,
+            alignedVideoUrl: fallbackVideoUrl,
+            duration:
+              typeof job.data.sourceDuration === "number" &&
+              Number.isFinite(job.data.sourceDuration) &&
+              job.data.sourceDuration >= 0
+                ? job.data.sourceDuration
+                : 0,
+            fallback: true,
+            fallbackStage: "DUBBING",
+            fallbackReason: reason,
+            attemptsMade: job.attemptsMade + 1,
+          };
+
+          try {
+            await postJobCallbackWithRetry(fallbackPayload);
+          } catch (callbackError) {
+            console.error(
+              `[dubbing-worker] Final fallback callback failed for job ${job.id}:`,
+              callbackError
+            );
+            throw new AggregateError(
+              [error, callbackError],
+              `Dubbing failed and source-video fallback callback could not be delivered for job ${job.id}`
+            );
+          }
+
+          await updateCompletedJobProgress(fallbackJobId, "Dubbing", () => job.updateProgress(100));
+          console.warn(
+            `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
           );
         }
-
-        await updateCompletedJobProgress(fallbackJobId, "Dubbing", () => job.updateProgress(100));
-        console.warn(
-          `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
-        );
-      }
+      });
       return;
     }
 
