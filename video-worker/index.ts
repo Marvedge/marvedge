@@ -1763,6 +1763,17 @@ export const dubbingWorker = new Worker(
       jobId,
       attemptsMade: job.attemptsMade,
       maxAttempts,
+      claim: async () => {
+        // PROCESSING remains eligible so BullMQ can retry active work.
+        const claimed = await prisma.videoJob.updateMany({
+          where: {
+            id: jobId,
+            status: { in: ["PENDING", "PROCESSING"] },
+          },
+          data: { status: "PROCESSING", progress: 10 },
+        });
+        return claimed.count > 0;
+      },
       process: async () => {
         const existingJob = await prisma.videoJob.findUnique({
           where: { id: jobId },
@@ -1774,10 +1785,6 @@ export const dubbingWorker = new Worker(
           targetLanguage
         );
 
-        await prisma.videoJob.update({
-          where: { id: jobId },
-          data: { status: "PROCESSING", progress: 10 },
-        });
         await job.updateProgress(10);
 
         const dubbingJob =

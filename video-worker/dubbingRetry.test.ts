@@ -3,6 +3,44 @@ import { UnrecoverableError } from "bullmq";
 import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
 
 describe("legacy dubbing worker retry handling", () => {
+  it("skips processing when a late delivery cannot claim the job", async () => {
+    const claim = vi.fn().mockResolvedValue(false);
+    const process = vi.fn().mockResolvedValue(undefined);
+    const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+    await runDubbingJobWithRetry({
+      jobId: "dubbing-job",
+      attemptsMade: 0,
+      maxAttempts: 1,
+      claim,
+      process,
+      persistFailure,
+    });
+
+    expect(claim).toHaveBeenCalledOnce();
+    expect(process).not.toHaveBeenCalled();
+    expect(persistFailure).not.toHaveBeenCalled();
+  });
+
+  it("processes a retry when the job can still be claimed", async () => {
+    const claim = vi.fn().mockResolvedValue(true);
+    const process = vi.fn().mockResolvedValue(undefined);
+    const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+    await runDubbingJobWithRetry({
+      jobId: "dubbing-job",
+      attemptsMade: 1,
+      maxAttempts: 2,
+      claim,
+      process,
+      persistFailure,
+    });
+
+    expect(claim).toHaveBeenCalledOnce();
+    expect(process).toHaveBeenCalledOnce();
+    expect(persistFailure).not.toHaveBeenCalled();
+  });
+
   it("reuses a persisted provider job for retries of the same dubbing input", () => {
     expect(
       getReusableDubbingJob(

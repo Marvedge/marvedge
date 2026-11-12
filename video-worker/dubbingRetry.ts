@@ -4,6 +4,7 @@ interface DubbingRetryOptions {
   jobId: string;
   attemptsMade: number;
   maxAttempts: number;
+  claim?: () => Promise<boolean>;
   process: () => Promise<void>;
   persistFailure: (message: string) => Promise<void>;
 }
@@ -60,10 +61,15 @@ export async function runDubbingJobWithRetry({
   jobId,
   attemptsMade,
   maxAttempts,
+  claim,
   process,
   persistFailure,
 }: DubbingRetryOptions): Promise<void> {
   try {
+    if (claim && !(await claim())) {
+      return;
+    }
+
     await process();
   } catch (error) {
     const isFinalAttempt = attemptsMade + 1 >= maxAttempts;
