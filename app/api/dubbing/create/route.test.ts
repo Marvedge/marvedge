@@ -16,6 +16,7 @@ vi.mock("@/app/lib/prisma", () => ({
     },
     videoJob: {
       create: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -326,5 +327,51 @@ describe("POST /api/dubbing/create URL security", () => {
     expect(isRateLimited).toHaveBeenCalledWith("dubbing-create:user-1", 5, 60 * 60, true);
     expect(prisma.videoJob.create).not.toHaveBeenCalled();
     expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+  it("settles the job when queue submission fails", async () => {
+    vi.mocked(dubbingQueue.add).mockRejectedValueOnce(new Error("Queue unavailable"));
+    vi.mocked(prisma.videoJob.updateMany).mockResolvedValueOnce({ count: 1 });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await POST(
+        makeRequest({
+          sourceUrl: "https://media.example.test/video.mp4",
+          targetLanguage: "fr",
+        })
+      );
+
+      expect(response.status).toBe(500);
+      expect(dubbingQueue.add).toHaveBeenCalledTimes(1);
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { id: "job-1", status: "PENDING" },
+        data: { status: "FAILED", error: "Failed to queue dubbing job" },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("does not retry cleanup when the pending-state guard matches no job", async () => {
+    vi.mocked(dubbingQueue.add).mockRejectedValueOnce(new Error("Queue acknowledgement lost"));
+    vi.mocked(prisma.videoJob.updateMany).mockResolvedValueOnce({ count: 0 });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await POST(
+        makeRequest({
+          sourceUrl: "https://media.example.test/video.mp4",
+          targetLanguage: "fr",
+        })
+      );
+
+      expect(response.status).toBe(500);
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { id: "job-1", status: "PENDING" },
+        data: { status: "FAILED", error: "Failed to queue dubbing job" },
+      });
+    } finally {
+      log.mockRestore();
+    }
   });
 });
