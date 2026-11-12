@@ -56,8 +56,8 @@ describe("POST /api/hub validation", () => {
       },
     } as never);
     vi.mocked(prisma.hubSettings.findUnique).mockResolvedValue(null);
-    vi.mocked(prisma.hubSettings.upsert).mockImplementation((async (args: any) => {
-      return { id: "hub-1", ...(args as { create: object }).create };
+    vi.mocked(prisma.hubSettings.upsert).mockImplementation((async (args: { create: object }) => {
+      return { id: "hub-1", ...args.create };
     }) as never);
   });
 
@@ -101,6 +101,73 @@ describe("POST /api/hub validation", () => {
       const res = await POST(makeRequest({ brandColor }));
 
       expect(res.status).toBe(400);
+    }
+    expect(prisma.hubSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a non-hex textColor without echoing it", async () => {
+    for (const textColor of ["red", "#fff", "#GGGGGG", "url(evil)"]) {
+      const res = await POST(makeRequest({ textColor }));
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("Text color");
+      expect(data.error).not.toContain(textColor);
+    }
+    expect(prisma.hubSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a non-hex accentColor without echoing it", async () => {
+    for (const accentColor of ["red", "#fff", "#GGGGGG", "url(evil)"]) {
+      const res = await POST(makeRequest({ accentColor }));
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("Accent color");
+      expect(data.error).not.toContain(accentColor);
+    }
+    expect(prisma.hubSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for non-string colors", async () => {
+    for (const color of [42, {}, ["#ffffff"], true]) {
+      const res = await POST(makeRequest({ textColor: color }));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Text color must be a hex color like #111827",
+      });
+    }
+    expect(prisma.hubSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps the default colors for missing or empty values", async () => {
+    const res = await POST(makeRequest({ textColor: "", accentColor: "" }));
+
+    expect(res.status).toBe(200);
+    const call = vi.mocked(prisma.hubSettings.upsert).mock.calls[0][0] as {
+      create: { textColor: string; accentColor: string };
+    };
+    expect(call.create.textColor).toBe("#111827");
+    expect(call.create.accentColor).toBe("#F3F0FC");
+  });
+
+  it("returns 400 for a non-string subdomain", async () => {
+    for (const subdomain of [{}, ["a"], 42, true]) {
+      const res = await POST(makeRequest({ subdomain }));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Subdomain must be a string" });
+    }
+    expect(prisma.hubSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a non-object body", async () => {
+    for (const body of [null, ["a"], "text"]) {
+      const res = await POST(makeRequest(body));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Invalid request body" });
     }
     expect(prisma.hubSettings.upsert).not.toHaveBeenCalled();
   });
