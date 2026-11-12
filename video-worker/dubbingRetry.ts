@@ -1,4 +1,5 @@
 import { UnrecoverableError } from "bullmq";
+import { VoiceStudioError } from "../app/lib/voicestudio/errors";
 
 interface DubbingRetryOptions {
   jobId: string;
@@ -9,9 +10,16 @@ interface DubbingRetryOptions {
   persistFailure: (message: string) => Promise<void>;
 }
 
-function isRetryableDubbingError(error: unknown): boolean {
+export function isRetryableDubbingError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return true;
+  }
+
+  if (
+    error instanceof VoiceStudioError ||
+    (typeof (error as any).isRetryable === "boolean" && typeof (error as any).code === "string")
+  ) {
+    return (error as any).isRetryable;
   }
 
   if (
