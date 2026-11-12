@@ -62,6 +62,39 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
     vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
   });
 
+  it("returns JSON and settles an AVS job when enqueue fails", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: "u-1",
+      plan: "PRO",
+    } as never);
+    vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-dub-123" } as never);
+    vi.mocked(dubbingQueue.add).mockRejectedValueOnce(new Error("Queue unavailable"));
+
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const response = await POST(
+        makeDubRequest({
+          videoUrl: "https://example.com/video.mp4",
+          dubUrl: "https://example.com/dub.mp3",
+          steps: [{ id: "step-1", startTime: 0, endTime: 5 }],
+          dubTimings: [{ stepId: "step-1", start: 0, end: 5.2 }],
+          duration: 10,
+        })
+      );
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "Failed to queue dub alignment" });
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { id: "job-dub-123", status: "PENDING" },
+        data: { status: "FAILED", error: "Failed to queue dub alignment" },
+      });
+      expect(invokeGcpDubSync).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   describe("Synchronous Route Validation (Deterministic Rejection)", () => {
     it("returns 404 when AVS feature flag is disabled", async () => {
       vi.mocked(isAvsEnabled).mockReturnValue(false);

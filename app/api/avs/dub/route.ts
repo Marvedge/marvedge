@@ -290,22 +290,37 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await dubbingQueue.add(
-    "avs-dub",
-    {
-      jobId: jobRecord.id,
-      videoUrl,
-      dubUrl,
-      steps,
-      dubTimings,
-      sourceDuration,
-      userId: user.id,
-      demoId,
-    },
-    {
-      jobId: jobRecord.id,
-    }
-  );
+  try {
+    await dubbingQueue.add(
+      "avs-dub",
+      {
+        jobId: jobRecord.id,
+        videoUrl,
+        dubUrl,
+        steps,
+        dubTimings,
+        sourceDuration,
+        userId: user.id,
+        demoId,
+      },
+      {
+        jobId: jobRecord.id,
+      }
+    );
+  } catch (enqueueError) {
+    console.error("Failed to enqueue AVS dub alignment:", enqueueError);
+
+    await prisma.videoJob
+      .updateMany({
+        where: { id: jobRecord.id, status: "PENDING" },
+        data: { status: "FAILED", error: "Failed to queue dub alignment" },
+      })
+      .catch((persistError: unknown) => {
+        console.error("Failed to persist AVS dub queue failure:", persistError);
+      });
+
+    return NextResponse.json({ error: "Failed to queue dub alignment" }, { status: 503 });
+  }
 
   return NextResponse.json({
     success: true,
