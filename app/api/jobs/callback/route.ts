@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
             where: {
               id: jobId,
               status: {
-                notIn: ["COMPLETED", "CANCELLED"],
+                in: ["PENDING", "PROCESSING"],
               },
             },
             data: {
