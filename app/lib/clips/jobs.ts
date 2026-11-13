@@ -39,6 +39,10 @@ export interface ClipJobDbClient {
       select: { jobData: true };
     }) => Promise<{ jobData: unknown } | null>;
 
+    updateMany: (args: {
+      where: { id: string; status: { in: string[] } };
+      data: { status: string; progress: number };
+    }) => Promise<{ count: number }>;
     update: (args: {
       where: { id: string };
       data: {
@@ -126,14 +130,20 @@ export async function runClipScoringJob(
 
   console.log(`[clip-scoring] Starting job ${jobId} (demoId=${demoId || "none"})...`);
 
+  // Claim before entering the processing failure handler. A failed claim
+  // must not write FAILED over a job the worker never started.
+  const claimed = await withDbRetry(() =>
+    db.videoJob.updateMany({
+      where: { id: jobId, status: { in: ["PENDING", "PROCESSING"] } },
+      data: { status: "PROCESSING", progress: 10 },
+    })
+  );
+
+  if (claimed.count === 0) {
+    return [];
+  }
+
   try {
-    // 1. Mark VideoJob as PROCESSING
-    await withDbRetry(() =>
-      db.videoJob.update({
-        where: { id: jobId },
-        data: { status: "PROCESSING", progress: 10 },
-      })
-    );
     await updateProgress(10);
 
     // 2. Resolve transcript cues and video duration

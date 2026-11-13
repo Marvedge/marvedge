@@ -101,19 +101,33 @@ export async function POST(req: NextRequest) {
     });
 
     // 2. Enqueue the clip-scoring job to BullMQ ("video-processing" queue)
-    await clipJobQueue.add(
-      "clip-scoring",
-      {
-        jobId: jobRecord.id,
-        userId,
-        demoId: demoId || null,
-        videoUrl: resolvedVideoUrl || videoUrl || undefined,
-        cues: resolvedCues,
-        duration: resolvedDuration,
-        options,
-      },
-      { jobId: jobRecord.id }
-    );
+    try {
+      await clipJobQueue.add(
+        "clip-scoring",
+        {
+          jobId: jobRecord.id,
+          userId,
+          demoId: demoId || null,
+          videoUrl: resolvedVideoUrl || videoUrl || undefined,
+          cues: resolvedCues,
+          duration: resolvedDuration,
+          options,
+        },
+        { jobId: jobRecord.id }
+      );
+    } catch (enqueueError) {
+      // The queue may have accepted the job before the acknowledgement failed.
+      await prisma.videoJob
+        .updateMany({
+          where: { id: jobRecord.id, status: "PENDING" },
+          data: { status: "FAILED", error: "Failed to queue clip-scoring job" },
+        })
+        .catch((persistError: unknown) => {
+          console.error("Failed to persist clip-scoring queue failure:", persistError);
+        });
+
+      throw enqueueError;
+    }
 
     // 3. Return the jobId immediately so the client can poll GET /api/jobs/[id]
     return NextResponse.json({
