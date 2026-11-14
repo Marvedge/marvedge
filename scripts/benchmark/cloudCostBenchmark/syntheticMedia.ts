@@ -5,7 +5,6 @@
 
 import { execFileSync, spawnSync } from "child_process";
 import ffmpegStatic from "ffmpeg-static";
-// @ts-expect-error untyped third-party module
 import ffprobeStatic from "ffprobe-static";
 import fs from "fs";
 import os from "os";

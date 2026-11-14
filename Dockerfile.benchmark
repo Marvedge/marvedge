@@ -1,28 +1,34 @@
-# Dockerfile.benchmark (Task-0102: Cloud Cost Benchmark Runner)
-# Lightweight, reproducible benchmark runner supporting CPU fallback and optional NVIDIA GPU.
-FROM node:20-slim
+# Dockerfile.benchmark (Task-00127: Portable Cloud Cost Benchmark Runner)
+# Pinned Node.js 20 base image with deterministic installation, FFmpeg, and multi-cloud readiness.
+FROM node:20.18.0-slim@sha256:28fbbb764069c698ead61d6a739a7615e8f0e07a4b8fe1473ceca70c1c3d6aaa
 
-# Install ffmpeg and ca-certificates for synthetic media generation
+# Install ffmpeg, procps (process monitoring), and ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    procps \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Ensure local node_modules binaries (including tsx) are in PATH
+ENV NODE_ENV=production
+ENV PATH="/app/node_modules/.bin:${PATH}"
+
 # Copy dependency manifests
 COPY package*.json ./
 COPY tsconfig*.json ./
 
-# Install dependencies (production + tsx for script execution)
-RUN npm install --omit=dev && npm install -g tsx
+# Deterministic dependency installation using package-lock.json
+# Note: tsx is declared in dependencies in package.json
+RUN npm ci --omit=dev
 
-# Copy source
+# Copy application source (filtered strictly by root .dockerignore)
 COPY . .
 
-# Benchmark output volume mount point
+# Benchmark output volume mount point for persistent host reporting
 VOLUME ["/app/benchmark_results"]
 
-# Default entrypoint runs the cloud cost benchmark CLI
+# Entrypoint runs the cloud cost benchmark CLI
 ENTRYPOINT ["npx", "tsx", "scripts/benchmark/cloudCostBenchmark.ts"]
 CMD ["--stages", "reframe,avs,captions,dubbing", "--concurrency", "1", "--iterations", "1", "--warmup", "0"]

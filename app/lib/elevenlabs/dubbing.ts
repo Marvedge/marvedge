@@ -87,11 +87,16 @@ async function elevenLabsRequest<T>(path: string, options: RequestInit = {}): Pr
 export async function createDubbingJob(input: {
   sourceUrl: string;
   targetLanguage: string;
+  watermark?: boolean;
 }): Promise<DubbingJobResult> {
   const normalizedLanguage = input.targetLanguage.trim().toLowerCase();
   const formData = new FormData();
   formData.append("source_url", input.sourceUrl);
   formData.append("target_lang", normalizedLanguage);
+
+  if (input.watermark !== undefined) {
+    formData.append("watermark", String(input.watermark));
+  }
 
   const response = await elevenLabsRequest<{
     dubbing_id?: string;

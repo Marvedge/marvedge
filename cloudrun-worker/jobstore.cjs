@@ -129,8 +129,8 @@ async function getChunk(chunkId) {
  */
 async function setChunkStatus(chunkId, data) {
   if (activeProvider() === "aws") {
-    // Build a safe UpdateExpression from the data keys
-    const keys  = Object.keys(data);
+    // Build a safe UpdateExpression from defined data keys
+    const keys  = Object.keys(data).filter((k) => data[k] !== undefined);
     const names  = {};
     const values = {};
     const setParts = keys.map((k, i) => {
