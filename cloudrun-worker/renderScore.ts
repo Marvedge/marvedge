@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
-// @ts-expect-error ffprobe-static does not bundle typescript types
+
 import ffprobeStatic from "ffprobe-static";
 
 export interface ClipScore {

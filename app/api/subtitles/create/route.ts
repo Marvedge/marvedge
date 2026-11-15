@@ -18,7 +18,10 @@ import {
 } from "@/app/lib/subtitles";
 
 function secretsMatch(provided: string, expected: string): boolean {
-  if (!provided || !expected) return false;
+  // Reject empty strings explicitly – they cannot match a secret.
+  if (provided.length === 0 || expected.length === 0) {
+    return false;
+  }
   const providedBuffer = Buffer.from(provided);
   const expectedBuffer = Buffer.from(expected);
 
