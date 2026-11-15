@@ -62,6 +62,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         status: true,
         progress: true,
         exportedUrl: true,
+        captionUrl: true,
+        scoreJson: true,
         error: true,
         userId: true,
         jobData: true,
@@ -136,6 +138,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       status: state,
       progress,
       exportedUrl,
+      captionUrl:
+        job.captionUrl ??
+        (jobData && typeof jobData === "object"
+          ? (jobData as Record<string, unknown>).captionUrl ?? null
+          : null),
+      score:
+        job.scoreJson ??
+        (jobData && typeof jobData === "object"
+          ? (jobData as Record<string, unknown>).score ?? null
+          : null),
       error,
       subtitles,
       // Expose the raw jobData so Task-82 consumers can inspect kind, fallback,

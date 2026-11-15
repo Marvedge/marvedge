@@ -15,11 +15,19 @@ export type ReframeProcessingCallbackPayload = {
   progress: number;
 };
 
+export type ClipScore = {
+  durationScore: number;
+  bitrateScore: number;
+  overlapScore?: number;
+};
+
 export type ReframeCompletedCallbackPayload = JobFallbackMetadata & {
   jobId: string;
   status: "COMPLETED";
   cropTargets: CropTargetData;
   exportedUrl?: string;
+  captionUrl?: string;
+  score?: ClipScore;
 };
 
 export type ReframeFailedCallbackPayload = {
@@ -37,6 +45,8 @@ export type ExportCompletedCallbackPayload = {
   jobId: string;
   status: "COMPLETED";
   exportedUrl?: string;
+  captionUrl?: string;
+  score?: ClipScore;
 };
 
 export type ExportFailedCallbackPayload = {

@@ -1,4 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpSubtitles } from "@/app/lib/gcpWorker";
 import { getServerSession } from "next-auth";
@@ -6,12 +9,24 @@ import { authOptions } from "@/app/lib/auth/options";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { isSafeUrl } from "@/app/lib/safeUrl";
 import {
+  generateAssContent,
   isSttOffered,
   normalizeCues,
   normalizeLanguage,
   subtitleWorkerTimeoutMs,
   validateSubtitleDuration,
 } from "@/app/lib/subtitles";
+
+function secretsMatch(provided: string, expected: string): boolean {
+  if (!provided || !expected) return false;
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    providedBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(providedBuffer, expectedBuffer)
+  );
+}
 
 // Transcribing a 10-minute video (download + ffmpeg audio extract + Deepgram)
 // runs well past the default serverless limit. The request itself returns in one
@@ -58,6 +73,18 @@ async function dispatchSubtitleJob(
     });
     const cues = normalizeCues(rawCues);
 
+    // Write ASS file to disk for immediate serving and worker access
+    try {
+      const captionsDir = path.resolve(process.cwd(), "public", "captions");
+      if (!fs.existsSync(captionsDir)) {
+        fs.mkdirSync(captionsDir, { recursive: true });
+      }
+      const assContent = generateAssContent(cues, 1920, 1080, undefined, language);
+      fs.writeFileSync(path.resolve(captionsDir, `${jobId}.ass`), assContent, "utf8");
+    } catch (fsErr) {
+      console.warn("[subtitles] Could not write local ASS file:", fsErr);
+    }
+
     const completed = await prisma.$transaction(async (tx) => {
       const job = await tx.videoJob.findUnique({
         where: { id: jobId },
@@ -76,11 +103,13 @@ async function dispatchSubtitleJob(
         data: {
           status: "COMPLETED",
           progress: PROGRESS_DONE,
+          captionUrl: `/api/subtitles/file/${jobId}`,
           jobData: {
             kind: "SUBTITLES",
             provider: "deepgram",
             language,
             subtitles: cues,
+            captionUrl: `/api/subtitles/file/${jobId}`,
           },
         },
       });
@@ -150,14 +179,20 @@ async function dispatchSubtitleJob(
 export async function POST(req: NextRequest) {
   let createdJobId: string | null = null;
   try {
-    const session = await getServerSession(authOptions);
+    const authHeader = req.headers.get("authorization") || "";
+    const bearerMatch = /^Bearer\s+(\S+)$/i.exec(authHeader.trim());
+    const token = bearerMatch?.[1] ?? "";
+    const expectedSecret = (process.env.CALLBACK_SECRET || "").trim();
+    const isWorkerAuth = Boolean(token && expectedSecret && secretsMatch(token, expectedSecret));
 
-    if (!session || !session.user) {
+    const session = isWorkerAuth ? null : await getServerSession(authOptions);
+
+    if (!isWorkerAuth && (!session || !session.user)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const data = await req.json();
-    const { videoUrl, demoId, language } = data;
+    const { videoUrl, demoId, language, sync } = data;
 
     if (!videoUrl) {
       return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
@@ -195,32 +230,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          session.user.id ? { id: session.user.id as string } : undefined,
-          session.user.email ? { email: session.user.email } : undefined,
-        ].filter(Boolean) as Array<{ id?: string; email?: string }>,
-      },
-      select: { id: true },
-    });
+    let userId: string;
+    if (isWorkerAuth) {
+      if (typeof data.userId === "string" && data.userId) {
+        userId = data.userId;
+      } else if (demoId) {
+        const d = await prisma.demo.findUnique({ where: { id: demoId }, select: { userId: true } });
+        userId = d?.userId ?? "worker";
+      } else {
+        const u = await prisma.user.findFirst({ select: { id: true } });
+        userId = u?.id ?? "worker";
+      }
+    } else {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            session!.user.id ? { id: session!.user.id as string } : undefined,
+            session!.user.email ? { email: session!.user.email } : undefined,
+          ].filter(Boolean) as Array<{ id?: string; email?: string }>,
+        },
+        select: { id: true },
+      });
 
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+      userId = user.id;
+
+      // Deepgram is billed per minute of audio. Cap per authenticated user before
+      // creating a job or calling the worker.
+      if (await isRateLimited(`subtitles-create:${userId}`, 10, 10 * 60, true)) {
+        return NextResponse.json(
+          { error: "Too many subtitle requests. Please try again shortly." },
+          { status: 429 }
+        );
+      }
     }
 
-    const userId = user.id;
-
-    // Deepgram is billed per minute of audio. Cap per authenticated user before
-    // creating a job or calling the worker.
-    if (await isRateLimited(`subtitles-create:${userId}`, 10, 10 * 60, true)) {
-      return NextResponse.json(
-        { error: "Too many subtitle requests. Please try again shortly." },
-        { status: 429 }
-      );
-    }
-
-    if (demoId) {
+    if (demoId && !isWorkerAuth) {
       const demo = await prisma.demo.findUnique({
         where: { id: demoId },
         select: { id: true, userId: true },
@@ -249,6 +296,19 @@ export async function POST(req: NextRequest) {
     });
     createdJobId = jobRecord.id;
 
+    const captionUrl = `/api/subtitles/file/${jobRecord.id}`;
+
+    if (sync) {
+      await dispatchSubtitleJob(jobRecord.id, videoUrl, normalizedLanguage, durationSeconds);
+      return NextResponse.json({
+        success: true,
+        status: "completed",
+        jobId: jobRecord.id,
+        captionUrl,
+        language: normalizedLanguage,
+      });
+    }
+
     // Transcription runs after the response is flushed. The client gets its
     // jobId in the same tick and polls /api/jobs/{id} for progress — before this,
     // the POST awaited the entire transcription, so a long video blew the
@@ -260,6 +320,7 @@ export async function POST(req: NextRequest) {
       success: true,
       status: "processing",
       jobId: jobRecord.id,
+      captionUrl,
       language: normalizedLanguage,
     });
   } catch (err) {
