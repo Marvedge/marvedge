@@ -21,6 +21,9 @@
 //
 // Contains ZERO Prisma / Postgres imports.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   calculateCenterCropTargets,
   CropTargetValidationError,
@@ -42,6 +45,7 @@ import {
 import { getReframeWorkerConfig, type ReframeWorkerConfig } from "./config";
 import { renderReframedVideo, type RenderReframedVideoOptions } from "./render";
 import type { JobFallbackMetadata } from "../app/types/jobs/fallback";
+import { scoreClip, type ClipScore } from "../cloudrun-worker/renderScore";
 
 export { ReframePayloadValidationError };
 
@@ -61,6 +65,15 @@ export interface ReframeOrchestratorDeps {
     cropTargets: CropTargetData,
     options?: RenderReframedVideoOptions
   ) => Promise<string>;
+  generateCaptions?: (params: {
+    videoUrl: string;
+    jobId: string;
+    demoId?: string | null;
+  }) => Promise<{ captionUrl?: string; captionPath?: string }>;
+  scoreVideo?: (
+    videoPath: string,
+    captionPath?: string
+  ) => Promise<ClipScore> | ClipScore;
   sendCallback?: (payload: JobCallbackPayload) => Promise<{ success: boolean }>;
   resultCache?: Map<string, CropTargetData>;
 }
@@ -169,6 +182,59 @@ export function isFinalBullMqAttempt(context: ReframeJobContext): boolean {
   return context.attemptsMade >= maxAttempts - 1;
 }
 
+async function defaultGenerateCaptions(
+  backendUrl: string,
+  secret: string,
+  params: { videoUrl: string; jobId: string; demoId?: string | null }
+): Promise<{ captionUrl?: string; captionPath?: string }> {
+  const base = backendUrl.replace(/\/+$/, "");
+  const endpoint = `${base}/api/subtitles/create`;
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify({
+      videoUrl: params.videoUrl,
+      demoId: params.demoId,
+      sync: true,
+      language: "en",
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Caption generation failed with HTTP ${res.status}: ${errText}`);
+  }
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const rawCaptionUrl =
+    typeof json.captionUrl === "string"
+      ? json.captionUrl
+      : `/api/subtitles/file/${params.jobId}`;
+  const captionUrl = rawCaptionUrl.startsWith("http")
+    ? rawCaptionUrl
+    : `${base}${rawCaptionUrl.startsWith("/") ? "" : "/"}${rawCaptionUrl}`;
+
+  let captionPath: string | undefined;
+  try {
+    const fileRes = await fetch(captionUrl, {
+      headers: {
+        Authorization: `Bearer ${secret}`,
+      },
+    });
+    if (fileRes.ok) {
+      const text = await fileRes.text();
+      const tempPath = path.resolve(os.tmpdir(), `captions-${params.jobId}.ass`);
+      fs.writeFileSync(tempPath, text, "utf8");
+      captionPath = tempPath;
+    }
+  } catch {
+    // Graceful fallback: scoring proceeds even if downloading caption fails
+  }
+
+  return { captionUrl, captionPath };
+}
+
 /**
  * Core orchestration logic for processing a single reframe job.
  */
@@ -180,6 +246,8 @@ export async function processReframeJob(
   success: boolean;
   cropTargets: CropTargetData;
   exportedUrl?: string;
+  captionUrl?: string;
+  score?: ClipScore;
   fallbackMetadata?: JobFallbackMetadata;
 }> {
   // ── Step 0: Validate Queued Job Payload (Task-00056) ───────────────────
@@ -212,6 +280,20 @@ export async function processReframeJob(
         retries: config.callbackMaxRetries,
         delayMs: config.callbackRetryDelayMs,
       }));
+
+  const generateCaptions =
+    deps.generateCaptions ??
+    (process.env.NODE_ENV === "test" && !deps.generateCaptions
+      ? undefined
+      : ((params: { videoUrl: string; jobId: string; demoId?: string }) =>
+          defaultGenerateCaptions(config.backendUrl, config.callbackSecret, params)));
+
+  const scoreVideo =
+    deps.scoreVideo ??
+    (process.env.NODE_ENV === "test" && !deps.scoreVideo
+      ? undefined
+      : ((videoPath: string, captionPath?: string) =>
+          scoreClip(videoPath, captionPath)));
 
   // ── Step 0: Validate Input (Fast-Fail Deterministic Errors) ───────────────
   if (!payload.videoUrl || typeof payload.videoUrl !== "string") {
@@ -452,6 +534,73 @@ export async function processReframeJob(
     throw renderError;
   }
 
+  // ── Step 2.5: Generate Captions and Compute Clip Scores (Task 112) ─────
+  let captionUrl: string | undefined;
+  let score: ClipScore | undefined;
+
+  if (generateCaptions || scoreVideo) {
+    let localCaptionPath: string | undefined;
+    try {
+      if (generateCaptions) {
+        console.log(`[reframe-worker] Generating captions for job ${payload.jobId}...`);
+        const captionResult = await generateCaptions({
+          videoUrl: exportedUrl || payload.videoUrl,
+          jobId: payload.jobId,
+          demoId: payload.demoId ?? undefined,
+        });
+        captionUrl = captionResult?.captionUrl || undefined;
+        localCaptionPath = captionResult?.captionPath || undefined;
+      }
+
+      if (scoreVideo) {
+        console.log(`[reframe-worker] Scoring reframed clip for job ${payload.jobId}...`);
+        score = await scoreVideo(exportedUrl || payload.videoUrl, localCaptionPath);
+      }
+    } catch (captionOrScoreErr) {
+      const errMsg =
+        captionOrScoreErr instanceof Error
+          ? captionOrScoreErr.message
+          : String(captionOrScoreErr);
+      console.error(
+        `[reframe-worker] Caption/score step failed for job ${payload.jobId}: ${errMsg}`
+      );
+
+      if (!finalAttempt) {
+        console.warn(
+          `[reframe-worker] Retrying via BullMQ on attempt ${context.attemptsMade + 1}/${context.maxAttempts}...`
+        );
+        throw captionOrScoreErr;
+      }
+
+      const category = classifyReframeError(captionOrScoreErr);
+      if (category === "DETERMINISTIC") {
+        await context.discardJob?.();
+      }
+
+      try {
+        await sendCallback({
+          jobId: payload.jobId,
+          status: "FAILED",
+          error: `Caption/scoring failed: ${errMsg}`,
+        });
+      } catch (cbErr) {
+        console.error(
+          `[reframe-worker] Failed to send FAILED callback for job ${payload.jobId}:`,
+          cbErr
+        );
+      }
+      throw captionOrScoreErr;
+    } finally {
+      if (localCaptionPath && fs.existsSync(localCaptionPath)) {
+        try {
+          fs.unlinkSync(localCaptionPath);
+        } catch {
+          // Ignore cleanup error
+        }
+      }
+    }
+  }
+
   // ── Step 3: Deliver Authenticated Callback to Backend ─────────────────
   try {
     console.log(`[reframe-worker] Delivering COMPLETED callback for job ${payload.jobId}...`);
@@ -460,6 +609,8 @@ export async function processReframeJob(
       status: "COMPLETED",
       cropTargets,
       exportedUrl,
+      ...(captionUrl ? { captionUrl } : {}),
+      ...(score ? { score } : {}),
       ...(fallbackMetadata ?? {}),
     });
 
@@ -472,6 +623,8 @@ export async function processReframeJob(
       success: true,
       cropTargets,
       exportedUrl,
+      ...(captionUrl ? { captionUrl } : {}),
+      ...(score ? { score } : {}),
       ...(fallbackMetadata ? { fallbackMetadata } : {}),
     };
   } catch (cbError) {

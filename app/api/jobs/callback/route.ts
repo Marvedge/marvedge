@@ -111,6 +111,8 @@ export async function POST(req: NextRequest) {
       fallbackStage,
       fallbackReason,
       attemptsMade,
+      captionUrl,
+      score,
     } = body as {
       jobId?: string;
       status?: string;
@@ -124,6 +126,12 @@ export async function POST(req: NextRequest) {
       fallbackStage?: string;
       fallbackReason?: string;
       attemptsMade?: number;
+      captionUrl?: string;
+      score?: {
+        durationScore: number;
+        bitrateScore: number;
+        overlapScore?: number;
+      };
     };
 
     if (!jobId || typeof jobId !== "string") {
@@ -133,6 +141,48 @@ export async function POST(req: NextRequest) {
     const validStatuses = ["PROCESSING", "COMPLETED", "FAILED"];
     if (!status || !validStatuses.includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    // Validate optional captionUrl if present
+    if (captionUrl !== undefined && captionUrl !== null) {
+      if (typeof captionUrl !== "string" || captionUrl.length > 2048) {
+        return NextResponse.json({ error: "Invalid captionUrl" }, { status: 400 });
+      }
+    }
+
+    // Validate optional score if present
+    if (score !== undefined && score !== null) {
+      if (typeof score !== "object" || Array.isArray(score)) {
+        return NextResponse.json({ error: "Invalid score: must be an object" }, { status: 400 });
+      }
+      const s = score as { durationScore?: unknown; bitrateScore?: unknown; overlapScore?: unknown };
+      if (
+        typeof s.durationScore !== "number" ||
+        !Number.isFinite(s.durationScore) ||
+        s.durationScore < 0 ||
+        s.durationScore > 100 ||
+        typeof s.bitrateScore !== "number" ||
+        !Number.isFinite(s.bitrateScore) ||
+        s.bitrateScore < 0 ||
+        s.bitrateScore > 100
+      ) {
+        return NextResponse.json(
+          { error: "Invalid score: durationScore and bitrateScore must be numbers between 0 and 100" },
+          { status: 400 }
+        );
+      }
+      if (
+        s.overlapScore !== undefined &&
+        (typeof s.overlapScore !== "number" ||
+          !Number.isFinite(s.overlapScore) ||
+          s.overlapScore < 0 ||
+          s.overlapScore > 100)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid score: overlapScore must be a number between 0 and 100" },
+          { status: 400 }
+        );
+      }
     }
 
     // ── Fetch existing job ────────────────────────────────────────────
@@ -330,10 +380,14 @@ export async function POST(req: NextRequest) {
             status: "COMPLETED",
             progress: 100,
             exportedUrl,
+            captionUrl: captionUrl || undefined,
+            scoreJson: score ? (score as Prisma.InputJsonValue) : undefined,
             jobData: {
               ...existingJobData,
               kind: "REFRAME",
               cropTargets,
+              ...(captionUrl ? { captionUrl } : {}),
+              ...(score ? { score } : {}),
               ...(fallback !== undefined ? { fallback } : {}),
               ...(fallbackStage ? { fallbackStage } : {}),
               ...(fallbackReason ? { fallbackReason } : {}),
@@ -355,10 +409,14 @@ export async function POST(req: NextRequest) {
               status: "COMPLETED",
               progress: 100,
               exportedUrl: exportedUrl || undefined,
+              captionUrl: captionUrl || undefined,
+              scoreJson: score ? (score as Prisma.InputJsonValue) : undefined,
               jobData: {
                 ...existingJobData,
                 kind: "REFRAME",
                 cropTargets,
+                ...(captionUrl ? { captionUrl } : {}),
+                ...(score ? { score } : {}),
                 ...(fallback !== undefined ? { fallback } : {}),
                 ...(fallbackStage ? { fallbackStage } : {}),
                 ...(fallbackReason ? { fallbackReason } : {}),
@@ -385,10 +443,14 @@ export async function POST(req: NextRequest) {
               status: "COMPLETED",
               progress: 100,
               exportedUrl: exportedUrl || undefined,
+              captionUrl: captionUrl || undefined,
+              scoreJson: score ? (score as Prisma.InputJsonValue) : undefined,
               jobData: {
                 ...existingJobData,
                 kind: "REFRAME",
                 cropTargets,
+                ...(captionUrl ? { captionUrl } : {}),
+                ...(score ? { score } : {}),
                 ...(fallback !== undefined ? { fallback } : {}),
                 ...(fallbackStage ? { fallbackStage } : {}),
                 ...(fallbackReason ? { fallbackReason } : {}),
@@ -551,6 +613,8 @@ export async function POST(req: NextRequest) {
         status: "COMPLETED",
         progress: 100,
         exportedUrl,
+        captionUrl: captionUrl || undefined,
+        scoreJson: score ? (score as Prisma.InputJsonValue) : undefined,
         error: error || undefined,
       });
     }
@@ -567,6 +631,8 @@ export async function POST(req: NextRequest) {
           status: isCompleted ? "COMPLETED" : "FAILED",
           progress: isCompleted ? 100 : undefined,
           exportedUrl: exportedUrl || undefined,
+          captionUrl: captionUrl || undefined,
+          scoreJson: score ? (score as Prisma.InputJsonValue) : undefined,
           error: error || (isCompleted ? undefined : "Export failed"),
         },
       });
@@ -588,6 +654,8 @@ export async function POST(req: NextRequest) {
           status: isCompleted ? "COMPLETED" : "FAILED",
           progress: isCompleted ? 100 : undefined,
           exportedUrl: exportedUrl || undefined,
+          captionUrl: captionUrl || undefined,
+          scoreJson: score ? (score as Prisma.InputJsonValue) : undefined,
           error: error || (isCompleted ? undefined : "Export failed"),
         },
       });
