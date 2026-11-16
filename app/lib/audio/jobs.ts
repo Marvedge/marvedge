@@ -176,6 +176,7 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
   const inputPath = path.join(tempDir, "input");
   const ext = path.extname(payload.trimmedKey);
   const outputPath = path.join(tempDir, `trimmed${ext}`);
+  let uploadedTrim = false;
   try {
     const clip = await withDbRetry(() =>
       db.audioClip.findUnique({ where: { id: payload.clipId } })
@@ -208,6 +209,7 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
 
     await trimAudioFile(inputPath, outputPath, payload.trimStartSec, payload.trimEndSec);
     await uploadAudioViaSignedUrl(payload.uploadUrl, outputPath, payload.mimeType);
+    uploadedTrim = true;
 
     await withDbRetry(() =>
       db.audioClip.update({
@@ -228,13 +230,20 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
       try {
         await deleteObject({ bucket: getR2RawBucket(), object: clip.trimmedKey });
       } catch (error) {
-        console.error(
-          `[audio] failed to clean up previous trim ${clip.trimmedKey}:`,
-          error
-        );
+        console.error(`[audio] failed to clean up previous trim ${clip.trimmedKey}:`, error);
       }
     }
   } catch (error) {
+    // Only remove the new object when the final write confirms the clip is gone.
+    // For an ambiguous database error, the update may already have committed.
+    if (uploadedTrim && error instanceof Error && "code" in error && error.code === "P2025") {
+      try {
+        await deleteObject({ bucket: getR2RawBucket(), object: payload.trimmedKey });
+      } catch (cleanupError) {
+        console.error("[audio] failed to clean up trim for deleted clip:", cleanupError);
+      }
+    }
+
     // Keep the previous trimmedKey (if any) intact — the clip stays playable.
     await failClip(db, payload.clipId, errorMessage(error));
     throw error;
