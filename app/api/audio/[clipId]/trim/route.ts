@@ -7,6 +7,10 @@ import { isAudioUploadEnabled } from "@/app/lib/audio/flags";
 import { asAudioClipDb } from "@/app/lib/audio/db";
 import { ApiError, requestAudioTrim } from "@/app/lib/audio/service";
 
+import { readBoundedRequestJson } from "@/app/lib/http/boundedBody";
+
+const MAX_BODY_BYTES = 8 * 1024;
+
 const trimSchema = z.object({
   trimStartSec: z.number().min(0, "Trim start cannot be negative"),
   trimEndSec: z.number(),
@@ -27,14 +31,15 @@ export async function PATCH(
 
   const { clipId } = await params;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const body = await readBoundedRequestJson(request, MAX_BODY_BYTES);
+  if (!body.ok) {
+    if (body.reason === "too_large") {
+      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+    }
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsed = trimSchema.safeParse(body);
+  const parsed = trimSchema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid request" },
