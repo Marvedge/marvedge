@@ -15,17 +15,22 @@ export function isRetryableDubbingError(error: unknown): boolean {
     return true;
   }
 
+  const errorWithMeta = error as { code?: string; isRetryable?: boolean };
+
   if (
     error instanceof VoiceStudioError ||
-    (typeof (error as any).isRetryable === "boolean" && typeof (error as any).code === "string")
+    (typeof errorWithMeta.isRetryable === "boolean" && typeof errorWithMeta.code === "string")
   ) {
-    return (error as any).isRetryable;
+    return Boolean(errorWithMeta.isRetryable);
   }
 
   if (
     error.message === "Missing ELEVENLABS_API_KEY" ||
     error.message === "ElevenLabs did not return a dubbing ID" ||
-    error.message.startsWith("ElevenLabs dubbing failed with status:")
+    error.message.startsWith("ElevenLabs dubbing failed with status:") ||
+    error.message === "Missing required videoUrl" ||
+    error.message.startsWith("Invalid payload") ||
+    error.message.startsWith("Invalid AVS dub job:")
   ) {
     return false;
   }
