@@ -147,4 +147,62 @@ describe("callMlInference latency metrics", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty("x-gateway-token");
   });
+
+  describe("Face Tracking Consent Gating (Task-00133)", () => {
+    it("routes to /reframe (AutoFlip-only) when enableFaceTracking is unset or false", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ ok: true, crop_targets: cropTargets }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      // Unset case
+      await callMlInference("http://ml-service:8000", {
+        videoUrl: "https://example.com/video.mp4",
+        targetAspectRatio: "9:16",
+      });
+      expect(fetchMock.mock.calls[0][0]).toBe("http://ml-service:8000/reframe");
+
+      // Explicitly false case
+      await callMlInference("http://ml-service:8000", {
+        videoUrl: "https://example.com/video.mp4",
+        targetAspectRatio: "9:16",
+        enableFaceTracking: false,
+      });
+      expect(fetchMock.mock.calls[1][0]).toBe("http://ml-service:8000/reframe");
+    });
+
+    it("routes to /reframe-combined when enableFaceTracking is true", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ ok: true, crop_targets: cropTargets }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      await callMlInference("http://ml-service:8000", {
+        videoUrl: "https://example.com/video.mp4",
+        targetAspectRatio: "9:16",
+        enableFaceTracking: true,
+      });
+      expect(fetchMock.mock.calls[0][0]).toBe("http://ml-service:8000/reframe-combined");
+    });
+
+    it("never breaks ordinary AutoFlip-only reframing when face tracking is disabled", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ ok: true, crop_targets: cropTargets }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await callMlInference("http://ml-service:8000", {
+        videoUrl: "https://example.com/video.mp4",
+        targetAspectRatio: "9:16",
+        enableFaceTracking: false,
+      });
+
+      expect(result).toEqual(cropTargets);
+      expect(result.crop_targets).toHaveLength(1);
+      expect(result.output.aspect_ratio).toBe("9:16");
+    });
+  });
 });

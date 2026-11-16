@@ -4,11 +4,7 @@ import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { isSafeUrl } from "@/app/lib/safeUrl";
-import {
-  ApiError,
-  reframeJobQueue,
-  validateReframeInput,
-} from "@/app/lib/reframe/service";
+import { ApiError, reframeJobQueue, validateReframeInput } from "@/app/lib/reframe/service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,6 +52,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Check workspace face tracking consent (Task-00133)
+    const userConsent = await prisma.workspaceConsent.findUnique({
+      where: { userId },
+      select: { faceTrackingConsent: true },
+    });
+
+    const hasFaceTrackingConsent = Boolean(userConsent?.faceTrackingConsent);
+    const requestedFaceTracking =
+      body &&
+      typeof body === "object" &&
+      "enableFaceTracking" in body &&
+      typeof (body as Record<string, unknown>).enableFaceTracking === "boolean"
+        ? ((body as Record<string, unknown>).enableFaceTracking as boolean)
+        : hasFaceTrackingConsent;
+
+    // Face tracking is enabled ONLY if the workspace has explicit consent
+    const enableFaceTracking = requestedFaceTracking && hasFaceTrackingConsent;
+
     // 1. Create a tracking VideoJob record in PostgreSQL
     const jobRecord = await prisma.videoJob.create({
       data: {
@@ -67,6 +81,7 @@ export async function POST(req: NextRequest) {
         jobData: {
           kind: "REFRAME",
           targetAspectRatio,
+          enableFaceTracking,
           ...(source ? { source } : {}),
         } as unknown as Prisma.InputJsonValue,
       },
@@ -83,6 +98,7 @@ export async function POST(req: NextRequest) {
           videoUrl,
           targetAspectRatio,
           source: source || null,
+          enableFaceTracking,
         },
         { jobId: jobRecord.id }
       );

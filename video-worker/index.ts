@@ -17,16 +17,17 @@ import axios from "axios";
 import { createDubbingJob, waitForDubbingCompletion } from "../app/lib/elevenlabs/dubbing";
 import { buildDrawtextFontOption, downloadUrlToFile } from "./safe-download";
 import { runClipScoringJob } from "../app/lib/clips/jobs";
-import { postJobCallbackWithRetry, processDubbingJob, defaultUploadToCloudinary } from "../app/lib/avs/dubbingProcessor";
+import {
+  postJobCallbackWithRetry,
+  processDubbingJob,
+  defaultUploadToCloudinary,
+} from "../app/lib/avs/dubbingProcessor";
 import {
   resolveDubbingProvider,
   VoiceStudioDubbingAdapter,
   type TimedStepNarration,
 } from "../app/lib/voicestudio/dubbingAdapter";
-import {
-  VoiceStudioError,
-  VoiceStudioUnavailableError,
-} from "../app/lib/voicestudio/errors";
+import { VoiceStudioError, VoiceStudioUnavailableError } from "../app/lib/voicestudio/errors";
 import { runSubtitleJobWithRetry } from "./subtitleRetry";
 import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
 import { parseDubbingWatermark } from "./dubbingConfig";
@@ -525,7 +526,6 @@ async function downloadFile(
     await fs.promises.rm(outputPath, { force: true }).catch(() => {});
     throw error;
   }
-
 }
 
 function writeRoundedMaskPgm(
@@ -1701,163 +1701,330 @@ if (dubbingMetricsMaxDataPoints === undefined) {
 export const dubbingWorker = new Worker(
   "dubbing-processing",
   withDubbingJobMetrics(
-  async (job: Job) => {
-    if (job.name === "avs-dub") {
-      const jobId: unknown = job.data?.jobId;
-      if (typeof jobId !== "string" || !jobId.trim()) {
-        throw new Error("Invalid AVS dub job: missing jobId");
-      }
+    async (job: Job) => {
+      if (job.name === "avs-dub") {
+        const jobId: unknown = job.data?.jobId;
+        if (typeof jobId !== "string" || !jobId.trim()) {
+          throw new Error("Invalid AVS dub job: missing jobId");
+        }
 
-      await runClaimedAvsDubJob(prisma.videoJob, jobId, async () => {
-        const maxAttempts =
-          typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
-        const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
-
-        try {
-          await processDubbingJob(job.data, {
-            isFinalAttempt,
-            updateProgress: async (pct: number) => {
-              await job.updateProgress(pct);
-            },
-          });
-        } catch (error) {
-          const fallbackJobId = typeof job.data?.jobId === "string" ? job.data.jobId : "";
-          const fallbackVideoUrl = typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
-
-          if (!isFinalAttempt || !fallbackJobId.trim() || !fallbackVideoUrl.trim()) {
-            throw error;
-          }
-
-          const reason = error instanceof Error ? error.message : String(error);
-          const fallbackPayload = {
-            jobId: fallbackJobId,
-            status: "COMPLETED" as const,
-            alignedVideoUrl: fallbackVideoUrl,
-            duration:
-              typeof job.data.sourceDuration === "number" &&
-              Number.isFinite(job.data.sourceDuration) &&
-              job.data.sourceDuration >= 0
-                ? job.data.sourceDuration
-                : 0,
-            fallback: true,
-            fallbackStage: "DUBBING",
-            fallbackReason: reason,
-            attemptsMade: job.attemptsMade + 1,
-          };
+        await runClaimedAvsDubJob(prisma.videoJob, jobId, async () => {
+          const maxAttempts =
+            typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
+          const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
 
           try {
-            await postJobCallbackWithRetry(fallbackPayload);
-          } catch (callbackError) {
-            console.error(
-              `[dubbing-worker] Final fallback callback failed for job ${job.id}:`,
-              callbackError
+            await processDubbingJob(job.data, {
+              isFinalAttempt,
+              updateProgress: async (pct: number) => {
+                await job.updateProgress(pct);
+              },
+            });
+          } catch (error) {
+            const fallbackJobId = typeof job.data?.jobId === "string" ? job.data.jobId : "";
+            const fallbackVideoUrl =
+              typeof job.data?.videoUrl === "string" ? job.data.videoUrl : "";
+
+            if (!isFinalAttempt || !fallbackJobId.trim() || !fallbackVideoUrl.trim()) {
+              throw error;
+            }
+
+            const reason = error instanceof Error ? error.message : String(error);
+            const fallbackPayload = {
+              jobId: fallbackJobId,
+              status: "COMPLETED" as const,
+              alignedVideoUrl: fallbackVideoUrl,
+              duration:
+                typeof job.data.sourceDuration === "number" &&
+                Number.isFinite(job.data.sourceDuration) &&
+                job.data.sourceDuration >= 0
+                  ? job.data.sourceDuration
+                  : 0,
+              fallback: true,
+              fallbackStage: "DUBBING",
+              fallbackReason: reason,
+              attemptsMade: job.attemptsMade + 1,
+            };
+
+            try {
+              await postJobCallbackWithRetry(fallbackPayload);
+            } catch (callbackError) {
+              console.error(
+                `[dubbing-worker] Final fallback callback failed for job ${job.id}:`,
+                callbackError
+              );
+              throw new AggregateError(
+                [error, callbackError],
+                `Dubbing failed and source-video fallback callback could not be delivered for job ${job.id}`
+              );
+            }
+
+            await updateCompletedJobProgress(fallbackJobId, "Dubbing", () =>
+              job.updateProgress(100)
             );
-            throw new AggregateError(
-              [error, callbackError],
-              `Dubbing failed and source-video fallback callback could not be delivered for job ${job.id}`
+            console.warn(
+              `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
             );
           }
-
-          await updateCompletedJobProgress(fallbackJobId, "Dubbing", () => job.updateProgress(100));
-          console.warn(
-            `[dubbing-worker] Job ${job.id} exhausted retries; completed with source-video fallback.`
-          );
-        }
-      });
-      return;
-    }
-
-    if (job.name !== "dubbing") {
-      throw new Error(`Unsupported dubbing job type: ${job.name}`);
-    }
-
-    const { jobId, sourceUrl, targetLanguage } = job.data;
-    const maxAttempts =
-      typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
-
-    const provider = resolveDubbingProvider();
-
-    await runDubbingJobWithRetry({
-      jobId,
-      attemptsMade: job.attemptsMade,
-      maxAttempts,
-      claim: async () => {
-        // PROCESSING remains eligible so BullMQ can retry active work.
-        const claimed = await prisma.videoJob.updateMany({
-          where: {
-            id: jobId,
-            status: { in: ["PENDING", "PROCESSING"] },
-          },
-          data: { status: "PROCESSING", progress: 10 },
         });
-        return claimed.count > 0;
-      },
-      process: async () => {
-        if (provider === "voicestudio") {
-          // 1. Validate VoiceStudio health before synthesis
-          const adapter = new VoiceStudioDubbingAdapter();
-          const client = adapter.getClient();
-          const health = await client.checkHealth();
-          if (!health.isReady) {
-            throw new VoiceStudioUnavailableError(
-              `VoiceStudio is not ready (status: ${health.status}, step: ${health.startupStep || "warming"})`
-            );
-          }
+        return;
+      }
 
-          await prisma.videoJob.update({
-            where: { id: jobId },
+      if (job.name !== "dubbing") {
+        throw new Error(`Unsupported dubbing job type: ${job.name}`);
+      }
+
+      const { jobId, sourceUrl, targetLanguage } = job.data;
+      const maxAttempts =
+        typeof job.opts.attempts === "number" && job.opts.attempts > 0 ? job.opts.attempts : 1;
+
+      const provider = resolveDubbingProvider();
+
+      await runDubbingJobWithRetry({
+        jobId,
+        attemptsMade: job.attemptsMade,
+        maxAttempts,
+        claim: async () => {
+          // PROCESSING remains eligible so BullMQ can retry active work.
+          const claimed = await prisma.videoJob.updateMany({
+            where: {
+              id: jobId,
+              status: { in: ["PENDING", "PROCESSING"] },
+            },
             data: { status: "PROCESSING", progress: 10 },
           });
-          await job.updateProgress(10);
-
-          // 2. Resolve script / narration steps
-          const existingJob = await prisma.videoJob.findUnique({
+          return claimed.count > 0;
+        },
+        process: async () => {
+          // ── Task-00133: Worker-Level Voice Cloning Consent Check ─────────
+          // Read the latest persisted consent at execution time before calling ElevenLabs or VoiceStudio.
+          // Fails closed if consent is absent, revoked, or cannot be verified.
+          const targetJob = await prisma.videoJob.findUnique({
             where: { id: jobId },
-            select: { jobData: true, demoId: true },
+            select: { userId: true },
           });
 
-          let steps: TimedStepNarration[] = [];
-          if (Array.isArray(job.data?.steps) && job.data.steps.length > 0) {
-            steps = job.data.steps;
-          } else if (typeof job.data?.text === "string" && job.data.text.trim()) {
-            steps = [{ stepId: "step-1", text: job.data.text.trim() }];
-          } else if (existingJob?.jobData && typeof existingJob.jobData === "object") {
-            const jd = existingJob.jobData as Record<string, unknown>;
-            if (Array.isArray(jd.steps) && jd.steps.length > 0) {
-              steps = jd.steps as TimedStepNarration[];
-            } else if (typeof jd.text === "string" && jd.text.trim()) {
-              steps = [{ stepId: "step-1", text: jd.text.trim() }];
-            }
-          }
-
-          if (steps.length === 0 && existingJob?.demoId) {
-            const demo = await prisma.demo.findUnique({
-              where: { id: existingJob.demoId },
-              select: { subtitles: true },
-            });
-            if (Array.isArray(demo?.subtitles)) {
-              steps = (demo.subtitles as any[])
-                .filter((c) => c && typeof c.text === "string" && c.text.trim())
-                .map((c, i) => ({
-                  stepId: c.id || `step-${i + 1}`,
-                  text: c.text.trim(),
-                  startTime: typeof c.start === "number" ? c.start : undefined,
-                  endTime: typeof c.end === "number" ? c.end : undefined,
-                  targetDurationSec:
-                    typeof c.end === "number" && typeof c.start === "number" && c.end > c.start
-                      ? Number((c.end - c.start).toFixed(3))
-                      : undefined,
-                }));
-            }
-          }
-
-          if (steps.length === 0) {
-            throw new VoiceStudioError(
-              "INVALID_INPUT",
-              "No narration steps or text provided for VoiceStudio dubbing"
+          const ownerUserId =
+            targetJob?.userId || (typeof job.data?.userId === "string" ? job.data.userId : null);
+          if (!ownerUserId) {
+            throw new Error(
+              "VOICE_CLONING_CONSENT_REQUIRED: Missing user ID for dubbing consent verification"
             );
           }
 
+          let userConsent: { voiceCloningConsent: boolean } | null = null;
+          try {
+            userConsent = await prisma.workspaceConsent.findUnique({
+              where: { userId: ownerUserId },
+              select: { voiceCloningConsent: true },
+            });
+          } catch (consentErr) {
+            throw new Error(
+              `VOICE_CLONING_CONSENT_REQUIRED: Consent verification failed: ${
+                consentErr instanceof Error ? consentErr.message : String(consentErr)
+              }`
+            );
+          }
+
+          if (!userConsent || !userConsent.voiceCloningConsent) {
+            throw new Error(
+              "VOICE_CLONING_CONSENT_REQUIRED: Explicit voice cloning consent has not been granted by this workspace."
+            );
+          }
+
+          if (provider === "voicestudio") {
+            // 1. Validate VoiceStudio health before synthesis
+            const adapter = new VoiceStudioDubbingAdapter();
+            const client = adapter.getClient();
+            const health = await client.checkHealth();
+            if (!health.isReady) {
+              throw new VoiceStudioUnavailableError(
+                `VoiceStudio is not ready (status: ${health.status}, step: ${health.startupStep || "warming"})`
+              );
+            }
+
+            await prisma.videoJob.update({
+              where: { id: jobId },
+              data: { status: "PROCESSING", progress: 10 },
+            });
+            await job.updateProgress(10);
+
+            // 2. Resolve script / narration steps
+            const existingJob = await prisma.videoJob.findUnique({
+              where: { id: jobId },
+              select: { jobData: true, demoId: true },
+            });
+
+            let steps: TimedStepNarration[] = [];
+            if (Array.isArray(job.data?.steps) && job.data.steps.length > 0) {
+              steps = job.data.steps;
+            } else if (typeof job.data?.text === "string" && job.data.text.trim()) {
+              steps = [{ stepId: "step-1", text: job.data.text.trim() }];
+            } else if (existingJob?.jobData && typeof existingJob.jobData === "object") {
+              const jd = existingJob.jobData as Record<string, unknown>;
+              if (Array.isArray(jd.steps) && jd.steps.length > 0) {
+                steps = jd.steps as TimedStepNarration[];
+              } else if (typeof jd.text === "string" && jd.text.trim()) {
+                steps = [{ stepId: "step-1", text: jd.text.trim() }];
+              }
+            }
+
+            if (steps.length === 0 && existingJob?.demoId) {
+              const demo = await prisma.demo.findUnique({
+                where: { id: existingJob.demoId },
+                select: { subtitles: true },
+              });
+              if (Array.isArray(demo?.subtitles)) {
+                steps = (demo.subtitles as any[])
+                  .filter((c) => c && typeof c.text === "string" && c.text.trim())
+                  .map((c, i) => ({
+                    stepId: c.id || `step-${i + 1}`,
+                    text: c.text.trim(),
+                    startTime: typeof c.start === "number" ? c.start : undefined,
+                    endTime: typeof c.end === "number" ? c.end : undefined,
+                    targetDurationSec:
+                      typeof c.end === "number" && typeof c.start === "number" && c.end > c.start
+                        ? Number((c.end - c.start).toFixed(3))
+                        : undefined,
+                  }));
+              }
+            }
+
+            if (steps.length === 0) {
+              throw new VoiceStudioError(
+                "INVALID_INPUT",
+                "No narration steps or text provided for VoiceStudio dubbing"
+              );
+            }
+
+            await prisma.videoJob.update({
+              where: { id: jobId },
+              data: {
+                progress: 25,
+                jobData: {
+                  kind: "DUBBING",
+                  sourceUrl,
+                  targetLanguage,
+                  provider: "voicestudio",
+                  providerStatus: "processing",
+                },
+              },
+            });
+            await job.updateProgress(25);
+
+            // 3. Synthesize speech using VoiceStudioDubbingAdapter
+            const synthesisResult = await adapter.synthesizeTimedSteps(steps, {
+              language: targetLanguage,
+            });
+
+            // 4. Persist generated audio using existing Cloudinary upload implementation
+            const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-vs-audio-"));
+            let audioUrl: string;
+            try {
+              const tempFile = path.join(tempDir, `audio.${synthesisResult.format || "wav"}`);
+              await fs.promises.writeFile(tempFile, synthesisResult.audioBuffer);
+              const uploadResult = await defaultUploadToCloudinary(tempFile);
+              if (!uploadResult?.secure_url) {
+                throw new Error("Cloudinary upload returned no secure_url for VoiceStudio audio");
+              }
+              audioUrl = uploadResult.secure_url;
+            } finally {
+              await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            }
+
+            // 5. Pass resulting audio URL and timing into existing AVS dubbing pipeline
+            const canAlign =
+              Boolean(sourceUrl) &&
+              steps.some((s) => s.startTime !== undefined && s.endTime !== undefined);
+
+            let finalExportedUrl = audioUrl;
+
+            if (canAlign) {
+              await job.updateProgress(50);
+              try {
+                await processDubbingJob(
+                  {
+                    jobId,
+                    videoUrl: sourceUrl,
+                    dubUrl: audioUrl,
+                    steps: steps.map((s, idx) => ({
+                      id: s.stepId,
+                      index: idx,
+                      startTime: s.startTime ?? 0,
+                      endTime: s.endTime ?? s.targetDurationSec ?? 0,
+                    })),
+                    dubTimings: synthesisResult.stepTimings.map((st) => ({
+                      stepId: st.stepId,
+                      start: st.start,
+                      end: st.end,
+                    })),
+                    sourceDuration: synthesisResult.durationSec,
+                  },
+                  {
+                    isFinalAttempt: job.attemptsMade + 1 >= maxAttempts,
+                    updateProgress: async (pct: number) => {
+                      const mapped = Math.round(50 + pct * 0.45);
+                      await job.updateProgress(Math.min(95, mapped));
+                    },
+                    postCallback: async (cbPayload) => {
+                      if (cbPayload.status === "COMPLETED" && cbPayload.alignedVideoUrl) {
+                        finalExportedUrl = cbPayload.alignedVideoUrl;
+                      }
+                    },
+                  }
+                );
+              } catch (alignmentErr) {
+                console.warn(
+                  `[Dubbing ${jobId}] AVS alignment skipped or failed, using synthesized audio:`,
+                  alignmentErr
+                );
+              }
+            }
+
+            // 6. Finalize job status, progress, and completion callbacks
+            await prisma.videoJob.update({
+              where: { id: jobId },
+              data: {
+                status: "COMPLETED",
+                progress: 100,
+                exportedUrl: finalExportedUrl,
+                jobData: {
+                  kind: "DUBBING",
+                  sourceUrl,
+                  targetLanguage,
+                  provider: "voicestudio",
+                  providerStatus: "completed",
+                  audioEndpoint: audioUrl,
+                  exportedUrl: finalExportedUrl,
+                  durationSec: synthesisResult.durationSec,
+                },
+              },
+            });
+            await updateCompletedJobProgress(jobId, "Dubbing", () => job.updateProgress(100));
+            return;
+          }
+
+          // --- Existing ElevenLabs Flow Below ---
+          const existingJob = await prisma.videoJob.findUnique({
+            where: { id: jobId },
+            select: { jobData: true },
+          });
+          const reusableDubbingJob = getReusableDubbingJob(
+            existingJob?.jobData,
+            sourceUrl,
+            targetLanguage
+          );
+
+          await job.updateProgress(10);
+
+          const watermark = parseDubbingWatermark();
+          const dubbingJob =
+            reusableDubbingJob ??
+            (await createDubbingJob({
+              sourceUrl,
+              targetLanguage,
+              ...(watermark !== undefined ? { watermark } : {}),
+            }));
           await prisma.videoJob.update({
             where: { id: jobId },
             data: {
@@ -1866,215 +2033,87 @@ export const dubbingWorker = new Worker(
                 kind: "DUBBING",
                 sourceUrl,
                 targetLanguage,
-                provider: "voicestudio",
-                providerStatus: "processing",
+                dubbingId: dubbingJob.dubbingId,
+                providerStatus: dubbingJob.status,
               },
             },
           });
           await job.updateProgress(25);
 
-          // 3. Synthesize speech using VoiceStudioDubbingAdapter
-          const synthesisResult = await adapter.synthesizeTimedSteps(steps, {
-            language: targetLanguage,
-          });
-
-          // 4. Persist generated audio using existing Cloudinary upload implementation
-          const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-vs-audio-"));
-          let audioUrl: string;
+          const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
+          // Extension point: record billable usage if returned by vendor response payload
+          if (completedJob.charactersUsed !== undefined) {
+            recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
+              category: "dubbing",
+              provider: "elevenlabs",
+              unit: "characters",
+              amount: completedJob.charactersUsed,
+              windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
+              idempotencyKey: `${jobId}:${job.attemptsMade}`,
+            });
+          }
+          if (completedJob.durationSecs !== undefined) {
+            recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
+              category: "dubbing",
+              provider: "elevenlabs",
+              unit: "audio_seconds",
+              amount: completedJob.durationSecs,
+              windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
+              idempotencyKey: `${jobId}:${job.attemptsMade}`,
+            });
+          }
+          // Download the generated audio and persist it before marking the job complete.
+          const audioEndpoint = `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`;
+          const audioUrl = `https://api.elevenlabs.io${audioEndpoint}`;
+          const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-dub-audio-"));
           try {
-            const tempFile = path.join(tempDir, `audio.${synthesisResult.format || "wav"}`);
-            await fs.promises.writeFile(tempFile, synthesisResult.audioBuffer);
+            const tempFile = path.join(tempDir, "audio.mp3");
+            const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+            if (!apiKey) {
+              throw new Error("Missing ELEVENLABS_API_KEY");
+            }
+
+            await downloadFile(audioUrl, tempFile, {
+              "xi-api-key": apiKey,
+            });
             const uploadResult = await defaultUploadToCloudinary(tempFile);
             if (!uploadResult?.secure_url) {
-              throw new Error("Cloudinary upload returned no secure_url for VoiceStudio audio");
+              throw new Error("Cloudinary upload returned no secure_url for audio");
             }
-            audioUrl = uploadResult.secure_url;
+
+            await prisma.videoJob.update({
+              where: { id: jobId },
+              data: {
+                status: "COMPLETED",
+                progress: 100,
+                exportedUrl: uploadResult.secure_url,
+                jobData: {
+                  kind: "DUBBING",
+                  sourceUrl,
+                  targetLanguage,
+                  dubbingId: completedJob.dubbingId,
+                  providerStatus: completedJob.status,
+                  audioEndpoint: uploadResult.secure_url,
+                },
+              },
+            });
           } finally {
             await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
           }
-
-          // 5. Pass resulting audio URL and timing into existing AVS dubbing pipeline
-          const canAlign =
-            Boolean(sourceUrl) &&
-            steps.some((s) => s.startTime !== undefined && s.endTime !== undefined);
-
-          let finalExportedUrl = audioUrl;
-
-          if (canAlign) {
-            await job.updateProgress(50);
-            try {
-              await processDubbingJob(
-                {
-                  jobId,
-                  videoUrl: sourceUrl,
-                  dubUrl: audioUrl,
-                  steps: steps.map((s, idx) => ({
-                    id: s.stepId,
-                    index: idx,
-                    startTime: s.startTime ?? 0,
-                    endTime: s.endTime ?? (s.targetDurationSec ?? 0),
-                  })),
-                  dubTimings: synthesisResult.stepTimings.map((st) => ({
-                    stepId: st.stepId,
-                    start: st.start,
-                    end: st.end,
-                  })),
-                  sourceDuration: synthesisResult.durationSec,
-                },
-                {
-                  isFinalAttempt: job.attemptsMade + 1 >= maxAttempts,
-                  updateProgress: async (pct: number) => {
-                    const mapped = Math.round(50 + pct * 0.45);
-                    await job.updateProgress(Math.min(95, mapped));
-                  },
-                  postCallback: async (cbPayload) => {
-                    if (cbPayload.status === "COMPLETED" && cbPayload.alignedVideoUrl) {
-                      finalExportedUrl = cbPayload.alignedVideoUrl;
-                    }
-                  },
-                }
-              );
-            } catch (alignmentErr) {
-              console.warn(
-                `[Dubbing ${jobId}] AVS alignment skipped or failed, using synthesized audio:`,
-                alignmentErr
-              );
-            }
-          }
-
-          // 6. Finalize job status, progress, and completion callbacks
-          await prisma.videoJob.update({
-            where: { id: jobId },
-            data: {
-              status: "COMPLETED",
-              progress: 100,
-              exportedUrl: finalExportedUrl,
-              jobData: {
-                kind: "DUBBING",
-                sourceUrl,
-                targetLanguage,
-                provider: "voicestudio",
-                providerStatus: "completed",
-                audioEndpoint: audioUrl,
-                exportedUrl: finalExportedUrl,
-                durationSec: synthesisResult.durationSec,
-              },
-            },
-          });
           await updateCompletedJobProgress(jobId, "Dubbing", () => job.updateProgress(100));
-          return;
-        }
-
-        // --- Existing ElevenLabs Flow Below ---
-        const existingJob = await prisma.videoJob.findUnique({
-          where: { id: jobId },
-          select: { jobData: true },
-        });
-        const reusableDubbingJob = getReusableDubbingJob(
-          existingJob?.jobData,
-          sourceUrl,
-          targetLanguage
-        );
-
-        await job.updateProgress(10);
-
-        const watermark = parseDubbingWatermark();
-        const dubbingJob =
-          reusableDubbingJob ??
-          (await createDubbingJob({
-            sourceUrl,
-            targetLanguage,
-            ...(watermark !== undefined ? { watermark } : {}),
-          }));
-        await prisma.videoJob.update({
-          where: { id: jobId },
-          data: {
-            progress: 25,
-            jobData: {
-              kind: "DUBBING",
-              sourceUrl,
-              targetLanguage,
-              dubbingId: dubbingJob.dubbingId,
-              providerStatus: dubbingJob.status,
-            },
-          },
-        });
-        await job.updateProgress(25);
-
-        const completedJob = await waitForDubbingCompletion(dubbingJob.dubbingId);
-        // Extension point: record billable usage if returned by vendor response payload
-        if (completedJob.charactersUsed !== undefined) {
-          recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
-            category: "dubbing",
-            provider: "elevenlabs",
-            unit: "characters",
-            amount: completedJob.charactersUsed,
-            windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
-            idempotencyKey: `${jobId}:${job.attemptsMade}`,
-          });
-        }
-        if (completedJob.durationSecs !== undefined) {
-          recordCostObservationBestEffort(dubbingMonitoringRedisConnection, {
-            category: "dubbing",
-            provider: "elevenlabs",
-            unit: "audio_seconds",
-            amount: completedJob.durationSecs,
-            windowSeconds: dubbingLatencyObservationWindowSeconds ?? 3600,
-            idempotencyKey: `${jobId}:${job.attemptsMade}`,
-          });
-        }
-        // Download the generated audio and persist it before marking the job complete.
-        const audioEndpoint = `/v1/dubbing/${completedJob.dubbingId}/audio/${targetLanguage}`;
-        const audioUrl = `https://api.elevenlabs.io${audioEndpoint}`;
-        const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marvedge-dub-audio-"));
-        try {
-          const tempFile = path.join(tempDir, "audio.mp3");
-          const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
-          if (!apiKey) {
-            throw new Error("Missing ELEVENLABS_API_KEY");
-          }
-
-          await downloadFile(audioUrl, tempFile, {
-            "xi-api-key": apiKey,
-          });
-          const uploadResult = await defaultUploadToCloudinary(tempFile);
-          if (!uploadResult?.secure_url) {
-            throw new Error("Cloudinary upload returned no secure_url for audio");
-          }
-
+        },
+        persistFailure: async (message) => {
+          console.error(`[Dubbing ${jobId}] failed:`, message);
           await prisma.videoJob.update({
             where: { id: jobId },
             data: {
-              status: "COMPLETED",
-              progress: 100,
-              exportedUrl: uploadResult.secure_url,
-              jobData: {
-                kind: "DUBBING",
-                sourceUrl,
-                targetLanguage,
-                dubbingId: completedJob.dubbingId,
-                providerStatus: completedJob.status,
-                audioEndpoint: uploadResult.secure_url,
-              },
+              status: "FAILED",
+              error: message,
             },
           });
-        } finally {
-          await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-        }
-        await updateCompletedJobProgress(jobId, "Dubbing", () => job.updateProgress(100));
-      },
-      persistFailure: async (message) => {
-        console.error(`[Dubbing ${jobId}] failed:`, message);
-        await prisma.videoJob.update({
-          where: { id: jobId },
-          data: {
-            status: "FAILED",
-            error: message,
-          },
-        });
-      },
-    });
-  },
+        },
+      });
+    },
     (status, durationSeconds) => {
       if (dubbingLatencyObservationWindowSeconds !== undefined) {
         recordLatencyObservationBestEffort(

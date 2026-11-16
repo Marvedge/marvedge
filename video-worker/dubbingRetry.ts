@@ -15,11 +15,20 @@ export function isRetryableDubbingError(error: unknown): boolean {
     return true;
   }
 
+  const errorWithMeta = error as { code?: string; isRetryable?: boolean };
+
+  if (
+    error.message.includes("VOICE_CLONING_CONSENT_REQUIRED") ||
+    errorWithMeta.code === "VOICE_CLONING_CONSENT_REQUIRED"
+  ) {
+    return false;
+  }
+
   if (
     error instanceof VoiceStudioError ||
-    (typeof (error as any).isRetryable === "boolean" && typeof (error as any).code === "string")
+    (typeof errorWithMeta.isRetryable === "boolean" && typeof errorWithMeta.code === "string")
   ) {
-    return (error as any).isRetryable;
+    return Boolean(errorWithMeta.isRetryable);
   }
 
   if (

@@ -8,6 +8,7 @@ import ProfileTab from "./components/ProfileTab";
 import AccountTab from "./components/AccountTab";
 import BrandingTab from "./components/BrandingTab";
 import CrmTab from "./components/CrmTab";
+import ConsentTab from "./components/ConsentTab";
 import { TABS } from "../../lib/constants";
 import { isOverlaysPanelEnabled } from "@/app/lib/overlays/flags";
 
@@ -17,13 +18,13 @@ export const metadata = {
 };
 
 /**
- * OVL (#302 §2.1) adds a CRM-delivery tab. It is appended to the shared TABS
- * list rather than added to it, so with NEXT_PUBLIC_OVERLAYS_ENABLED unset this
- * page renders exactly the three tabs it renders today — the flag is read at
- * module scope because Next inlines it at build time.
+ * Task-00133 adds a dedicated Consent tab.
+ * OVL (#302 §2.1) adds a CRM-delivery tab.
  */
+const CONSENT_TAB = "Consent";
 const CRM_TAB = "Integrations";
-const TAB_LIST = isOverlaysPanelEnabled() ? [...TABS, CRM_TAB] : TABS;
+const BASE_TABS = [...TABS, CONSENT_TAB];
+const TAB_LIST = isOverlaysPanelEnabled() ? [...BASE_TABS, CRM_TAB] : BASE_TABS;
 
 const SettingsPage = () => {
   const settings = useSettings();
@@ -41,6 +42,8 @@ const SettingsPage = () => {
       {settings.activeTab === "Account" && <AccountTab settings={settings} />}
 
       {settings.activeTab === "Branding" && <BrandingTab />}
+
+      {settings.activeTab === CONSENT_TAB && <ConsentTab />}
 
       {settings.activeTab === CRM_TAB && isOverlaysPanelEnabled() && <CrmTab />}
       <ToastContainer position="top-right" autoClose={3000} />

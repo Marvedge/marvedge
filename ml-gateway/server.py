@@ -258,6 +258,23 @@ async def reframe_combined(request: Request) -> JSONResponse:
             "ok": False, "error": "videoUrl is required"
         })
 
+    # Task-00133: If face tracking is explicitly disabled, fall back to AutoFlip-only reframing
+    if body.get("enableFaceTracking") is False:
+        try:
+            async with httpx.AsyncClient(timeout=DOWNSTREAM_TIMEOUT_SEC) as client:
+                resp = await client.post(f"{AUTOFILP_SERVICE_URL}/reframe", json=body)
+                try:
+                    content = resp.json()
+                except Exception:
+                    content = {"ok": False, "error": "Malformed response from AutoFlip service"}
+                return JSONResponse(status_code=resp.status_code, content=content)
+        except httpx.TimeoutException:
+            logger.error("AutoFlip service timed out after %ss", DOWNSTREAM_TIMEOUT_SEC)
+            return JSONResponse(status_code=504, content={"ok": False, "error": "AutoFlip service request timed out"})
+        except Exception as e:
+            logger.exception("AutoFlip proxy error: %s", str(e))
+            return JSONResponse(status_code=502, content={"ok": False, "error": "AutoFlip service is unavailable"})
+
     talknet_body = {
         "videoUrl": video_url,
         "minTrackFrames": body.get("minTrackFrames", 10),

@@ -27,6 +27,9 @@ vi.mock("@/app/lib/prisma", () => ({
       create: vi.fn(),
       updateMany: vi.fn(),
     },
+    workspaceConsent: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -213,6 +216,7 @@ describe("POST /api/reframe", () => {
         jobData: {
           kind: "REFRAME",
           targetAspectRatio: "9:16",
+          enableFaceTracking: false,
           source: { width: 1920, height: 1080, fps: 30, durationSec: 12 },
         },
       },
@@ -227,8 +231,103 @@ describe("POST /api/reframe", () => {
         videoUrl: "https://example.com/v.mp4",
         targetAspectRatio: "9:16",
         source: { width: 1920, height: 1080, fps: 30, durationSec: 12 },
+        enableFaceTracking: false,
       },
       { jobId: "job-new-456" }
     );
+  });
+
+  describe("Face Tracking Consent Gating (Task-00133)", () => {
+    it("propagates enableFaceTracking: true when workspace consent is granted", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-consented" } });
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-consented" } as never);
+      vi.mocked(prisma.workspaceConsent.findUnique).mockResolvedValue({
+        faceTrackingConsent: true,
+      } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-ft-1" } as never);
+
+      const res = await POST(
+        makeRequest({
+          videoUrl: "https://example.com/v.mp4",
+          targetAspectRatio: "9:16",
+          enableFaceTracking: true,
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(prisma.videoJob.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          jobData: expect.objectContaining({
+            enableFaceTracking: true,
+          }),
+        }),
+      });
+      expect(reframeJobQueue.add).toHaveBeenCalledWith(
+        "reframe",
+        expect.objectContaining({
+          enableFaceTracking: true,
+        }),
+        expect.any(Object)
+      );
+    });
+
+    it("forces enableFaceTracking: false when workspace consent is absent or false", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-unconsented" } });
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-unconsented" } as never);
+      vi.mocked(prisma.workspaceConsent.findUnique).mockResolvedValue({
+        faceTrackingConsent: false,
+      } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-ft-2" } as never);
+
+      const res = await POST(
+        makeRequest({
+          videoUrl: "https://example.com/v.mp4",
+          targetAspectRatio: "9:16",
+          enableFaceTracking: true, // requested by client but gated by consent
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(prisma.videoJob.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          jobData: expect.objectContaining({
+            enableFaceTracking: false,
+          }),
+        }),
+      });
+      expect(reframeJobQueue.add).toHaveBeenCalledWith(
+        "reframe",
+        expect.objectContaining({
+          enableFaceTracking: false,
+        }),
+        expect.any(Object)
+      );
+    });
+
+    it("respects client explicitly setting enableFaceTracking: false even when workspace has consent", async () => {
+      vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-consented" } });
+      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-consented" } as never);
+      vi.mocked(prisma.workspaceConsent.findUnique).mockResolvedValue({
+        faceTrackingConsent: true,
+      } as never);
+      vi.mocked(prisma.videoJob.create).mockResolvedValue({ id: "job-ft-3" } as never);
+
+      const res = await POST(
+        makeRequest({
+          videoUrl: "https://example.com/v.mp4",
+          targetAspectRatio: "9:16",
+          enableFaceTracking: false,
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(reframeJobQueue.add).toHaveBeenCalledWith(
+        "reframe",
+        expect.objectContaining({
+          enableFaceTracking: false,
+        }),
+        expect.any(Object)
+      );
+    });
   });
 });
