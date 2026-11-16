@@ -7,6 +7,10 @@ import { asAudioClipDb } from "@/app/lib/audio/db";
 import { ApiError, confirmAudioUpload } from "@/app/lib/audio/service";
 import { isAudioRateLimited } from "@/app/lib/audio/rateLimit";
 
+import { readBoundedRequestJsonObject } from "@/app/lib/http/boundedBody";
+
+const MAX_BODY_BYTES = 8 * 1024;
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ clipId: string }> }
@@ -25,9 +29,14 @@ export async function POST(
   }
 
   const { clipId } = await params;
-  const body = (await _request.json().catch(() => ({}))) as {
-    durationSec?: number | string | null;
-  };
+  const parsed = await readBoundedRequestJsonObject(_request, MAX_BODY_BYTES);
+  if (!parsed.ok && parsed.reason !== "empty") {
+    if (parsed.reason === "too_large") {
+      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+    }
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const body = parsed.ok ? parsed.value : {};
   const durationSec =
     typeof body.durationSec === "number"
       ? body.durationSec

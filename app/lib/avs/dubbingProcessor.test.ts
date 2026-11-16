@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   processDubbingJob,
   postJobCallbackWithRetry,
+  isLocalArtifactUrl,
+  defaultUploadToCloudinary,
   type DubbingJobPayload,
 } from "./dubbingProcessor";
 import type { GcpDubSyncResult } from "../gcpWorker";
@@ -608,6 +610,186 @@ describe("AVS Dubbing Processor (processDubbingJob)", () => {
       } finally {
         globalThis.fetch = originalFetch;
         process.env = originalEnv;
+      }
+    });
+
+    it("prefers VIDEO_WORKER_URL over GCP_VIDEO_WORKER_URL when both are set", async () => {
+      const originalFetch = globalThis.fetch;
+      const originalEnv = { ...process.env };
+      delete process.env.AVS_DUB_SERVICE_URL;
+      process.env.VIDEO_WORKER_URL = "https://aws-worker.example.com";
+      process.env.GCP_VIDEO_WORKER_URL = "https://prod-gcp-worker.run.app";
+      process.env.WORKER_SECRET = "test-worker-secret";
+
+      let calledUrl = "";
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+        calledUrl = url;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            result: {
+              recipeId: "avs-dub",
+              alignedVideoUrl: "https://storage.googleapis.com/test/aligned.mp4",
+              duration: 10,
+            },
+          }),
+        };
+      });
+
+      const postCallback = vi.fn().mockResolvedValue(undefined);
+
+      try {
+        await processDubbingJob(basePayload, { postCallback });
+        expect(calledUrl).toBe("https://aws-worker.example.com/avs-dub");
+      } finally {
+        globalThis.fetch = originalFetch;
+        process.env = originalEnv;
+      }
+    });
+  });
+
+  describe("H. Artifact-origin & loopback URL detection (isLocalArtifactUrl)", () => {
+    it("detects loopback hostnames (localhost, 127.0.0.1, and /artifacts/ paths)", () => {
+      expect(isLocalArtifactUrl("http://localhost:8080/out.mp4")).toBe(true);
+      expect(isLocalArtifactUrl("http://127.0.0.1:3000/media.mp4")).toBe(true);
+      expect(isLocalArtifactUrl("https://my-bucket.s3.amazonaws.com/artifacts/clip.mp4")).toBe(
+        true
+      );
+    });
+
+    it("detects AVS_DUB_SERVICE_URL override artifacts", () => {
+      const prev = process.env.AVS_DUB_SERVICE_URL;
+      try {
+        process.env.AVS_DUB_SERVICE_URL = "http://dub-service:9000";
+        expect(isLocalArtifactUrl("http://dub-service:9000/output.mp4")).toBe(true);
+        expect(isLocalArtifactUrl("http://other-service:9000/output.mp4")).toBe(false);
+      } finally {
+        process.env.AVS_DUB_SERVICE_URL = prev;
+      }
+    });
+
+    it("prefers VIDEO_WORKER_URL over GCP_VIDEO_WORKER_URL for artifact detection", () => {
+      const prevNeutral = process.env.VIDEO_WORKER_URL;
+      const prevLegacy = process.env.GCP_VIDEO_WORKER_URL;
+      try {
+        process.env.VIDEO_WORKER_URL = "https://aws-worker.example.com";
+        process.env.GCP_VIDEO_WORKER_URL = "https://gcp-worker.run.app";
+
+        expect(isLocalArtifactUrl("https://aws-worker.example.com/artifacts/video.mp4")).toBe(
+          true
+        );
+        expect(isLocalArtifactUrl("https://aws-worker.example.com/video.mp4")).toBe(true);
+      } finally {
+        process.env.VIDEO_WORKER_URL = prevNeutral;
+        process.env.GCP_VIDEO_WORKER_URL = prevLegacy;
+      }
+    });
+
+    it("falls back to GCP_VIDEO_WORKER_URL when VIDEO_WORKER_URL is absent or empty", () => {
+      const prevNeutral = process.env.VIDEO_WORKER_URL;
+      const prevLegacy = process.env.GCP_VIDEO_WORKER_URL;
+      try {
+        delete process.env.VIDEO_WORKER_URL;
+        process.env.GCP_VIDEO_WORKER_URL = "https://gcp-worker.run.app";
+
+        expect(isLocalArtifactUrl("https://gcp-worker.run.app/export.mp4")).toBe(true);
+
+        process.env.VIDEO_WORKER_URL = "   ";
+        expect(isLocalArtifactUrl("https://gcp-worker.run.app/export.mp4")).toBe(true);
+      } finally {
+        process.env.VIDEO_WORKER_URL = prevNeutral;
+        process.env.GCP_VIDEO_WORKER_URL = prevLegacy;
+      }
+    });
+
+    it("returns false for non-matching remote cloud storage URLs", () => {
+      const prevNeutral = process.env.VIDEO_WORKER_URL;
+      const prevLegacy = process.env.GCP_VIDEO_WORKER_URL;
+      const prevDub = process.env.AVS_DUB_SERVICE_URL;
+      try {
+        delete process.env.VIDEO_WORKER_URL;
+        delete process.env.GCP_VIDEO_WORKER_URL;
+        delete process.env.AVS_DUB_SERVICE_URL;
+
+        expect(isLocalArtifactUrl("https://storage.googleapis.com/bucket/aligned.mp4")).toBe(
+          false
+        );
+        expect(isLocalArtifactUrl("https://s3.amazonaws.com/my-bucket/aligned.mp4")).toBe(false);
+      } finally {
+        process.env.VIDEO_WORKER_URL = prevNeutral;
+        process.env.GCP_VIDEO_WORKER_URL = prevLegacy;
+        process.env.AVS_DUB_SERVICE_URL = prevDub;
+      }
+    });
+
+    it("automatically triggers Cloudinary upload when aligned video URL starts with VIDEO_WORKER_URL", async () => {
+      const prevNeutral = process.env.VIDEO_WORKER_URL;
+      const prevStorage = process.env.STORAGE_PROVIDER;
+      try {
+        process.env.VIDEO_WORKER_URL = "https://aws-worker.example.com";
+        delete process.env.STORAGE_PROVIDER;
+
+        const fakeGcpResult: GcpDubSyncResult = {
+          alignedVideoUrl: "https://aws-worker.example.com/output/aligned.mp4",
+          duration: 12.0,
+        };
+
+        const invokeDubSync = vi.fn(async () => fakeGcpResult);
+        const postCallback = vi.fn(async () => {});
+        const uploadToCloudinary = vi.fn(async () => ({
+          secure_url: "https://res.cloudinary.com/demo/video/upload/aws-aligned.mp4",
+        }));
+
+        await processDubbingJob(basePayload, {
+          invokeDubSync,
+          postCallback,
+          uploadToCloudinary,
+        });
+
+        expect(uploadToCloudinary).toHaveBeenCalledWith(
+          "https://aws-worker.example.com/output/aligned.mp4"
+        );
+        expect(postCallback).toHaveBeenCalledWith({
+          jobId: "job-dub-123",
+          status: "COMPLETED",
+          alignedVideoUrl: "https://res.cloudinary.com/demo/video/upload/aws-aligned.mp4",
+          duration: 12.0,
+        });
+      } finally {
+        process.env.VIDEO_WORKER_URL = prevNeutral;
+        process.env.STORAGE_PROVIDER = prevStorage;
+      }
+    });
+
+    it("defaultUploadToCloudinary recognizes VIDEO_WORKER_URL as a local loopback URL requiring fetch", async () => {
+      const prevNeutral = process.env.VIDEO_WORKER_URL;
+      const prevLegacy = process.env.GCP_VIDEO_WORKER_URL;
+      const originalFetch = globalThis.fetch;
+      try {
+        process.env.VIDEO_WORKER_URL = "http://internal-worker.aws:8080";
+        delete process.env.GCP_VIDEO_WORKER_URL;
+
+        let fetchedUrl = "";
+        globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+          fetchedUrl = url;
+          return {
+            ok: false,
+            status: 404,
+            statusText: "Not Found",
+          };
+        });
+
+        await expect(
+          defaultUploadToCloudinary("http://internal-worker.aws:8080/artifacts/output.mp4")
+        ).rejects.toThrow("Failed to download local artifact for Cloudinary upload");
+
+        expect(fetchedUrl).toBe("http://internal-worker.aws:8080/artifacts/output.mp4");
+      } finally {
+        globalThis.fetch = originalFetch;
+        process.env.VIDEO_WORKER_URL = prevNeutral;
+        process.env.GCP_VIDEO_WORKER_URL = prevLegacy;
       }
     });
   });

@@ -1966,27 +1966,15 @@ async function packageHlsJob({ demoId, videoUrl, sourceHash: knownSourceHash, fo
 }
 
 async function getRecipeById(recipeId) {
-  const snap = await firestore
-    .collection(RECIPES_COLLECTION)
-    .doc(recipeId)
-    .get();
-  if (!snap.exists) {
+  const recipe = await jobstore.getRecipe(recipeId);
+  if (!recipe) {
     throw new Error(`Recipe not found: ${recipeId}`);
   }
-  return snap.data() || {};
+  return recipe;
 }
 
 async function updateChunkStatus(chunkId, patch) {
-  await firestore
-    .collection(CHUNKS_COLLECTION)
-    .doc(chunkId)
-    .set(
-      {
-        ...patch,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+  await jobstore.setChunkStatus(chunkId, patch);
 }
 
 async function processChunkJob({
@@ -2014,7 +2002,7 @@ async function processChunkJob({
     rawBucket,
     rawObject: sourceObject,
     sourceUrl: videoUrl || null,
-    error: FieldValue.delete(),
+    error: null,
   });
 
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "marvedge-gcp-"));
@@ -2068,7 +2056,7 @@ async function processChunkJob({
       await updateChunkStatus(chunkId, {
         recipeId,
         status: "SKIPPED",
-        error: FieldValue.delete(),
+        error: null,
       });
       return {
         chunkId,
@@ -2104,7 +2092,7 @@ async function processChunkJob({
       status: "DONE",
       processedBucket,
       processedObject: destObject,
-      error: FieldValue.delete(),
+      error: null,
     });
 
     return {
@@ -2459,4 +2447,12 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, downloadFromUrl, isSafeChunkFilename, resolveChunkPath };
+module.exports = {
+  app,
+  downloadFromUrl,
+  isSafeChunkFilename,
+  resolveChunkPath,
+  getRecipeById,
+  updateChunkStatus,
+  processChunkJob,
+};

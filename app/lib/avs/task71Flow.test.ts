@@ -80,7 +80,7 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
       userId,
     } as never);
 
-    vi.mocked(prisma.videoJob.create).mockImplementation(({ data }: Prisma.VideoJobCreateArgs) => {
+    vi.mocked(prisma.videoJob.create).mockImplementation(({ data }: any) => {
       currentJob = {
         id: jobId,
         userId: (data as { userId: string }).userId ?? userId,
@@ -90,13 +90,15 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
         videoUrl: data.videoUrl,
         jobData: (data.jobData as Prisma.JsonValue) ?? {},
         exportedUrl: data.exportedUrl ?? null,
+        captionUrl: null,
+        scoreJson: null,
         error: data.error ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
         idempotencyKey: (data as { idempotencyKey?: string | null }).idempotencyKey ?? null,
         version: (data as { version?: number }).version ?? 0,
       };
-      return mockVideoJobClient(currentJob!);
+return mockVideoJobClient(currentJob!);
     });
 
     vi.mocked(prisma.videoJob.findUnique).mockImplementation(

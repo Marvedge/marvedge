@@ -22,8 +22,7 @@ const authMiddleware = withAuth({
       if (typeof token.sessionVersion !== "number") {
         return false;
       }
-      const hasIdentity =
-        typeof token.id === "string" || typeof token.sub === "string";
+      const hasIdentity = typeof token.id === "string" || typeof token.sub === "string";
       return hasIdentity;
     },
   },
@@ -103,7 +102,7 @@ function isStaticAsset(pathname: string): boolean {
 }
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
-  const hostname = req.headers.get("host") || "";
+  const hostname = (req.headers.get("host") || "").trim().toLowerCase();
   const url = req.nextUrl.clone();
 
   // 1. Exclude system paths and APIs

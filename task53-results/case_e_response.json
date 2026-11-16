@@ -1,0 +1,1 @@
+﻿{"ok":true,"crop_targets":{"schema_version":1,"source":{"width":720,"height":480,"fps":29.97,"duration_sec":18446744073709.52},"output":{"aspect_ratio":"9:16"},"timeline":{"timebase":"seconds","sampling":"keyframes_interpolated"},"crop_targets":[{"timestamp_sec":18446744073709.52,"frame":0,"crop":{"x":225.0,"y":0.0,"width":270.0,"height":480.0},"source":"autoflip"}]}}

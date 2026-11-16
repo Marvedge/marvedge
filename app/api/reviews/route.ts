@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     if (
       typeof rating !== "number" ||
       !Number.isFinite(rating) ||
+      !Number.isInteger(rating) ||
       rating < 1 ||
       rating > 5 ||
       typeof content !== "string" ||

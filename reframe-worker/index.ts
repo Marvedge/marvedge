@@ -20,6 +20,8 @@ import { recordCostObservationBestEffort } from "../app/lib/monitoring/costWindo
 import { createWorkerMonitoringRedis } from "../app/lib/monitoring/workerRedis";
 import { getReframeWorkerConfig, loadReframeWorkerEnv } from "./config";
 import { isFinalReframeJobFailure } from "./jobMetrics";
+import { postJobCallbackWithRetry } from "./client";
+import { runAfterReframeStart } from "./startGate";
 import { processReframeJob, type ReframeJobContext, type ReframeOrchestratorDeps } from "./orchestrator";
 
 // Load environment variables (.env.local, .env) following Next.js precedence
@@ -88,7 +90,23 @@ const worker = new Worker<ReframeJobPayload>(
         crop_targets: [],
       });
     }
-    return await processReframeJob(job.data, context, deps);
+    if (!context.jobId.trim()) {
+      throw new Error("Invalid reframe job payload: missing jobId");
+    }
+
+    return await runAfterReframeStart(
+      () =>
+        postJobCallbackWithRetry(
+          config.backendUrl,
+          config.callbackSecret,
+          { jobId: context.jobId, status: "PROCESSING", progress: 10 },
+          {
+            retries: config.callbackMaxRetries,
+            delayMs: config.callbackRetryDelayMs,
+          }
+        ),
+      () => processReframeJob(job.data, context, deps)
+    );
   },
   {
     connection: redisConnection as unknown as ConnectionOptions,

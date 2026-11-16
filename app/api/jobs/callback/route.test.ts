@@ -580,7 +580,7 @@ describe("POST /api/jobs/callback", () => {
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
         where: {
           id: "reframe-job-1",
-          status: { notIn: ["COMPLETED", "CANCELLED"] },
+          status: { in: ["PENDING", "PROCESSING"] },
         },
         data: {
           status: "PROCESSING",
@@ -610,7 +610,7 @@ describe("POST /api/jobs/callback", () => {
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
         where: {
           id: "reframe-job-1",
-          status: { notIn: ["COMPLETED", "CANCELLED"] },
+          status: { in: ["PENDING", "PROCESSING"] },
         },
         data: { status: "PROCESSING", progress: 0 },
       });
@@ -637,10 +637,40 @@ describe("POST /api/jobs/callback", () => {
       expect(prisma.videoJob.updateMany).toHaveBeenCalledWith({
         where: {
           id: "reframe-job-1",
-          status: { notIn: ["COMPLETED", "CANCELLED"] },
+          status: { in: ["PENDING", "PROCESSING"] },
         },
         data: { status: "PROCESSING", progress: 100 },
       });
+    });
+
+    it("ignores reframe start after enqueue cleanup marks the job failed", async () => {
+      // The callback reads PENDING, but cleanup wins before the guarded write.
+      vi.mocked(prisma.videoJob.findUnique).mockResolvedValueOnce({
+        id: "reframe-job-1",
+        status: "PENDING",
+        demoId: null,
+        jobData: { kind: "REFRAME" },
+      } as never);
+      vi.mocked(prisma.videoJob.updateMany).mockResolvedValueOnce({ count: 0 });
+
+      const response = await POST(
+        makePostRequest({
+          jobId: "reframe-job-1",
+          status: "PROCESSING",
+          progress: 10,
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ success: true, ignored: true });
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: {
+          id: "reframe-job-1",
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
+        data: { status: "PROCESSING", progress: 10 },
+      });
+      expect(prisma.videoJob.update).not.toHaveBeenCalled();
     });
 
     it("rejects progress < 0 with 400", async () => {

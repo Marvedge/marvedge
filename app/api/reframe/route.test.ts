@@ -25,6 +25,7 @@ vi.mock("@/app/lib/prisma", () => ({
     },
     videoJob: {
       create: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -63,10 +64,42 @@ describe("POST /api/reframe", () => {
     vi.clearAllMocks();
   });
 
+  it("settles the reframe job when queue submission fails", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "u-1" } as never);
+    vi.mocked(prisma.videoJob.create).mockResolvedValue({
+      id: "job-reframe-1",
+      status: "PENDING",
+    } as never);
+    vi.mocked(prisma.videoJob.updateMany).mockResolvedValueOnce({ count: 1 });
+    vi.mocked(reframeJobQueue.add).mockRejectedValueOnce(new Error("Queue unavailable"));
+
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const response = await POST(
+        makeRequest({
+          videoUrl: "https://example.com/v.mp4",
+          targetAspectRatio: "9:16",
+        })
+      );
+
+      expect(response.status).toBe(500);
+      expect(reframeJobQueue.add).toHaveBeenCalledTimes(1);
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { id: "job-reframe-1", status: "PENDING" },
+        data: { status: "FAILED", error: "Failed to queue reframe job" },
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("returns 401 when unauthenticated", async () => {
     vi.mocked(getServerSession).mockResolvedValue(null);
 
-    const res = await POST(makeRequest({ videoUrl: "https://example.com/v.mp4", targetAspectRatio: "9:16" }));
+    const res = await POST(
+      makeRequest({ videoUrl: "https://example.com/v.mp4", targetAspectRatio: "9:16" })
+    );
     expect(res.status).toBe(401);
     const json = await res.json();
     expect(json.error).toBe("Unauthorized");
@@ -78,7 +111,9 @@ describe("POST /api/reframe", () => {
     });
     vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
 
-    const res = await POST(makeRequest({ videoUrl: "https://example.com/v.mp4", targetAspectRatio: "9:16" }));
+    const res = await POST(
+      makeRequest({ videoUrl: "https://example.com/v.mp4", targetAspectRatio: "9:16" })
+    );
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error).toBe("User not found");

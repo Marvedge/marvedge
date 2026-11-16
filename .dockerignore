@@ -1,0 +1,67 @@
+# Root .dockerignore (Task-00127)
+# Prevents host artifacts, secrets, and caches from entering Docker build context.
+
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Git metadata
+.git
+.gitignore
+.gitattributes
+
+# Next.js and build outputs
+.next
+dist
+build
+out
+coverage
+*.tsbuildinfo
+
+# Environment variables & secrets (CRITICAL: prevent leaking secrets into image layers)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Benchmark outputs & temporary artifacts
+benchmark_results
+benchmark_clips
+task53-results
+task45-artifacts
+task-85-bug-bash
+
+# Python caches and virtual environments
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+env
+*.egg-info
+
+# OS-specific artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# IDE / Editor configuration
+.vscode
+.idea
+*.swp
+*.swo
+
+# Temporary files
+tmp
+temp

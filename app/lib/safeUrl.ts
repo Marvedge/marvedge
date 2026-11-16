@@ -1,12 +1,12 @@
 // Shared server-side URL safety gate for anything the server fetches.
 // Pure module: no node imports, so it stays safe on any runtime.
 // Blocks non-http(s) schemes and literal private/internal hosts.
-// Internal storage URIs (r2://, gs://) pass through: they are never
+// Internal storage URIs (r2://, gs://, s3://) pass through: they are never
 // fetched over HTTP and other flows depend on them.
 // Note: this is a literal check only. A hostile domain that resolves to a
 // public IP today and an internal one tomorrow (DNS rebinding) is not
 // caught here. Delivery paths re-resolve before sending (see deliveryCheck).
-const STORAGE_SCHEMES = new Set(["r2:", "gs:"]);
+const STORAGE_SCHEMES = new Set(["r2:", "gs:", "s3:"]);
 
 function parseIpv4Numbers(host: string): number[] | null {
   const parts = host.split(".");

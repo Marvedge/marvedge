@@ -21,6 +21,8 @@ import {
   isTranslationTarget,
   languageLabel,
   normalizeCues,
+  normalizeLanguage,
+  AUTO_DETECT_LANGUAGE,
   parseTranslationBatch,
   readCueList,
   toTranslationSegments,
@@ -87,23 +89,46 @@ async function dispatchTranslateJob({
   videoDurationSeconds,
 }: TranslateJobInput) {
   try {
-    await prisma.videoJob.update({
-      where: { id: jobId },
+    const started = await prisma.videoJob.updateMany({
+      where: {
+        id: jobId,
+        status: { in: ["PENDING", "PROCESSING"] },
+      },
       data: { status: "PROCESSING", progress: PROGRESS_TRANSLATING },
     });
+
+    if (started.count === 0) {
+      return;
+    }
 
     const openai = new OpenAI({ apiKey });
     const sourceLabel = languageLabel(sourceLanguage);
     const targetLabel = languageLabel(targetLanguage);
-
     const batches = buildTranslationBatches(cues);
     const translated: string[] = [];
 
     for (let b = 0; b < batches.length; b++) {
+      // Check before each paid request. An already-running request cannot
+      // be stopped here, but its result must not survive cancellation.
+      const active = await prisma.videoJob.updateMany({
+        where: {
+          id: jobId,
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
+        data: {
+          progress:
+            PROGRESS_TRANSLATING +
+            Math.round((b / batches.length) * (PROGRESS_PERSISTING - PROGRESS_TRANSLATING)),
+        },
+      });
+
+      if (active.count === 0) {
+        return;
+      }
+
       const batch = batches[b];
       const completion = await openai.chat.completions.create({
         model: MODEL,
-        // Low temperature: this is a faithfulness task, not a creative one.
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [
@@ -115,32 +140,10 @@ async function dispatchTranslateJob({
         ],
       });
 
-      // Throws TranslationAlignmentError unless the response carries exactly the
-      // indices it was given. Deliberately NOT tolerant: a batch that comes back
-      // one line short would shift every subtitle after it against the audio for
-      // the rest of the video, and that is invisible until someone watches to
-      // the end. See the header comment in app/lib/subtitles/translate.ts.
       const content = completion.choices[0]?.message?.content ?? "";
       translated.push(...parseTranslationBatch(content, batch.length));
-
-      await prisma.videoJob
-        .update({
-          where: { id: jobId },
-          data: {
-            progress:
-              PROGRESS_TRANSLATING +
-              Math.round(((b + 1) / batches.length) * (PROGRESS_PERSISTING - PROGRESS_TRANSLATING)),
-          },
-        })
-        .catch(() => {});
     }
 
-    // Timings are copied from the source cues verbatim; the model never sees or
-    // returns a timestamp. Task-00061: `localize: true` additionally retimes
-    // character-dense cues into silence gaps and attaches per-cue fontSizePct
-    // overrides for cues whose translated text is significantly longer than the
-    // source. normalizeCues is the same last-mile guarantee the generation route
-    // applies (sorted, non-overlapping) for the render worker.
     const translatedCues = normalizeCues(
       applyTranslations(cues, translated, {
         localize: true,
@@ -149,44 +152,64 @@ async function dispatchTranslateJob({
       })
     );
 
-    await prisma.subtitleTrack.upsert({
-      where: { demoId_language: { demoId, language: targetLanguage } },
-      create: {
-        demoId,
-        language: targetLanguage,
-        status: "READY",
-        source: "translation",
-        cues: translatedCues,
-      },
-      update: { status: "READY", source: "translation", cues: translatedCues },
-    });
-
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "COMPLETED",
-        progress: PROGRESS_DONE,
-        jobData: {
-          kind: "SUBTITLES",
-          provider: "openai",
-          mode: "translation",
-          language: targetLanguage,
-          sourceLanguage,
-          subtitles: translatedCues,
+    // Serialize with cancellation on the job row. If cancellation wins,
+    // no track is written; if track storage fails, completion rolls back.
+    await prisma.$transaction(async (tx) => {
+      const completed = await tx.videoJob.updateMany({
+        where: {
+          id: jobId,
+          status: { in: ["PENDING", "PROCESSING"] },
         },
-      },
+        data: {
+          status: "COMPLETED",
+          progress: PROGRESS_DONE,
+          jobData: {
+            kind: "SUBTITLES",
+            provider: "openai",
+            mode: "translation",
+            language: targetLanguage,
+            sourceLanguage,
+            subtitles: translatedCues,
+          },
+        },
+      });
+
+      if (completed.count === 0) {
+        return;
+      }
+
+      await tx.subtitleTrack.upsert({
+        where: { demoId_language: { demoId, language: targetLanguage } },
+        create: {
+          demoId,
+          language: targetLanguage,
+          status: "READY",
+          source: "translation",
+          cues: translatedCues,
+        },
+        update: { status: "READY", source: "translation", cues: translatedCues },
+      });
     });
   } catch (err) {
     console.error("Subtitle Translate Dispatch Error:", err);
+
     await prisma.videoJob
-      .update({
-        where: { id: jobId },
+      .updateMany({
+        where: {
+          id: jobId,
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
         data: {
           status: "FAILED",
           error: err instanceof Error ? err.message : "Subtitle translation failed",
         },
       })
-      .catch(() => {});
+      .catch((persistError: unknown) => {
+        console.error(
+          `[subtitle-translate] Failed to persist FAILED status for job ${jobId}:`,
+          persistError
+        );
+      });
   }
 }
 
@@ -233,7 +256,13 @@ export async function POST(req: NextRequest) {
 
   let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as Record<string, unknown>;
+    const parsed: unknown = await req.json();
+
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
+    }
+
+    body = parsed as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -284,9 +313,28 @@ export async function POST(req: NextRequest) {
     })
     .catch(() => null);
 
-  const cues = normalizeCues(
-    readCueList(sourceTrack?.cues ?? demo.subtitles) as unknown as SubtitleCue[]
+  const savedEditing =
+    demo.editing && typeof demo.editing === "object" && !Array.isArray(demo.editing)
+      ? (demo.editing as Record<string, unknown>)
+      : {};
+
+  const activeSourceLanguage = normalizeLanguage(
+    typeof savedEditing.subtitleLanguage === "string"
+      ? savedEditing.subtitleLanguage
+      : AUTO_DETECT_LANGUAGE
   );
+
+  // The active editor copy includes saved corrections and deletions.
+  // An empty array is intentional and must not revive older subtitles.
+  const useSavedSource =
+    normalizeLanguage(sourceLanguage) === activeSourceLanguage &&
+    Array.isArray(savedEditing.subtitles);
+
+  const sourceCues = useSavedSource
+    ? savedEditing.subtitles
+    : (sourceTrack?.cues ?? demo.subtitles);
+
+  const cues = normalizeCues(readCueList(sourceCues) as unknown as SubtitleCue[]);
 
   if (cues.length === 0) {
     return NextResponse.json(

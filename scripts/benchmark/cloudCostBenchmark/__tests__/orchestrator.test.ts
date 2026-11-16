@@ -63,7 +63,7 @@ describe("Benchmark Orchestrator", () => {
 
     const report = await orchestrator.run();
 
-    expect(report.schemaVersion).toBe("1.1.0");
+    expect(report.schemaVersion).toBe("1.2.0");
     expect(report.summary.overallStatus).toBe("SUCCESS");
     expect(report.stages.reframe).not.toBeNull();
     expect(report.stages.avs).not.toBeNull();

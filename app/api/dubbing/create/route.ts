@@ -122,18 +122,36 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await dubbingQueue.add(
-      "dubbing",
-      {
-        jobId: jobRecord.id,
-        sourceUrl,
-        targetLanguage,
-      },
-      {
-        removeOnComplete: 100,
-        removeOnFail: 100,
-      }
-    );
+    try {
+      await dubbingQueue.add(
+        "dubbing",
+        {
+          jobId: jobRecord.id,
+          sourceUrl,
+          targetLanguage,
+        },
+        {
+          removeOnComplete: 100,
+          removeOnFail: 100,
+        }
+      );
+    } catch (enqueueError) {
+      // A lost queue acknowledgement can race with the worker starting.
+      // Settle the job only if the worker has not claimed it.
+      await prisma.videoJob
+        .updateMany({
+          where: { id: jobRecord.id, status: "PENDING" },
+          data: {
+            status: "FAILED",
+            error: "Failed to queue dubbing job",
+          },
+        })
+        .catch((persistError: unknown) => {
+          console.error("Failed to persist dubbing queue failure:", persistError);
+        });
+
+      throw enqueueError;
+    }
 
     return NextResponse.json({
       success: true,

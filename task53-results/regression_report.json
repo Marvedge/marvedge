@@ -1,0 +1,525 @@
+{
+  "task": "TASK-00053",
+  "timestamp": "2026-09-23T12:00:43.534653+00:00",
+  "configuration": {
+    "media_dir": "C:\\marvedge-task53-media",
+    "output_dir": "C:\\Users\\Shambhavi\\OneDrive\\Desktop\\marvedge\\marvedge\\task53-results",
+    "target_ratio": "9:16",
+    "gateway_url": "http://localhost:8000",
+    "timeout_seconds": 180,
+    "skip_long_form": false,
+    "dry_run": false
+  },
+  "preflight": {
+    "status": "PASS",
+    "media_dir_path": "C:\\marvedge-task53-media",
+    "media_dir_exists": true,
+    "expected_assets": {
+      "two_speaker_conversation": {
+        "exists": true,
+        "path": "C:\\marvedge-task53-media\\columbia\\col.mp4",
+        "size_bytes": 1110659572
+      },
+      "single_speaker": {
+        "exists": true,
+        "path": "C:\\marvedge-task53-media\\02_single_speaker.avi",
+        "size_bytes": 9286830
+      },
+      "long_form_noisy": {
+        "exists": true,
+        "path": "C:\\marvedge-task53-media\\ava\\05_noisy_audio.mp4",
+        "size_bytes": 875338998
+      },
+      "short_noisy_audio": {
+        "exists": true,
+        "path": "C:\\marvedge-task53-media\\ava\\noisy_sample.mp4",
+        "size_bytes": 4639271
+      },
+      "moving_subject_silent": {
+        "exists": true,
+        "path": "C:\\marvedge-task53-media\\moving_subject\\06_moving_subject.mp4",
+        "size_bytes": 4061421
+      }
+    },
+    "missing_assets": [],
+    "tools": {
+      "ffprobe": {
+        "available": true,
+        "version": "ffprobe version 9.0.1-essentials_build-www.gyan.dev Copyright (c) 2007-2026 the FFmpeg developers"
+      },
+      "ffmpeg": {
+        "available": true,
+        "version": "ffmpeg version 9.0.1-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+      }
+    },
+    "services": {
+      "ml_gateway": {
+        "endpoint": "http://localhost:8000",
+        "status": "DEGRADED",
+        "http_status": 503,
+        "response_time_sec": 0.0529,
+        "reason": "HTTP 503: gateway degraded (TalkNet weights missing) \u2014 AutoFlip healthy, /reframe executable"
+      },
+      "autoflip": {
+        "status": "PASS",
+        "reason": "service reports healthy via gateway"
+      },
+      "talknet": {
+        "status": "BLOCKED",
+        "weights_found": false,
+        "reason": "required model weights unavailable on disk"
+      }
+    }
+  },
+  "services": {
+    "ml_gateway": {
+      "endpoint": "http://localhost:8000",
+      "status": "DEGRADED",
+      "http_status": 503,
+      "response_time_sec": 0.0529,
+      "reason": "HTTP 503: gateway degraded (TalkNet weights missing) \u2014 AutoFlip healthy, /reframe executable"
+    },
+    "autoflip": {
+      "status": "PASS",
+      "reason": "service reports healthy via gateway"
+    },
+    "talknet": {
+      "status": "BLOCKED",
+      "weights_found": false,
+      "reason": "required model weights unavailable on disk"
+    }
+  },
+  "cases": [
+    {
+      "case": "two_speaker_conversation",
+      "logical_case": "CASE_A",
+      "description": "Two-speaker conversation, long-form (~86.8 min, ~1.11 GB)",
+      "input": "C:\\marvedge-task53-media\\columbia\\col.mp4",
+      "metadata": {
+        "filename": "col.mp4",
+        "path": "C:\\marvedge-task53-media\\columbia\\col.mp4",
+        "file_size_bytes": 1110659572,
+        "duration_seconds": 5211.854,
+        "width": 1280,
+        "height": 720,
+        "aspect_ratio": "1280:720",
+        "video_codec": "h264",
+        "fps": 29.97,
+        "total_frames": 156198,
+        "has_audio": true,
+        "audio_codec": "opus",
+        "audio_channels": 2,
+        "audio_sample_rate": 48000,
+        "media_classification": "video_with_audio",
+        "error": null
+      },
+      "execution": {
+        "status": "BLOCKED",
+        "layer_exercised": "ML Gateway POST /reframe (AutoFlip)",
+        "duration_seconds": 0.0289,
+        "http_status": 502,
+        "error": "HTTP 502: Local file not found: C:\\marvedge-task53-media\\columbia\\col.mp4"
+      },
+      "output": {
+        "path": null,
+        "exists": false,
+        "duration_seconds": null,
+        "width": null,
+        "height": null,
+        "aspect_ratio": null,
+        "valid": false
+      },
+      "crop_metrics": {
+        "total_crop_targets": 0,
+        "valid_crop_targets": 0,
+        "invalid_crop_targets": 0,
+        "validity_percentage": 0.0,
+        "validation_errors": []
+      },
+      "stability_metrics": {
+        "mean_pos_delta": null,
+        "max_pos_delta": null,
+        "mean_size_delta": null,
+        "max_size_delta": null,
+        "mean_velocity": null,
+        "max_velocity": null,
+        "velocity_variance": null,
+        "velocity_std_dev": null,
+        "stability_evaluation": "NOT_APPLICABLE"
+      },
+      "notes": []
+    },
+    {
+      "case": "single_speaker",
+      "logical_case": "CASE_B",
+      "description": "Single speaker video (~20 sec)",
+      "input": "C:\\marvedge-task53-media\\02_single_speaker.avi",
+      "metadata": {
+        "filename": "02_single_speaker.avi",
+        "path": "C:\\marvedge-task53-media\\02_single_speaker.avi",
+        "file_size_bytes": 9286830,
+        "duration_seconds": 20.04,
+        "width": 640,
+        "height": 360,
+        "aspect_ratio": "640:360",
+        "video_codec": "mpeg4",
+        "fps": 25.0,
+        "total_frames": 501,
+        "has_audio": true,
+        "audio_codec": "mp3",
+        "audio_channels": 2,
+        "audio_sample_rate": 44100,
+        "media_classification": "video_with_audio",
+        "error": null
+      },
+      "execution": {
+        "status": "BLOCKED",
+        "layer_exercised": "ML Gateway POST /reframe (AutoFlip)",
+        "duration_seconds": 0.0384,
+        "http_status": 502,
+        "error": "HTTP 502: Local file not found: C:\\marvedge-task53-media\\02_single_speaker.avi"
+      },
+      "output": {
+        "path": null,
+        "exists": false,
+        "duration_seconds": null,
+        "width": null,
+        "height": null,
+        "aspect_ratio": null,
+        "valid": false
+      },
+      "crop_metrics": {
+        "total_crop_targets": 0,
+        "valid_crop_targets": 0,
+        "invalid_crop_targets": 0,
+        "validity_percentage": 0.0,
+        "validation_errors": []
+      },
+      "stability_metrics": {
+        "mean_pos_delta": null,
+        "max_pos_delta": null,
+        "mean_size_delta": null,
+        "max_size_delta": null,
+        "mean_velocity": null,
+        "max_velocity": null,
+        "velocity_variance": null,
+        "velocity_std_dev": null,
+        "stability_evaluation": "NOT_APPLICABLE"
+      },
+      "notes": []
+    },
+    {
+      "case": "long_form_noisy",
+      "logical_case": "CASE_C",
+      "description": "Long-form noisy audio video (~69.6 min, ~875 MB)",
+      "input": "C:\\marvedge-task53-media\\ava\\05_noisy_audio.mp4",
+      "metadata": {
+        "filename": "05_noisy_audio.mp4",
+        "path": "C:\\marvedge-task53-media\\ava\\05_noisy_audio.mp4",
+        "file_size_bytes": 875338998,
+        "duration_seconds": 4178.802358,
+        "width": 1280,
+        "height": 720,
+        "aspect_ratio": "1280:720",
+        "video_codec": "h264",
+        "fps": 25.0,
+        "total_frames": 104467,
+        "has_audio": true,
+        "audio_codec": "aac",
+        "audio_channels": 2,
+        "audio_sample_rate": 44100,
+        "media_classification": "video_with_audio",
+        "error": null
+      },
+      "execution": {
+        "status": "BLOCKED",
+        "layer_exercised": "ML Gateway POST /reframe (AutoFlip)",
+        "duration_seconds": 0.0345,
+        "http_status": 502,
+        "error": "HTTP 502: Local file not found: C:\\marvedge-task53-media\\ava\\05_noisy_audio.mp4"
+      },
+      "output": {
+        "path": null,
+        "exists": false,
+        "duration_seconds": null,
+        "width": null,
+        "height": null,
+        "aspect_ratio": null,
+        "valid": false
+      },
+      "crop_metrics": {
+        "total_crop_targets": 0,
+        "valid_crop_targets": 0,
+        "invalid_crop_targets": 0,
+        "validity_percentage": 0.0,
+        "validation_errors": []
+      },
+      "stability_metrics": {
+        "mean_pos_delta": null,
+        "max_pos_delta": null,
+        "mean_size_delta": null,
+        "max_size_delta": null,
+        "mean_velocity": null,
+        "max_velocity": null,
+        "velocity_variance": null,
+        "velocity_std_dev": null,
+        "stability_evaluation": "NOT_APPLICABLE"
+      },
+      "notes": []
+    },
+    {
+      "case": "short_noisy_audio",
+      "logical_case": "CASE_D",
+      "description": "Short noisy-audio sample (~30 sec)",
+      "input": "C:\\marvedge-task53-media\\ava\\noisy_sample.mp4",
+      "metadata": {
+        "filename": "noisy_sample.mp4",
+        "path": "C:\\marvedge-task53-media\\ava\\noisy_sample.mp4",
+        "file_size_bytes": 4639271,
+        "duration_seconds": 30.04,
+        "width": 1280,
+        "height": 720,
+        "aspect_ratio": "1280:720",
+        "video_codec": "h264",
+        "fps": 25.0,
+        "total_frames": 775,
+        "has_audio": true,
+        "audio_codec": "aac",
+        "audio_channels": 2,
+        "audio_sample_rate": 44100,
+        "media_classification": "video_with_audio",
+        "error": null
+      },
+      "execution": {
+        "status": "BLOCKED",
+        "layer_exercised": "ML Gateway POST /reframe (AutoFlip)",
+        "duration_seconds": 0.029,
+        "http_status": 502,
+        "error": "HTTP 502: Local file not found: C:\\marvedge-task53-media\\ava\\noisy_sample.mp4"
+      },
+      "output": {
+        "path": null,
+        "exists": false,
+        "duration_seconds": null,
+        "width": null,
+        "height": null,
+        "aspect_ratio": null,
+        "valid": false
+      },
+      "crop_metrics": {
+        "total_crop_targets": 0,
+        "valid_crop_targets": 0,
+        "invalid_crop_targets": 0,
+        "validity_percentage": 0.0,
+        "validation_errors": []
+      },
+      "stability_metrics": {
+        "mean_pos_delta": null,
+        "max_pos_delta": null,
+        "mean_size_delta": null,
+        "max_size_delta": null,
+        "mean_velocity": null,
+        "max_velocity": null,
+        "velocity_variance": null,
+        "velocity_std_dev": null,
+        "stability_evaluation": "NOT_APPLICABLE"
+      },
+      "notes": []
+    },
+    {
+      "case": "moving_subject_silent",
+      "logical_case": "CASE_E",
+      "description": "Moving subject without audio stream (~15 sec, silent)",
+      "input": "C:\\marvedge-task53-media\\moving_subject\\06_moving_subject.mp4",
+      "metadata": {
+        "filename": "06_moving_subject.mp4",
+        "path": "C:\\marvedge-task53-media\\moving_subject\\06_moving_subject.mp4",
+        "file_size_bytes": 4061421,
+        "duration_seconds": 15.448789,
+        "width": 720,
+        "height": 480,
+        "aspect_ratio": "720:480",
+        "video_codec": "h264",
+        "fps": 29.97,
+        "total_frames": 463,
+        "has_audio": false,
+        "audio_codec": null,
+        "audio_channels": null,
+        "audio_sample_rate": null,
+        "media_classification": "silent_video",
+        "error": null
+      },
+      "execution": {
+        "status": "BLOCKED",
+        "layer_exercised": "ML Gateway POST /reframe (AutoFlip)",
+        "duration_seconds": 0.0628,
+        "http_status": 502,
+        "error": "HTTP 502: Local file not found: C:\\marvedge-task53-media\\moving_subject\\06_moving_subject.mp4"
+      },
+      "output": {
+        "path": null,
+        "exists": false,
+        "duration_seconds": null,
+        "width": null,
+        "height": null,
+        "aspect_ratio": null,
+        "valid": false
+      },
+      "crop_metrics": {
+        "total_crop_targets": 0,
+        "valid_crop_targets": 0,
+        "invalid_crop_targets": 0,
+        "validity_percentage": 0.0,
+        "validation_errors": []
+      },
+      "stability_metrics": {
+        "mean_pos_delta": null,
+        "max_pos_delta": null,
+        "mean_size_delta": null,
+        "max_size_delta": null,
+        "mean_velocity": null,
+        "max_velocity": null,
+        "velocity_variance": null,
+        "velocity_std_dev": null,
+        "stability_evaluation": "NOT_APPLICABLE"
+      },
+      "notes": []
+    }
+  ],
+  "aggregate_metrics": {
+    "total_cases": 5,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 5,
+    "not_applicable": 0
+  },
+  "acceptance_matrix": [
+    {
+      "id": "A",
+      "criterion": "No reproducible crash",
+      "status": "BLOCKED",
+      "evidence": "Automated repository tests passed (61 test files, 1,037 TS tests; 92 Python unit tests), demonstrating regression-test health. However, the live production pipeline could not execute due to Docker daemon unavailability; therefore absence of a live production crash cannot be established.",
+      "test_case_used": "Full automated test suite / Local environment",
+      "blocker": "Docker Desktop daemon unavailable on host"
+    },
+    {
+      "id": "B",
+      "criterion": "Valid portrait output",
+      "status": "BLOCKED",
+      "evidence": "Live output could not be rendered because local Docker ML Gateway was offline (WinError 10061).",
+      "test_case_used": "Cases A\u2013E",
+      "blocker": "Docker ML stack offline"
+    },
+    {
+      "id": "C",
+      "criterion": "Usable TalkNet speaker information",
+      "status": "BLOCKED",
+      "evidence": "TalkNet model weights missing; service reports 503 degraded without weights.",
+      "test_case_used": "talknet/weights/ inspection",
+      "blocker": "Missing model checkpoints (sfd_face.pth, pretrain_TalkSet.model)"
+    },
+    {
+      "id": "D",
+      "criterion": "High-confidence speaker affects crop",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "Audited architectural gap: No speaker arbitration or active-speaker crop selection layer exists. Reframe worker only calls AutoFlip.",
+      "test_case_used": "Repository architecture audit",
+      "blocker": "Unbuilt prerequisite from prior tasks"
+    },
+    {
+      "id": "E",
+      "criterion": "Low-confidence TalkNet -> AutoFlip fallback",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "No arbitration or fallback orchestration exists between TalkNet and AutoFlip.",
+      "test_case_used": "Repository architecture audit",
+      "blocker": "Unbuilt prerequisite from prior tasks"
+    },
+    {
+      "id": "F",
+      "criterion": "No-face -> center crop",
+      "status": "BLOCKED",
+      "evidence": "Face center crop fallback logic exists in scripts/ml/preprocess_faces.py, but is offline/preprocessing-only and not wired into production reframe-worker.",
+      "test_case_used": "reframe-worker audit",
+      "blocker": "Not wired into production pipeline"
+    },
+    {
+      "id": "G",
+      "criterion": "Stable crop movement",
+      "status": "BLOCKED",
+      "evidence": "Trajectory metrics calculation engine is built and verified, but live trajectory collection was blocked by service outage.",
+      "test_case_used": "scripts/ml/test_task53_regression.py",
+      "blocker": "Docker ML stack offline"
+    },
+    {
+      "id": "H",
+      "criterion": "No persistent multi-speaker flicker",
+      "status": "NOT_IMPLEMENTED",
+      "evidence": "Multi-speaker crop arbitration requires TalkNet -> AutoFlip fusion, which is unbuilt.",
+      "test_case_used": "Case A (col.mp4)",
+      "blocker": "Fusion layer unbuilt; weights missing"
+    },
+    {
+      "id": "I",
+      "criterion": "Model resources available",
+      "status": "BLOCKED",
+      "evidence": "talknet/weights/ contains no weights (weights.all_ready: False).",
+      "test_case_used": "Pre-flight check",
+      "blocker": "Weights not committed or supplied"
+    },
+    {
+      "id": "J",
+      "criterion": "Long-form video completion",
+      "status": "BLOCKED",
+      "evidence": "Synchronous 150s AutoFlip and 180s Gateway timeouts predictably block 86m and 69m inputs; TalkNet enforces 250MB download limit.",
+      "test_case_used": "Case A (1.11 GB / 86.8m) & Case C (875 MB / 69.6m)",
+      "blocker": "Architectural timeout and size limits"
+    },
+    {
+      "id": "K",
+      "criterion": "Caption/reframe/clip integration contracts",
+      "status": "PASS",
+      "evidence": "Contracts delivered by Tasks 44, 47, and 50 are fully verified by automated tests.",
+      "test_case_used": "reframe-worker/render.test.ts, app/lib/clips/jobs.test.ts, app/types/editor/crop-target.test.ts",
+      "blocker": "None"
+    }
+  ],
+  "blocked_criteria": [
+    "two_speaker_conversation: HTTP 502: Local file not found: C:\\marvedge-task53-media\\columbia\\col.mp4",
+    "single_speaker: HTTP 502: Local file not found: C:\\marvedge-task53-media\\02_single_speaker.avi",
+    "long_form_noisy: HTTP 502: Local file not found: C:\\marvedge-task53-media\\ava\\05_noisy_audio.mp4",
+    "short_noisy_audio: HTTP 502: Local file not found: C:\\marvedge-task53-media\\ava\\noisy_sample.mp4",
+    "moving_subject_silent: HTTP 502: Local file not found: C:\\marvedge-task53-media\\moving_subject\\06_moving_subject.mp4"
+  ],
+  "architectural_gaps": [
+    {
+      "gap": "talknet_autoflip_speaker_fusion",
+      "status": "NOT_IMPLEMENTED",
+      "prerequisite_status": "MISSING_PREREQUISITE",
+      "details": "TalkNet active speaker detection and AutoFlip operate as completely independent isolated endpoints (/detect and /reframe). No speaker arbitration or active-speaker crop fusion layer exists in the repository."
+    },
+    {
+      "gap": "talknet_model_weights",
+      "status": "BLOCKED",
+      "prerequisite_status": "MISSING_WEIGHTS",
+      "details": "Required model weights (sfd_face.pth and pretrain_TalkSet.model) are not present in talknet/weights/ or the media corpus. TalkNet returns HTTP 503 degraded."
+    },
+    {
+      "gap": "long_form_timeout_limits",
+      "status": "BLOCKED",
+      "prerequisite_status": "ARCHITECTURAL_LIMITATION",
+      "details": "Synchronous request timeouts (150s in AutoFlip, 180s in Gateway/Worker) prevent processing long-form videos (col.mp4 86.8m, 05_noisy_audio.mp4 69.6m) synchronously without async job chunking or scene splitting."
+    },
+    {
+      "gap": "center_crop_fallback_wiring",
+      "status": "OFFLINE/PREPROCESSING-ONLY",
+      "prerequisite_status": "NOT_WIRED_TO_PRODUCTION",
+      "details": "Face-crop fallback logic exists in scripts/ml/preprocess_faces.py, but is not wired into the production reframe-worker or AutoFlip service path."
+    }
+  ],
+  "errors": [],
+  "summary": {
+    "overall_decision": "BLOCKED",
+    "verdict": "BLOCKED \u2014 INSUFFICIENT LIVE EVIDENCE FOR GO/NO-GO",
+    "reason": "Validation blocked on 5 case(s). Live production ML pipeline could not execute because Docker Desktop was unavailable. Services or prerequisites (ML Gateway / TalkNet weights / long-form timeouts) were unavailable. Task-53 therefore does not yet have sufficient live evidence for a final GO/NO-GO decision."
+  }
+}

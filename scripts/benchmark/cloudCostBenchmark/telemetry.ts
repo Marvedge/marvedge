@@ -4,6 +4,7 @@
  */
 
 import { execFile, spawnSync } from "child_process";
+import fs from "fs";
 import os from "os";
 import type {
   CpuTelemetry,
@@ -130,6 +131,57 @@ export class TelemetryCollector {
     }
 
     return this.gpuAvailable;
+  }
+
+  public isContainerized(): boolean {
+    if (process.env.DOCKER_CONTAINER === "true" || process.env.CONTAINER === "true") {
+      return true;
+    }
+    try {
+      if (fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv")) {
+        return true;
+      }
+      if (fs.existsSync("/proc/1/cgroup")) {
+        const cgroup = fs.readFileSync("/proc/1/cgroup", "utf8");
+        if (
+          cgroup.includes("docker") ||
+          cgroup.includes("containerd") ||
+          cgroup.includes("kubepods")
+        ) {
+          return true;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return false;
+  }
+
+  public getPythonVersion(): string | null {
+    for (const cmd of ["python3", "python"]) {
+      try {
+        const res = spawnSync(cmd, ["--version"], { timeout: 1000, encoding: "utf8" });
+        if (res.status === 0) {
+          const out = (res.stdout || res.stderr || "").trim();
+          if (out) return out;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return null;
+  }
+
+  public getDockerVersion(): string | null {
+    try {
+      const res = spawnSync("docker", ["--version"], { timeout: 1000, encoding: "utf8" });
+      if (res.status === 0 && res.stdout) {
+        return res.stdout.trim();
+      }
+    } catch {
+      // Not installed or inaccessible
+    }
+    return null;
   }
 
   public start(): void {

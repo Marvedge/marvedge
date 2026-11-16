@@ -227,3 +227,142 @@ describe("export worker cold-start recovery", () => {
     expect(mocks.update.mock.calls.some(([args]) => args.data.status === "FAILED")).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task-108: speakerTracksUri propagation
+// ---------------------------------------------------------------------------
+describe("speakerTracksUri propagation through job dispatch", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.session.mockResolvedValue({
+      user: { id: "user-1", email: "owner@example.test" },
+    });
+    mocks.findUser.mockResolvedValue({ id: "user-1", plan: "PRO" });
+    mocks.limited.mockResolvedValue(false);
+    mocks.create.mockResolvedValue({ id: "job-1" });
+    mocks.findJob.mockResolvedValue({ status: "PENDING" });
+    mocks.update.mockResolvedValue({ id: "job-1" });
+    mocks.updateMany.mockImplementation(
+      async ({
+        where,
+        data,
+      }: {
+        where: { id: string; status: { notIn: string[] } };
+        data: Record<string, unknown>;
+      }) => {
+        expect(where.status.notIn).toEqual(["COMPLETED", "CANCELLED"]);
+        await mocks.update({ where: { id: where.id }, data });
+        return { count: 1 };
+      }
+    );
+    mocks.transaction.mockImplementation(
+      async (
+        work: (tx: {
+          $queryRaw: typeof mocks.queryRaw;
+          videoJob: { create: typeof mocks.create };
+        }) => Promise<unknown>
+      ) =>
+        work({
+          $queryRaw: mocks.queryRaw,
+          videoJob: { create: mocks.create },
+        })
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("passes speakerTracksUri to invokeGcpWorker when provided in the request", async () => {
+    mocks.invoke
+      .mockResolvedValueOnce({
+        result: { processedObject: "job-1_chunk_000.mp4" },
+      })
+      .mockResolvedValueOnce({
+        result: { exportedUrl: "https://example.com/done.mp4" },
+      });
+
+    const response = await POST(
+      new NextRequest("http://localhost/api/jobs/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: "https://example.com/source.mp4",
+          duration: 10,
+          speakerTracksUri: "gs://my-bucket/speaker-tracks.json",
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+
+    const dispatch = mocks.after.mock.calls[0][0] as () => Promise<void>;
+    await dispatch();
+
+    // The first invoke call is the /process chunk dispatch — it must carry the URI.
+    const [processPayload] = mocks.invoke.mock.calls[0] as [Record<string, unknown>, string];
+    expect(processPayload.speakerTracksUri).toBe("gs://my-bucket/speaker-tracks.json");
+  });
+
+  it("omits speakerTracksUri from invokeGcpWorker when it is not provided", async () => {
+    mocks.invoke
+      .mockResolvedValueOnce({
+        result: { processedObject: "job-1_chunk_000.mp4" },
+      })
+      .mockResolvedValueOnce({
+        result: { exportedUrl: "https://example.com/done.mp4" },
+      });
+
+    const response = await POST(
+      new NextRequest("http://localhost/api/jobs/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: "https://example.com/source.mp4",
+          duration: 10,
+          // speakerTracksUri intentionally absent
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+
+    const dispatch = mocks.after.mock.calls[0][0] as () => Promise<void>;
+    await dispatch();
+
+    const [processPayload] = mocks.invoke.mock.calls[0] as [Record<string, unknown>, string];
+    expect(processPayload.speakerTracksUri).toBeUndefined();
+  });
+
+  it("strips surrounding whitespace from speakerTracksUri before propagating it", async () => {
+    mocks.invoke
+      .mockResolvedValueOnce({
+        result: { processedObject: "job-1_chunk_000.mp4" },
+      })
+      .mockResolvedValueOnce({
+        result: { exportedUrl: "https://example.com/done.mp4" },
+      });
+
+    const response = await POST(
+      new NextRequest("http://localhost/api/jobs/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: "https://example.com/source.mp4",
+          duration: 10,
+          speakerTracksUri: "  gs://my-bucket/speaker-tracks.json  ",
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const dispatch = mocks.after.mock.calls[0][0] as () => Promise<void>;
+    await dispatch();
+
+    const [processPayload] = mocks.invoke.mock.calls[0] as [Record<string, unknown>, string];
+    expect(processPayload.speakerTracksUri).toBe("gs://my-bucket/speaker-tracks.json");
+  });
+});

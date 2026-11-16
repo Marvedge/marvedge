@@ -3,6 +3,44 @@ import { UnrecoverableError } from "bullmq";
 import { getReusableDubbingJob, runDubbingJobWithRetry } from "./dubbingRetry";
 
 describe("legacy dubbing worker retry handling", () => {
+  it("skips processing when a late delivery cannot claim the job", async () => {
+    const claim = vi.fn().mockResolvedValue(false);
+    const process = vi.fn().mockResolvedValue(undefined);
+    const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+    await runDubbingJobWithRetry({
+      jobId: "dubbing-job",
+      attemptsMade: 0,
+      maxAttempts: 1,
+      claim,
+      process,
+      persistFailure,
+    });
+
+    expect(claim).toHaveBeenCalledOnce();
+    expect(process).not.toHaveBeenCalled();
+    expect(persistFailure).not.toHaveBeenCalled();
+  });
+
+  it("processes a retry when the job can still be claimed", async () => {
+    const claim = vi.fn().mockResolvedValue(true);
+    const process = vi.fn().mockResolvedValue(undefined);
+    const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+    await runDubbingJobWithRetry({
+      jobId: "dubbing-job",
+      attemptsMade: 1,
+      maxAttempts: 2,
+      claim,
+      process,
+      persistFailure,
+    });
+
+    expect(claim).toHaveBeenCalledOnce();
+    expect(process).toHaveBeenCalledOnce();
+    expect(persistFailure).not.toHaveBeenCalled();
+  });
+
   it("reuses a persisted provider job for retries of the same dubbing input", () => {
     expect(
       getReusableDubbingJob(
@@ -134,5 +172,75 @@ describe("legacy dubbing worker retry handling", () => {
 
     expect(process).toHaveBeenCalledOnce();
     expect(persistFailure).toHaveBeenCalledWith(originalError.message);
+  });
+
+  describe("VoiceStudio retry and error classification (Task-00132)", () => {
+    it("classifies VoiceStudioUnavailableError as retryable", async () => {
+      const { VoiceStudioUnavailableError } = await import("../app/lib/voicestudio/errors");
+      const err = new VoiceStudioUnavailableError("VoiceStudio service warming up", 5);
+      const { isRetryableDubbingError } = await import("./dubbingRetry");
+      expect(isRetryableDubbingError(err)).toBe(true);
+
+      const process = vi.fn().mockRejectedValue(err);
+      const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        runDubbingJobWithRetry({
+          jobId: "vs-dubbing-job",
+          attemptsMade: 0,
+          maxAttempts: 2,
+          process,
+          persistFailure,
+        })
+      ).rejects.toBe(err);
+
+      expect(persistFailure).not.toHaveBeenCalled();
+    });
+
+    it("classifies VoiceStudioAuthError as unrecoverable", async () => {
+      const { VoiceStudioAuthError } = await import("../app/lib/voicestudio/errors");
+      const err = new VoiceStudioAuthError("Invalid VoiceStudio API key", 401);
+      const { isRetryableDubbingError } = await import("./dubbingRetry");
+      expect(isRetryableDubbingError(err)).toBe(false);
+
+      const process = vi.fn().mockRejectedValue(err);
+      const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+      const thrown = await runDubbingJobWithRetry({
+        jobId: "vs-dubbing-job",
+        attemptsMade: 0,
+        maxAttempts: 3,
+        process,
+        persistFailure,
+      }).catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect(thrown).toMatchObject({
+        message: err.message,
+        cause: err,
+      });
+      expect(persistFailure).toHaveBeenCalledWith(err.message);
+    });
+
+    it("classifies VoiceStudio validation errors (INVALID_INPUT) as unrecoverable", async () => {
+      const { VoiceStudioError } = await import("../app/lib/voicestudio/errors");
+      const err = new VoiceStudioError("INVALID_INPUT", "No narration steps provided");
+      const { isRetryableDubbingError } = await import("./dubbingRetry");
+      expect(isRetryableDubbingError(err)).toBe(false);
+
+      const process = vi.fn().mockRejectedValue(err);
+      const persistFailure = vi.fn().mockResolvedValue(undefined);
+
+      const thrown = await runDubbingJobWithRetry({
+        jobId: "vs-dubbing-job",
+        attemptsMade: 0,
+        maxAttempts: 3,
+        process,
+        persistFailure,
+      }).catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect(persistFailure).toHaveBeenCalledWith(err.message);
+    });
   });
 });

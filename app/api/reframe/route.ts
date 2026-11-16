@@ -73,18 +73,32 @@ export async function POST(req: NextRequest) {
     });
 
     // 2. Enqueue the reframe job to BullMQ ("reframe-processing" queue)
-    await reframeJobQueue.add(
-      "reframe",
-      {
-        jobId: jobRecord.id,
-        userId,
-        demoId: demoId || null,
-        videoUrl,
-        targetAspectRatio,
-        source: source || null,
-      },
-      { jobId: jobRecord.id }
-    );
+    try {
+      await reframeJobQueue.add(
+        "reframe",
+        {
+          jobId: jobRecord.id,
+          userId,
+          demoId: demoId || null,
+          videoUrl,
+          targetAspectRatio,
+          source: source || null,
+        },
+        { jobId: jobRecord.id }
+      );
+    } catch (enqueueError) {
+      // A worker may already have received the job despite the rejection.
+      await prisma.videoJob
+        .updateMany({
+          where: { id: jobRecord.id, status: "PENDING" },
+          data: { status: "FAILED", error: "Failed to queue reframe job" },
+        })
+        .catch((persistError: unknown) => {
+          console.error("Failed to persist reframe queue failure:", persistError);
+        });
+
+      throw enqueueError;
+    }
 
     // 3. Return the jobId immediately so the client can poll GET /api/jobs/[id]
     return NextResponse.json({

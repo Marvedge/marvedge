@@ -18,6 +18,7 @@ describe("Worker Integration & End-to-End Contract (Task-00050)", () => {
     mockDb = {
       videoJob: {
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn().mockResolvedValue(null),
       } as any,
       demo: {

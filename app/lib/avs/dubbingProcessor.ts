@@ -13,7 +13,7 @@ import path from "node:path";
 import cloudinary from "../cloudinary";
 
 import type { GcpDubSyncPayload, GcpDubSyncResult } from "../gcpWorker";
-import { invokeGcpDubSync } from "../gcpWorker";
+import { invokeGcpDubSync, getVideoWorkerUrl } from "../gcpWorker";
 
 export type DubbingJobPayload = {
   jobId: string;
@@ -50,6 +50,19 @@ export type DubbingCallbackPayload =
 
 export type UploadToCloudinaryFn = (videoUrlOrPath: string) => Promise<{ secure_url: string }>;
 
+export function isLocalArtifactUrl(videoUrlOrPath: string): boolean {
+  const workerUrl = getVideoWorkerUrl();
+  return (
+    videoUrlOrPath.startsWith("http://localhost") ||
+    videoUrlOrPath.startsWith("http://127.0.0.1") ||
+    videoUrlOrPath.includes("/artifacts/") ||
+    Boolean(
+      process.env.AVS_DUB_SERVICE_URL && videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
+    ) ||
+    Boolean(workerUrl && videoUrlOrPath.startsWith(workerUrl))
+  );
+}
+
 export async function defaultUploadToCloudinary(
   videoUrlOrPath: string
 ): Promise<{ secure_url: string }> {
@@ -64,18 +77,7 @@ export async function defaultUploadToCloudinary(
   let fileToUpload = videoUrlOrPath;
   let tempDirToClean: string | null = null;
 
-  const isLoopbackUrl =
-    videoUrlOrPath.startsWith("http://localhost") ||
-    videoUrlOrPath.startsWith("http://127.0.0.1") ||
-    videoUrlOrPath.includes("/artifacts/") ||
-    Boolean(
-      process.env.AVS_DUB_SERVICE_URL &&
-        videoUrlOrPath.startsWith(process.env.AVS_DUB_SERVICE_URL)
-    ) ||
-    Boolean(
-      process.env.GCP_VIDEO_WORKER_URL &&
-        videoUrlOrPath.startsWith(process.env.GCP_VIDEO_WORKER_URL)
-    );
+  const isLoopbackUrl = isLocalArtifactUrl(videoUrlOrPath);
 
   try {
     if (isLoopbackUrl) {
@@ -290,18 +292,7 @@ export async function processDubbingJob(
       alignedVideoUrl = result.alignedVideoUrl;
       duration = result.duration || duration;
 
-      const isLocalArtifact =
-        alignedVideoUrl.startsWith("http://localhost") ||
-        alignedVideoUrl.startsWith("http://127.0.0.1") ||
-        alignedVideoUrl.includes("/artifacts/") ||
-        Boolean(
-          process.env.AVS_DUB_SERVICE_URL &&
-          alignedVideoUrl.startsWith(process.env.AVS_DUB_SERVICE_URL)
-        ) ||
-        Boolean(
-          process.env.GCP_VIDEO_WORKER_URL &&
-          alignedVideoUrl.startsWith(process.env.GCP_VIDEO_WORKER_URL)
-        );
+      const isLocalArtifact = isLocalArtifactUrl(alignedVideoUrl);
 
       const shouldUploadToCloudinary =
         deps.uploadToCloudinary !== undefined ||

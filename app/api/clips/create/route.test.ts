@@ -33,14 +33,14 @@ vi.mock("@/app/lib/prisma", () => ({
     videoJob: {
       findFirst: vi.fn(),
       create: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
 
 vi.mock("@/app/lib/clips/service", async () => {
-  const actual = await vi.importActual<typeof import("@/app/lib/clips/service")>(
-    "@/app/lib/clips/service"
-  );
+  const actual =
+    await vi.importActual<typeof import("@/app/lib/clips/service")>("@/app/lib/clips/service");
   return {
     ...actual,
     clipJobQueue: {
@@ -91,7 +91,10 @@ describe("POST /api/clips/create (Task-00050)", () => {
   it("returns 404 when demo does not exist or user is not the owner", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "user-1" } as any);
-    vi.mocked(prisma.demo.findUnique).mockResolvedValue({ id: "demo-1", userId: "other-user" } as any);
+    vi.mocked(prisma.demo.findUnique).mockResolvedValue({
+      id: "demo-1",
+      userId: "other-user",
+    } as any);
 
     const res = await POST(makeRequest({ demoId: "demo-1" }));
     expect(res.status).toBe(404);
@@ -183,6 +186,37 @@ describe("POST /api/clips/create (Task-00050)", () => {
       }),
       { jobId: "job-clip-123" }
     );
+  });
+
+  it("settles the clip-scoring job when queue submission fails", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "user-1" } as never);
+    vi.mocked(prisma.videoJob.create).mockResolvedValue({
+      id: "job-clip-queue-failure",
+      status: "PENDING",
+    } as never);
+    vi.mocked(prisma.videoJob.updateMany).mockResolvedValueOnce({ count: 1 });
+    vi.mocked(clipJobQueue.add).mockRejectedValueOnce(new Error("Queue unavailable"));
+
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const response = await POST(
+        makeRequest({
+          videoUrl: "https://example.com/custom.mp4",
+          cues: [{ start: 0, end: 10, text: "Direct custom cues" }],
+          duration: 10,
+        })
+      );
+
+      expect(response.status).toBe(500);
+      expect(clipJobQueue.add).toHaveBeenCalledOnce();
+      expect(prisma.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { id: "job-clip-queue-failure", status: "PENDING" },
+        data: { status: "FAILED", error: "Failed to queue clip-scoring job" },
+      });
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("accepts explicitly supplied cues without requiring existing demo transcript", async () => {

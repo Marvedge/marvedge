@@ -208,7 +208,20 @@ All approved combinations comply with WCAG 2.1 specifications:
 
 ---
 
-## 8. Code Import & Integration Cheat Sheet
+## 8. Parent Brand Lockup (Orithm Technologies Pvt. Ltd.)
+
+Marvedge is a product of **Orithm Technologies Pvt. Ltd.** The corporate identity rules for co-branding and footer attribution are as follows:
+
+* **Official Assets:**
+  * Dark Surface Asset: `/images/orithm_logo_dark.png` (and `.webp`) — The bottom "— TECHNOLOGIES PVT. LTD. —" text is calibrated to pure white (`#FFFFFF`) for maximum optical contrast against dark backdrops (`#261753` and `#000000`).
+  * Light Surface Asset: `/images/orithm_logo.png` (and `.webp`) — Original black typography for light canvas substrates (`#E8DFCA` and `#FFFFFF`).
+  * Horizontal Lockup: `/images/orithm_horizontal_dark.png` — Balanced 816x180 side-by-side lockup for horizontal toolbars and navigation bars.
+* **Attribution Label:** Must be accompanied by the uppercase label `"A PRODUCT OF"` in Inter Medium 11px with `+0.08em` tracking.
+* **Placement:** Positioned in the primary footer left column directly below the Marvedge product description.
+
+---
+
+## 9. Code Import & Integration Cheat Sheet
 
 ### 8.1 TypeScript Tokens
 

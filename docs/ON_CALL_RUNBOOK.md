@@ -23,13 +23,13 @@ ML Gateway, TalkNet, AutoFlip, monitoring alerts, and the AWS GPU worker.
 
 The root queue configuration defines these default retry policies:
 
-| Queue | Attempts | Backoff |
-|---|---:|---|
-| video-processing | 3 | Exponential, 5-second initial delay |
-| subtitle-processing | 3 | Exponential, 5-second initial delay |
-| audio-processing | 3 | Exponential, 5-second initial delay |
-| reframe-processing | 3 | Exponential, 2-second initial delay |
-| dubbing-processing | 2 | Exponential, 5-second initial delay |
+| Queue               | Attempts | Backoff                             |
+| ------------------- | -------: | ----------------------------------- |
+| video-processing    |        3 | Exponential, 5-second initial delay |
+| subtitle-processing |        3 | Exponential, 5-second initial delay |
+| audio-processing    |        3 | Exponential, 5-second initial delay |
+| reframe-processing  |        3 | Exponential, 2-second initial delay |
+| dubbing-processing  |        2 | Exponential, 5-second initial delay |
 
 These are configured defaults; inspect the individual job options if a job
 overrides them. Do not assume all processing pipelines use the same queue.
@@ -85,6 +85,7 @@ notifications. An alert may therefore require an operator to take action.
 ## 5. Diagnose Redis and queue problems
 
 Symptoms:
+
 - Jobs accumulate in waiting or delayed states.
 - Workers cannot acquire jobs.
 - Logs report Redis connection errors or connection timeouts.
@@ -109,11 +110,11 @@ Never expose REDIS_URL in incident reports. It may contain credentials.
 
 The GPU deployment plan documents these local health endpoints:
 
-| Service | URL |
-|---|---|
+| Service    | URL                          |
+| ---------- | ---------------------------- |
 | ML Gateway | http://127.0.0.1:8000/health |
-| TalkNet | http://127.0.0.1:8001/health |
-| AutoFlip | http://127.0.0.1:8002/health |
+| TalkNet    | http://127.0.0.1:8001/health |
+| AutoFlip   | http://127.0.0.1:8002/health |
 
 Run these commands on the GPU worker host:
 
@@ -126,6 +127,7 @@ A failed request indicates that the service is unreachable or unhealthy from
 that host; inspect service logs before restarting it.
 
 Check the reframe worker configuration for:
+
 - REDIS_URL pointing to the intended shared Redis instance.
 - CALLBACK_SECRET being configured.
 - BACKEND_URL resolving to the intended application.
@@ -139,6 +141,7 @@ callback failure should be diagnosed before resubmitting the job.
 ## 7. Inspect GPU worker services
 
 The deployment plan defines these systemd services:
+
 - marvedge-ml-gateway
 - marvedge-talknet
 - marvedge-autoflip
@@ -179,6 +182,7 @@ Do not restart every service indiscriminately.
 ## 8. GPU preflight and launch
 
 The documented GPU instance is:
+
 - Instance ID: i-02aa4578f3790bae1
 - Region: ap-southeast-2
 - Instance type: g4dn.xlarge
@@ -225,46 +229,176 @@ file in logs or attach it to an incident ticket.
 
 ## 9. Failed, active, or stalled jobs
 
-### Failed jobs
+### 9.1 Diagnosing elevated processing latency
 
-1. Capture the queue name, BullMQ job ID, application job ID if different,
-   failure reason, attempts made, and relevant logs.
-2. Determine whether the failure is transient or deterministic.
-3. Check whether the configured retry attempts are exhausted.
-4. Resolve the underlying dependency or input problem first.
-5. Use an approved, pipeline-specific recovery mechanism if one exists.
+When `marvedge_reframe_inference_duration_seconds` or `marvedge_dubbing_duration_seconds` triggers an alert:
 
-The repository search did not identify a general-purpose HTTP endpoint for
-retrying arbitrary video, reframe, or dubbing jobs. Do not use the CRM retry
-endpoints for media jobs. Do not invent an API route or manually alter BullMQ
-Redis keys.
+1. **Isolate Pipeline & Quantiles:**
+   Run the PromQL queries in `docs/qa/OBSERVABILITY_DASHBOARDS_AND_QUERIES.md`:
+   - Inspect p50 vs. p95/p99 latency.
+   - If p50 is normal but p95 is spiked, the delay is caused by outlier large video files or occasional network latency to downstream APIs.
+   - If p50 itself is elevated, the worker host is under CPU/GPU saturation or throttling.
+2. **Inspect Host Hardware & Compute Utilisation:**
+   On the GPU worker host (`g4dn.xlarge`):
 
-If no documented recovery operation exists, preserve evidence and escalate
-to the service owner to determine the supported recovery procedure.
+   ```bash
+   # Check GPU utilization, VRAM usage, and active compute PIDs
+   nvidia-smi
 
-### Active or apparently stuck jobs
+   # Check host CPU load and memory usage
+   htop -t
+   ```
 
-1. Confirm whether the worker is alive and still producing logs.
-2. Check Redis connectivity, downstream health, resource usage, and elapsed time.
-3. Check whether the worker's configured lock and stalled-job settings apply.
-4. Allow BullMQ's configured stalled-job handling to operate while monitoring.
-5. If the worker must be restarted, follow the service restart procedure above.
-6. Verify the job's state and output before considering resubmission.
+3. **Check Downstream ML Service Latencies:**
+   Test container responsiveness locally:
+   ```bash
+   curl -o /dev/null -s -w 'ML Gateway: %{time_total}s\n' http://127.0.0.1:8000/health
+   curl -o /dev/null -s -w 'TalkNet: %{time_total}s\n' http://127.0.0.1:8001/health
+   curl -o /dev/null -s -w 'AutoFlip: %{time_total}s\n' http://127.0.0.1:8002/health
+   ```
+   If TalkNet or AutoFlip responses exceed 1.0s on the health check, the Python process is CPU-bound or deadlocked.
 
-Do not assume that restarting a worker guarantees a safe retry. Before
-resubmitting work, establish whether the previous attempt produced output or
-performed a non-idempotent external action. Escalate if duplicate execution
-could cause data loss, duplicate billing, or conflicting artifacts.
+### 9.2 Investigating rising job failure rates
 
-### Completed jobs with missing output
+When `reframe_job_failure_rate` or `dubbing_job_failure_rate` breaches threshold:
 
-Verify the job result, callback delivery, storage destination, and output
-artifact. Check S3 or the configured storage provider using approved
-read-only access. Do not delete or overwrite artifacts while investigating.
+1. **Distinguish Retries from Terminal Failures:**
+   BullMQ jobs automatically retry up to the configured limit (3 attempts for reframe, 2 attempts for dubbing) with exponential backoff.
+   - Jobs in `state="delayed"` are actively retrying. Do not intervene while retries remain.
+   - Jobs increment `marvedge_jobs_total{status="failed"}` only when all attempts have been exhausted.
+2. **Extract Affected Job IDs and Error Signatures:**
+   Run journalctl filtering to capture the root error messages:
+   ```bash
+   sudo journalctl -u marvedge-reframe-worker --since "30 minutes ago" --no-pager | grep -E "\[reframe-worker\] BullMQ Job failed"
+   ```
+3. **Categorize Root Cause:**
+   - **`ECONNREFUSED` / `ETIMEDOUT` to 8000/8001/8002:** ML container died. Check `docker ps` and restart the affected container.
+   - **`Cloudinary upload failed` / `S3 Access Denied`:** Storage credential or network egress issue.
+   - **`Callback failed with status 500`:** Application backend error; inspect Next.js application logs.
+   - **`UnrecoverableError`:** Invalid video format, missing audio stream, or corrupt media. Retrying will not succeed; job was intentionally discarded.
+
+### 9.3 Diagnosing stuck queues
+
+When `reframe_stuck_queue` or `dubbing_stuck_queue` breaches threshold (> 300s / > 600s):
+
+1. **Check Queue Depth Distribution:**
+   Inspect BullMQ job counts across states:
+   ```bash
+   curl -fsS -H "x-marvedge-rollup-secret: ${OVERLAYS_ROLLUP_SECRET}" http://localhost:3000/api/monitoring/metrics | grep marvedge_queue_depth
+   ```
+2. **Determine if Queue is Starved vs. Stalled:**
+   - **Starved (`waiting > 0` and `active == 0`):** Worker process is not running or disconnected from Redis. Check worker status: `sudo systemctl status marvedge-reframe-worker`.
+   - **Stalled (`active > 0` for duration > timeout):** A job is actively locked by a worker that may have hung, or the worker crashed without unlocking the job.
+   - **Empty / Idle (`waiting == 0` and `active == 0`):** Normal state. The stuck queue metric automatically reports 0s when queue is empty (guaranteed zero false alarms).
+
+### 9.4 Actionable Stuck-Job Recovery Procedure
+
+> [!CAUTION]
+> **Duplicate Processing & Billing Warning:**
+> Never restart a job without verifying whether it has already produced output or executed billable vendor calls (e.g. ElevenLabs audio synthesis or GPU rendering). Blindly re-running jobs can lead to duplicate cloud spend and corrupted database records.
+
+Follow this strict step-by-step procedure to inspect and recover a stuck job:
+
+#### Step 1: Identify the Stalled Job
+
+Inspect the oldest active jobs using an administrative Node inspection script from the application root:
+
+```bash
+# Run safe, read-only inspection of active jobs
+npx tsx -e "
+import { reframeQueue, dubbingQueue } from './app/lib/queue';
+async function inspect() {
+  const queues = [reframeQueue, dubbingQueue];
+  for (const q of queues) {
+    const active = await q.getJobs(['active']);
+    console.log(q.name, 'Active count:', active.length);
+    for (const j of active) {
+      console.log('Job ID:', j.id, 'Data ID:', j.data?.jobId, 'ProcessedOn:', new Date(j.processedOn).toISOString(), 'Attempts:', j.attemptsMade);
+    }
+  }
+  process.exit(0);
+}
+inspect();
+"
+```
+
+#### Step 2: Determine if Worker Process is Still Alive
+
+On the worker host:
+
+1. Check if the worker PID is actively using CPU/GPU:
+   ```bash
+   ps aux | grep -E "reframe-worker|video-worker"
+   nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
+   ```
+2. Check recent logs for that specific job ID:
+   ```bash
+   sudo journalctl -u marvedge-reframe-worker --since "15 minutes ago" --no-pager | grep "<job-id>"
+   ```
+3. **If the process is actively writing logs or consuming GPU:** Do NOT interrupt. The job is processing a large file.
+
+#### Step 3: Check External Output Artifacts (Avoid Duplicate Work)
+
+Before modifying the job state, check whether the worker already finished rendering and uploaded the result:
+
+- Check Cloudinary / S3 for the destination key: `reframe/<job-id>` or `dubbing/<job-id>`.
+- Check database state in PostgreSQL (`SELECT status, output_url FROM "Job" WHERE id = '<job-id>';`).
+- If the output artifact already exists in storage and database, the job was completed, but BullMQ failed to record the acknowledgment. In this case, simply update the job record; do NOT re-enqueue the compute job.
+
+#### Step 4: Safely Retry a Stalled or Failed Job Using BullMQ API
+
+If the worker crashed, the process died, and no output was generated, use standard BullMQ APIs (`job.retry()` or `job.moveToFailed()`) rather than manual Redis key manipulation:
+
+```bash
+# Execute safe BullMQ retry via administrative command
+npx tsx -e "
+import { reframeQueue, dubbingQueue } from './app/lib/queue';
+async function recoverJob(queueName, jobId) {
+  const queue = queueName === 'reframe' ? reframeQueue : dubbingQueue;
+  const job = await queue.getJob(jobId);
+  if (!job) {
+    console.error('Job not found in queue:', jobId);
+    process.exit(1);
+  }
+  const state = await job.getState();
+  console.log('Current state of job', jobId, 'is:', state);
+
+  if (state === 'failed') {
+    console.log('Retrying failed job...');
+    await job.retry();
+    console.log('Job moved to waiting for retry.');
+  } else if (state === 'active') {
+    console.log('Moving orphaned active job to failed state first...');
+    await job.moveToFailed(new Error('Manual operator recovery: worker orphaned/hung'), '0', true);
+    console.log('Retrying job...');
+    await job.retry();
+    console.log('Job safely reset to waiting.');
+  } else {
+    console.warn('Job is currently in state', state, '; manual intervention not required.');
+  }
+  process.exit(0);
+}
+// Usage: recoverJob('reframe', '<target-job-id>')
+const [,, qName, jId] = process.argv;
+if (qName && jId) {
+  recoverJob(qName, jId);
+} else {
+  console.log('Usage: npx tsx <script> <reframe|dubbing> <job-id>');
+}
+" reframe "<target-job-id>"
+```
+
+#### Step 5: Verify Recovery
+
+1. Run `marvedge_queue_depth{state="waiting"}` and verify job count increments.
+2. Watch worker logs: `sudo journalctl -u marvedge-reframe-worker -f --no-pager`.
+3. Confirm worker picks up the job, outputs progress logs, and reports `BullMQ Job completed`.
+4. Verify the `reframe_stuck_queue` alert transitions to `[RESOLVED]` in monitoring logs.
 
 ## 10. Escalation criteria
 
 Escalate to the service owner or infrastructure owner when:
+
 - Redis or a critical dependency remains unavailable.
 - The GPU preflight gate reports critical failures.
 - Required model weights or executables are missing.
@@ -281,6 +415,7 @@ error messages, relevant log excerpts, checks performed, and actions taken.
 ## 11. Launch-support checklist
 
 Before launch:
+
 - [ ] Confirm the release and deployment owner.
 - [ ] Confirm the correct production environment and Redis target.
 - [ ] Confirm required credentials are present without printing their values.
@@ -292,6 +427,7 @@ Before launch:
 - [ ] Run an approved test job and verify completion and output delivery.
 
 During launch:
+
 - [ ] Monitor application, worker, and monitoring logs.
 - [ ] Check queue depth, failed jobs, processing latency, and service health.
 - [ ] Record incidents and recovery actions.
@@ -299,11 +435,12 @@ During launch:
 - [ ] Escalate sustained failures or unexpected resource consumption.
 
 After launch:
+
 - [ ] Verify test output and callback delivery.
 - [ ] Confirm queues are progressing and errors are returning to baseline.
 - [ ] Record outstanding issues, owners, and next actions.
 - [ ] Stop unneeded GPU compute only after confirming no required work is active
-  and following the deployment owner's shutdown procedure.
+      and following the deployment owner's shutdown procedure.
 - [ ] Hand over unresolved incidents and links to relevant logs.
 
 ## 12. Known limitations and follow-up work
@@ -327,4 +464,4 @@ After launch:
 - infra/AWS_INFRASTRUCTURE.md — AWS resources and GPU instance details
 - infra/gpu-deployment/DEPLOYMENT_PLAN.md — GPU service topology and preflight
 - infra/gpu-deployment/preflight-gate.sh — GPU deployment gate
-- infra/gpu-deployment/marvedge-*.service — systemd service definitions
+- infra/gpu-deployment/marvedge-\*.service — systemd service definitions

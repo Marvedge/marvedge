@@ -10,12 +10,35 @@ import { runClipScoringJob, type ClipJobDbClient } from "./jobs";
 import type { ClipCandidate } from "./types";
 
 describe("runClipScoringJob (Task-00050)", () => {
+
+  it("skips scoring when a late delivery cannot claim a settled job", async () => {
+    const scoringFn = vi.fn();
+    const updateProgress = vi.fn();
+    vi.mocked(mockDb.videoJob.updateMany).mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      runClipScoringJob({ jobId: "job-settled" }, mockDb, {
+        scoringFn,
+        updateProgress,
+      })
+    ).resolves.toEqual([]);
+
+    expect(mockDb.videoJob.updateMany).toHaveBeenCalledExactlyOnceWith({
+      where: { id: "job-settled", status: { in: ["PENDING", "PROCESSING"] } },
+      data: { status: "PROCESSING", progress: 10 },
+    });
+    expect(scoringFn).not.toHaveBeenCalled();
+    expect(updateProgress).not.toHaveBeenCalled();
+    expect(mockDb.videoJob.update).not.toHaveBeenCalled();
+  });
+
   let mockDb: ClipJobDbClient;
 
   beforeEach(() => {
     mockDb = {
       videoJob: {
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn().mockResolvedValue(null),
       } as any,
       demo: {
@@ -68,8 +91,8 @@ describe("runClipScoringJob (Task-00050)", () => {
     );
 
     // Verify status updates
-    expect(mockDb.videoJob.update).toHaveBeenCalledWith({
-      where: { id: "job-123" },
+    expect(mockDb.videoJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job-123", status: { in: ["PENDING", "PROCESSING"] } },
       data: { status: "PROCESSING", progress: 10 },
     });
 

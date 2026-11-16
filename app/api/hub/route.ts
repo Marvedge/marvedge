@@ -5,6 +5,18 @@ import { prisma } from "@/app/lib/prisma";
 import { registerCustomDomain, deleteCustomDomain } from "@/app/lib/cloudflare";
 import { normalizeCustomDomain } from "@/app/lib/hub/customDomain";
 
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function invalidColorMessage(label: string, value: unknown, example: string): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value !== "string" || !HEX_COLOR.test(value)) {
+    return `${label} color must be a hex color like ${example}`;
+  }
+  return null;
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -63,6 +75,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
     const {
       logoUrl,
       brandColor,
@@ -89,11 +104,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Hex colours land in inline styles on public pages — anything else is rejected.
-    if (typeof brandColor === "string" && brandColor && !/^#[0-9a-fA-F]{6}$/.test(brandColor)) {
-      return NextResponse.json(
-        { error: "Brand color must be a hex color like #7C5CFC" },
-        { status: 400 }
-      );
+    const colorError =
+      invalidColorMessage("Brand", brandColor, "#7C5CFC") ??
+      invalidColorMessage("Text", textColor, "#111827") ??
+      invalidColorMessage("Accent", accentColor, "#F3F0FC");
+    if (colorError) {
+      return NextResponse.json({ error: colorError }, { status: 400 });
     }
 
     const cleanHubTitle = typeof hubTitle === "string" ? hubTitle.trim() : hubTitle;
@@ -102,6 +118,10 @@ export async function POST(req: NextRequest) {
         { error: "Hub title must be under 200 characters" },
         { status: 400 }
       );
+    }
+
+    if (subdomain !== undefined && subdomain !== null && typeof subdomain !== "string") {
+      return NextResponse.json({ error: "Subdomain must be a string" }, { status: 400 });
     }
 
     // Enforce static unique ID suffix on subdomain
