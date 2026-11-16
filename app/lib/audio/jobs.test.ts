@@ -208,6 +208,40 @@ describe("runTrimJob", () => {
     });
   });
 
+  it.each([
+    ["P2025", true],
+    ["P1008", false],
+  ] as const)("handles trim cleanup when the final save fails with %s", async (code, cleanUp) => {
+    const { db, get } = createFakeDb([
+      makeRecord({
+        status: "READY",
+        durationSec: 123.4,
+        trimmedKey: "audio/demo-1/user-1/previous.mp3",
+      }),
+    ]);
+    const clip = get("clip-1");
+    const saveError = Object.assign(new Error("Trim save failed"), { code });
+
+    if (cleanUp) {
+      vi.mocked(db.audioClip.findUnique).mockResolvedValueOnce(clip).mockResolvedValueOnce(null);
+    }
+    vi.mocked(db.audioClip.update)
+      .mockResolvedValueOnce({ ...clip, status: "TRIM_PROCESSING" })
+      .mockRejectedValueOnce(saveError);
+
+    await expect(runTrimJob(trimPayload, db)).rejects.toBe(saveError);
+
+    expect(media.uploadAudioViaSignedUrl).toHaveBeenCalledOnce();
+    if (cleanUp) {
+      expect(r2.deleteObject).toHaveBeenCalledExactlyOnceWith({
+        bucket: "raw",
+        object: trimPayload.trimmedKey,
+      });
+    } else {
+      expect(r2.deleteObject).not.toHaveBeenCalled();
+    }
+  });
+
   it("keeps the previous trimmedKey intact when the trim fails", async () => {
     const { db, get } = createFakeDb([
       makeRecord({
