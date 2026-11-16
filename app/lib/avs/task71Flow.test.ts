@@ -93,8 +93,10 @@ describe("Task 71: Complete Dashboard -> Queue -> Worker -> Callback E2E Flow", 
         error: data.error ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        idempotencyKey: (data as { idempotencyKey?: string | null }).idempotencyKey ?? null,
+        version: (data as { version?: number }).version ?? 0,
       };
-      return mockVideoJobClient(currentJob);
+      return mockVideoJobClient(currentJob!);
     });
 
     vi.mocked(prisma.videoJob.findUnique).mockImplementation(

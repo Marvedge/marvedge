@@ -219,7 +219,12 @@ describe("export dispatch terminal-state protection", () => {
     const dispatch = mocks.after.mock.calls[0][0] as () => Promise<void>;
     await dispatch();
 
-    expect(record).toEqual(settledRecord);
+    expect({
+      status: record.status,
+      progress: record.progress,
+      exportedUrl: record.exportedUrl,
+      error: record.error,
+    }).toEqual(settledRecord);
 
     const expectedWorkerCalls =
       timing === "before dispatch" || timing === "between read and write"
