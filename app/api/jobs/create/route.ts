@@ -138,22 +138,115 @@ async function updateUnsettledExportJob(
   return result.count > 0;
 }
 
+// In-process serialized promise chain to coordinate database updates to jobData across concurrent chunks
+let chunkPersistLock: Promise<void> = Promise.resolve();
+
+async function persistCompletedChunk(
+  jobId: string,
+  chunkId: string,
+  outputObject: string
+): Promise<void> {
+  chunkPersistLock = chunkPersistLock
+    .catch(() => {})
+    .then(async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const job = await prisma.videoJob.findUnique({
+          where: { id: jobId },
+          select: { jobData: true, status: true, version: true },
+        });
+        if (!job || job.status === "COMPLETED" || job.status === "CANCELLED") {
+          return;
+        }
+
+        const rawData = (job.jobData as Record<string, unknown>) ?? {};
+        const recorded: Record<string, string> =
+          rawData.completedChunks &&
+          typeof rawData.completedChunks === "object" &&
+          !Array.isArray(rawData.completedChunks)
+            ? { ...(rawData.completedChunks as Record<string, string>) }
+            : {};
+
+        if (recorded[chunkId] === outputObject) {
+          return;
+        }
+
+        recorded[chunkId] = outputObject;
+        const updatedData = {
+          ...rawData,
+          completedChunks: recorded,
+        };
+
+        const currentVersion =
+          job && "version" in job && typeof (job as { version?: unknown }).version === "number"
+            ? (job as { version: number }).version
+            : undefined;
+
+        const whereClause: {
+          id: string;
+          status: { notIn: string[] };
+          version?: number;
+        } = {
+          id: jobId,
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        };
+        if (typeof currentVersion === "number") {
+          whereClause.version = currentVersion;
+        }
+
+        const result = await prisma.videoJob.updateMany({
+          where: whereClause,
+          data: {
+            jobData: updatedData as Prisma.InputJsonValue,
+            ...(typeof currentVersion === "number" ? { version: currentVersion + 1 } : {}),
+          },
+        });
+
+        if (result.count > 0) {
+          return;
+        }
+      }
+      throw new Error("Failed to persist completed chunk after retries");
+    });
+
+  await chunkPersistLock;
+}
+
 // Dispatches chunked processing to GCP Cloud Run workers and merges the result.
-async function dispatchVideoJob(
+export async function dispatchVideoJob(
   jobId: string,
   videoUrl: string,
   duration: number,
   normalizedPayload: Record<string, unknown>
 ): Promise<void> {
-  try {
-    // Do not overwrite a settled job. A COMPLETED or CANCELLED record is final.
-    const existing = await prisma.videoJob
-      .findUnique({ where: { id: jobId }, select: { status: true } })
-      .catch(() => null);
-    if (existing?.status === "COMPLETED" || existing?.status === "CANCELLED") {
-      return;
-    }
+  // Load existing jobData to support idempotent chunk processing
+  const existingJob = await prisma.videoJob
+    .findUnique({
+      where: { id: jobId },
+      select: { jobData: true, status: true },
+    })
+    .catch(() => null);
 
+  if (existingJob?.status === "COMPLETED" || existingJob?.status === "CANCELLED") {
+    return;
+  }
+
+  const jobData = (existingJob?.jobData as Record<string, unknown>) ?? {};
+  let completedChunks: Record<string, string> = {};
+  if (
+    jobData.completedChunks &&
+    typeof jobData.completedChunks === "object" &&
+    !Array.isArray(jobData.completedChunks)
+  ) {
+    completedChunks = { ...(jobData.completedChunks as Record<string, string>) };
+  } else if (Array.isArray(jobData.completedChunks)) {
+    for (const id of jobData.completedChunks) {
+      if (typeof id === "string") {
+        completedChunks[id] = `${id}.mp4`;
+      }
+    }
+  }
+
+  try {
     if (
       !(await updateUnsettledExportJob(jobId, {
         status: "PROCESSING",
@@ -181,22 +274,42 @@ async function dispatchVideoJob(
 
       chunkFilenames.push(outputObject);
 
-      // Store a function that RETURNS the promise, but don't call it yet!
-      fetchTasks.push(() =>
-        invokeGcpWorker(
-          {
-            chunkId,
-            recipeId: jobId,
-            outputObject,
-            videoUrl,
-            recipe: normalizedPayload,
-            startTime,
-            duration: currentChunkDuration,
-            ...(speakerTracksUri ? { speakerTracksUri } : {}),
-          },
-          "/process"
-        )
-      );
+      if (completedChunks[chunkId]) {
+        // Reuse completed chunk output without redispatching to worker
+        const reusedOutput = completedChunks[chunkId];
+        fetchTasks.push(() =>
+          Promise.resolve({
+            result: { processedObject: reusedOutput },
+          })
+        );
+      } else {
+        // Store a function that returns the promise, dispatching worker and persisting progress on success
+        fetchTasks.push(async () => {
+          const resp = (await invokeGcpWorker(
+            {
+              chunkId,
+              recipeId: jobId,
+              outputObject,
+              videoUrl,
+              recipe: normalizedPayload,
+              startTime,
+              duration: currentChunkDuration,
+              ...(speakerTracksUri ? { speakerTracksUri } : {}),
+            },
+            "/process"
+          )) as { result?: { skipped?: boolean; processedObject?: unknown } };
+
+          const processedObject =
+            typeof resp?.result?.processedObject === "string" && resp.result.processedObject
+              ? resp.result.processedObject
+              : outputObject;
+
+          // Immediately persist chunk completion so later failures retain this progress
+          await persistCompletedChunk(jobId, chunkId, processedObject);
+
+          return resp;
+        });
+      }
     }
 
     // True Concurrency Queue Logic (Actual Deferred Execution)
@@ -339,6 +452,8 @@ export async function POST(req: NextRequest) {
       aspectRatio,
       browserFrame,
       speakerTracksUri: rawSpeakerTracksUri,
+      // Optional idempotency key provided by the client
+      idempotencyKey,
     } = data;
 
     const speakerTracksUri =
@@ -487,6 +602,23 @@ export async function POST(req: NextRequest) {
     const subtitleLanguage =
       !burnSubtitles || rawSubtitleLanguage === "multi" ? null : rawSubtitleLanguage;
 
+    // If an idempotency key is provided, check for an existing job for this user.
+    let trimmedKey: string | undefined;
+    if (idempotencyKey !== undefined && idempotencyKey !== null) {
+      if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
+        return NextResponse.json({ error: "Invalid idempotencyKey" }, { status: 400 });
+      }
+      trimmedKey = idempotencyKey.trim();
+      const existing = await prisma.videoJob.findFirst({
+        where: { userId, idempotencyKey: trimmedKey },
+        select: { id: true },
+      });
+      if (existing) {
+        // Return the existing job without creating or dispatching
+        return NextResponse.json({ success: true, jobId: existing.id });
+      }
+    }
+
     // 1. Create a job record in the database, serialized per user: the free-trial
     // allowance check and the insert run in one transaction behind a
     // SELECT ... FOR UPDATE on the caller's User row, so concurrent exports
@@ -520,17 +652,33 @@ export async function POST(req: NextRequest) {
                 drawShadow: true,
                 drawBorder: false,
               },
-              // Spread into a fresh object literal so the Prisma Json field accepts
-              // it (a named interface lacks the implicit index signature Prisma wants).
               ...(subtitleStyle ? { subtitleStyle: { ...subtitleStyle } } : {}),
               ...(subtitleLanguage ? { subtitleLanguage } : {}),
               ...(watermark ? { watermark: { ...watermark } } : {}),
               ...(speakerTracksUri ? { speakerTracksUri } : {}),
             },
+            ...(trimmedKey ? { idempotencyKey: trimmedKey } : {}),
           },
         });
       });
     } catch (txErr) {
+      // Handle unique‑constraint violation that can occur when two concurrent
+      // requests use the same idempotencyKey. Prisma throws error code P2002.
+      if (
+        txErr &&
+        typeof txErr === "object" &&
+        "code" in txErr &&
+        (txErr as { code?: unknown }).code === "P2002" &&
+        trimmedKey
+      ) {
+        const existing = await prisma.videoJob.findFirst({
+          where: { userId, idempotencyKey: trimmedKey },
+          select: { id: true },
+        });
+        if (existing) {
+          return NextResponse.json({ success: true, jobId: existing.id });
+        }
+      }
       if (txErr instanceof FreeTrialLimitError) {
         return NextResponse.json(
           {

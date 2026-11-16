@@ -196,6 +196,14 @@ model VideoJob {
   demo        Demo?    @relation(fields: [demoId], references: [id])
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Added fields for idempotency and retry safety
+  idempotencyKey String?
+  // Global unique removed; per-user uniqueness enforced below
+
+  version Int @default(0)
+
+  @@unique([userId, idempotencyKey])
 }
 
 model ExportedVideo {
