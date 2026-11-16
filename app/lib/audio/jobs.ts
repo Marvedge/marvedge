@@ -224,12 +224,12 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
 
     // The previous trimmed asset (from an earlier successful trim) is now
     // orphaned — drop it best-effort. Never fails the job.
-    if (payload.previousTrimmedKey && payload.previousTrimmedKey !== payload.trimmedKey) {
+    if (clip.trimmedKey && clip.trimmedKey !== payload.trimmedKey) {
       try {
-        await deleteObject({ bucket: getR2RawBucket(), object: payload.previousTrimmedKey });
+        await deleteObject({ bucket: getR2RawBucket(), object: clip.trimmedKey });
       } catch (error) {
         console.error(
-          `[audio] failed to clean up previous trim ${payload.previousTrimmedKey}:`,
+          `[audio] failed to clean up previous trim ${clip.trimmedKey}:`,
           error
         );
       }

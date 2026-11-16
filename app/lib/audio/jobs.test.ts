@@ -192,6 +192,22 @@ describe("runTrimJob", () => {
     });
   });
 
+  it("cleans up the output actually replaced by a queued trim", async () => {
+    const earlierKey = "audio/demo-1/user-1/earlier.mp3";
+    const currentKey = "audio/demo-1/user-1/current.mp3";
+    const { db, get } = createFakeDb([
+      makeRecord({ status: "READY", durationSec: 123.4, trimmedKey: currentKey }),
+    ]);
+
+    await runTrimJob({ ...trimPayload, previousTrimmedKey: earlierKey }, db);
+
+    expect(get("clip-1").trimmedKey).toBe(trimPayload.trimmedKey);
+    expect(r2.deleteObject).toHaveBeenCalledExactlyOnceWith({
+      bucket: "raw",
+      object: currentKey,
+    });
+  });
+
   it("keeps the previous trimmedKey intact when the trim fails", async () => {
     const { db, get } = createFakeDb([
       makeRecord({
