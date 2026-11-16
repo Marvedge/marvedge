@@ -12,7 +12,7 @@ import { getPresignedUrl } from "@/app/lib/storage/index";
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }));
 vi.mock("@/app/lib/auth/options", () => ({ authOptions: {} }));
 vi.mock("next/server", async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal<typeof import("next/server")>();
   return { ...actual, after: vi.fn() };
 });
 vi.mock("@/app/lib/prisma", () => ({
@@ -27,7 +27,7 @@ vi.mock("@/app/lib/prisma", () => ({
 }));
 vi.mock("@/app/lib/gcpWorker", () => ({ invokeGcpWorker: vi.fn() }));
 vi.mock("@/app/lib/storage/index", async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal<typeof import("@/app/lib/storage/index")>();
   return { ...actual, getPresignedUrl: vi.fn() };
 });
 vi.mock("@/app/lib/storage/access", () => ({ mayResolveObject: vi.fn() }));
@@ -45,7 +45,7 @@ import { invokeGcpWorker } from "@/app/lib/gcpWorker";
 import { POST } from "../app/api/jobs/create/route";
 import { after } from "next/server";
 
-function makeRequest(body) {
+function makeRequest(body: unknown) {
   return new NextRequest("http://localhost/api/jobs/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -63,9 +63,9 @@ describe("Failure injection tests for job creation", () => {
     vi.mocked(isRateLimited as any).mockResolvedValue(false);
     vi.mocked(isSafeUrl as any).mockReturnValue(true);
     vi.mocked(mayResolveObject as any).mockResolvedValue(true);
-    vi.mocked(getPresignedUrl as any).mockImplementation((url) => Promise.resolve(url));
+    vi.mocked(getPresignedUrl as any).mockImplementation((url: string) => Promise.resolve(url));
     // Transaction mock – runs callback and returns job record
-    vi.mocked(prisma.$transaction as any).mockImplementation(async (cb) => cb({
+    vi.mocked(prisma.$transaction as any).mockImplementation(async (cb: (tx: any) => Promise<any>) => cb({
       $queryRaw: vi.fn(),
       videoJob: { create: vi.fn(() => ({ id: "job-1" })) },
     }));
