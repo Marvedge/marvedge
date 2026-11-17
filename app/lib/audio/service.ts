@@ -137,7 +137,7 @@ export async function createAudioUpload(args: {
     where: { demoId: args.demoId },
     _max: { order: true },
   });
-  const order = (max._max.order ?? -1) + 1;
+  const order = Math.min((max._max.order ?? -1) + 1, 2_147_483_647);
 
   const clip = await args.db.audioClip.create({
     data: {
