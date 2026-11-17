@@ -1,6 +1,74 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { Readable } from "stream";
 
 // Mock external dependencies
+vi.mock("axios", () => {
+  return {
+    default: vi.fn().mockImplementation(async () => {
+      const stream = new Readable({
+        read() {
+          this.push(Buffer.from("fake-audio-stream-content"));
+          this.push(null);
+        },
+      });
+      return {
+        data: stream,
+        status: 200,
+        headers: {},
+      };
+    }),
+  };
+});
+
+vi.mock("ioredis", () => {
+  class MockRedis {
+    on = vi.fn();
+    connect = vi.fn();
+    quit = vi.fn();
+    duplicate = vi.fn().mockReturnThis();
+  }
+  return {
+    default: MockRedis,
+    Redis: MockRedis,
+  };
+});
+
+vi.mock("@prisma/client", () => {
+  class PrismaClient {
+    videoJob = {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      update: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn().mockResolvedValue({}),
+    };
+    demo = {
+      findUnique: vi.fn().mockResolvedValue({}),
+    };
+  }
+  return {
+    PrismaClient,
+  };
+});
+
+vi.mock("bullmq", () => {
+  class Worker {
+    on = vi.fn();
+    close = vi.fn();
+  }
+  class Queue {
+    on = vi.fn();
+    add = vi.fn();
+  }
+  class UnrecoverableError extends Error {
+    name = "UnrecoverableError";
+  }
+  return {
+    Worker,
+    Queue,
+    UnrecoverableError,
+  };
+});
+
 vi.mock("../app/lib/avs/dubbingProcessor", () => ({
   processDubbingJob: vi.fn(),
   defaultUploadToCloudinary: vi
@@ -49,6 +117,7 @@ import {
   VoiceStudioDubbingAdapter,
 } from "../app/lib/voicestudio/dubbingAdapter";
 import { VoiceStudioError, VoiceStudioUnavailableError } from "../app/lib/voicestudio/errors";
+import { executeDubbingJob } from "./index";
 
 describe("Video Worker - dubbing-processing worker integration", () => {
   const originalEnv = process.env;
@@ -207,7 +276,7 @@ describe("Video Worker - dubbing-processing worker integration", () => {
       });
 
       const mockJob = {
-        name: "dubbing",
+        name: "dubbing" as const,
         id: "bullmq-vs-100",
         data: {
           jobId: "video-job-vs",
@@ -215,112 +284,23 @@ describe("Video Worker - dubbing-processing worker integration", () => {
           targetLanguage: "es",
           steps: [{ stepId: "step-1", text: "Hola mundo", startTime: 0, endTime: 17.29 }],
         },
+        opts: { attempts: 1 },
+        attemptsMade: 0,
         updateProgress: vi.fn().mockResolvedValue(undefined),
       };
 
-      const mockPrismaUpdate = vi.fn().mockResolvedValue({});
-
-      // Worker processor simulation matching video-worker/index.ts implementation
-      const processor = async (job: typeof mockJob) => {
-        const provider = resolveDubbingProvider();
-        expect(provider).toBe("voicestudio");
-
-        const adapter = new VoiceStudioDubbingAdapter();
-        const health = await adapter.getClient().checkHealth();
-        if (!health.isReady) {
-          throw new Error("offline");
-        }
-
-        await job.updateProgress(10);
-
-        const steps = job.data.steps;
-        await job.updateProgress(25);
-
-        const synthesisResult = await adapter.synthesizeTimedSteps(steps, {
-          language: job.data.targetLanguage,
-        });
-
-        // Upload to Cloudinary
-        const uploadResult = await defaultUploadToCloudinary("temp_audio.wav");
-        const audioUrl = uploadResult.secure_url;
-
-        const hasSourceVideo = Boolean(job.data.sourceUrl && job.data.sourceUrl.trim());
-        const hasValidTimings = steps.some(
-          (s: { startTime?: number; endTime?: number }) =>
-            typeof s.startTime === "number" &&
-            typeof s.endTime === "number" &&
-            Number.isFinite(s.startTime) &&
-            Number.isFinite(s.endTime) &&
-            s.endTime > s.startTime
-        );
-
-        if (hasSourceVideo && !hasValidTimings) {
-          throw new VoiceStudioError(
-            "INVALID_INPUT",
-            "Cannot align dubbed video: missing subtitle or narration timing information for source video"
-          );
-        }
-
-        let finalExportedUrl = audioUrl;
-
-        if (hasSourceVideo) {
-          await job.updateProgress(50);
-          let alignedVideoUrl: string | undefined;
-
-          await processDubbingJob(
-            {
-              jobId: job.data.jobId,
-              videoUrl: job.data.sourceUrl,
-              dubUrl: audioUrl,
-              steps: steps.map((s, idx) => ({
-                id: s.stepId,
-                index: idx,
-                startTime: s.startTime,
-                endTime: s.endTime,
-              })),
-              dubTimings: synthesisResult.stepTimings.map((st) => ({
-                stepId: st.stepId,
-                start: st.start,
-                end: st.end,
-              })),
-              sourceDuration: synthesisResult.durationSec,
-            },
-            {
-              isFinalAttempt: false,
-              updateProgress: async () => {},
-              postCallback: async (cbPayload) => {
-                if (cbPayload.status === "COMPLETED" && cbPayload.alignedVideoUrl) {
-                  alignedVideoUrl = cbPayload.alignedVideoUrl;
-                }
-              },
-            }
-          );
-
-          if (!alignedVideoUrl || alignedVideoUrl === audioUrl) {
-            throw new VoiceStudioError(
-              "INFERENCE_FAILED",
-              "AVS alignment completed without returning an aligned video URL"
-            );
-          }
-
-          finalExportedUrl = alignedVideoUrl;
-        }
-
-        if (hasSourceVideo && (!finalExportedUrl || finalExportedUrl === audioUrl)) {
-          throw new VoiceStudioError(
-            "INFERENCE_FAILED",
-            "Invalid export artifact: video dubbing job cannot be marked completed with audio-only URL"
-          );
-        }
-
-        await mockPrismaUpdate({
-          where: { id: job.data.jobId },
-          data: { status: "COMPLETED", progress: 100, exportedUrl: finalExportedUrl },
-        });
-        await job.updateProgress(100);
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn().mockResolvedValue({ jobData: null, demoId: null }),
+        },
+        demo: {
+          findUnique: vi.fn().mockResolvedValue(null),
+        },
       };
 
-      await processor(mockJob);
+      await executeDubbingJob(mockJob, { prisma: mockPrisma as any });
 
       expect(mockAdapter.synthesizeTimedSteps).toHaveBeenCalledWith(mockJob.data.steps, {
         language: "es",
@@ -338,13 +318,13 @@ describe("Video Worker - dubbing-processing worker integration", () => {
         expect.any(Object)
       );
       // Confirmed: aligned video URL is persisted, NEVER audioUrl
-      expect(mockPrismaUpdate).toHaveBeenCalledWith({
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
         where: { id: "video-job-vs" },
-        data: {
+        data: expect.objectContaining({
           status: "COMPLETED",
           progress: 100,
           exportedUrl: "https://cloudinary.com/aligned-final.mp4",
-        },
+        }),
       });
       expect(mockJob.updateProgress).toHaveBeenCalledWith(100);
       expect(createDubbingJob).not.toHaveBeenCalled();
@@ -373,7 +353,7 @@ describe("Video Worker - dubbing-processing worker integration", () => {
       vi.mocked(processDubbingJob).mockRejectedValueOnce(alignmentError);
 
       const mockJob = {
-        name: "dubbing",
+        name: "dubbing" as const,
         id: "bullmq-vs-fail",
         data: {
           jobId: "video-job-fail",
@@ -381,89 +361,31 @@ describe("Video Worker - dubbing-processing worker integration", () => {
           targetLanguage: "es",
           steps: [{ stepId: "step-1", text: "Hola mundo", startTime: 0, endTime: 10.0 }],
         },
+        opts: { attempts: 3 },
+        attemptsMade: 0,
         updateProgress: vi.fn().mockResolvedValue(undefined),
       };
 
-      const mockPrismaUpdate = vi.fn().mockResolvedValue({});
-
-      const processor = async (job: typeof mockJob) => {
-        const adapter = new VoiceStudioDubbingAdapter();
-        const steps = job.data.steps;
-        const synthesisResult = await adapter.synthesizeTimedSteps(steps, {
-          language: job.data.targetLanguage,
-        });
-        const uploadResult = await defaultUploadToCloudinary("temp_audio.wav");
-        const audioUrl = uploadResult.secure_url;
-
-        let finalExportedUrl = audioUrl;
-        const hasSourceVideo = Boolean(job.data.sourceUrl && job.data.sourceUrl.trim());
-
-        if (hasSourceVideo) {
-          let alignedVideoUrl: string | undefined;
-
-          // Crucial fix: do not swallow error!
-          await processDubbingJob(
-            {
-              jobId: job.data.jobId,
-              videoUrl: job.data.sourceUrl,
-              dubUrl: audioUrl,
-              steps: steps.map(
-                (
-                  s: {
-                    startTime?: number;
-                    endTime?: number;
-                    targetDurationSec?: number;
-                    stepId: string;
-                  },
-                  idx: number
-                ) => ({
-                  id: s.stepId,
-                  index: idx,
-                  startTime: s.startTime,
-                  endTime: s.endTime,
-                })
-              ),
-              dubTimings: synthesisResult.stepTimings.map((st) => ({
-                stepId: st.stepId,
-                start: st.start,
-                end: st.end,
-              })),
-              sourceDuration: synthesisResult.durationSec,
-            },
-            {
-              isFinalAttempt: false,
-              postCallback: async (cbPayload) => {
-                if (cbPayload.status === "COMPLETED" && cbPayload.alignedVideoUrl) {
-                  alignedVideoUrl = cbPayload.alignedVideoUrl;
-                }
-              },
-            }
-          );
-
-          if (!alignedVideoUrl || alignedVideoUrl === audioUrl) {
-            throw new VoiceStudioError(
-              "INFERENCE_FAILED",
-              "AVS alignment completed without returning an aligned video URL"
-            );
-          }
-          finalExportedUrl = alignedVideoUrl;
-        }
-
-        if (hasSourceVideo && (!finalExportedUrl || finalExportedUrl === audioUrl)) {
-          throw new VoiceStudioError("INFERENCE_FAILED", "Invalid export artifact");
-        }
-
-        await mockPrismaUpdate({
-          where: { id: job.data.jobId },
-          data: { status: "COMPLETED", progress: 100, exportedUrl: finalExportedUrl },
-        });
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn().mockResolvedValue({ jobData: null, demoId: null }),
+        },
+        demo: {
+          findUnique: vi.fn().mockResolvedValue(null),
+        },
       };
 
-      await expect(processor(mockJob)).rejects.toThrow(
+      await expect(executeDubbingJob(mockJob, { prisma: mockPrisma as any })).rejects.toThrow(
         "Cloud Run AVS alignment service timed out (504)"
       );
       // Confirmed: outer COMPLETED database update was NEVER executed
-      expect(mockPrismaUpdate).not.toHaveBeenCalled();
+      expect(mockPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
       // Confirmed: ElevenLabs fallback was NEVER triggered
       expect(createDubbingJob).not.toHaveBeenCalled();
     });
@@ -618,37 +540,445 @@ describe("Video Worker - dubbing-processing worker integration", () => {
 
     it("10. preserves ElevenLabs behavior unchanged when DUBBING_PROVIDER is elevenlabs", async () => {
       process.env.DUBBING_PROVIDER = "elevenlabs";
+      process.env.ELEVENLABS_API_KEY = "test-elevenlabs-api-key";
 
       const mockJob = {
-        name: "dubbing",
+        name: "dubbing" as const,
         id: "el-job-1",
         data: {
           jobId: "el-job-id",
           sourceUrl: "https://example.com/el-video.mp4",
           targetLanguage: "es",
         },
-        updateProgress: vi.fn(),
+        opts: { attempts: 1 },
+        attemptsMade: 0,
+        updateProgress: vi.fn().mockResolvedValue(undefined),
       };
 
-      const processor = async (job: typeof mockJob) => {
-        const provider = resolveDubbingProvider();
-        if (provider === "elevenlabs") {
-          const res = await createDubbingJob({
-            sourceUrl: job.data.sourceUrl,
-            targetLanguage: job.data.targetLanguage,
-          });
-          await waitForDubbingCompletion(res.dubbingId);
-        }
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn().mockResolvedValue({ jobData: null, demoId: null }),
+        },
+        demo: {
+          findUnique: vi.fn().mockResolvedValue(null),
+        },
       };
 
-      await processor(mockJob);
+      await executeDubbingJob(mockJob, { prisma: mockPrisma as any });
 
-      expect(createDubbingJob).toHaveBeenCalledWith({
-        sourceUrl: "https://example.com/el-video.mp4",
-        targetLanguage: "es",
-      });
+      expect(createDubbingJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceUrl: "https://example.com/el-video.mp4",
+          targetLanguage: "es",
+        })
+      );
       expect(waitForDubbingCompletion).toHaveBeenCalledWith("el-123");
       expect(VoiceStudioDubbingAdapter).not.toHaveBeenCalled();
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "el-job-id" },
+        data: expect.objectContaining({
+          status: "COMPLETED",
+          progress: 100,
+        }),
+      });
+    });
+  });
+
+  describe("C. VoiceStudio AVS False-Success Defense Regression Suite (Production Worker)", () => {
+    const createProductionMockPrisma = () => ({
+      videoJob: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
+        findUnique: vi.fn().mockResolvedValue({
+          jobData: null,
+          demoId: null,
+        }),
+      },
+      demo: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+    });
+
+    const createProductionMockJob = (
+      opts: {
+        attemptsMade?: number;
+        maxAttempts?: number;
+        sourceUrl?: string;
+      } = {}
+    ) => ({
+      name: "dubbing" as const,
+      id: "bullmq-vs-prod-100",
+      data: {
+        jobId: "video-job-vs-prod",
+        sourceUrl: opts.sourceUrl ?? "https://example.com/demo.mp4",
+        targetLanguage: "es",
+        steps: [{ stepId: "step-1", text: "Hola mundo", startTime: 0, endTime: 17.29 }],
+      },
+      opts: { attempts: opts.maxAttempts ?? 3 },
+      attemptsMade: opts.attemptsMade ?? 0,
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+    });
+
+    it("1. AVS returns a valid aligned MP4 URL -> job completes", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      vi.mocked(processDubbingJob).mockImplementationOnce(async (_payload, deps) => {
+        if (deps?.postCallback) {
+          await deps.postCallback({
+            jobId: "video-job-vs-prod",
+            status: "COMPLETED",
+            alignedVideoUrl: "https://cloudinary.com/aligned-final.mp4",
+            duration: 17.29,
+          });
+        }
+      });
+
+      const mockJob = createProductionMockJob();
+      const mockPrisma = createProductionMockPrisma();
+
+      await executeDubbingJob(mockJob, { prisma: mockPrisma as any });
+
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "COMPLETED",
+          progress: 100,
+          exportedUrl: "https://cloudinary.com/aligned-final.mp4",
+        }),
+      });
+      expect(mockJob.updateProgress).toHaveBeenCalledWith(100);
+    });
+
+    it("2. AVS returns the uploaded WAV URL -> job fails", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      // AVS returns the uploaded WAV URL (audioUrl)
+      vi.mocked(processDubbingJob).mockImplementationOnce(async (_payload, deps) => {
+        if (deps?.postCallback) {
+          await deps.postCallback({
+            jobId: "video-job-vs-prod",
+            status: "COMPLETED",
+            alignedVideoUrl: "https://cloudinary.com/dubbed.wav",
+            duration: 17.29,
+          });
+        }
+      });
+
+      const mockJob = createProductionMockJob();
+      const mockPrisma = createProductionMockPrisma();
+
+      await expect(executeDubbingJob(mockJob, { prisma: mockPrisma as any })).rejects.toThrow();
+
+      // Guard assertion: invalid AVS output must NEVER result in a COMPLETED database update
+      expect(mockPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      // Guard assertion: permanent failure is persisted as FAILED
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("valid aligned video URL"),
+        }),
+      });
+    });
+
+    it("3. AVS returns the unchanged source MP4 URL -> job fails", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      // AVS returns the unchanged source video URL (sourceUrl)
+      vi.mocked(processDubbingJob).mockImplementationOnce(async (_payload, deps) => {
+        if (deps?.postCallback) {
+          await deps.postCallback({
+            jobId: "video-job-vs-prod",
+            status: "COMPLETED",
+            alignedVideoUrl: "https://example.com/demo.mp4", // identical to sourceUrl
+            duration: 17.29,
+          });
+        }
+      });
+
+      const mockJob = createProductionMockJob();
+      const mockPrisma = createProductionMockPrisma();
+
+      await expect(executeDubbingJob(mockJob, { prisma: mockPrisma as any })).rejects.toThrow();
+
+      // Guard assertion: source video fallback must NEVER result in a COMPLETED database update
+      expect(mockPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      // Guard assertion: persisted as FAILED with typed error message
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("valid aligned video URL"),
+        }),
+      });
+    });
+
+    it("4. AVS returns an empty URL -> job fails", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      // AVS returns empty/whitespace URL
+      vi.mocked(processDubbingJob).mockImplementationOnce(async (_payload, deps) => {
+        if (deps?.postCallback) {
+          await deps.postCallback({
+            jobId: "video-job-vs-prod",
+            status: "COMPLETED",
+            alignedVideoUrl: "   ",
+            duration: 17.29,
+          });
+        }
+      });
+
+      const mockJob = createProductionMockJob();
+      const mockPrisma = createProductionMockPrisma();
+
+      await expect(executeDubbingJob(mockJob, { prisma: mockPrisma as any })).rejects.toThrow();
+
+      expect(mockPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("valid aligned video URL"),
+        }),
+      });
+    });
+
+    it("5. AVS returns no completion callback -> job fails", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      // AVS finishes without delivering any COMPLETED callback
+      vi.mocked(processDubbingJob).mockResolvedValueOnce(undefined);
+
+      const mockJob = createProductionMockJob();
+      const mockPrisma = createProductionMockPrisma();
+
+      await expect(executeDubbingJob(mockJob, { prisma: mockPrisma as any })).rejects.toThrow();
+
+      expect(mockPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("valid aligned video URL"),
+        }),
+      });
+    });
+
+    it("6. Invalid callback status -> job fails", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      // AVS callback reports FAILED status instead of COMPLETED
+      vi.mocked(processDubbingJob).mockImplementationOnce(async (_payload, deps) => {
+        if (deps?.postCallback) {
+          await deps.postCallback({
+            jobId: "video-job-vs-prod",
+            status: "FAILED",
+            error: "AVS alignment internal calculation failure",
+          });
+        }
+      });
+
+      const mockJob = createProductionMockJob();
+      const mockPrisma = createProductionMockPrisma();
+
+      await expect(executeDubbingJob(mockJob, { prisma: mockPrisma as any })).rejects.toThrow();
+
+      expect(mockPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("valid aligned video URL"),
+        }),
+      });
+    });
+
+    it("7. Transient AVS timeout -> BullMQ retry preserved on intermediate attempt", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      const transientError = new Error("Cloud Run AVS alignment service timed out (504)");
+      vi.mocked(processDubbingJob).mockRejectedValueOnce(transientError);
+
+      const intermediateJob = createProductionMockJob({ attemptsMade: 0, maxAttempts: 3 });
+      const intermediatePrisma = createProductionMockPrisma();
+
+      // Must re-throw original transient error so BullMQ can schedule retry
+      await expect(
+        executeDubbingJob(intermediateJob, { prisma: intermediatePrisma as any })
+      ).rejects.toThrow("Cloud Run AVS alignment service timed out (504)");
+
+      // Neither COMPLETED nor FAILED should be written to DB on intermediate transient retry
+      expect(intermediatePrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      expect(intermediatePrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "FAILED" }),
+        })
+      );
+    });
+
+    it("8. Final retry exhaustion -> FAILED database persistence", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      const transientError = new Error("Cloud Run AVS alignment service timed out (504)");
+      vi.mocked(processDubbingJob).mockRejectedValueOnce(transientError);
+
+      const finalJob = createProductionMockJob({ attemptsMade: 2, maxAttempts: 3 });
+      const finalPrisma = createProductionMockPrisma();
+
+      await expect(executeDubbingJob(finalJob, { prisma: finalPrisma as any })).rejects.toThrow();
+
+      // On final attempt, permanent failure is persisted as FAILED
+      expect(finalPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      expect(finalPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: "Cloud Run AVS alignment service timed out (504)",
+        }),
+      });
+    });
+
+    it("9. ElevenLabs flow remains unaffected", async () => {
+      process.env.DUBBING_PROVIDER = "elevenlabs";
+      process.env.ELEVENLABS_API_KEY = "test-elevenlabs-api-key";
+
+      const elJob = {
+        name: "dubbing" as const,
+        id: "bullmq-el-prod-1",
+        data: {
+          jobId: "video-job-el-prod",
+          sourceUrl: "https://example.com/el-video.mp4",
+          targetLanguage: "es",
+        },
+        opts: { attempts: 1 },
+        attemptsMade: 0,
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockPrisma = createProductionMockPrisma();
+
+      await executeDubbingJob(elJob, { prisma: mockPrisma as any });
+
+      expect(createDubbingJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceUrl: "https://example.com/el-video.mp4",
+          targetLanguage: "es",
+        })
+      );
+      expect(waitForDubbingCompletion).toHaveBeenCalledWith("el-123");
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-el-prod" },
+        data: expect.objectContaining({
+          status: "COMPLETED",
+          progress: 100,
+        }),
+      });
+    });
+
+    it("10. Generic AVS fallback does not falsely complete a VoiceStudio dubbing job", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+
+      // VoiceStudio job receives a degenerate source-video callback from processDubbingJob
+      vi.mocked(processDubbingJob).mockImplementationOnce(async (payload, deps) => {
+        if (deps?.postCallback) {
+          await deps.postCallback({
+            jobId: payload.jobId,
+            status: "COMPLETED",
+            alignedVideoUrl: payload.videoUrl, // degenerate fallback to source video
+            duration: 10.0,
+          });
+        }
+      });
+
+      const vsJob = createProductionMockJob();
+      const vsPrisma = createProductionMockPrisma();
+
+      // VoiceStudio worker must catch and reject source video output as FAILED
+      await expect(executeDubbingJob(vsJob, { prisma: vsPrisma as any })).rejects.toThrow();
+
+      expect(vsPrisma.videoJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "COMPLETED" }),
+        })
+      );
+      expect(vsPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-vs-prod" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("valid aligned video URL"),
+        }),
+      });
+
+      // Verify that the generic avs-dub job path is isolated to job.name === "avs-dub"
+      const genericAvsJob = {
+        name: "avs-dub" as const,
+        id: "bullmq-generic-avs-1",
+        data: {
+          jobId: "generic-avs-job-1",
+          videoUrl: "https://example.com/generic-source.mp4",
+          dubUrl: "https://example.com/generic-dub.wav",
+          sourceDuration: 15.0,
+        },
+        opts: { attempts: 3 },
+        attemptsMade: 2, // final attempt
+        updateProgress: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const genericPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+        },
+      };
+
+      const { postJobCallbackWithRetry } = await import("../app/lib/avs/dubbingProcessor");
+      vi.mocked(processDubbingJob).mockRejectedValueOnce(
+        new Error("Fatal GCP Cloud Run service error")
+      );
+
+      await executeDubbingJob(genericAvsJob, { prisma: genericPrisma as any });
+
+      // Generic AVS job path executes degraded-mode source-video fallback on final retry
+      expect(postJobCallbackWithRetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: "generic-avs-job-1",
+          status: "COMPLETED",
+          alignedVideoUrl: "https://example.com/generic-source.mp4",
+          fallback: true,
+          fallbackStage: "DUBBING",
+          fallbackReason: "Fatal GCP Cloud Run service error",
+        })
+      );
     });
   });
 });
