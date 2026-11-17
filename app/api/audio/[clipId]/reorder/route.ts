@@ -8,7 +8,11 @@ import { asAudioClipDb } from "@/app/lib/audio/db";
 import { ApiError, reorderAudioClip } from "@/app/lib/audio/service";
 
 const reorderSchema = z.object({
-  order: z.number().int().min(0, "Order must be a non-negative integer"),
+  order: z
+    .number()
+    .int()
+    .min(0, "Order must be a non-negative integer")
+    .max(2_147_483_647, "Order exceeds the maximum supported value"),
 });
 
 export async function PATCH(
