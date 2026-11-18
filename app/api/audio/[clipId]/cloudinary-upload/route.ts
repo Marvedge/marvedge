@@ -14,6 +14,7 @@ import { isAudioUploadEnabled } from "@/app/lib/audio/flags";
 import { CloudinaryUploadError, cloudinaryUploadBuffer } from "@/app/lib/cloudinaryUpload";
 
 import { readBoundedRequestBytes } from "@/app/lib/http/boundedBytes";
+import { deleteAudioObjects } from "@/app/lib/audio/storage";
 
 export const runtime = "nodejs";
 
@@ -89,10 +90,23 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ clipId:
       filename: clip.fileName || undefined,
     });
 
-    await db.audioClip.update({
-      where: { id: clipId },
-      data: { originalKey: secureUrl },
-    });
+    try {
+      await db.audioClip.update({
+        where: { id: clipId },
+        data: { originalKey: secureUrl },
+      });
+    } catch (saveError) {
+      // A missing row means this upload cannot be attached to the clip.
+      // Other database errors can leave the write outcome uncertain.
+      if (saveError instanceof Error && "code" in saveError && saveError.code === "P2025") {
+        try {
+          await deleteAudioObjects([secureUrl]);
+        } catch (cleanupError) {
+          console.error("Failed to clean up audio uploaded for a deleted clip:", cleanupError);
+        }
+      }
+      throw saveError;
+    }
   } catch (error) {
     return errorResponse(error);
   }
