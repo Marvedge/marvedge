@@ -1,9 +1,13 @@
 # Marvedge Pipeline — Handoff Documentation
 
-**Task:** Task-00090 — Pipeline architecture, service contracts, setup scripts, known limitations  
-**Sprint:** Sprint 2 — Hardening & Production Readiness  
-**Date:** 29 October 2026  
-**Release Status:** 🟢 **UNCONDITIONAL GO** — validated in Task-00101 (26 Oct 2026)
+**Task:** Task-00090 — Pipeline architecture, service contracts, setup scripts, known limitations
+**Sprint:** Sprint 2 — Hardening & Production Readiness
+**Date:** 29 October 2026 (Updated November 2026 for Task-00116)
+**Historical Status:** Task-00101 reported a GO status on 26 October 2026.
+
+**Current Integration Status:** Task-00115 staging validation is pending. Historical validation does not establish current staging readiness or production readiness.
+
+**Detailed Flow & Contracts:** See [INTEGRATED_PIPELINE_FLOW_AND_CONTRACT.md](./INTEGRATED_PIPELINE_FLOW_AND_CONTRACT.md) for concrete route schemas, manual sequencing, and validation status.
 
 ---
 
@@ -34,13 +38,16 @@ Given a source video URL, the pipeline produces:
 2. **Caption** — Automatic speech transcription into timestamped `.ass` subtitle files via Whisper/Deepgram.
 3. **Dub** — Voice synthesis and time-alignment using ElevenLabs, with composited audio/video export.
 
-### Sprint 2 Status
+### Sprint 2 Historical Status
 
-Following 8-video, 6.8-hour full regression (Task-00101):
-- **17/17 production gates** — 100% PASS
-- **6/6 adversarial edge cases** — 100% PASS
-- **Average throughput** — 12.4× real-time on a single NVIDIA T4
-- **Human framing accuracy** — 96.0% (50-clip audit)
+Following 8-video, 6.8-hour full regression (Task-00101, 26 October 2026):
+- **17/17 production gates** — Reported 100% PASS in historical report `docs/qa/Task_00101_Release_Readiness_Report.md`
+- **6/6 adversarial edge cases** — Reported 100% PASS in historical report
+- **Average throughput** — 12.4× real-time on a single NVIDIA T4 (historical benchmark)
+- **Human framing accuracy** — 96.0% (50-clip audit from historical run)
+
+> [!NOTE]
+> These metrics represent historical test records from Task-00101 (October 2026). They do not constitute verified verification of current integrated staging (Task-00115), which remains pending.
 
 ---
 
@@ -73,7 +80,8 @@ Following 8-video, 6.8-hour full regression (Task-00101):
 │  Reframe Worker  (Node.js 20, EC2 GPU / Cloud Run)                   │
 │                                                                       │
 │  Consumes: "reframe-processing" queue                                 │
-│  1. Calls ML Gateway → GET /reframe { videoUrl, targetAspectRatio }  │
+│  1. Calls ML Gateway → POST /reframe { videoUrl, targetAspectRatio } │
+│     (Header: x-gateway-token: <ML_GATEWAY_TOKEN>)                     │
 │  2. Receives CropTargetData (timestamped crop coordinates)           │
 │  3. Downloads source video → applies FFmpeg filtergraph crop         │
 │  4. Encodes: libx264 / aac, CRF 23, faststart                       │
@@ -85,8 +93,8 @@ Following 8-video, 6.8-hour full regression (Task-00101):
 ┌───────────────────────────────────────────────────────────────────────┐
 │  ML API Gateway  (Python/FastAPI, port 8000, EC2)                    │
 │                                                                       │
-│  GET /reframe ──► calls AutoFlip Service (port 8002)                 │
-│  POST /talknet ──► calls TalkNet Service (port 8001)                 │
+│  POST /reframe ──► calls AutoFlip Service                            │
+│  POST /talknet ──► calls TalkNet Service                             │
 │  All services on loopback (127.0.0.1) — not exposed to internet      │
 └───────────────┬───────────────────────────┬───────────────────────────┘
                 │                           │
@@ -121,13 +129,14 @@ Following 8-video, 6.8-hour full regression (Task-00101):
 |---|---|---|---|---|---|
 | **ML API Gateway** | `/opt/marvedge/ml-gateway` | `8000` | Python 3.10+ | `uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1` | `GET /health` |
 | **TalkNet Service** | `/opt/marvedge/talknet` | `8001` | Python 3.10+ + PyTorch CUDA | `uvicorn server:app --host 127.0.0.1 --port 8001 --workers 1` | `GET /health` |
-| **AutoFlip Service** | `/opt/marvedge/autoflip` | `8002` | Python 3.10+ | `uvicorn server:app --host 127.0.0.1 --port 8002 --workers 1` | `GET /health` |
+| **AutoFlip Service** | `/opt/marvedge/autoflip` | `8002` (configurable) | Python 3.10+ | `uvicorn server:app --host 127.0.0.1 --port 8002 --workers 1` | `GET /health` |
 | **Reframe Worker** | `/opt/marvedge` | — | Node.js 20 LTS | `node node_modules/tsx/dist/cli.mjs reframe-worker/index.ts` | BullMQ ping |
 | **Video Worker** | `/opt/marvedge` | — | Node.js 20 LTS | `node node_modules/tsx/dist/cli.mjs video-worker/index.ts` | BullMQ ping |
 | **CloudRun Worker** | `/opt/marvedge/cloudrun-worker` | `8080` | Node.js 20 LTS | `node server.js` | `GET /health` |
 
 > [!NOTE]
-> All ML services bind to `127.0.0.1` only. The ML Gateway (port 8000) is the single externally visible service within the VPC, accessed via `http://172.31.8.120:8080`.
+> All ML services bind to `127.0.0.1` on the GPU host. The ML Gateway (port 8000) routes downstream to AutoFlip and TalkNet.
+> *Implementation Discrepancy Note:* In `ml-gateway/server.py`, the environment variable for AutoFlip is spelled `AUTOFILP_SERVICE_URL` with a default of `http://autoflip:8000`. On standalone EC2 hosts, `worker.env` overrides this to `http://127.0.0.1:8002`.
 
 ---
 
@@ -196,11 +205,12 @@ Following 8-video, 6.8-hour full regression (Task-00101):
 
 | Route | Direction | Input | Output |
 |---|---|---|---|
-| `GET /reframe` | Gateway → AutoFlip (8002) | `{ videoUrl, targetAspectRatio }` | `CropTargetData` (Task-00016 schema) |
-| `POST /talknet` | Gateway → TalkNet (8001) | Video segment path | `{ ok: true, speakers: [{ track_id, score }] }` |
-| `GET /health` | Health check | — | `{ status: "ok" }` |
+| `POST /reframe` | Gateway → AutoFlip | `{ videoUrl, targetAspectRatio }` | `CropTargetData` (Task-00016 schema) |
+| `POST /reframe-combined` | Gateway → AutoFlip + TalkNet | `{ videoUrl, targetAspectRatio }` | Fused `CropTargetData` |
+| `POST /talknet` | Gateway → TalkNet | Video segment path / audio track | `{ ok: true, speakers: [{ track_id, score }] }` |
+| `GET /health` | Health check | — | `{ status: "ok", services: { autoflip, talknet } }` |
 
-**Auth:** `ML_GATEWAY_TOKEN` header required on all calls from workers to gateway.
+**Auth:** Custom header `x-gateway-token: <ML_GATEWAY_TOKEN>` required on all calls from workers to gateway. If `ML_GATEWAY_TOKEN` is unset on the gateway, endpoints fail closed with HTTP 503 (unless `ML_GATEWAY_ALLOW_INSECURE=1`). If the token is invalid or missing in the request header, the gateway returns HTTP 401.
 
 ---
 
@@ -257,34 +267,32 @@ interface CropTargetData {
 
 ### 4.6 BullMQ Queue Reference
 
-| Queue Name | Consumer | Retry | Backoff |
-|---|---|---|---|
-| `reframe-processing` | Reframe Worker | 3 | Exponential, 2s initial |
-| `video-processing` | Video Worker | 3 | Exponential, 5s initial |
-| `subtitle-processing` | Video Worker | 3 | Exponential, 5s initial |
-| `audio-processing` | Video Worker | 3 | Exponential, 5s initial |
-| `dubbing-processing` | Video Worker | 2 | Exponential, 5s initial |
+| Queue Name | Code Reference / Variable | Consumer | Retry | Backoff |
+|---|---|---|---|---|
+| `reframe-processing` | `reframeQueue` / `REFRAME_QUEUE_NAME` | Reframe Worker | 3 | Exponential, 2s initial |
+| `video-processing` | `videoQueue` | Video Worker | 3 | Exponential, 5s initial |
+| `subtitle-processing` | `subtitleQueue` | Video Worker | 3 | Exponential, 5s initial |
+| `audio-processing` | `audioQueue` | Video Worker | 3 | Exponential, 5s initial |
+| `dubbing-processing` | `dubbingQueue` (in `app/lib/queue.ts`) | Video Worker | 2 | Exponential, 5s initial |
 
 ---
 
 ## 5. AWS Infrastructure
 
-| Service | Resource | Endpoint | Status |
-|---|---|---|---|
-| **S3** | `marvedge-raw-ap2` | `arn:aws:s3:::marvedge-raw-ap2` | ✅ Active |
-| **S3** | `marvedge-processed-ap2` | `arn:aws:s3:::marvedge-processed-ap2` | ✅ Active |
-| **DynamoDB** | `marvedge-chunks` | `ap-southeast-2` · PAY_PER_REQUEST | ✅ Active |
-| **DynamoDB** | `marvedge-recipes` | `ap-southeast-2` · PAY_PER_REQUEST | ✅ Active |
-| **RDS** | `marvedge-db` | `marvedge-db.cfggeg20sv42.ap-southeast-2.rds.amazonaws.com:5432` | ✅ Active |
-| **ElastiCache** | `marvedge-redis` | `marvedge-redis.bef3ee.0001.apse2.cache.amazonaws.com:6379` | ✅ Active |
-| **EC2 GPU** | `marvedge-gpu-worker` | `i-02aa4578f3790bae1` · `172.31.8.120` · T4 | ⏸️ Stopped (Ready) |
+> **Historical infrastructure reference — not verified for Task 115.** The resource names and configuration below were documented previously. Their current existence, availability, ownership, and approval for staging have not been verified. Do not use these references to start resources, upload videos, or run Task 115.
 
-**Region:** `ap-southeast-2` (Sydney)  
-**VPC:** `vpc-0b1bd9bae8138ef98` · **Subnet:** `subnet-03547601323aa5e5e`
+| Service | Previously documented resource | Task 115 status |
+|---|---|---|
+| S3 | `marvedge-raw-ap2` | Historical reference; Dev input prefix pending confirmation |
+| S3 | `marvedge-processed-ap2` | Historical reference; Dev output prefix pending confirmation |
+| DynamoDB | `marvedge-chunks`, `marvedge-recipes` | Current status unverified |
+| RDS | `marvedge-db` | Current environment and isolation unverified |
+| ElastiCache | `marvedge-redis` | Current environment and isolation unverified |
+| EC2 GPU | Previously documented GPU worker | Approved Task 115 worker pending confirmation |
 
-> [!CAUTION]
-> All S3 buckets have **Block All Public Access** enabled. RDS is non-publicly accessible. EC2 has no public IP. Access via SSM Session Manager only — do not add inbound SSH rules to the security group.
+**Previously documented region:** `ap-southeast-2` (Sydney). This is not confirmation of the approved Task 115 Dev region.
 
+**Staging prerequisites:** Obtain Sarthak's confirmation of the approved Dev GPU worker, region, separate input/output prefixes, access instructions, and environment isolation before any cloud execution. Verify callback authentication before dispatch. Stop if any preflight check fails.
 ---
 
 ## 6. Environment Variable Reference
@@ -305,22 +313,26 @@ interface CropTargetData {
 
 ### ML Service Routing
 
-| Variable | Value |
-|---|---|
-| `REFRAME_ML_SERVICE_URL` | `http://127.0.0.1:8000` |
-| `REFRAME_ML_TIMEOUT_MS` | `180000` (3 min) |
-| `ML_GATEWAY_TOKEN` | Internal gateway auth token |
-| `AUTOFILP_SERVICE_URL` | `http://127.0.0.1:8002` |
-| `TALKNET_SERVICE_URL` | `http://127.0.0.1:8001` |
+| Variable | Value | Notes |
+|---|---|---|
+| `REFRAME_ML_SERVICE_URL` | `http://127.0.0.1:8000` | Worker target URL for ML Gateway |
+| `REFRAME_ML_TIMEOUT_MS` | `180000` (3 min) | Worker client request timeout |
+| `ML_GATEWAY_TOKEN` | Internal gateway auth token | Passed by worker via `x-gateway-token` header |
+| `AUTOFILP_SERVICE_URL` | `http://127.0.0.1:8002` (or `http://autoflip:8000`) | Notice spelling discrepancy in `ml-gateway/server.py` |
+| `TALKNET_SERVICE_URL` | `http://127.0.0.1:8001` (or `http://talknet:8000`) | Downstream target for TalkNet service |
 
 ### Storage
 
-| Variable | Value |
-|---|---|
-| `STORAGE_PROVIDER` | `aws` |
-| `AWS_REGION` | `ap-southeast-2` |
-| `RAW_BUCKET` | `marvedge-raw-ap2` |
-| `PROCESSED_BUCKET` | `marvedge-processed-ap2` |
+The values below are historical configuration references only; they are not approved Task 115 staging settings.
+
+| Variable | Previously documented value | Task 115 status |
+|---|---|---|
+| `STORAGE_PROVIDER` | `aws` | Confirm approved Dev configuration |
+| `AWS_REGION` | `ap-southeast-2` | Approved Dev region pending confirmation |
+| `RAW_BUCKET` | `marvedge-raw-ap2` | Approved Dev input bucket/prefix pending confirmation |
+| `PROCESSED_BUCKET` | `marvedge-processed-ap2` | Approved Dev output bucket/prefix pending confirmation |
+
+Do not copy these historical values into a staging environment without confirmation.
 
 ### Concurrency
 
@@ -360,49 +372,13 @@ The script validates:
 - [ ] `REFRAME_WORKER_CONCURRENCY` is `1` or `4`
 - [ ] `nvidia-smi` detects a GPU
 
-### Start the EC2 Worker
+### GPU Worker Operations — Task 115 Blocked
 
-```bash
-aws ec2 start-instances \
-  --instance-ids i-02aa4578f3790bae1 \
-  --region ap-southeast-2 \
-  --profile marvedge
-```
+**Do not execute the historical AWS commands below for Task 115.** The previously documented instance ID, region, and AWS profile have not been confirmed as the approved Dev environment.
 
-### Verify SSM Registration (~2 min after start)
+Before any worker operation, obtain Sarthak's written confirmation of the approved Dev GPU worker, region, access method, test window, cost limits, and cleanup instructions.
 
-```bash
-aws ssm describe-instance-information \
-  --filters "Key=InstanceIds,Values=i-02aa4578f3790bae1" \
-  --region ap-southeast-2 --profile marvedge \
-  --query 'InstanceInformationList[0].{Ping:PingStatus,Agent:AgentVersion}' \
-  --output table
-```
-
-### Verify GPU
-
-```bash
-aws ssm start-session \
-  --target i-02aa4578f3790bae1 \
-  --region ap-southeast-2 \
-  --document-name AWS-StartInteractiveCommand \
-  --parameters '{"command":["nvidia-smi"]}'
-```
-
-Expected: Tesla T4 · Driver 535.183.06 · CUDA 12.2
-
-### Stop the Worker (immediately after use)
-
-```bash
-aws ec2 stop-instances \
-  --instance-ids i-02aa4578f3790bae1 \
-  --region ap-southeast-2 \
-  --profile marvedge
-```
-
-> [!CAUTION]
-> At **$0.526/hr** for g4dn.xlarge, an overnight oversight costs ~$4.20. Always stop immediately after confirming pipeline outputs. Set a phone alarm if needed.
-
+After approval, use only the confirmed resource identifiers and follow the agreed preflight procedure. If any check fails, stop and contact Sarthak. Record actual worker start/stop times and usage for the validation report.
 ---
 
 ## 8. Performance Reference
@@ -490,12 +466,15 @@ All gates must be **PASS** before any production deployment.
 
 ---
 
-### Verification Evidence & Test Reports
+### Verification Evidence & Test Reports (Historical Sprint 2)
 
-- Full E2E smoke test runner: `scripts/e2e_pipeline_run.sh`
-- Task-00089 live regression run: `docs/qa/Task_00089_E2E_Run_20261030_183416.md` (7/7 in-VPC checks PASS)
-- Task-00101 full regression report: `docs/qa/Task_00101_Release_Readiness_Report.md`
-- Scope freeze & CTO sign-off: `docs/SCOPE_FREEZE_CTO_SIGNOFF.md`
+- Full E2E smoke test runner: `scripts/e2e_pipeline_run.sh` (Historical script; requires running EC2 instance and SSM connectivity)
+- Task-00089 live regression run: `docs/qa/Task_00089_E2E_Run_20261030_183416.md` (Historical 7/7 in-VPC checks PASS)
+- Task-00101 full regression report: `docs/qa/Task_00101_Release_Readiness_Report.md` (Historical 26 Oct 2026 report)
+- Scope freeze & CTO sign-off: `docs/SCOPE_FREEZE_CTO_SIGNOFF.md` (Historical Sprint 2 sign-off)
+
+> [!NOTE]
+> The reports above record historical Sprint 2 testing. Current staging integration validation (Task-00115) remains unverified and blocked on Dev cloud resource approvals. Current contract and unit test evidence is detailed in `docs/INTEGRATED_PIPELINE_FLOW_AND_CONTRACT.md`.
 
 ---
 
