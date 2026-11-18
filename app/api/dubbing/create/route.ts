@@ -52,6 +52,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Voice cloning consent check (Task-00133)
+    const consent = await prisma.workspaceConsent.findUnique({
+      where: { userId: user.id },
+      select: { voiceCloningConsent: true },
+    });
+
+    if (!consent?.voiceCloningConsent) {
+      return NextResponse.json(
+        {
+          error: "VOICE_CLONING_CONSENT_REQUIRED",
+          message: "Voice cloning consent is required to create a dubbing job.",
+        },
+        { status: 403 }
+      );
+    }
+
     // ElevenLabs charges per dubbed minute. Cap per authenticated user before
     // reading the body or creating a job.
     if (await isRateLimited(`dubbing-create:${user.id}`, 5, 60 * 60, true)) {

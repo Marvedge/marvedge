@@ -22,6 +22,7 @@ export interface MlInferenceRequest {
     fps?: number;
     durationSec?: number;
   } | null;
+  enableFaceTracking?: boolean;
 }
 
 export interface MlInferenceEnvelope {
@@ -73,7 +74,12 @@ export async function callMlInference(
     onDuration?: (status: "success" | "failure", durationSeconds: number) => void;
   } = {}
 ): Promise<CropTargetData> {
-  const endpoint = `${mlServiceUrl.replace(/\/+$/, "")}/reframe`;
+  const baseUrl = mlServiceUrl.replace(/\/+$/, "");
+  // Gate TalkNet and face-fusion processing independently (Task-00133):
+  // When enableFaceTracking is true, route to /reframe-combined (AutoFlip + TalkNet fusion).
+  // When false or unset, route to /reframe (AutoFlip-only saliency reframing).
+  const endpoint =
+    request.enableFaceTracking === true ? `${baseUrl}/reframe-combined` : `${baseUrl}/reframe`;
   const timeoutMs = options.timeoutMs ?? 180000;
 
   const controller = new AbortController();
@@ -145,9 +151,7 @@ export async function callMlInference(
     } else if ("schema_version" in data) {
       extracted = data;
     } else {
-      throw new Error(
-        "ML inference response envelope missing 'crop_targets' object"
-      );
+      throw new Error("ML inference response envelope missing 'crop_targets' object");
     }
 
     validateCropTargetData(extracted);

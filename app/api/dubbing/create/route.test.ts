@@ -18,6 +18,9 @@ vi.mock("@/app/lib/prisma", () => ({
       create: vi.fn(),
       updateMany: vi.fn(),
     },
+    workspaceConsent: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -61,6 +64,10 @@ describe("POST /api/dubbing/create URL security", () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: "user-1",
       plan: "PRO",
+    } as never);
+
+    vi.mocked(prisma.workspaceConsent.findUnique).mockResolvedValue({
+      voiceCloningConsent: true,
     } as never);
 
     vi.mocked(prisma.videoJob.create).mockResolvedValue({
@@ -119,6 +126,42 @@ describe("POST /api/dubbing/create URL security", () => {
     expect(await response.json()).toEqual({
       error: "Dubbing is available on PRO and ENTERPRISE plans",
     });
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("rejects with 403 VOICE_CLONING_CONSENT_REQUIRED when workspace consent record is absent", async () => {
+    vi.mocked(prisma.workspaceConsent.findUnique).mockResolvedValue(null);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "es",
+      })
+    );
+
+    expect(response.status).toBe(403);
+    const data = await response.json();
+    expect(data.error).toBe("VOICE_CLONING_CONSENT_REQUIRED");
+    expect(prisma.videoJob.create).not.toHaveBeenCalled();
+    expect(dubbingQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("rejects with 403 VOICE_CLONING_CONSENT_REQUIRED when voiceCloningConsent is false", async () => {
+    vi.mocked(prisma.workspaceConsent.findUnique).mockResolvedValue({
+      voiceCloningConsent: false,
+    } as never);
+
+    const response = await POST(
+      makeRequest({
+        sourceUrl: "https://media.example.test/video.mp4",
+        targetLanguage: "es",
+      })
+    );
+
+    expect(response.status).toBe(403);
+    const data = await response.json();
+    expect(data.error).toBe("VOICE_CLONING_CONSENT_REQUIRED");
     expect(prisma.videoJob.create).not.toHaveBeenCalled();
     expect(dubbingQueue.add).not.toHaveBeenCalled();
   });
