@@ -109,7 +109,7 @@ export function readHeadBytes(filePath: string): Buffer {
 }
 
 /**
- * Trim an audio file with `ffmpeg -ss {start} -i in -to {end} -c:a copy out`.
+ * Trim an audio file with `ffmpeg -ss {start} -i in -t {end-start} -c:a copy out`.
  * The output codec is copied (the original is never re-encoded), so the trimmed
  * file is a brand-new asset with the same codec/container as its source.
  */
@@ -123,7 +123,7 @@ export function trimAudioFile(
     const command = ffmpeg(inputPath)
       .inputOptions(["-ss", String(trimStartSec)])
       .output(outputPath)
-      .outputOptions(["-to", String(trimEndSec)])
+      .outputOptions(["-t", String(trimEndSec - trimStartSec)])
       .audioCodec("copy")
       .on("end", () => resolve())
       .on("error", (err: Error) => reject(err));
