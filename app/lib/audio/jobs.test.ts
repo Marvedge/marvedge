@@ -59,7 +59,28 @@ function createFakeDb(initial: AudioClipRecord[] = []) {
         return next;
       }
     ),
-    updateMany: vi.fn(async () => ({ count: 0 })),
+    updateMany: vi.fn(
+      async ({
+        where,
+        data,
+      }: {
+        where: { id?: string; status?: string | { in: string[] } };
+        data: Partial<AudioClipRecord>;
+      }) => {
+        const current = where.id ? map.get(where.id) : undefined;
+        if (!current) {
+          return { count: 0 };
+        }
+        if (
+          (typeof where.status === "string" && current.status !== where.status) ||
+          (typeof where.status === "object" && !where.status.in.includes(current.status))
+        ) {
+          return { count: 0 };
+        }
+        map.set(current.id, { ...current, ...data, updatedAt: new Date() });
+        return { count: 1 };
+      }
+    ),
     deleteMany: vi.fn(async () => ({ count: 0 })),
     aggregate: vi.fn(async () => ({ _max: { order: null } })),
   };
@@ -89,6 +110,85 @@ afterEach(() => {
 });
 
 describe("runMetadataJob", () => {
+  it("skips metadata when a trim wins before the database claim", async () => {
+    const { db, get } = createFakeDb([makeRecord({ status: "TRIM_PROCESSING", durationSec: 60 })]);
+    vi.mocked(db.audioClip.findUnique).mockResolvedValueOnce(makeRecord());
+
+    await runMetadataJob(
+      { clipId: "clip-1", sourceUrl: "https://signed.example.test/original" },
+      db
+    );
+
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(media.downloadAudioToFile).not.toHaveBeenCalled();
+    expect(db.audioClip.update).not.toHaveBeenCalled();
+  });
+
+  it("preserves a trim started during metadata download", async () => {
+    const { db, get } = createFakeDb([makeRecord()]);
+
+    vi.mocked(media.downloadAudioToFile).mockImplementationOnce(async (_url, destinationPath) => {
+      await db.audioClip.update({
+        where: { id: "clip-1" },
+        data: { status: "TRIM_PROCESSING", durationSec: 60 },
+      });
+      fs.writeFileSync(destinationPath, WAV_HEADER);
+    });
+
+    await runMetadataJob(
+      { clipId: "clip-1", sourceUrl: "https://signed.example.test/original" },
+      db
+    );
+
+    expect(media.probeAudioDuration).toHaveBeenCalledOnce();
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(get("clip-1").error).toBeNull();
+  });
+
+  it("preserves an active trim when metadata processing fails", async () => {
+    const { db, get } = createFakeDb([makeRecord()]);
+    const failure = new Error("Metadata download failed");
+
+    vi.mocked(media.downloadAudioToFile).mockImplementationOnce(async () => {
+      await db.audioClip.update({
+        where: { id: "clip-1" },
+        data: { status: "TRIM_PROCESSING", durationSec: 60 },
+      });
+      throw failure;
+    });
+
+    await expect(
+      runMetadataJob({ clipId: "clip-1", sourceUrl: "https://signed.example.test/original" }, db)
+    ).rejects.toBe(failure);
+
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(get("clip-1").error).toBeNull();
+  });
+
+  it("does not overwrite an active trim when metadata arrives late", async () => {
+    const { db, get } = createFakeDb([
+      makeRecord({
+        status: "TRIM_PROCESSING",
+        durationSec: 60,
+        trimmedKey: "audio/demo-1/user-1/previous.mp3",
+      }),
+    ]);
+
+    await runMetadataJob(
+      { clipId: "clip-1", sourceUrl: "https://signed.example.test/original" },
+      db
+    );
+
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(db.audioClip.update).not.toHaveBeenCalled();
+    expect(media.downloadAudioToFile).not.toHaveBeenCalled();
+    expect(media.probeAudioDuration).not.toHaveBeenCalled();
+  });
+
   it("runs UPLOADING → PROCESSING → READY with duration + detected MIME", async () => {
     const { db, get } = createFakeDb([makeRecord()]);
 

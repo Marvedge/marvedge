@@ -101,16 +101,22 @@ export async function runMetadataJob(payload: MetadataJobPayload, db: AudioClipD
     if (!clip) {
       throw new Error("Audio clip not found");
     }
-    if (clip.status === "READY") {
+    if (clip.status === "READY" || clip.status === "TRIM_PROCESSING") {
       return; // already processed — retry-safe no-op
     }
 
-    await withDbRetry(() =>
-      db.audioClip.update({
-        where: { id: clip.id },
+    const metadataClaim = await withDbRetry(() =>
+      db.audioClip.updateMany({
+        where: {
+          id: clip.id,
+          status: { in: ["UPLOADING", "PROCESSING", "FAILED"] },
+        },
         data: { status: "PROCESSING" satisfies AudioClipStatus, error: null },
       })
     );
+    if (metadataClaim.count === 0) {
+      return;
+    }
 
     await downloadAudioToFile(payload.sourceUrl, filePath);
 
@@ -132,8 +138,8 @@ export async function runMetadataJob(payload: MetadataJobPayload, db: AudioClipD
     }
 
     await withDbRetry(() =>
-      db.audioClip.update({
-        where: { id: clip.id },
+      db.audioClip.updateMany({
+        where: { id: clip.id, status: "PROCESSING" },
         data: {
           status: "READY" satisfies AudioClipStatus,
           durationSec,
@@ -143,7 +149,14 @@ export async function runMetadataJob(payload: MetadataJobPayload, db: AudioClipD
       })
     );
   } catch (error) {
-    await failClip(db, payload.clipId, errorMessage(error));
+    await withDbRetry(() =>
+      db.audioClip.updateMany({
+        where: { id: payload.clipId, status: "PROCESSING" },
+        data: { status: "FAILED" satisfies AudioClipStatus, error: errorMessage(error) },
+      })
+    ).catch(() => {
+      // Preserve the original processing error.
+    });
     throw error;
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
