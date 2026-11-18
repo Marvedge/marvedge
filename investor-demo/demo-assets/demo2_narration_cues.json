@@ -1,0 +1,178 @@
+{
+  "task": "transcribe",
+  "language": "english",
+  "duration": 16,
+  "text": "Marvedge turns wide clips into shorts. Auto-framing tracks the main visual action. Blur-pad fit preserves full widescreen context. Export vertical videos in one workflow.",
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.25,
+      "end": 3.3,
+      "text": "Marvedge turns wide clips into shorts.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    },
+    {
+      "id": 1,
+      "seek": 330,
+      "start": 4.25,
+      "end": 7.35,
+      "text": "Auto-framing tracks the main visual action.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    },
+    {
+      "id": 2,
+      "seek": 735,
+      "start": 8.3,
+      "end": 11.4,
+      "text": "Blur-pad fit preserves full widescreen context.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    },
+    {
+      "id": 3,
+      "seek": 1140,
+      "start": 12.35,
+      "end": 15.55,
+      "text": "Export vertical videos in one workflow.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    }
+  ],
+  "words": [
+    {
+      "word": "Marvedge",
+      "start": 0.25,
+      "end": 0.8
+    },
+    {
+      "word": "turns",
+      "start": 0.86,
+      "end": 1.3
+    },
+    {
+      "word": "wide",
+      "start": 1.36,
+      "end": 1.76
+    },
+    {
+      "word": "clips",
+      "start": 1.82,
+      "end": 2.26
+    },
+    {
+      "word": "into",
+      "start": 2.32,
+      "end": 2.68
+    },
+    {
+      "word": "shorts.",
+      "start": 2.74,
+      "end": 3.3
+    },
+    {
+      "word": "Auto-framing",
+      "start": 4.25,
+      "end": 4.85
+    },
+    {
+      "word": "tracks",
+      "start": 4.91,
+      "end": 5.32
+    },
+    {
+      "word": "the",
+      "start": 5.38,
+      "end": 5.66
+    },
+    {
+      "word": "main",
+      "start": 5.72,
+      "end": 6.14
+    },
+    {
+      "word": "visual",
+      "start": 6.2,
+      "end": 6.68
+    },
+    {
+      "word": "action.",
+      "start": 6.74,
+      "end": 7.35
+    },
+    {
+      "word": "Blur-pad",
+      "start": 8.3,
+      "end": 8.75
+    },
+    {
+      "word": "fit",
+      "start": 8.81,
+      "end": 9.38
+    },
+    {
+      "word": "preserves",
+      "start": 9.44,
+      "end": 10.02
+    },
+    {
+      "word": "full",
+      "start": 10.08,
+      "end": 10.42
+    },
+    {
+      "word": "widescreen",
+      "start": 10.48,
+      "end": 10.92
+    },
+    {
+      "word": "context.",
+      "start": 10.98,
+      "end": 11.4
+    },
+    {
+      "word": "Export",
+      "start": 12.35,
+      "end": 12.85
+    },
+    {
+      "word": "vertical",
+      "start": 12.91,
+      "end": 13.45
+    },
+    {
+      "word": "videos",
+      "start": 13.51,
+      "end": 14
+    },
+    {
+      "word": "in",
+      "start": 14.06,
+      "end": 14.32
+    },
+    {
+      "word": "one",
+      "start": 14.38,
+      "end": 14.75
+    },
+    {
+      "word": "workflow.",
+      "start": 14.81,
+      "end": 15.55
+    }
+  ]
+}

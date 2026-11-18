@@ -1,0 +1,46 @@
+{
+  "deliverables": [
+    {
+      "file": "source_landscape_16x9.mp4",
+      "sha256": "6e62cea23d0085bca338b70d317b18b870f146a4f29056bb4ebd9e59e3ead8a0",
+      "size_bytes": 6596616,
+      "backup_verified": true
+    },
+    {
+      "file": "demo1_intelligent_reframe_9x16.mp4",
+      "sha256": "01cd08b07efdfae452c42b98cec712d76984dfa0bd0ac5ba6ea8b23d75c79dfc",
+      "size_bytes": 5837831,
+      "backup_verified": true
+    },
+    {
+      "file": "demo2_kinetic_karaoke_9x16.mp4",
+      "sha256": "d51cf586f30b3b72049c1949a22016957dbf9c5f54f5cf852ee024ebb246f60c",
+      "size_bytes": 5955860,
+      "backup_verified": true
+    },
+    {
+      "file": "demo3_multilingual_research_preview_9x16.mp4",
+      "sha256": "d8b013efa34986e1cc92b3ea414344738b70f398d64ae142f242d4ed7907c6b4",
+      "size_bytes": 5916190,
+      "backup_verified": true
+    },
+    {
+      "file": "demo4_side_by_side_transformation_16x9.mp4",
+      "sha256": "e64f6b06ddc54932133cd860098dbaff6a3e30334cacec53dd1ed42293d30ff0",
+      "size_bytes": 7506122,
+      "backup_verified": true
+    },
+    {
+      "file": "marvedge_investor_walkthrough_master_backup.mp4",
+      "sha256": "7f467ed3c80538013fc1032aa7edfeb3fa6158e193c747604c36a265aca18312",
+      "size_bytes": 29522298,
+      "backup_verified": true
+    },
+    {
+      "file": "marvedge_investor_demo_narrated.mp4",
+      "sha256": "d631b0bb5053af921a5445780852010b5662f7c38a012b5ca348029ed1a6c150",
+      "size_bytes": 29715293,
+      "backup_verified": true
+    }
+  ]
+}
