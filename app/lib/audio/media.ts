@@ -10,17 +10,18 @@
 import { execFile } from "node:child_process";
 import { closeSync, createReadStream, createWriteStream, openSync, readSync } from "node:fs";
 import { stat } from "node:fs/promises";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import axios from "axios";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 
-import { detectAudioMime } from "./validation";
+import { AUDIO_MAX_BYTES, detectAudioMime } from "./validation";
 
 /** How long a single download/upload may take before we give up. */
 const TRANSFER_TIMEOUT_MS = 5 * 60 * 1000;
 
-/** Download a (signed) URL to a local file for processing. */
+/** Download a signed URL, enforcing the audio size cap while streaming. */
 export async function downloadAudioToFile(url: string, destinationPath: string): Promise<void> {
   const response = await axios({
     url,
@@ -28,7 +29,23 @@ export async function downloadAudioToFile(url: string, destinationPath: string):
     responseType: "stream",
     timeout: TRANSFER_TIMEOUT_MS,
   });
-  await pipeline(response.data as NodeJS.ReadableStream, createWriteStream(destinationPath));
+  let receivedBytes = 0;
+  const byteLimit = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      receivedBytes += chunk.length;
+      if (receivedBytes > AUDIO_MAX_BYTES) {
+        callback(new Error("File exceeds the 50MB size limit"));
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+
+  await pipeline(
+    response.data as NodeJS.ReadableStream,
+    byteLimit,
+    createWriteStream(destinationPath)
+  );
 }
 
 /** PUT a local file to a pre-signed upload URL. */
