@@ -260,6 +260,57 @@ describe("runTrimJob", () => {
     trimEndSec: 20,
   };
 
+  it("preserves a completed trim when another trim fails concurrently", async () => {
+    const { db, get } = createFakeDb([makeRecord({ status: "READY", durationSec: 123.4 })]);
+    const failure = new Error("Earlier trim failed");
+    const completedKey = "audio/demo-1/user-1/completed.mp3";
+
+    const update = vi.mocked(db.audioClip.update);
+    const updateMany = vi.mocked(db.audioClip.updateMany);
+    const applyUpdate = update.getMockImplementation()!;
+    const applyUpdateMany = updateMany.getMockImplementation()!;
+
+    const completeOtherTrim = () =>
+      applyUpdate({
+        where: { id: "clip-1" },
+        data: {
+          status: "READY",
+          trimmedKey: completedKey,
+          trimStartSec: 10,
+          trimEndSec: 15,
+          error: null,
+        },
+      });
+
+    // Another trim commits immediately before the failure write.
+    // Exercise either write method so the test also checks an atomic fix.
+    update.mockImplementation(async (args) => {
+      if (args.data.status === "FAILED") {
+        await completeOtherTrim();
+      }
+      return applyUpdate(args);
+    });
+
+    updateMany.mockImplementation(async (args) => {
+      if (args.data.status === "FAILED") {
+        await completeOtherTrim();
+      }
+      return applyUpdateMany(args);
+    });
+
+    vi.mocked(media.trimAudioFile).mockRejectedValueOnce(failure);
+
+    await expect(runTrimJob(trimPayload, db)).rejects.toBe(failure);
+
+    const clip = get("clip-1");
+    expect(clip.status).toBe("READY");
+    expect(clip.error).toBeNull();
+    expect(clip.trimmedKey).toBe(completedKey);
+    expect(clip.trimStartSec).toBe(10);
+    expect(clip.trimEndSec).toBe(15);
+    expect(media.uploadAudioViaSignedUrl).not.toHaveBeenCalled();
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+  });
   it("re-trims from the ORIGINAL and stores a new trimmedKey", async () => {
     const { db, get } = createFakeDb([makeRecord({ status: "READY", durationSec: 123.4 })]);
 
