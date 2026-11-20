@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   limited: vi.fn(),
   invoke: vi.fn(),
   after: vi.fn(),
+  mayResolve: vi.fn(),
 }));
 
 vi.mock("next/server", async (importOriginal) => ({
@@ -41,11 +42,14 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpWorker: mocks.invoke,
 }));
 vi.mock("@/app/lib/storage/index", () => ({
-  parseStorageUri: () => null,
+  parseStorageUri: (uri: string) => {
+    const match = uri.match(/^(?:s3|gs):\/\/([^/]+)\/(.+)$/);
+    return match ? { bucket: match[1], key: match[2] } : null;
+  },
   getPresignedUrl: vi.fn(),
 }));
 vi.mock("@/app/lib/storage/access", () => ({
-  mayResolveObject: vi.fn(),
+  mayResolveObject: mocks.mayResolve,
 }));
 vi.mock("@/app/lib/audio/rateLimit", () => ({
   isRateLimited: mocks.limited,
@@ -75,6 +79,7 @@ describe("export worker cold-start recovery", () => {
     });
     mocks.findUser.mockResolvedValue({ id: "user-1", plan: "PRO" });
     mocks.limited.mockResolvedValue(false);
+    mocks.mayResolve.mockResolvedValue(true);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.findJob.mockResolvedValue({ status: "PENDING" });
     mocks.update.mockResolvedValue({ id: "job-1" });
@@ -240,6 +245,7 @@ describe("speakerTracksUri propagation through job dispatch", () => {
     });
     mocks.findUser.mockResolvedValue({ id: "user-1", plan: "PRO" });
     mocks.limited.mockResolvedValue(false);
+    mocks.mayResolve.mockResolvedValue(true);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.findJob.mockResolvedValue({ status: "PENDING" });
     mocks.update.mockResolvedValue({ id: "job-1" });
@@ -274,6 +280,18 @@ describe("speakerTracksUri propagation through job dispatch", () => {
     vi.restoreAllMocks();
   });
 
+  function makeSpeakerTracksRequest(speakerTracksUri: string): NextRequest {
+    return new NextRequest("http://localhost/api/jobs/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        videoUrl: "https://example.com/source.mp4",
+        duration: 10,
+        speakerTracksUri,
+      }),
+    });
+  }
+
   it("passes speakerTracksUri to invokeGcpWorker when provided in the request", async () => {
     mocks.invoke
       .mockResolvedValueOnce({
@@ -304,6 +322,84 @@ describe("speakerTracksUri propagation through job dispatch", () => {
     // The first invoke call is the /process chunk dispatch — it must carry the URI.
     const [processPayload] = mocks.invoke.mock.calls[0] as [Record<string, unknown>, string];
     expect(processPayload.speakerTracksUri).toBe("gs://my-bucket/speaker-tracks.json");
+    expect(mocks.mayResolve).toHaveBeenCalledWith(
+      "gs://my-bucket/speaker-tracks.json",
+      "my-bucket",
+      "speaker-tracks.json",
+      "user-1"
+    );
+    expect(mocks.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        jobData: expect.objectContaining({
+          speakerTracksUri: "gs://my-bucket/speaker-tracks.json",
+        }),
+      }),
+    });
+  });
+
+  it("rejects a local filesystem path for speakerTracksUri", async () => {
+    const response = await POST(makeSpeakerTracksRequest("/etc/passwd"));
+
+    expect(response.status).toBe(400);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it("rejects a storage URI the caller may not resolve", async () => {
+    mocks.mayResolve.mockResolvedValue(false);
+
+    const response = await POST(makeSpeakerTracksRequest("gs://other-bucket/speaker-tracks.json"));
+
+    expect(response.status).toBe(400);
+    expect(mocks.mayResolve).toHaveBeenCalledWith(
+      "gs://other-bucket/speaker-tracks.json",
+      "other-bucket",
+      "speaker-tracks.json",
+      "user-1"
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized inline speaker track JSON", async () => {
+    const inline = JSON.stringify({
+      speakers: [{ x: 100 }, { x: 900 }],
+      padding: "a".repeat(1024 * 1024),
+    });
+
+    const response = await POST(makeSpeakerTracksRequest(inline));
+
+    expect(response.status).toBe(413);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it("propagates valid inline speaker track JSON", async () => {
+    const inline = JSON.stringify({ speakers: [{ x: 100 }, { x: 900 }] });
+    mocks.invoke
+      .mockResolvedValueOnce({
+        result: { processedObject: "job-1_chunk_000.mp4" },
+      })
+      .mockResolvedValueOnce({
+        result: { exportedUrl: "https://example.com/done.mp4" },
+      });
+
+    const response = await POST(makeSpeakerTracksRequest(inline));
+
+    expect(response.status).toBe(200);
+    const dispatch = mocks.after.mock.calls[0][0] as () => Promise<void>;
+    await dispatch();
+
+    const [processPayload] = mocks.invoke.mock.calls[0] as [Record<string, unknown>, string];
+    expect(processPayload.speakerTracksUri).toBe(inline);
+    expect(mocks.mayResolve).not.toHaveBeenCalled();
+    expect(mocks.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        jobData: expect.objectContaining({
+          speakerTracksUri: inline,
+        }),
+      }),
+    });
   });
 
   it("omits speakerTracksUri from invokeGcpWorker when it is not provided", async () => {

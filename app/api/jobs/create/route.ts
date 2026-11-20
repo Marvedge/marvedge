@@ -21,6 +21,7 @@ export const maxDuration = 300;
 const MAX_DEMO_SECONDS = 6 * 60 * 60;
 const CHUNK_DURATION_SECONDS = 10;
 const MAX_CHUNKS = Math.ceil(MAX_DEMO_SECONDS / CHUNK_DURATION_SECONDS);
+const MAX_INLINE_SPEAKER_TRACKS_BYTES = 1024 * 1024;
 
 const EXEMPT_EMAILS = [
   "aryaanandpathak30@gmail.com",
@@ -512,6 +513,38 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id;
+
+    // The worker may treat this value as a local path or fetch it with its own
+    // storage credentials, so only accept inline track JSON or an object the
+    // caller is allowed to resolve.
+    if (speakerTracksUri) {
+      if (speakerTracksUri.startsWith("{") || speakerTracksUri.startsWith("[")) {
+        if (Buffer.byteLength(speakerTracksUri, "utf8") > MAX_INLINE_SPEAKER_TRACKS_BYTES) {
+          return NextResponse.json({ error: "speakerTracksUri is too large" }, { status: 413 });
+        }
+        try {
+          JSON.parse(speakerTracksUri);
+        } catch {
+          return NextResponse.json(
+            { error: "speakerTracksUri is not valid JSON" },
+            { status: 400 }
+          );
+        }
+      } else {
+        const speakerTracksStorageUri = parseStorageUri(speakerTracksUri);
+        if (
+          !speakerTracksStorageUri ||
+          !(await mayResolveObject(
+            speakerTracksUri,
+            speakerTracksStorageUri.bucket,
+            speakerTracksStorageUri.key,
+            userId
+          ))
+        ) {
+          return NextResponse.json({ error: "speakerTracksUri is not allowed" }, { status: 400 });
+        }
+      }
+    }
 
     // GPU dispatches are the most expensive action in the product. Limit per
     // authenticated user before signing anything or creating a job.
