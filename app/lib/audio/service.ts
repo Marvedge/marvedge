@@ -198,17 +198,22 @@ export async function confirmAudioUpload(args: {
     return buildClipDto(updated);
   }
 
+  const dto = await buildClipDto(clip);
+  if (!dto.originalUrl) {
+    throw new ApiError(503, "Audio source URL is temporarily unavailable");
+  }
+
   const queue = args.queue ?? audioJobQueue;
   await queue.add(
     "extract-metadata",
     {
       clipId: args.clipId,
-      sourceUrl: await audioPlayableUrl(clip.originalKey),
+      sourceUrl: dto.originalUrl,
     },
     { jobId: args.clipId }
   );
 
-  return buildClipDto(clip);
+  return dto;
 }
 
 /**
