@@ -259,4 +259,34 @@ describe("POST /api/gcs/upload", () => {
     expect(res.status).toBe(400);
     expect(getSignedUploadUrl).not.toHaveBeenCalled();
   });
+
+  it("rejects an SVG upload", async () => {
+    const res = await POST(
+      makeRequest({
+        kind: "generic",
+        filename: "logo.svg",
+        contentType: "image/svg+xml",
+        size: 1024,
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(getSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("derives the object suffix from the allowlisted MIME type", async () => {
+    const res = await POST(
+      makeRequest({
+        kind: "generic",
+        filename: "logo.svg",
+        contentType: "image/png",
+        size: 1024,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const call = vi.mocked(getSignedUploadUrl).mock.calls[0];
+    expect(call[1]).toMatch(/\.png$/);
+    expect(call[2]).toBe("image/png");
+  });
 });
