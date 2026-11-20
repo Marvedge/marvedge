@@ -23,6 +23,7 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
+import { parsePagination } from "@/app/lib/http/pagination";
 import { summarizeDeliveries } from "@/app/lib/overlays/csv";
 
 export const runtime = "nodejs";
@@ -40,14 +41,10 @@ export async function GET(request: NextRequest) {
 
   const params = request.nextUrl.searchParams;
 
-  const requestedSize = Number(params.get("pageSize"));
-  const pageSize =
-    Number.isFinite(requestedSize) && requestedSize > 0
-      ? Math.min(Math.floor(requestedSize), MAX_PAGE_SIZE)
-      : DEFAULT_PAGE_SIZE;
-
-  const requestedPage = Number(params.get("page"));
-  const page = Number.isFinite(requestedPage) && requestedPage > 1 ? Math.floor(requestedPage) : 1;
+  const { page, pageSize, skip } = parsePagination(params, {
+    defaultPageSize: DEFAULT_PAGE_SIZE,
+    maxPageSize: MAX_PAGE_SIZE,
+  });
 
   // An unknown or unowned demoId is not an error: it filters to nothing, exactly
   // as a demo with no leads does. Nothing here distinguishes the two.
@@ -66,7 +63,7 @@ export async function GET(request: NextRequest) {
       prisma.lead.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        skip: (page - 1) * pageSize,
+        skip,
         take: pageSize,
         select: {
           id: true,

@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { toast } from "sonner";
 
+import { getSafeCallbackUrl, SIGN_IN_FALLBACK_URL } from "@/app/lib/auth/redirect";
+
+export { getSafeCallbackUrl, SIGN_IN_FALLBACK_URL };
+
 const signInSchema = z.object({
   email: z.string().min(1, "Please enter your email").email("Invalid email address"),
   password: z.string().min(1, "Please enter your password"),
@@ -11,31 +15,6 @@ const signInSchema = z.object({
 
 const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
 const AUTH_SERVICE_ERROR = "Unable to sign in. Please try again later.";
-
-/** Fallback destination when `callbackUrl` is missing or unsafe. */
-export const SIGN_IN_FALLBACK_URL = "/dashboard";
-
-/**
- * Allow only same-origin paths: exactly one leading `/` (reject `//`,
- * backslash-prefixed, protocol-relative and absolute URLs, and control
- * characters). Anything else falls back to {@link SIGN_IN_FALLBACK_URL}.
- */
-export function getSafeCallbackUrl(raw: string | null | undefined): string {
-  if (typeof raw !== "string" || raw.length === 0) {
-    return SIGN_IN_FALLBACK_URL;
-  }
-  const value = raw.trim();
-  if (
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.startsWith("/\\") ||
-    value.includes("\\") ||
-    /[\s\x00-\x1f\x7f]/.test(value)
-  ) {
-    return SIGN_IN_FALLBACK_URL;
-  }
-  return value;
-}
 
 function safeSignInError(error: string | null | undefined): string {
   return error === INVALID_CREDENTIALS_ERROR ? INVALID_CREDENTIALS_ERROR : AUTH_SERVICE_ERROR;

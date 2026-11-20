@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isCrmActionRateLimited } from "@/app/lib/crm/abuseProtection";
 import { retryFailedDeliveries } from "@/app/lib/crm/deliverLead";
 import { resolveCrmOwner } from "@/app/lib/crm/owner";
+import { parsePositiveLimit } from "@/app/lib/http/pagination";
 import { isOverlaysCrmEnabled } from "@/app/lib/overlays/flags";
 
 export const runtime = "nodejs";
@@ -66,9 +67,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const requested = Number(request.nextUrl.searchParams.get("limit"));
-  const limit =
-    Number.isFinite(requested) && requested > 0 ? Math.min(requested, MAX_LIMIT) : DEFAULT_LIMIT;
+  const limit = parsePositiveLimit(
+    request.nextUrl.searchParams.get("limit"),
+    DEFAULT_LIMIT,
+    MAX_LIMIT
+  );
 
   const summary = await retryFailedDeliveries({ userId: resolved.owner.userId, limit });
 
