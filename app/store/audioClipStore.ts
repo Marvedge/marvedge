@@ -32,10 +32,9 @@ export const MIN_AUDIO_CLIP_LEN_SEC = 0.1;
 
 /** Length of the playable (trimmed) source material in seconds. */
 export function getSourceLengthSec(clip: AudioClipDto): number {
-  return Math.max(
-    MIN_AUDIO_CLIP_LEN_SEC,
-    (clip.trimEndSec ?? clip.durationSec ?? 0) - clip.trimStartSec
-  );
+  const end = Math.min(clip.trimEndSec ?? Infinity, clip.durationSec ?? Infinity);
+  const playableEnd = Number.isFinite(end) ? end : 0;
+  return Math.max(MIN_AUDIO_CLIP_LEN_SEC, playableEnd - clip.trimStartSec);
 }
 
 /**
