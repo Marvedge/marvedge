@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
-import { deleteCloudinaryVideoByUrl } from "@/app/lib/cloudinary-utils";
+import { deleteCloudinaryVideoByUrl, isManagedCloudinaryUrl } from "@/app/lib/cloudinary-utils";
 import { packageDemoHls } from "@/app/lib/hls/package";
 import { isSafeUrl } from "@/app/lib/safeUrl";
 
@@ -34,6 +34,15 @@ async function getCurrentUserId(user: SessionUser): Promise<string | null> {
   });
 
   return dbUser?.id ?? null;
+}
+
+async function hasOwnedVideoJobForUrl(userId: string, exportedUrl: string): Promise<boolean> {
+  const job = await prisma.videoJob.findFirst({
+    where: { userId, exportedUrl },
+    select: { id: true },
+  });
+
+  return Boolean(job);
 }
 
 export async function GET() {
@@ -115,6 +124,15 @@ export async function POST(req: NextRequest) {
 
     // refuse to store urls the server must never fetch
     if (!isSafeUrl(exportedUrl)) {
+      return NextResponse.json({ error: "Exported URL is not allowed" }, { status: 400 });
+    }
+
+    // A managed Cloudinary URL is destroyed with operator credentials later, so
+    // the caller must have produced it before we persist a reference to it.
+    if (
+      isManagedCloudinaryUrl(exportedUrl) &&
+      !(await hasOwnedVideoJobForUrl(userId, exportedUrl))
+    ) {
       return NextResponse.json({ error: "Exported URL is not allowed" }, { status: 400 });
     }
     if (typeof sourceVideoUrl === "string" && sourceVideoUrl.trim().length > 0) {
@@ -225,7 +243,12 @@ export async function POST(req: NextRequest) {
 
       if (txResult.upserted) {
         if (txResult.previousUrl && txResult.previousUrl !== exportedUrl) {
-          await deleteCloudinaryVideoByUrl(txResult.previousUrl);
+          const shouldDestroy =
+            isManagedCloudinaryUrl(txResult.previousUrl) &&
+            (await hasOwnedVideoJobForUrl(userId, txResult.previousUrl));
+          if (shouldDestroy) {
+            await deleteCloudinaryVideoByUrl(txResult.previousUrl);
+          }
         }
 
         // OVL PR 8 — package HLS renditions for the export that just landed.
@@ -289,7 +312,14 @@ export async function DELETE(req: NextRequest) {
     }
 
     await prisma.exportedVideo.delete({ where: { id } });
-    await deleteCloudinaryVideoByUrl(record.exportedUrl);
+
+    if (
+      record.exportedUrl &&
+      isManagedCloudinaryUrl(record.exportedUrl) &&
+      (await hasOwnedVideoJobForUrl(userId, record.exportedUrl))
+    ) {
+      await deleteCloudinaryVideoByUrl(record.exportedUrl);
+    }
 
     if (record.demoId) {
       await prisma.demo

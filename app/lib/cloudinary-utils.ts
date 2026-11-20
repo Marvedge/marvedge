@@ -86,6 +86,10 @@ function extractPublicIdFromCloudinaryUrl(url: string): string | null {
   return withoutExtension;
 }
 
+export function isManagedCloudinaryUrl(url: string): boolean {
+  return extractPublicIdFromCloudinaryUrl(url) !== null;
+}
+
 export async function deleteCloudinaryVideoByUrl(url: string | null | undefined): Promise<void> {
   if (!url) {
     return;
