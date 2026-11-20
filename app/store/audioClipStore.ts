@@ -136,7 +136,15 @@ async function performUpload(
   });
 
   const durationSec = await readAudioDuration(file);
-  await axios.post(`/api/audio/${clipId}/confirm`, { durationSec });
+  const confirmUrl = `/api/audio/${clipId}/confirm`;
+  try {
+    await axios.post(confirmUrl, { durationSec }, { signal });
+  } catch (error) {
+    if (signal.aborted || !axios.isAxiosError(error) || error.response?.status !== 503) {
+      throw error;
+    }
+    await axios.post(confirmUrl, { durationSec }, { signal });
+  }
 }
 
 /** Best-effort drop of the clip row an aborted/failed upload left behind. */
