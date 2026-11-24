@@ -59,7 +59,7 @@ export default function AudioPreviewLayer({ playbackSpeed }: { playbackSpeed: nu
         continue;
       }
       const window = clipWindow(clip, placements);
-      const inside = playing && currentTime >= window.start - 0.01 && currentTime < window.end;
+      const inside = playing && window.contains(currentTime);
       if (!inside) {
         if (!el.paused) {
           el.pause();
@@ -92,7 +92,7 @@ export default function AudioPreviewLayer({ playbackSpeed }: { playbackSpeed: nu
         continue;
       }
       const window = clipWindow(clip, placements);
-      if (currentTime < window.start || currentTime > window.end) {
+      if (!window.contains(currentTime)) {
         el.pause();
         continue;
       }
