@@ -8,7 +8,6 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 
 import { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 
 const JOB_ID = process.env.CANARY_JOB_ID ?? '';
 
@@ -20,10 +19,27 @@ async function main() {
   const prisma = new PrismaClient({
     datasources: { db: { url: process.env.DATABASE_URL } },
   });
-  const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379', {
+  const redisUrl = new URL(
+    process.env.REDIS_URL ?? 'redis://127.0.0.1:6379'
+  );
+  const connection = {
+    host: redisUrl.hostname,
+    port: Number(
+      redisUrl.port || (redisUrl.protocol === 'rediss:' ? 6380 : 6379)
+    ),
+    ...(redisUrl.username
+      ? { username: decodeURIComponent(redisUrl.username) }
+      : {}),
+    ...(redisUrl.password
+      ? { password: decodeURIComponent(redisUrl.password) }
+      : {}),
+    ...(redisUrl.pathname.length > 1
+      ? { db: Number(redisUrl.pathname.slice(1)) }
+      : {}),
+    ...(redisUrl.protocol === 'rediss:' ? { tls: {} } : {}),
     maxRetriesPerRequest: null,
-  });
-  const queue = new Queue('reframe-processing', { connection: redis });
+  };
+  const queue = new Queue('reframe-processing', { connection });
 
   // --- DB record ---
   const job = await prisma.videoJob.findUnique({ where: { id: JOB_ID } });
@@ -65,7 +81,6 @@ async function main() {
   }
 
   await queue.close();
-  await redis.quit();
   await prisma.$disconnect();
 }
 

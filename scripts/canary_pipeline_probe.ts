@@ -14,7 +14,6 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 
 import { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 import { isSafeUrl } from '../app/lib/safeUrl';
 import { validateReframeJobPayload } from '../app/lib/reframe/validation';
 
@@ -82,9 +81,26 @@ async function main() {
 
   // --- Step 4: Live Queue -> Callback -> DB Integration Test ---
   console.log('\n[4/4] Validating live Queue -> Worker -> Callback -> DB cycle...');
-  const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379', {
+  const redisUrl = new URL(
+    process.env.REDIS_URL ?? 'redis://127.0.0.1:6379'
+  );
+  const connection = {
+    host: redisUrl.hostname,
+    port: Number(
+      redisUrl.port || (redisUrl.protocol === 'rediss:' ? 6380 : 6379)
+    ),
+    ...(redisUrl.username
+      ? { username: decodeURIComponent(redisUrl.username) }
+      : {}),
+    ...(redisUrl.password
+      ? { password: decodeURIComponent(redisUrl.password) }
+      : {}),
+    ...(redisUrl.pathname.length > 1
+      ? { db: Number(redisUrl.pathname.slice(1)) }
+      : {}),
+    ...(redisUrl.protocol === 'rediss:' ? { tls: {} } : {}),
     maxRetriesPerRequest: null,
-  });
+  };
 
   // Create VideoJob record in PENDING
   const testJob = await prisma.videoJob.create({
@@ -148,7 +164,7 @@ async function main() {
   console.log('    DB jobData:', JSON.stringify(afterFail?.jobData, null, 2));
 
   // Enqueue job into BullMQ to verify Redis Queue connectivity
-  const queue = new Queue('reframe-processing', { connection: redis });
+  const queue = new Queue('reframe-processing', { connection });
   const bullJob = await queue.add(
     'reframe',
     {
@@ -166,7 +182,6 @@ async function main() {
   console.log('     BullMQ job initial state:', jobState);
 
   await queue.close();
-  await redis.quit();
   await prisma.$disconnect();
 
   console.log('\n====================================================');

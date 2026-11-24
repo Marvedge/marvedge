@@ -11,7 +11,6 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 
 import { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 
 const CANARY_VIDEO_URL = process.env.CANARY_VIDEO_URL ?? '';
 const TARGET_ASPECT = '9:16';
@@ -55,11 +54,28 @@ async function main() {
   console.log('✅ VideoJob created — id:', videoJob.id, 'status:', videoJob.status);
 
   // --- Enqueue in BullMQ ---
-  const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379', {
+  const redisUrl = new URL(
+    process.env.REDIS_URL ?? 'redis://127.0.0.1:6379'
+  );
+  const connection = {
+    host: redisUrl.hostname,
+    port: Number(
+      redisUrl.port || (redisUrl.protocol === 'rediss:' ? 6380 : 6379)
+    ),
+    ...(redisUrl.username
+      ? { username: decodeURIComponent(redisUrl.username) }
+      : {}),
+    ...(redisUrl.password
+      ? { password: decodeURIComponent(redisUrl.password) }
+      : {}),
+    ...(redisUrl.pathname.length > 1
+      ? { db: Number(redisUrl.pathname.slice(1)) }
+      : {}),
+    ...(redisUrl.protocol === 'rediss:' ? { tls: {} } : {}),
     maxRetriesPerRequest: null,
-  });
+  };
 
-  const queue = new Queue('reframe-processing', { connection: redis });
+  const queue = new Queue('reframe-processing', { connection });
 
   await queue.add(
     'reframe',
@@ -86,7 +102,6 @@ async function main() {
   console.log('   Video URL   =', CANARY_VIDEO_URL.substring(0, 60) + '...');
 
   await queue.close();
-  await redis.quit();
   await prisma.$disconnect();
 }
 
