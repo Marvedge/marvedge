@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CropTargetData } from "../app/types/editor/crop-target";
 import type { MlInferenceRequest, JobCallbackPayload } from "./client";
 import type { RenderReframedVideoOptions } from "./render";
@@ -17,6 +17,7 @@ const sampleCropTargets: CropTargetData = {
 };
 
 describe("Task-00133: Reframe Worker Face Tracking Execution-Time Consent Hardening", () => {
+  const originalCallbackSecret = process.env.CALLBACK_SECRET;
   let mockExecuteMl: (request: MlInferenceRequest) => Promise<CropTargetData>;
   let mockRenderVideo: (
     videoUrl: string,
@@ -28,6 +29,7 @@ describe("Task-00133: Reframe Worker Face Tracking Execution-Time Consent Harden
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.CALLBACK_SECRET = originalCallbackSecret || "test-callback-secret";
     mockExecuteMl = vi.fn().mockResolvedValue(sampleCropTargets);
     mockRenderVideo = vi.fn().mockResolvedValue("https://res.cloudinary.com/test/reframed.mp4");
     mockSendCallback = vi.fn().mockResolvedValue({ success: true });
@@ -37,6 +39,14 @@ describe("Task-00133: Reframe Worker Face Tracking Execution-Time Consent Harden
       attemptsMade: 0,
       maxAttempts: 3,
     };
+  });
+
+  afterEach(() => {
+    if (originalCallbackSecret === undefined) {
+      delete process.env.CALLBACK_SECRET;
+    } else {
+      process.env.CALLBACK_SECRET = originalCallbackSecret;
+    }
   });
 
   it("falls back to AutoFlip-only (enableFaceTracking: false) when consent was granted at queue time but revoked before execution", async () => {
