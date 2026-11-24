@@ -3,33 +3,11 @@
 import React, { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { useAudioClipStore, getSourceLengthSec } from "@/app/store/audioClipStore";
+import { useAudioClipStore } from "@/app/store/audioClipStore";
 import { useEditorStore } from "@/app/store/editor/editorStore";
-import type { AudioClipDto } from "@/app/types/audio";
+import { clipWindow, playableUrl } from "./previewTiming";
 
 /** The URL to play for a clip: the trimmed version when present, else the original. */
-function playableUrl(clip: AudioClipDto): string | null {
-  return clip.trimmedUrl ?? clip.originalUrl ?? null;
-}
-
-/**
- * Timeline window a clip is audible over, and where within the source
- * material the video playhead maps to. The trimmed source loops to fill
- * windows longer than the source material.
- */
-function clipWindow(
-  clip: AudioClipDto,
-  placements: Record<string, { start: number; len: number }>
-) {
-  const srcLen = getSourceLengthSec(clip);
-  const placement = placements[clip.id] ?? { start: clip.trimStartSec, len: srcLen };
-  return {
-    start: placement.start,
-    end: placement.start + placement.len,
-    sourcePosFor: (videoTime: number) =>
-      clip.trimStartSec + ((videoTime - placement.start) % srcLen),
-  };
-}
 
 /**
  * Renders one hidden <audio> element per READY clip and keeps each element in
