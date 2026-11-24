@@ -1,96 +1,89 @@
 # Marvedge V3 AI/ML Architecture & Operations Guide
 
 - **Document:** `docs/V3_AI_ARCHITECTURE_AND_OPERATIONS.md`
-- **Task:** Task-00134 — V3 AI Architecture & Documentation Refresh
-- **Version:** 3.1.0 (Canonical Architecture & Operational Reference)
+- **Task:** Task-00106 — V3 AI Architecture & Operations Documentation
+- **Version:** 3.0.0 (Production & Operational Reference)
 - **Date:** November 2026
 - **Audience:** Platform Engineers, ML Engineers, SRE / On-Call Engineers, and Engineering Leadership
-- **Status:** Canonical Engineering Reference (Master Implementation Ground Truth)
+- **Status:** Authoritative Engineering Reference (Ground Truth Reconciled)
 
 ---
 
 ## Table of Contents
 
 1. [System Overview](#1-system-overview)
-   - 1.1 [Pipeline Purpose & Capabilities](#11-pipeline-purpose--capabilities)
+   - 1.1 [Pipeline Purpose &amp; Capabilities](#11-pipeline-purpose--capabilities)
    - 1.2 [Core Processing Stages](#12-core-processing-stages)
    - 1.3 [Synchronous Ingestion vs. Asynchronous Worker Execution](#13-synchronous-ingestion-vs-asynchronous-worker-execution)
-   - 1.4 [Queue Orchestration via BullMQ & Redis](#14-queue-orchestration-via-bullmq--redis)
-   - 1.5 [Result Propagation & State Persistence](#15-result-propagation--state-persistence)
-   - 1.6 [External Services & Cloud Topology](#16-external-services--cloud-topology)
+   - 1.4 [Queue Orchestration via BullMQ &amp; Redis](#14-queue-orchestration-via-bullmq--redis)
+   - 1.5 [Result Propagation &amp; State Persistence](#15-result-propagation--state-persistence)
+   - 1.6 [External Services &amp; Cloud Topology](#16-external-services--cloud-topology)
 2. [Architecture](#2-architecture)
    - 2.1 [End-to-End System Topology (Mermaid Diagram)](#21-end-to-end-system-topology-mermaid-diagram)
-   - 2.2 [Component Classification & Lifecycle Status](#22-component-classification--lifecycle-status)
+   - 2.2 [Component Classification &amp; Lifecycle Status](#22-component-classification--lifecycle-status)
 3. [Service Input/Output Contracts](#3-service-inputoutput-contracts)
    - 3.1 [Service Master Directory](#31-service-master-directory)
-   - 3.2 [Queue Lifecycle, Job Names & Retry Policies](#32-queue-lifecycle-job-names--retry-policies)
-   - 3.3 [Next.js Ingestion & Webhook Endpoints](#33-nextjs-ingestion--webhook-endpoints)
+   - 3.2 [Queue Lifecycle, Job Names &amp; Retry Policies](#32-queue-lifecycle-job-names--retry-policies)
+   - 3.3 [Next.js Ingestion &amp; Webhook Endpoints](#33-nextjs-ingestion--webhook-endpoints)
    - 3.4 [ML Gateway Internal Contracts (`ml-gateway`)](#34-ml-gateway-internal-contracts-ml-gateway)
    - 3.5 [AutoFlip Crop Target Contract (`autoflip`)](#35-autoflip-crop-target-contract-autoflip)
    - 3.6 [TalkNet Active Speaker Detection Contract (`talknet`)](#36-talknet-active-speaker-detection-contract-talknet)
-   - 3.7 [Dubbing Provider Abstraction (ElevenLabs & VoiceStudio)](#37-dubbing-provider-abstraction-elevenlabs--voicestudio)
+   - 3.7 [Dubbing Provider Abstraction (ElevenLabs &amp; VoiceStudio)](#37-dubbing-provider-abstraction-elevenlabs--voicestudio)
    - 3.8 [Cloud Run Worker API (`cloudrun-worker`)](#38-cloud-run-worker-api-cloudrun-worker)
 4. [Environment Variable Reference](#4-environment-variable-reference)
-   - 4.1 [Application & Database](#41-application--database)
-   - 4.2 [Redis & BullMQ Infrastructure](#42-redis--bullmq-infrastructure)
-   - 4.3 [Worker Concurrency Limits](#43-worker-concurrency-limits)
-   - 4.4 [ML Gateway & Worker Execution](#44-ml-gateway--worker-execution)
-   - 4.5 [AutoFlip & TalkNet Pipeline](#45-autoflip--talknet-pipeline)
-   - 4.6 [Captioning & Speech Transcription](#46-captioning--speech-transcription)
-   - 4.7 [Dubbing Providers & VoiceStudio](#47-dubbing-providers--voicestudio)
-   - 4.8 [Cloud Storage & CDN](#48-cloud-storage--cdn)
-   - 4.9 [AWS & GPU Infrastructure](#49-aws--gpu-infrastructure)
-   - 4.10 [Monitoring & Alerting Infrastructure](#410-monitoring--alerting-infrastructure)
-   - 4.11 [Benchmark Configuration Variables](#411-benchmark-configuration-variables)
+   - 4.1 [Application &amp; Database](#41-application--database)
+   - 4.2 [Redis &amp; BullMQ Infrastructure](#42-redis--bullmq-infrastructure)
+   - 4.3 [ML Gateway &amp; Worker Execution](#43-ml-gateway--worker-execution)
+   - 4.4 [AutoFlip &amp; TalkNet Pipeline](#44-autoflip--talknet-pipeline)
+   - 4.5 [Captioning &amp; Speech Transcription](#45-captioning--speech-transcription)
+   - 4.6 [Dubbing Providers &amp; VoiceStudio](#46-dubbing-providers--voicestudio)
+   - 4.7 [Cloud Storage &amp; CDN](#47-cloud-storage--cdn)
+   - 4.8 [AWS &amp; GPU Infrastructure](#48-aws--gpu-infrastructure)
+   - 4.9 [Monitoring &amp; Alerting Infrastructure](#49-monitoring--alerting-infrastructure)
 5. [Benchmark Execution](#5-benchmark-execution)
-   - 5.1 [Prerequisites & Host Requirements](#51-prerequisites--host-requirements)
+   - 5.1 [Prerequisites &amp; Host Requirements](#51-prerequisites--host-requirements)
    - 5.2 [Cloud Cost Benchmark Harness (`scripts/benchmark/cloudCostBenchmark.ts`)](#52-cloud-cost-benchmark-harness-scriptsbenchmarkcloudcostbenchmarkts)
-   - 5.3 [Offline Fixture Benchmark (Zero Cloud Cost)](#53-offline-fixture-benchmark-zero-cloud-cost)
-   - 5.4 [Live Cloud-Cost Benchmark (AWS / GCP / Azure / CPU)](#54-live-cloud-cost-benchmark-aws--gcp--azure--cpu)
-   - 5.5 [Concurrent Load Testing Harness (`scripts/benchmark/concurrentLoadRunner.ts`)](#55-concurrent-load-testing-harness-scriptsbenchmarkconcurrentloadrunnerts)
-   - 5.6 [In-VPC GPU Load Testing (`infra/gpu-deployment/in_vpc_load_test.mjs`)](#56-in-vpc-gpu-load-testing-infragpu-deploymentin_vpc_load_testmjs)
-   - 5.7 [VoiceStudio-Specific Speech Benchmark](#57-voicestudio-specific-speech-benchmark)
-   - 5.8 [Interpreting Performance Telemetry](#58-interpreting-performance-telemetry)
-   - 5.9 [Measured Benchmarks vs. Modeled Economic Projections](#59-measured-benchmarks-vs-modeled-economic-projections)
+   - 5.3 [Concurrent Load Testing Harness (`scripts/benchmark/concurrentLoadRunner.ts`)](#53-concurrent-load-testing-harness-scriptsbenchmarkconcurrentloadrunnerts)
+   - 5.4 [In-VPC GPU Load Testing (`infra/gpu-deployment/in_vpc_load_test.mjs`)](#54-in-vpc-gpu-load-testing-infragpu-deploymentin_vpc_load_testmjs)
+   - 5.5 [VoiceStudio Benchmark Scripts](#55-voicestudio-benchmark-scripts)
+   - 5.6 [Interpreting Performance Telemetry](#56-interpreting-performance-telemetry)
+   - 5.7 [Measured Benchmarks vs. Modeled Economic Projections](#57-measured-benchmarks-vs-modeled-economic-projections)
 6. [Stuck-Job Diagnosis and Recovery](#6-stuck-job-diagnosis-and-recovery)
-   - 6.1 [Operational Principles & Safety Guardrails](#61-operational-principles--safety-guardrails)
-   - 6.2 [Step 1: Identify Affected Job, Queue & Pipeline](#62-step-1-identify-affected-job-queue--pipeline)
-   - 6.3 [Step 2: Inspect Job State, Attempts & Stall Timers](#63-step-2-inspect-job-state-attempts--stall-timers)
-   - 6.4 [Step 3: Analyze Worker Logs & Error Signatures](#64-step-3-analyze-worker-logs--error-signatures)
-   - 6.5 [Step 4: Verify Redis Reachability & Network Saturation](#65-step-4-verify-redis-reachability--network-saturation)
-   - 6.6 [Step 5: Verify Application & ML Service Health](#66-step-5-verify-application--ml-service-health)
-   - 6.7 [Step 6: Diagnose GPU Worker Host & Preflight Gates](#67-step-6-diagnose-gpu-worker-host--preflight-gates)
-   - 6.8 [Step 7: Isolate External Vendor & API Failures](#68-step-7-isolate-external-vendor--api-failures)
-   - 6.9 [Step 8: Evaluate Retry Safety & Idempotency Boundary](#69-step-8-evaluate-retry-safety--idempotency-boundary)
+   - 6.1 [Operational Principles &amp; Safety Guardrails](#61-operational-principles--safety-guardrails)
+   - 6.2 [Step 1: Identify Affected Job, Queue &amp; Pipeline](#62-step-1-identify-affected-job-queue--pipeline)
+   - 6.3 [Step 2: Inspect Job State, Attempts &amp; Stall Timers](#63-step-2-inspect-job-state-attempts--stall-timers)
+   - 6.4 [Step 3: Analyze Worker Logs &amp; Error Signatures](#64-step-3-analyze-worker-logs--error-signatures)
+   - 6.5 [Step 4: Verify Redis Reachability &amp; Network Saturation](#65-step-4-verify-redis-reachability--network-saturation)
+   - 6.6 [Step 5: Verify Application &amp; ML Service Health](#66-step-5-verify-application--ml-service-health)
+   - 6.7 [Step 6: Diagnose GPU Worker Host &amp; Preflight Gates](#67-step-6-diagnose-gpu-worker-host--preflight-gates)
+   - 6.8 [Step 7: Isolate External Vendor &amp; API Failures](#68-step-7-isolate-external-vendor--api-failures)
+   - 6.9 [Step 8: Evaluate Retry Safety &amp; Idempotency Boundary](#69-step-8-evaluate-retry-safety--idempotency-boundary)
    - 6.10 [Step 9: Safe Job Recovery via BullMQ / Service Restarts](#610-step-9-safe-job-recovery-via-bullmq--service-restarts)
-   - 6.11 [Step 10: Verify Successful Callback & Metric Resolution](#611-step-10-verify-successful-callback--metric-resolution)
+   - 6.11 [Step 10: Verify Successful Callback &amp; Metric Resolution](#611-step-10-verify-successful-callback--metric-resolution)
 7. [Monitoring and Observability](#7-monitoring-and-observability)
    - 7.1 [Prometheus Metrics Endpoint (`GET /api/monitoring/metrics`)](#71-prometheus-metrics-endpoint-get-apimonitoringmetrics)
-   - 7.2 [Queue Depth & Stuck-Queue Latency Alerts](#72-queue-depth--stuck-queue-latency-alerts)
+   - 7.2 [Queue Depth &amp; Stuck-Queue Latency Alerts](#72-queue-depth--stuck-queue-latency-alerts)
    - 7.3 [Terminal Failure Rate Accounting](#73-terminal-failure-rate-accounting)
-   - 7.4 [GPU Compute & Vendor Spend Anomaly Tracking](#74-gpu-compute--vendor-spend-anomaly-tracking)
-   - 7.5 [Notification Dispatch & Webhook Masking](#75-notification-dispatch--webhook-masking)
-   - 7.6 [Alert State Persistence & Atomic Redis Transitions](#76-alert-state-persistence--atomic-redis-transitions)
+   - 7.4 [GPU Compute &amp; Vendor Spend Anomaly Tracking](#74-gpu-compute--vendor-spend-anomaly-tracking)
+   - 7.5 [Notification Dispatch &amp; Webhook Masking](#75-notification-dispatch--webhook-masking)
+   - 7.6 [Alert State Persistence &amp; Atomic Redis Transitions](#76-alert-state-persistence--atomic-redis-transitions)
    - 7.7 [Systemd Supervision of Alert Evaluator](#77-systemd-supervision-of-alert-evaluator)
-   - 7.8 [Telemetry Limitations & Data Granularity](#78-telemetry-limitations--data-granularity)
+   - 7.8 [Telemetry Limitations &amp; Data Granularity](#78-telemetry-limitations--data-granularity)
 8. [Known Limitations and Caveats](#8-known-limitations-and-caveats)
-   - 8.1 [AutoFlip I-Frame Decoding & Camera Motion](#81-autoflip-i-frame-decoding--camera-motion)
-   - 8.2 [TalkNet Model and GPU Dependencies](#82-talknet-model-and-gpu-dependencies)
-   - 8.3 [VoiceStudio Legal, Licensing & Model Checkpoints](#83-voicestudio-legal-licensing--model-checkpoints)
-   - 8.4 [Commercial Fallback Prevention & Billing Bounds](#84-commercial-fallback-prevention--billing-bounds)
-   - 8.5 [Provisional Concurrency & Full-Pipeline Assumptions](#85-provisional-concurrency--full-pipeline-assumptions)
-   - 8.6 [GPU EC2 Cold-Start & Standby State](#86-gpu-ec2-cold-start--standby-state)
-   - 8.7 [AVS Alignment and Timing Requirements](#87-avs-alignment-and-timing-requirements)
-   - 8.8 [Cloud Run Subtitle Job Cancellation Semantics](#88-cloud-run-subtitle-job-cancellation-semantics)
-   - 8.9 [Cross-Cloud Egress & Multi-Region Topology](#89-cross-cloud-egress--multi-region-topology)
-   - 8.10 [Benchmark Fixture Limitations vs. Real GPU Measurements](#810-benchmark-fixture-limitations-vs-real-gpu-measurements)
-   - 8.11 [Development vs. Production Database & Operational Parity](#811-development-vs-production-database--operational-parity)
+   - 8.1 [AutoFlip I-Frame Decoding &amp; Camera Motion](#81-autoflip-i-frame-decoding--camera-motion)
+   - 8.2 [VoiceStudio Legal, Licensing &amp; Model Checkpoints](#82-voicestudio-legal-licensing--model-checkpoints)
+   - 8.3 [Commercial Fallback Prevention &amp; Billing Bounds](#83-commercial-fallback-prevention--billing-bounds)
+   - 8.4 [Provisional Concurrency &amp; Full-Pipeline Assumptions](#84-provisional-concurrency--full-pipeline-assumptions)
+   - 8.5 [GPU EC2 Cold-Start &amp; Standby State](#85-gpu-ec2-cold-start--standby-state)
+   - 8.6 [Cloud Run Subtitle Job Cancellation Semantics](#86-cloud-run-subtitle-job-cancellation-semantics)
+   - 8.7 [Cross-Cloud Egress &amp; Multi-Region Topology](#87-cross-cloud-egress--multi-region-topology)
+   - 8.8 [Development vs. Production Operational Parity](#88-development-vs-production-operational-parity)
 9. [Deployment and Operational Reference](#9-deployment-and-operational-reference)
    - 9.1 [Local Developer Setup](#91-local-developer-setup)
    - 9.2 [Docker Compose Services](#92-docker-compose-services)
    - 9.3 [GPU Host Systemd Services](#93-gpu-host-systemd-services)
    - 9.4 [Health Check Verification](#94-health-check-verification)
-   - 9.5 [Safe Shutdown, Drain & Restart Sequences](#95-safe-shutdown-drain--restart-sequences)
+   - 9.5 [Safe Shutdown, Drain &amp; Restart Sequences](#95-safe-shutdown-drain--restart-sequences)
    - 9.6 [Production Security Architecture](#96-production-security-architecture)
 10. [Source-of-Truth References](#10-source-of-truth-references)
 
@@ -158,14 +151,11 @@ To guarantee resilience under load and maintain strict SLA boundaries on client-
   - Upon completion or terminal failure, workers notify the application via HMAC-authenticated callbacks (`POST /api/jobs/callback`).
   - Web clients poll `GET /api/jobs/[id]` at 5-second intervals (with a 15-minute ceiling) to observe state transitions.
 
-### 1.4 Queue Orchestration via BullMQ & Native Redis TCP
+### 1.4 Queue Orchestration via BullMQ & Redis
 
-Queue orchestration across Marvedge relies strictly on **BullMQ** backed by **native Redis TCP/TLS connections** (via `ioredis` configured in `app/lib/redis.ts` and `app/lib/redisConfig.ts`):
+Queue orchestration relies on BullMQ backed by a centralized Redis instance (AWS ElastiCache Redis cluster or Upstash Redis with TLS):
 
-- **Verified Application Implementation:** Application-level queue producers (Next.js) and background consumers (worker processes) use `ioredis` directly over native TCP. BullMQ requires persistent, low-latency Redis TCP streaming and blocking commands (such as `BRPOPLPUSH` / `BLMOVE`) with `maxRetriesPerRequest: null`. It is **strictly incompatible with HTTP/REST Redis APIs** (such as Upstash REST).
-- **Supported Provider Configurations:** In production, any compliant managed Redis provider supporting native Redis TCP with TLS over port 6379 can be configured (such as Upstash native TCP `rediss://...:6379` or AWS ElastiCache). While Upstash TCP connection strings are referenced in environment templates and runbooks, the specific managed Redis provider and endpoint deployed in production remain **`[UNVERIFIED Provider]`** from repository configuration files alone. Production runtime guards in `app/lib/redisConfig.ts` enforce that `REDIS_URL` must be set and reject loopback addresses (`localhost`, `127.0.0.1`) unless explicitly bypassed.
-- **Development Infrastructure:** Local development falls back cleanly to local Redis TCP (`redis://localhost:6379`).
-- **Application Rate Limiting:** Application-level sliding-window rate limiters (e.g., `app/lib/audio/rateLimit.ts`) also consume this shared native `ioredis` TCP connection, avoiding separate SDK dependencies.
+- **Job Distribution:** Decouples Next.js API producers from background worker consumers. Workers pull jobs based on configured concurrency limits.
 - **Lock Management:** Workers maintain distributed locks in Redis (with automatic renewal loops) during heavy FFmpeg or ML operations to prevent jobs from being incorrectly marked as stalled.
 - **Exponential Backoff:** Transient network timeouts or downstream rate limits trigger bounded retries with exponential backoff rather than immediate job termination.
 - **Outcome Metrics Partitioning:** Worker completion and failure events record telemetry in one-minute Redis buckets (`marvedge:monitoring:...`), powering sliding-window latency and failure rate alarms without impacting database I/O.
@@ -174,7 +164,9 @@ Queue orchestration across Marvedge relies strictly on **BullMQ** backed by **na
 
 Job state transitions follow a strict lifecycle recorded in PostgreSQL:
 
-$$\text{PENDING} \longrightarrow \text{PROCESSING} \longrightarrow \begin{cases} \text{COMPLETED} & (\text{with } exportedUrl \text{ and } jobData) \\ \text{FAILED} & (\text{with sanitized error description}) \end{cases}$$
+$$
+\text{PENDING} \longrightarrow \text{PROCESSING} \longrightarrow \begin{cases} \text{COMPLETED} & (\text{with } exportedUrl \text{ and } jobData) \\ \text{FAILED} & (\text{with sanitized error description}) \end{cases}
+$$
 
 - **State Persistence:** All operational records live in the `VideoJob` table managed by Prisma ORM.
 - **Progress Reporting:** Workers update the `progress` integer ($0$ to $100$) and update BullMQ job progress.
@@ -183,20 +175,19 @@ $$\text{PENDING} \longrightarrow \text{PROCESSING} \longrightarrow \begin{cases}
 
 ### 1.6 External Services & Cloud Topology
 
-| Provider                             | Service / Resource                                | Purpose in V3 Pipeline                                     | Criticality          | Fallback Mechanism                        |
-| :----------------------------------- | :------------------------------------------------ | :--------------------------------------------------------- | :------------------- | :---------------------------------------- |
-| **Neon**                             | Serverless PostgreSQL (Dual-URL)                  | Relational persistence (`User`, `Demo`, `VideoJob`)        | Critical             | None (System of record)                   |
-| **AWS**                              | EC2 `g4dn.xlarge` (Tesla T4)                      | GPU inference (AutoFlip, TalkNet, Reframe, Video Workers)  | Critical             | None (Primary compute engine)             |
-| **Managed Redis `[UNVERIFIED]`**     | Native Redis TCP/TLS (Upstash / ElastiCache supp) | BullMQ queues, rate limiting, alert state & metric buckets | Critical             | None (Fail-closed)                        |
-| **AWS**                              | S3 (`marvedge-raw-ap2`, `marvedge-processed-ap2`) | Permanent media asset storage, raw inputs & rendered MP4s  | High                 | Cold-standby GCS                          |
-| **Cloudinary**                       | Media CDN & Direct Upload                         | Browser direct unsigned uploads, video hosting & previews  | High                 | Direct S3 storage fallback                |
-| **ElevenLabs**                       | Speech Synthesis & Dubbing API                    | Multilingual text-to-speech and turnkey video dubbing      | High                 | Optional in-house VoiceStudio             |
-| **Deepgram**                         | Nova-2 Speech-to-Text API                         | Word-level speech transcription for subtitle generation    | High                 | Groq Whisper API                          |
-| **Groq**                             | Whisper Large v3 / Translation                    | Subtitle transcription and multi-language translation      | Medium               | Deepgram / OpenAI                         |
-| **Resend**                           | Transactional Email API                           | User authentication OTPs and external monitoring alerts    | Medium               | Chat webhook alerts                       |
-| **GCP**                              | Cloud Run (`cloudrun-worker`)                     | Containerized legacy dub-sync, HLS packaging & subtitles   | Medium               | AWS EC2 worker processing                 |
-| **Cloudflare**                       | R2 Object Storage                                 | S3-compatible HLS chunk delivery & signed media assets     | Medium               | AWS S3                                    |
-| **AWS `[UNVERIFIED Existence]`**     | RDS PostgreSQL 16 (Referenced in `.env.example`)  | Template reference (`marvedge-db...`); live state unprobed | Dormant / UNVERIFIED | Inactive; repository standardizes on Neon |
+| Provider             | Service / Resource              | Purpose in V3 Pipeline                                     | Criticality | Fallback Mechanism            |
+| :------------------- | :------------------------------ | :--------------------------------------------------------- | :---------- | :---------------------------- |
+| **AWS**        | EC2 `g4dn.xlarge` (Tesla T4)  | GPU inference (AutoFlip, TalkNet, Reframe, Video Workers)  | Critical    | None (Primary compute engine) |
+| **AWS**        | ElastiCache / Upstash Redis     | BullMQ queues, rate limiting, alert state & metric buckets | Critical    | None (Fail-closed)            |
+| **AWS**        | RDS PostgreSQL 16               | Relational persistence (`User`, `Demo`, `VideoJob`)  | Critical    | None (Primary data store)     |
+| **AWS**        | S3 (`marvedge-raw-ap2`, etc.) | Permanent media asset storage, raw inputs & rendered MP4s  | High        | Cold-standby GCS              |
+| **Cloudinary** | Media CDN & Direct Upload       | Browser direct unsigned uploads, video hosting & previews  | High        | Direct S3 storage fallback    |
+| **ElevenLabs** | Speech Synthesis & Dubbing API  | Multilingual text-to-speech and turnkey video dubbing      | High        | Optional in-house VoiceStudio |
+| **Deepgram**   | Nova-2 Speech-to-Text API       | Word-level speech transcription for subtitle generation    | High        | Groq Whisper API              |
+| **Groq**       | Whisper Large v3 / Translation  | Subtitle transcription and multi-language translation      | Medium      | Deepgram / OpenAI             |
+| **Resend**     | Transactional Email API         | User authentication OTPs and external monitoring alerts    | Medium      | Chat webhook alerts           |
+| **GCP**        | Cloud Run (`cloudrun-worker`) | Containerized legacy dub-sync, HLS packaging & subtitles   | Medium      | AWS EC2 worker processing     |
+| **Cloudflare** | R2 Object Storage               | S3-compatible HLS chunk delivery & signed media assets     | Medium      | AWS S3                        |
 
 ---
 
@@ -219,8 +210,8 @@ flowchart TD
     end
 
     subgraph PersistenceTier ["Data & Queue Tier"]
-        NeonDB[("Neon Serverless PostgreSQL<br/>Pooled: DATABASE_URL<br/>Direct: DIRECT_URL")]
-        RedisDB[("Managed Redis (Native TCP/TLS)<br/>(BullMQ Queues & Metrics)")]
+        RDS[("AWS RDS PostgreSQL 16<br/>(VideoJob, Demo, User)")]
+        Redis[("Redis (ElastiCache / Upstash)<br/>(BullMQ Queues & Metrics)")]
     end
 
     subgraph WorkerTier ["Worker & Execution Tier (AWS EC2 / Hosts)"]
@@ -229,11 +220,11 @@ flowchart TD
         AlertEvaluator["Monitoring Alert Evaluator<br/>(Node.js TS Daemon)"]
     end
 
-    subgraph MLTier ["ML Inference Tier (Docker Bridge: marvedge-ml-net)"]
-        MLGateway["ML API Gateway (FastAPI)<br/>Host Published: 8000:8000"]
-        AutoFlip["AutoFlip Service (YuNet ONNX)<br/>Internal Port: 8000"]
-        TalkNet["TalkNet AVS (PyTorch CUDA)<br/>Internal Port: 8000"]
-        VoiceStudio["VoiceStudio Container (AGPL-3.0)<br/>Host Loopback Port: 3900"]
+    subgraph MLTier ["ML Inference Tier (EC2 Local Loopback 127.0.0.1)"]
+        MLGateway["ML API Gateway (FastAPI)<br/>Port 8000"]
+        AutoFlip["AutoFlip Service (YuNet ONNX)<br/>Port 8002"]
+        TalkNet["TalkNet AVS (PyTorch CUDA)<br/>Port 8001"]
+        VoiceStudio["VoiceStudio Container (AGPL-3.0)<br/>Port 3900 (Optional Opt-In)"]
     end
 
     subgraph ExternalServices ["External Cloud Services & APIs"]
@@ -250,17 +241,17 @@ flowchart TD
     CloudinaryCDN -->|"Returns secure_url"| Browser
     Browser -->|"2. POST Ingest Job"| NextAPI
     NextAPI --> NextAuth
-    NextAPI -->|"Create VideoJob (PENDING)"| NeonDB
-    NextAPI -->|"Enqueue Job"| RedisDB
+    NextAPI -->|"Create VideoJob (PENDING)"| RDS
+    NextAPI -->|"Enqueue Job"| Redis
 
     %% Worker Consumption
-    RedisDB -->|"reframe-processing"| ReframeWorker
-    RedisDB -->|"dubbing-processing / subtitle-processing"| VideoWorker
+    Redis -->|"reframe-processing"| ReframeWorker
+    Redis -->|"dubbing-processing / subtitle-processing"| VideoWorker
 
     %% Reframe Worker Flow
     ReframeWorker -->|"POST /reframe (x-gateway-token)"| MLGateway
-    MLGateway -->|"http://autoflip:8000/reframe"| AutoFlip
-    MLGateway -->|"http://talknet:8000/detect"| TalkNet
+    MLGateway -->|"Proxy /reframe"| AutoFlip
+    MLGateway -->|"Proxy /detect"| TalkNet
     AutoFlip -->|"CropTargetData JSON"| MLGateway
     TalkNet -->|"Speaker Tracks JSON"| MLGateway
     MLGateway -->|"Fused Crop Target Data"| ReframeWorker
@@ -278,38 +269,37 @@ flowchart TD
     %% Callback & Polling Flow
     ReframeWorker -->|"POST /api/jobs/callback (HMAC)"| CallbackRoute
     VideoWorker -->|"POST /api/jobs/callback (HMAC)"| CallbackRoute
-    CallbackRoute -->|"Update VideoJob (COMPLETED/FAILED)"| NeonDB
+    CallbackRoute -->|"Update VideoJob (COMPLETED/FAILED)"| RDS
     Browser -->|"Poll GET /api/jobs/:id"| NextAPI
-    NextAPI -->|"Read Job Progress"| NeonDB
+    NextAPI -->|"Read Job Progress"| RDS
 
     %% Observability Flow
-    AlertEvaluator -->|"Evaluate Queue Ages & Outcome Buckets"| RedisDB
+    AlertEvaluator -->|"Evaluate Queue Ages & Outcome Buckets"| Redis
     AlertEvaluator -->|"Dispatch Alerts (Email / Webhook)"| ResendWebhooks
-    MetricsEndpoint -->|"Scrape Queue & Latency Histograms"| RedisDB
+    MetricsEndpoint -->|"Scrape Queue & Latency Histograms"| Redis
 ```
 
 ### 2.2 Component Classification & Lifecycle Status
 
-To prevent architectural ambiguity, Marvedge explicitly classifies every component into an operational lifecycle tier:
+To prevent architectural ambiguity, Marvedge explicitly classifies every component into one of four operational lifecycle tiers:
 
-| Component                       | Architecture Role                     | Lifecycle Status          | Deployment Model                                 | Notes                                                                          |
-| :------------------------------ | :------------------------------------ | :------------------------ | :----------------------------------------------- | :----------------------------------------------------------------------------- |
-| **Next.js API & App**           | Frontend, API Gateway & Orchestration | **Production Active**     | Vercel Serverless                                | Enforces rate limits, authentication, and bounded validation.                  |
-| **Neon PostgreSQL (Dual-URL)**  | System of Record                      | **Production Active**     | Neon Serverless (`ap-southeast-2` / `us-east-1`) | Standardized DB. `DATABASE_URL` (pooled) + `DIRECT_URL` (direct migrations).   |
-| **BullMQ & Redis**              | Distributed Job Queue & Metrics       | **Production Active** (App) / **[UNVERIFIED Provider]** | Native TCP/TLS via `REDIS_URL` (:6379)           | Application strictly requires native Redis TCP (ioredis); incompatible with Upstash REST. Specific cloud provider unverified. |
-| **Reframe Worker**              | Intelligent Crop Video Pipeline       | **Production Active**                                   | Systemd on AWS EC2 (`g4dn.xlarge`)               | Consumes `reframe-processing`; invokes ML Gateway.                                                                             |
-| **Video Worker**                | Subtitles, Dubbing & Audio Prep       | **Production Active**                                   | Systemd on AWS EC2 (`g4dn.xlarge`)               | Consumes `video-processing`, `dubbing-processing`, `subtitle-processing`, etc.                                                 |
-| **ML API Gateway**              | Local Python Reverse Proxy            | **Production Active**                                   | Docker / Systemd (`8000:8000`)                   | Internal gateway; proxies to AutoFlip and TalkNet with `X-Gateway-Token`.                                                      |
-| **AutoFlip Service**            | Facial Detection & Saliency Crop      | **Production Active**                                   | Docker (`autoflip:8000`)                         | CPU-side YuNet ONNX face detection + MediaPipe AutoFlip headless graph.                                                        |
-| **ElevenLabs Integration**      | Commercial Dubbing Provider           | **Production Active**                                   | Vendor Managed SaaS API                          | Default dubbing engine; Scale Tier pricing model.                                                                              |
-| **Deepgram Integration**        | Speech Transcription Engine           | **Production Active**                                   | Vendor Managed SaaS API                          | Primary transcription provider for timestamped subtitles.                                                                      |
-| **Monitoring Alerts Evaluator** | System SRE Alert Daemon               | **Production Active**                                   | Systemd Daemon (`scripts/monitoringAlerts.ts`)   | Evaluates Redis state; dispatches Resend emails & webhooks.                                                                    |
-| **TalkNet Service**             | Active Speaker Detection              | **Operational (Opt-In)**                                | Docker (`talknet:8000`)                          | PyTorch CUDA on Tesla T4; invoked via `/talknet` or combined reframe.                                                          |
-| **VoiceStudio Service**         | Self-Hosted In-House TTS              | **Experimental / Opt-In**                               | Docker on Host (`127.0.0.1:3900`)                | Initial adapter merged (PR #565); hardened guards in PR #578 (unmerged).                                                       |
-| **Cloud Run Worker**            | Legacy Dub-Sync & Subtitles           | **Separately Deployed**                                 | GCP Cloud Run Container (`:8080`)                | Legacy service for `/avs-sync`, `/avs-dub`, `/process`, and `/subtitles`.                                                      |
-| **Google Cloud Storage**        | Cold-Standby Object Storage           | **Standby Fallback**                                    | GCP Cloud Storage                                | Inactive by default; enabled only during AWS S3 outages (`STORAGE_PROVIDER`).                                                  |
-| **AWS Lambda Splitter**         | Chunk-Based Video Splitter            | **Planned / Inactive**                                  | AWS Lambda                                       | `USE_AWS_SPLITTER="false"`; pending serverless ffmpeg build.                                                                   |
-| **AWS RDS PostgreSQL 16**       | Referenced Resource                   | **Dormant / [UNVERIFIED]**                              | AWS RDS endpoint reference in `.env.example`     | Listed in `.env.example` (ap-southeast-2); unmigrated, inactive in codebase, and live AWS existence unverified.                |
+| Component                             | Architecture Role                     | Lifecycle Status                | Deployment Model                                 | Notes                                                               |
+| :------------------------------------ | :------------------------------------ | :------------------------------ | :----------------------------------------------- | :------------------------------------------------------------------ |
+| **Next.js API & App**           | Frontend, API Gateway & Orchestration | **Production Active**     | Vercel Serverless                                | Enforces rate limits, authentication, and bounded validation.       |
+| **PostgreSQL 16 (RDS)**         | System of Record                      | **Production Active**     | AWS RDS Multi-AZ (`ap-southeast-2`)            | Stores user identities, demo projects, and video job states.        |
+| **BullMQ & Redis**              | Distributed Job Queue & Metrics       | **Production Active**     | AWS ElastiCache / Upstash TLS                    | Orchestrates async workers; holds time-bucketed telemetry.          |
+| **Reframe Worker**              | Intelligent Crop Video Pipeline       | **Production Active**     | Systemd on AWS EC2 (`g4dn.xlarge`)             | Consumes `reframe-processing`; invokes ML Gateway.                |
+| **Video Worker**                | Subtitles, Dubbing & Audio Prep       | **Production Active**     | Systemd on AWS EC2 (`g4dn.xlarge`)             | Consumes `dubbing-processing`, `subtitle-processing`, etc.      |
+| **ML API Gateway**              | Local Python Reverse Proxy            | **Production Active**     | Systemd on AWS EC2 (`127.0.0.1:8000`)          | Internal VPC gateway; proxies to AutoFlip and TalkNet.              |
+| **AutoFlip Service**            | Facial Detection & Saliency Crop      | **Production Active**     | Systemd on AWS EC2 (`127.0.0.1:8002`)          | CPU-side YuNet ONNX face detection + MediaPipe AutoFlip.            |
+| **ElevenLabs Integration**      | Commercial Dubbing Provider           | **Production Active**     | Vendor Managed SaaS API                          | Default dubbing engine; Scale Tier pricing model.                   |
+| **Deepgram Integration**        | Speech Transcription Engine           | **Production Active**     | Vendor Managed SaaS API                          | Primary transcription provider for timestamped subtitles.           |
+| **Monitoring Alerts Evaluator** | System SRE Alert Daemon               | **Production Active**     | Systemd Daemon (`scripts/monitoringAlerts.ts`) | Evaluates Redis state; dispatches Resend emails & webhooks.         |
+| **TalkNet Service**             | Active Speaker Detection              | **Operational (Opt-In)**  | Systemd on AWS EC2 (`127.0.0.1:8001`)          | PyTorch CUDA on Tesla T4; invoked via `/talknet` or combined.     |
+| **VoiceStudio Service**         | Self-Hosted In-House TTS              | **Experimental / Opt-In** | Docker on Host (`127.0.0.1:3900`)              | GNU AGPL-3.0 application; OmniVoice CC-BY-NC 4.0 weights.           |
+| **Cloud Run Worker**            | Legacy Dub-Sync & Subtitles           | **Separately Deployed**   | GCP Cloud Run Container                          | Legacy service for `/avs-sync`, `/avs-dub`, and `/subtitles`. |
+| **Google Cloud Storage**        | Cold-Standby Object Storage           | **Standby Fallback**      | GCP Cloud Storage                                | Inactive by default; enabled only during AWS S3 outages.            |
+| **AWS Lambda Splitter**         | Chunk-Based Video Splitter            | **Planned / Inactive**    | AWS Lambda                                       | `USE_AWS_SPLITTER="false"`; pending serverless ffmpeg build.      |
 
 ---
 
@@ -317,49 +307,36 @@ To prevent architectural ambiguity, Marvedge explicitly classifies every compone
 
 ### 3.1 Service Master Directory
 
-| Service Name         | Primary Responsibility                                 | Runtime / Language      | Entry Point / Executable      | Host & Container Network Configuration                                           | Health Check Mechanism             |
-| :------------------- | :----------------------------------------------------- | :---------------------- | :---------------------------- | :------------------------------------------------------------------------------- | :--------------------------------- |
-| **Next.js API**      | Ingestion, validation, job dispatch, status polling    | Node.js 20 (Next.js 15) | `app/api/.../route.ts`        | HTTPS Port 443 / 3000                                                            | `GET /api/monitoring/metrics`      |
-| **Reframe Worker**   | Coordinates reframe execution, downloads, renders      | Node.js 20 LTS          | `reframe-worker/index.ts`     | BullMQ: `reframe-processing`                                                     | BullMQ Redis heartbeat             |
-| **Video Worker**     | Executes dubbing, subtitles, and audio jobs            | Node.js 20 LTS          | `video-worker/index.ts`       | BullMQ: `video-processing`, `dubbing-processing`, `subtitle-processing`, `audio` | BullMQ Redis heartbeat             |
-| **ML API Gateway**   | Authenticates worker calls, routes to AutoFlip/TalkNet | Python 3.10+ (FastAPI)  | `ml-gateway/server.py`        | Published Host Port `8000` $\to$ Container Port `8000`                           | `GET http://127.0.0.1:8000/health` |
-| **AutoFlip Service** | Decodes I-frames, runs YuNet ONNX, calculates crop     | Python 3.10+ (FastAPI)  | `autoflip/server.py`          | Container Port `8000` (`http://autoflip:8000` on `marvedge-ml-net` network)      | `GET http://autoflip:8000/health`  |
-| **TalkNet Service**  | S3FD face tracking + TalkNet active speaker scoring    | Python 3.10+ (PyTorch)  | `talknet/server.py`           | Container Port `8000` (`http://talknet:8000` on `marvedge-ml-net` network)       | `GET http://talknet:8000/health`   |
-| **VoiceStudio**      | Neural TTS speech synthesis                            | Python 3.11 (FastAPI)   | Container `ghcr.io/...`       | Published Host Loopback `127.0.0.1:3900`                                         | `GET http://127.0.0.1:3900/health` |
-| **Cloud Run Worker** | Legacy video stitching, HLS packaging, AVS sync        | Node.js 20 LTS          | `cloudrun-worker/server.js`   | HTTP Port `8080`                                                                 | `GET http://<host>:8080/healthz`   |
-| **Alert Evaluator**  | Background anomaly evaluation and alert dispatch       | Node.js 20 LTS          | `scripts/monitoringAlerts.ts` | Process loop (interval 60s)                                                      | Process liveness / Redis keys      |
-
-> [!IMPORTANT]
-> **Docker Container Port Mapping vs Host Ports:**
-> In the canonical `docker-compose.yml` configuration:
->
-> - AutoFlip and TalkNet run their uvicorn processes on internal container port `8000` and are exposed strictly within the Docker bridge network `marvedge-ml-net` (`http://autoflip:8000`, `http://talknet:8000`). They are **not** published to the host.
-> - ML Gateway listens on internal container port `8000` and publishes `8000:8000` to the host.
-> - Workers on the host connect to `http://localhost:8000` with the `X-Gateway-Token` header.
-> - Standalone host processes running directly under systemd without Docker may bind to separate host ports (e.g., AutoFlip on 8002, TalkNet on 8001), but all containerized deployments use internal port 8000.
+| Service Name               | Primary Responsibility                                 | Runtime / Language      | Entry Point / Executable                                                                                                                                                                    | Network Bind / Queue                                                          | Health Check Mechanism               |
+| :------------------------- | :----------------------------------------------------- | :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------- | :----------------------------------- |
+| **Next.js API**      | Ingestion, validation, job dispatch, status polling    | Node.js 20 (Next.js 15) | `app/api/reframe/route.ts`, `app/api/avs/dub/route.ts`, `app/api/dubbing/create/route.ts`, `app/api/jobs/[id]/route.ts` (representative entry points, not an exhaustive route list) | HTTPS Port 443 / 3000                                                         | `GET /api/monitoring/metrics`      |
+| **Reframe Worker**   | Coordinates reframe execution, downloads, renders      | Node.js 20 LTS          | `reframe-worker/index.ts`                                                                                                                                                                 | BullMQ: `reframe-processing`                                                | BullMQ Redis heartbeat               |
+| **Video Worker**     | Executes dubbing, subtitles, and audio jobs            | Node.js 20 LTS          | `video-worker/index.ts`                                                                                                                                                                   | BullMQ: `dubbing-processing`, `subtitle-processing`, `audio-processing` | BullMQ Redis heartbeat               |
+| **ML API Gateway**   | Authenticates worker calls, routes to AutoFlip/TalkNet | Python 3.10+ (FastAPI)  | `ml-gateway/server.py`                                                                                                                                                                    | HTTP `127.0.0.1:8000`                                                       | `GET http://127.0.0.1:8000/health` |
+| **AutoFlip Service** | Decodes I-frames, runs YuNet ONNX, calculates crop     | Python 3.10+ (FastAPI)  | `autoflip/server.py`                                                                                                                                                                      | HTTP `127.0.0.1:8002`                                                       | `GET http://127.0.0.1:8002/health` |
+| **TalkNet Service**  | S3FD face tracking + TalkNet active speaker scoring    | Python 3.10+ (PyTorch)  | `talknet/server.py`                                                                                                                                                                       | HTTP `127.0.0.1:8001`                                                       | `GET http://127.0.0.1:8001/health` |
+| **VoiceStudio**      | Neural TTS speech synthesis                            | Python 3.11 (FastAPI)   | Container `ghcr.io/...`                                                                                                                                                                   | HTTP `127.0.0.1:3900`                                                       | `GET http://127.0.0.1:3900/health` |
+| **Cloud Run Worker** | Legacy video stitching, HLS packaging, AVS sync        | Node.js 20 LTS          | `cloudrun-worker/server.js`                                                                                                                                                               | HTTP Port 8080                                                                | `GET http://<host>:8080/healthz`   |
+| **Alert Evaluator**  | Background anomaly evaluation and alert dispatch       | Node.js 20 LTS          | `scripts/monitoringAlerts.ts`                                                                                                                                                             | Process loop (interval 60s)                                                   | Process liveness / Redis keys        |
 
 ### 3.2 Queue Lifecycle, Job Names & Retry Policies
 
-Queue definitions are centralized in `app/lib/queue.ts` and consumed across workers:
+Queue definitions are centralized in `app/lib/queue.ts` and consumed across workers.
 
-| Queue Identifier      | BullMQ Job Name                | Max Attempts | Backoff Policy                      | Retention (Complete) | Retention (Failed) | Dead-Letter / Fallback Action                                                  |
-| :-------------------- | :----------------------------- | :----------: | :---------------------------------- | :------------------: | :----------------: | :----------------------------------------------------------------------------- |
-| `reframe-processing`  | `"reframe"`                    |    **3**     | Exponential (base $2000\text{ ms}$) |       100 jobs       |      500 jobs      | Immediate center-crop fallback on terminal failure (`fallback: true`)          |
-| `dubbing-processing`  | `"dubbing"`                    |    **2**     | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs      | Fail closed; persists `FAILED` in `VideoJob`. Dual-guard rejects audio/source. |
-| `dubbing-processing`  | `"avs-dub"`                    |    **2**     | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs      | Degraded-mode completion with source-video fallback (`fallback: true`)         |
-| `subtitle-processing` | `"subtitle-processing"`        |    **3**     | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs      | Fail closed; persists `FAILED` in `VideoJob`                                   |
-| `audio-processing`    | `"trim"`, `"extract-metadata"` |    **3**     | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs      | Fail closed; discard clip updates                                              |
-| `video-processing`    | `"clip-scoring"`               |    **3**     | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs      | Fail closed; persists `FAILED` in `VideoJob`                                   |
+| Queue Identifier        | BullMQ Job Name                    | Max Attempts | Backoff Policy                        | Retention (Complete) | Retention (Failed) | Dead-Letter / Fallback Action                        |
+| :---------------------- | :--------------------------------- | :----------: | :------------------------------------ | :------------------: | :----------------: | :--------------------------------------------------- |
+| `reframe-processing`  | `"reframe"`                      | **3** | Exponential (base $2000\text{ ms}$) |       100 jobs       |      500 jobs      | Immediate center-crop fallback on terminal failure   |
+| `dubbing-processing`  | `"dubbing"`                      | **2** | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs     | Fail closed; record terminal failure in `VideoJob` |
+| `dubbing-processing`  | `"avs-dub"`                      | **2** | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs     | Graceful degradation to original source audio        |
+| `subtitle-processing` | `"subtitle-processing"`          | **3** | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs     | Fail closed; record terminal failure in `VideoJob` |
+| `audio-processing`    | `"trim"`, `"extract-metadata"` | **3** | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs     | Fail closed; discard clip updates                    |
+| `video-processing`    | `"clip-scoring"`                 | **3** | Exponential (base $5000\text{ ms}$) |       200 jobs       |     1000 jobs     | Fail closed                                          |
 
 ### 3.3 Next.js Ingestion & Webhook Endpoints
 
 #### 1. Ingest Reframe Job (`POST /api/reframe`)
 
-> [!NOTE]
-> **Route Resolution:** The canonical reframe ingestion endpoint in Marvedge is `POST /api/reframe` (implemented in [`app/api/reframe/route.ts`](../app/api/reframe/route.ts)). The route `/api/reframe/create` does not exist in the codebase.
-
 - **Headers:** `Content-Type: application/json`, Cookie (NextAuth Session)
-- **Authentication & Authorization:** Requires active NextAuth session (`HTTP 401 Unauthorized`). Resolves user in PostgreSQL by session ID or email (`HTTP 404 User not found`).
 - **Request Schema:**
   ```json
   {
@@ -374,11 +351,10 @@ Queue definitions are centralized in `app/lib/queue.ts` and consumed across work
     }
   }
   ```
-- **Validation Rules & Error Modes:**
-  - `videoUrl`: Mandatory string, verified by `isSafeUrl()` (rejects loopback, AWS metadata, private subnets with `HTTP 400 Invalid video URL`).
+- **Validation Rules:**
+  - `videoUrl`: Mandatory HTTPS/HTTP string, verified by `isSafeUrl()` (rejects loopback, AWS metadata, private subnets).
   - `targetAspectRatio`: Must match `"9:16" | "1:1" | "4:5" | "16:9"` (defaults to `"9:16"`).
-  - `demoId`: Optional string; if provided, verifies project ownership against session user ID (`HTTP 404 Demo not found`).
-  - Missing/malformed JSON returns `HTTP 400 Invalid JSON body`.
+  - `demoId`: Optional string; if provided, verifies project ownership against session user ID.
 - **Response (`HTTP 200 OK`):**
   ```json
   {
@@ -387,15 +363,10 @@ Queue definitions are centralized in `app/lib/queue.ts` and consumed across work
     "status": "pending"
   }
   ```
-- **Queue Action:** Enqueues job `"reframe"` into BullMQ queue (named via `REFRAME_QUEUE_NAME` or `"reframe-processing"`).
 
 #### 2. Ingest Dubbing Job (`POST /api/dubbing/create`)
 
 - **Headers:** `Content-Type: application/json`, Cookie (NextAuth Session)
-- **Authentication & Authorization:** Requires active NextAuth session (`HTTP 401`). Resolves user in PostgreSQL (`HTTP 404`).
-- **Plan Gate:** Enforced via `isAvsAllowed(user.plan)`: Free plan users rejected with `HTTP 403` (`"Dubbing is available on PRO and ENTERPRISE plans"`).
-- **Rate Limit:** Capped at 5 requests/hour/user via Redis sliding window (`HTTP 429 Too many dubbing requests. Please try again shortly.`).
-- **Body Ceiling:** Request body size strictly capped at $8\text{ KB}$ (`HTTP 413 Request body too large`).
 - **Request Schema:**
   ```json
   {
@@ -403,116 +374,29 @@ Queue definitions are centralized in `app/lib/queue.ts` and consumed across work
     "targetLanguage": "es"
   }
   ```
-- **Validation Rules & Error Modes:**
-  - `sourceUrl`: Mandatory string, must be valid HTTP/HTTPS URL (`HTTP 400`), validated by `isSafeUrl()` (`HTTP 400 Unsafe sourceUrl`).
-  - `targetLanguage`: Mandatory ISO language code string matching `/^[a-z]{2,5}$/` (`HTTP 400 Invalid targetLanguage`).
+- **Validation Rules:**
+  - Gated by `isAvsAllowed(user.plan)`: Rejects Free plan users with `HTTP 403`.
+  - Rate limited to 5 requests/hour/user via Redis sliding window (`HTTP 429`).
+  - Request body size strictly capped at $8\text{ KB}$ (`HTTP 413` if exceeded).
+  - `targetLanguage`: ISO language code string (`/^[a-z]{2,5}$/`).
 - **Response (`HTTP 200 OK`):**
   ```json
   {
     "success": true,
     "jobId": "cm3dub1234567890abcdef",
-    "targetLanguage": "es"
+    "status": "pending"
   }
   ```
-- **Queue Action:** Enqueues job `"dubbing"` into `dubbingQueue` (`"dubbing-processing"`).
 
-#### 3. Ingest AVS Dub Alignment Job (`POST /api/avs/dub`)
-
-- **Feature Flag:** Gated by `isAvsEnabled()`: Returns `HTTP 404 Not found` if disabled.
-- **Headers:** `Content-Type: application/json`, Cookie (NextAuth Session)
-- **Authentication & Authorization:** Requires active NextAuth session (`HTTP 401`). Plan gated via `isAvsAllowed(user.plan)` (`HTTP 403`).
-- **Request Schema:**
-  ```json
-  {
-    "videoUrl": "https://res.cloudinary.com/marvedge/video/upload/source.mp4",
-    "dubUrl": "https://res.cloudinary.com/marvedge/video/upload/dub.wav",
-    "steps": [{ "id": "step-1", "startTime": 0.0, "endTime": 5.2 }],
-    "dubTimings": [{ "stepId": "step-1", "start": 0.0, "end": 4.9 }],
-    "duration": 15.0,
-    "demoId": "cmu123abc456"
-  }
-  ```
-- **Validation Rules & Error Modes:**
-  - `videoUrl`: Mandatory string, normalized from `gs://` if needed, validated by `isSafeUrl()` (`HTTP 400`).
-  - `dubUrl`: Optional string, validated by `isSafeUrl()` (`HTTP 400`).
-  - `steps`: Parsed into `{ id, index?, startTime, endTime }` entries where `endTime > startTime`.
-  - `dubTimings`: Parsed into `{ stepId, start, end }` entries where `end > start`.
-  - `duration`: Optional number (defaults to `0`).
-  - `demoId`: Optional string; verified against user ownership (`HTTP 404 Demo not found`).
-- **Response (`HTTP 200 OK`):**
-  ```json
-  {
-    "success": true,
-    "jobId": "cm3avsdub123456789"
-  }
-  ```
-- **Queue Action:** Enqueues job `"avs-dub"` into `dubbingQueue` (`"dubbing-processing"`).
-
-#### 4. Ingest Subtitle Job (`POST /api/subtitles/create`)
-
-- **Headers:** `Content-Type: application/json`, and EITHER `Authorization: Bearer <CALLBACK_SECRET>` (worker authentication) OR Cookie (NextAuth Session).
-- **Authentication & Authorization:** Worker secret matched via constant-time comparison (`timingSafeEqual`); otherwise requires NextAuth session (`HTTP 401 Unauthorized`).
-- **Rate Limit:** For non-worker users, capped at 10 requests / 10 minutes via Redis (`HTTP 429 Too many subtitle requests. Please try again shortly.`).
-- **Request Schema:**
-  ```json
-  {
-    "videoUrl": "https://res.cloudinary.com/marvedge/video/upload/source.mp4",
-    "language": "es",
-    "durationSeconds": 60.0,
-    "demoId": "cmu123abc456",
-    "sync": false
-  }
-  ```
-- **Validation Rules & Error Modes:**
-  - `videoUrl`: Mandatory string, validated by `isSafeUrl()` (`HTTP 400 Unsafe videoUrl`).
-  - `language`: Validated via `isSttOffered()` (`HTTP 400` with list prompt if unsupported; missing code defaults to auto-detect `"multi"`).
-  - `durationSeconds`: Validated via `validateSubtitleDuration()` (`HTTP 400` if exceeding ceiling).
-  - `demoId`: Optional string; verified against user ownership (`HTTP 404 Demo not found`).
-- **Response (`HTTP 200 OK`):**
-  - **Asynchronous Default (`sync: false`):**
-    ```json
-    {
-      "success": true,
-      "status": "processing",
-      "jobId": "cm3sub123456789",
-      "captionUrl": "/api/subtitles/file/cm3sub123456789",
-      "language": "es"
-    }
-    ```
-    _(Dispatches transcription in background via Next.js `after()`)._
-  - **Synchronous Mode (`sync: true`):**
-    ```json
-    {
-      "success": true,
-      "status": "completed",
-      "jobId": "cm3sub123456789",
-      "captionUrl": "/api/subtitles/file/cm3sub123456789",
-      "language": "es"
-    }
-    ```
-
-#### 5. Worker Webhook Callback Endpoint (`POST /api/jobs/callback`)
+#### 3. Worker Callback Endpoint (`POST /api/jobs/callback`)
 
 - **Headers:** `Content-Type: application/json`, `Authorization: Bearer <CALLBACK_SECRET>`
-- **Authentication & Error Modes:**
-  - `CALLBACK_SECRET` not set on server: Returns `HTTP 503 Service unavailable`.
-  - Missing/invalid Bearer token: Evaluated via constant-time `timingSafeEqual()`; returns `HTTP 401 Unauthorized`. (Does **not** inspect `X-Callback-Secret`).
-  - Non-existent `jobId`: Returns `HTTP 404 Job not found`.
-  - Missing/invalid `status` (must be `"PROCESSING" | "COMPLETED" | "FAILED"`): Returns `HTTP 400 Invalid status`.
-- **Terminal State Protection:** If target `VideoJob` is already `"COMPLETED"` or `"CANCELLED"`, ignores update and returns:
-  ```json
-  {
-    "success": true,
-    "ignored": true,
-    "message": "Job cm3... is already in a terminal state"
-  }
-  ```
 - **Request Schema (`COMPLETED`):**
   ```json
   {
     "jobId": "cm3a1b2c3d4e5f6g7h8i9j0k",
     "status": "COMPLETED",
-    "exportedUrl": "https://res.cloudinary.com/marvedge/video/upload/reframed.mp4",
+    "exportedUrl": "https://res.cloudinary.com/marvedge/video/upload/v12345/reframed_exports/cmu_out.mp4",
     "cropTargets": {
       "schema_version": 1,
       "source": { "width": 1920, "height": 1080 },
@@ -532,79 +416,37 @@ Queue definitions are centralized in `app/lib/queue.ts` and consumed across work
   {
     "jobId": "cm3a1b2c3d4e5f6g7h8i9j0k",
     "status": "FAILED",
-    "error": "AVS alignment completed without returning a valid aligned video URL"
+    "error": "AutoFlip binary execution timed out after 150 seconds"
   }
   ```
 - **Response (`HTTP 200 OK`):**
   ```json
   {
-    "success": true
+    "received": true,
+    "jobId": "cm3a1b2c3d4e5f6g7h8i9j0k",
+    "status": "COMPLETED"
   }
-  ```
-
-#### 6. Job Status Polling Endpoint (`GET /api/jobs/[id]`)
-
-- **Headers:** Cookie (NextAuth Session)
-- **Authentication & Error Modes:**
-  - Session absent: Returns `HTTP 401 Unauthorized`.
-  - Job ID malformed (length $>200$ or non-alphanumeric): Returns `HTTP 400 Invalid job id`.
-  - Job ID not in database: Returns `HTTP 404 Job not found`.
-  - Job ownership mismatch (`job.userId !== session.user.id`): Returns `HTTP 403 Forbidden`.
-- **Response (`HTTP 200 OK`):**
-
-  ```json
-  {
-    "success": true,
-    "id": "cm3a1b2c3d4e5f6g7h8i9j0k",
-    "state": "completed",
-    "status": "completed",
-    "progress": 100,
-    "exportedUrl": "https://res.cloudinary.com/marvedge/video/upload/reframed.mp4",
-    "captionUrl": null,
-    "score": null,
-    "error": null,
-    "subtitles": null,
-    "jobData": { "kind": "REFRAME", "targetAspectRatio": "9:16" },
-    "cropTargets": { "schema_version": 1, "crop_targets": [...] }
-  }
-  ```
-
-  - `state`: Closed public state mapping from database status: `"waiting"` (PENDING), `"active"` (PROCESSING), `"completed"` (COMPLETED), `"failed"` (FAILED), `"cancelled"` (CANCELLED), or `"unknown"`.
-  - `status`: Direct alias for `state` preserving backward-compatible client polling.
-  - `aligned`: Object `{ alignedVideoUrl: string | null, duration: number | null }` (present only when `kind` is `"AVS_SYNC"` or `"AVS_DUB"`).
-  - `cropTargets`: Object (present only when `kind` is `"REFRAME"`).
-  - `fallback`, `fallbackStage`, `fallbackReason`, `attemptsMade`: Included conditionally when populated in `jobData`.
-
-  ```
-
   ```
 
 ### 3.4 ML Gateway Internal Contracts (`ml-gateway`)
 
-The ML Gateway is a FastAPI application. In containerized environments, it publishes port 8000 to the host and authenticates via `X-Gateway-Token: <ML_GATEWAY_TOKEN>`.
+The ML Gateway is a FastAPI application running on loopback (`127.0.0.1:8000`). All endpoints validate the shared secret `x-gateway-token: <ML_GATEWAY_TOKEN>` if configured in production.
 
 #### 1. Liveness & Health Probe (`GET /health`)
 
-- **Authentication:** Unauthenticated.
-- **Execution:** Checks `http://autoflip:8000/health` and `http://talknet:8000/health`. Returns HTTP 200 if AutoFlip is healthy (even if TalkNet is degraded); returns HTTP 503 only if AutoFlip fails.
 - **Response (`HTTP 200 OK`):**
   ```json
   {
     "status": "ok",
     "services": {
-      "autoflip": "healthy",
-      "talknet": "healthy"
-    },
-    "ready": {
-      "reframe": true,
-      "talknet": true
+      "autoflip": { "status": "ok", "url": "http://127.0.0.1:8002" },
+      "talknet": { "status": "ok", "url": "http://127.0.0.1:8001" }
     }
   }
   ```
 
-#### 2. Reframe Proxy (`POST /reframe`)
+#### 2. Reframe Execution (`POST /reframe`)
 
-- **Authentication:** Requires `X-Gateway-Token`.
 - **Payload (`ReframeRequest`):**
   ```json
   {
@@ -613,13 +455,12 @@ The ML Gateway is a FastAPI application. In containerized environments, it publi
     "source": { "width": 1920, "height": 1080, "fps": 30.0 }
   }
   ```
-- **Execution:** Proxies request directly to AutoFlip (`POST http://autoflip:8000/reframe`).
+- **Execution:** Proxies request directly to AutoFlip service on port 8002 (`POST http://127.0.0.1:8002/reframe`).
 - **Response (`HTTP 200 OK`):** Returns canonical `CropTargetData` envelope.
 
 #### 3. Active Speaker Proxy (`POST /talknet`)
 
-- **Authentication:** Requires `X-Gateway-Token`.
-- **Payload (`DetectRequest`):**
+- **Payload:**
   ```json
   {
     "videoUrl": "https://res.cloudinary.com/marvedge/video/upload/source.mp4",
@@ -627,24 +468,24 @@ The ML Gateway is a FastAPI application. In containerized environments, it publi
     "confidenceThreshold": 0.0
   }
   ```
-- **Execution:** Proxies request directly to TalkNet (`POST http://talknet:8000/detect`).
-- **Response (`HTTP 200 OK`):** Returns detected face tracks with active speaking confidence scores.
+- **Execution:** Proxies request directly to TalkNet service on port 8001 (`POST http://127.0.0.1:8001/detect`).
 
 #### 4. Combined Crop Fusion (`POST /reframe-combined`)
 
-- **Authentication:** Requires `X-Gateway-Token`.
 - **Execution:** Concurrently dispatches requests to AutoFlip and TalkNet via `asyncio.gather`. Fuses visual crop boxes with active speaker bounding boxes using `crop_fusion.py`. If TalkNet fails or finds zero active speakers, gracefully falls back to AutoFlip crop coordinates.
 
 ### 3.5 AutoFlip Crop Target Contract (`autoflip`)
 
-- **Internal Endpoint:** `POST http://autoflip:8000/reframe`
+- **Endpoint:** `POST http://127.0.0.1:8002/reframe`
 - **Output Schema (`CropTargetData` - Schema Version 1):**
   ```json
   {
     "schema_version": 1,
     "source": {
       "width": 1920,
-      "height": 1080
+      "height": 1080,
+      "fps": 30.0,
+      "duration_sec": 15.2
     },
     "output": {
       "aspect_ratio": "9:16",
@@ -660,275 +501,220 @@ The ML Gateway is a FastAPI application. In containerized environments, it publi
           "width": 608,
           "height": 1080
         },
-        "confidence": 0.95
+        "confidence": 0.98
+      },
+      {
+        "timestamp_sec": 0.5,
+        "crop": {
+          "x": 660,
+          "y": 0,
+          "width": 608,
+          "height": 1080
+        },
+        "confidence": 0.96
       }
     ]
   }
   ```
+- **Client Validation:** Enforced via `validateCropTargetData()` in `app/types/editor/crop-target.ts`. Rejects negative coordinates, crops exceeding source bounds, or non-finite numbers before invoking FFmpeg.
 
 ### 3.6 TalkNet Active Speaker Detection Contract (`talknet`)
 
-- **Internal Endpoint:** `POST http://talknet:8000/detect`
-- **Output Schema:**
+- **Endpoint:** `POST http://127.0.0.1:8001/detect`
+- **Response Schema:**
   ```json
   {
     "ok": true,
-    "durationSec": 15.2,
+    "video_url": "https://res.cloudinary.com/.../source.mp4",
     "speakers": [
       {
-        "trackId": 0,
-        "activeFrames": 120,
-        "meanConfidence": 0.82,
-        "segments": [{ "startSec": 1.2, "endSec": 5.4, "confidence": 0.88 }],
-        "boundingBoxes": [
-          { "timestampSec": 1.2, "box": { "x": 420, "y": 180, "width": 240, "height": 300 } }
-        ]
+        "track_id": 1,
+        "score": 0.84,
+        "speaking": true,
+        "segments": [{ "start_sec": 1.2, "end_sec": 4.8 }],
+        "bbox": { "x": 450, "y": 180, "width": 240, "height": 300 }
       }
     ]
   }
   ```
 
-### 3.7 Dubbing Provider Abstraction & VoiceStudio Service Contract
+### 3.7 Dubbing Provider Abstraction (ElevenLabs & VoiceStudio)
 
-The dubbing subsystem (`video-worker/index.ts`, `app/lib/voicestudio/`, `app/lib/elevenlabs/`) provides dual-provider abstraction governed by `DUBBING_PROVIDER`:
+The pipeline abstracts speech synthesis across commercial SaaS and self-hosted open models:
 
-1. **ElevenLabs Commercial Provider (`elevenlabs`):**
-   - Dispatches audio/video to ElevenLabs Dubbing API (`https://api.elevenlabs.io/v1/dubbing`).
-   - Polls completion status, downloads dubbed audio, and packages output.
-2. **VoiceStudio In-House Neural Provider (`voicestudio`):**
-   - Synthesizes timed script steps via `VoiceStudioDubbingAdapter.synthesizeTimedSteps()`.
-   - Dispatches step-timed voiceovers to AVS alignment via `processDubbingJob`.
-   - **Task-00132 Implementation & Verification Status:**
-     - **Merged into Master (`origin/master`):** PR #565 merged the base `VoiceStudioDubbingAdapter` into the BullMQ dubbing worker (`video-worker/index.ts`).
-     - **Implemented on Feature Branch (Unmerged):** The dual-layer false-success guards and failure classification reside on branch `task/task-00132-voicestudio-remediation` (PR #578, unmerged).
-     - **Covered by Automated Tests:** Automated unit tests in [`video-worker/dubbingWorker.test.ts`](../video-worker/dubbingWorker.test.ts) verify rejection of audio-only outputs (`finalExportedUrl === audioUrl`), rejection of unchanged source fallbacks (`finalExportedUrl === sourceUrl`), and invalid export URLs, throwing typed non-retryable `VoiceStudioError("INFERENCE_FAILED")`.
-     - **End-to-End AVS Dubbing Verification:** **UNVERIFIED / BLOCKED**. Full audiovisual synchronization on real video remains unverified due to the source/dub dialogue semantic mismatch in reference test assets (`clip1.mp4` dialogue does not match the product-demo Spanish/French audio tracks).
+```typescript
+export interface DubbingProviderAdapter {
+  createDub(request: DubbingCreateRequest): Promise<DubbingCreateResponse>;
+  pollStatus(dubbingId: string): Promise<DubbingStatusResponse>;
+  getAudioStream(dubbingId: string, language: string): Promise<ReadableStream | Buffer>;
+}
+```
 
-#### VoiceStudio Container HTTP API Contract (`127.0.0.1:3900`)
+#### 1. ElevenLabs Provider (`app/lib/elevenlabs/dubbing.ts`)
 
-The VoiceStudio container (`docker-compose.voicestudio.yml`) exposes an OpenAI-compatible FastAPI interface on host loopback port 3900:
+- **API Call:** `POST https://api.elevenlabs.io/v1/dubbing`
+- **Headers:** `xi-api-key: <ELEVENLABS_API_KEY>`
+- **Polling:** `GET https://api.elevenlabs.io/v1/dubbing/{dubbing_id}`
+- **Audio Retrieval:** `GET https://api.elevenlabs.io/v1/dubbing/{dubbing_id}/audio/{language_code}`
+- **Usage Reporting:** Tracks `characters_used` and audio duration; records to Redis cost window metrics.
 
-1. **Speech Generation (`POST /v1/audio/speech`):**
-   - **Headers:** `Content-Type: application/json`, `Authorization: Bearer <VOICESTUDIO_API_KEY>`, `Accept: application/json, audio/*`
-   - **Request Schema:**
-     ```json
-     {
-       "model": "omnivoice",
-       "input": "Bienvenidos a todos a esta demostración de producto.",
-       "voice": "alloy",
-       "response_format": "wav",
-       "speed": 1.0
-     }
-     ```
-   - **Response (`HTTP 200 OK`):** Binary audio stream (`Content-Type: audio/wav`, $24\text{ kHz}$, 16-bit PCM mono).
-   - **Error Modes:** `HTTP 401 Unauthorized` if API key is invalid; `HTTP 503 Service Unavailable` with `Retry-After` header during initial weight initialization.
-2. **Liveness & Readiness Probe (`GET /health`):**
-   - **Authentication:** Bearer token (if configured).
-   - **Response (`HTTP 200 OK` when ready; `HTTP 503` when starting):**
-     ```json
-     {
-       "status": "ready",
-       "device": "cuda",
-       "version": "0.5.6",
-       "step": "ready",
-       "label": "Ready"
-     }
-     ```
-3. **Explicit Model Weight Pre-Caching (`POST /models/install`):**
-   - **Request:** `{ "repo_id": "k2-fsa/OmniVoice" }`
-   - **Response (`HTTP 200 OK`):** Downloads and caches model weights into `/app/omnivoice_data` to prevent first-request cold-start inference timeouts.
+#### 2. VoiceStudio Provider (`app/lib/voicestudio/dubbingAdapter.ts`)
+
+- **API Call:** `POST http://127.0.0.1:3900/v1/audio/speech`
+- **Headers:** `Authorization: Bearer <VOICESTUDIO_API_KEY>`, `Content-Type: application/json`
+- **Payload (`SpeechRequest`):**
+  ```json
+  {
+    "model": "omnivoice",
+    "input": "Transcript text segment to synthesize...",
+    "voice": "alloy",
+    "response_format": "wav",
+    "speed": 1.0,
+    "duration": 5.2,
+    "num_step": 16,
+    "language": "en"
+  }
+  ```
+- **Output:** Raw binary audio stream (`audio/wav`) validated by RIFF header inspection (`validateAudioStream`).
+- **Fail-Safe Behavior:** If VoiceStudio is unavailable, fails closed (`VOICESTUDIO_UNAVAILABLE`). Does **not** fall back to paid ElevenLabs unless `VOICESTUDIO_FALLBACK_TO_PAID="true"` is explicitly set.
 
 ### 3.8 Cloud Run Worker API (`cloudrun-worker`)
 
-The standalone Node.js service (`cloudrun-worker/server.js`) exposes the following endpoints (authenticated with `X-Worker-Secret: <WORKER_SECRET>`):
+Legacy containerized service deployed on Google Cloud Run for specialized audio-video alignment and HLS video packaging.
 
-- `GET /healthz`: Service liveness check.
-- `POST /process`: Renders video chunks from recipe JSON.
-- `POST /subtitles`: Performs Deepgram Nova-2 transcription and subtitle generation.
-- `POST /avs-voiceover`: Synthesizes Deepgram Aura TTS voiceover audio.
-- `POST /avs-sync`: Time-aligns video segments to generated voiceover.
-- `POST /avs-dub`: Time-aligns source video to dubbed target audio.
-- `POST /wtm-composite`: Composites webcam circular overlay bubbles onto screen recording video.
-- `POST /package-hls`: Encodes multi-bitrate HLS ladder (1080p, 720p, 480p) and uploads `.m3u8` and `.ts` chunks to R2/S3.
-- `POST /merge`: Concat-merges rendered video chunks into final delivery MP4.
+- **`GET /healthz`:** Returns `HTTP 200 { "status": "ok" }`.
+- **`POST /avs-sync`:** Time-aligns audio clips to video steps; returns `{ alignedVideoUrl: "...", duration: 45.2 }`.
+- **`POST /avs-dub`:** Composites dubbed audio with ducked source audio and applies watermarks.
+- **`POST /subtitles`:** Transcribes audio using Deepgram Nova-2 and formats timestamped cue structures.
+- **`POST /package-hls`:** Transcodes source video into multi-bitrate HLS streams (`.m3u8` playlist and `.ts` segments) delivered to Cloudflare R2.
 
 ---
 
 ## 4. Environment Variable Reference
 
-This reference documents the complete operational configuration across Marvedge V3, reconciled from TypeScript, Python, Docker Compose, systemd unit files, and `.env.example`.
-
-> [!NOTE]
-> **Environment Inventory Reconciliation:**
-> An automated scan across all repository files identifies **185 unique environment variable names**:
->
-> - **Active Application & Operational Variables:** ~168 variables across TypeScript (`process.env`), Python (`os.environ` / `os.getenv`), Docker Compose, systemd unit files, and `.env.example`.
-> - **Internal Tooling & Runtime Flags:** 17 internal variables reserved for build tools, test runners, and runtime engines (e.g. `PRISMA_QUERY_ENGINE_*`, `DOTENV_*`, `CI`, `PYTHONUNBUFFERED`).
-> - **`.env.example` Formally Documented:** 112 baseline configuration variables.
->   All application defaults documented below reflect the actual runtime defaults defined in code, which take precedence over template suggestions.
+This reference documents the complete operational configuration across Marvedge V3. Variables are categorized into ten functional domains.
 
 ### 4.1 Application & Database
 
-| Variable Name          | Purpose                             | Required / Optional | Consuming Service         | Default Value           | Secret  | Configuration Notes                                                             |
-| :--------------------- | :---------------------------------- | :------------------ | :------------------------ | :---------------------- | :-----: | :------------------------------------------------------------------------------ |
-| `NODE_ENV`             | Sets execution runtime mode         | Required            | All services              | `development`           |   No    | `production` enables strict security checks.                                    |
-| `DATABASE_URL`         | PostgreSQL pooled connection string | Required            | Next.js API, Video Worker | None                    | **Yes** | Neon transaction-pooled URL (`-pooler`), requires `sslmode=require`.            |
-| `DIRECT_URL`           | PostgreSQL direct compute string    | Required            | Prisma CLI, Migrations    | None                    | **Yes** | Neon direct compute URL (non-pooler), requires `sslmode=require`. Used for DDL. |
-| `NEXTAUTH_URL`         | Canonical origin URL for NextAuth   | Required            | Next.js API               | `http://localhost:3000` |   No    | Must match production domain (e.g., `https://marvedge.com`).                    |
-| `NEXTAUTH_SECRET`      | Key used to encrypt session cookies | Required            | Next.js API               | None                    | **Yes** | Random 32+ byte string generated via `openssl rand -hex 32`.                    |
-| `NEXT_PUBLIC_APP_URL`  | Client-accessible base URL          | Required            | Web Client                | `http://localhost:3000` |   No    | Exposed to browser for constructing absolute share links.                       |
-| `GOOGLE_CLIENT_ID`     | Google OAuth Client ID              | Optional            | Next.js API               | None                    |   No    | Used for Google Social Login.                                                   |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret          | Optional            | Next.js API               | None                    | **Yes** | Guarded in secrets manager; never expose to client.                             |
+| Variable Name            | Purpose                             | Required / Optional | Consuming Service         | Default Value             |    Secret    | Configuration Notes                                               |
+| :----------------------- | :---------------------------------- | :------------------ | :------------------------ | :------------------------ | :-----------: | :---------------------------------------------------------------- |
+| `NODE_ENV`             | Sets execution runtime mode         | Required            | All services              | `development`           |      No      | `production` enables strict security checks.                    |
+| `DATABASE_URL`         | PostgreSQL connection string        | Required            | Next.js API, Video Worker | None                      | **Yes** | AWS RDS PostgreSQL 16 connection string with `sslmode=require`. |
+| `NEXTAUTH_URL`         | Canonical origin URL for NextAuth   | Required            | Next.js API               | `http://localhost:3000` |      No      | Must match production domain (e.g., `https://marvedge.com`).    |
+| `NEXTAUTH_SECRET`      | Key used to encrypt session cookies | Required            | Next.js API               | None                      | **Yes** | Random 32+ byte string generated via `openssl rand -hex 32`.    |
+| `NEXT_PUBLIC_APP_URL`  | Client-accessible base URL          | Required            | Web Client                | `http://localhost:3000` |      No      | Exposed to browser for constructing absolute share links.         |
+| `GOOGLE_CLIENT_ID`     | Google OAuth Client ID              | Optional            | Next.js API               | None                      |      No      | Used for Google Social Login.                                     |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret          | Optional            | Next.js API               | None                      | **Yes** | Guarded in secrets manager; never expose to client.               |
 
 ### 4.2 Redis & BullMQ Infrastructure
 
-| Variable Name                         | Purpose                                | Required / Optional | Consuming Service         | Default Value            | Secret  | Configuration Notes                                                                                                                                      |
-| :------------------------------------ | :------------------------------------- | :------------------ | :------------------------ | :----------------------- | :-----: | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `REDIS_URL`                           | Native Redis TCP connection URL        | Required            | API, Workers, Evaluator   | `redis://localhost:6379` | **Yes** | Native Redis TCP/TLS URL (`rediss://...` for TLS). Application code strictly requires native Redis TCP; production rejects loopback targets. Specific managed provider (e.g. Upstash vs. ElastiCache) is configured at deployment and unverified from repo alone. |
-| `REFRAME_QUEUE_NAME`                  | BullMQ queue identifier override       | Optional            | API, Reframe Worker       | `reframe-processing`     |   No    | Overrides queue name for isolated benchmarking or sharding.                                                                                              |
-| `ALLOW_LOCALHOST_REDIS_IN_PRODUCTION` | Bypasses localhost Redis check in prod | Optional            | Reframe Worker, Evaluator | `false`                  |   No    | Must remain `false` in production. Only for local Docker integration testing.                                                                            |
+| Variable Name                           | Purpose                                | Required / Optional | Consuming Service         | Default Value |    Secret    | Configuration Notes                                                             |
+| :-------------------------------------- | :------------------------------------- | :------------------ | :------------------------ | :------------ | :-----------: | :------------------------------------------------------------------------------ |
+| `REDIS_URL`                           | Redis connection URL                   | Required            | API, Workers, Evaluator   | None          | **Yes** | `rediss://...` for TLS (ElastiCache / Upstash). Production rejects localhost. |
+| `ALLOW_LOCALHOST_REDIS_IN_PRODUCTION` | Bypasses localhost Redis check in prod | Optional            | Reframe Worker, Evaluator | `false`     |      No      | Must remain `false` in production. Only for local Docker integration testing. |
 
-> [!IMPORTANT]
-> **No Upstash REST SDK Dependency:**
-> Marvedge does not install or use `@upstash/redis` (the HTTP/REST SDK). All queue dispatch (BullMQ) and application rate limiting (`app/lib/audio/rateLimit.ts`) execute over native Redis TCP via `ioredis` on `REDIS_URL`. Variables such as `UPSTASH_REDIS_REST_URL` or `UPSTASH_REDIS_REST_TOKEN` are not active in runtime code.
+### 4.3 ML Gateway & Worker Execution
 
-### 4.3 Worker Concurrency Limits
+| Variable Name                  | Purpose                                   | Required / Optional | Consuming Service       | Default Value                 |    Secret    | Configuration Notes                                                              |
+| :----------------------------- | :---------------------------------------- | :------------------ | :---------------------- | :---------------------------- | :-----------: | :------------------------------------------------------------------------------- |
+| `BACKEND_URL`                | Application root for worker callbacks     | Required            | Reframe / Video Workers | `http://localhost:3000`     |      No      | Target URL where `/api/jobs/callback` is hosted.                               |
+| `CALLBACK_SECRET`            | HMAC bearer secret for worker callbacks   | Required            | API, Workers            | None                          | **Yes** | Shared secret verifying worker authenticity. Production fails closed if missing. |
+| `REFRAME_ML_SERVICE_URL`     | Endpoint of the ML Gateway                | Required            | Reframe Worker          | `http://127.0.0.1:8000`     |      No      | Worker connects to Gateway on host loopback.                                     |
+| `REFRAME_ML_TIMEOUT_MS`      | ML inference timeout in milliseconds      | Optional            | Reframe Worker          | `180000` ($3\text{ min}$) |      No      | Bounded request timeout preventing stalled jobs.                                 |
+| `ML_GATEWAY_TOKEN`           | Shared secret header for ML Gateway       | Optional            | Worker, ML Gateway      | None                          | **Yes** | Passed via `x-gateway-token`. Required in production to secure gateway.        |
+| `ML_GATEWAY_ALLOW_INSECURE`  | Allows unauthenticated gateway calls      | Optional            | ML Gateway              | `false`                     |      No      | Development only. Fails closed in production if token is absent.                 |
+| `REFRAME_WORKER_CONCURRENCY` | Maximum concurrent jobs in Reframe Worker | Optional            | Reframe Worker          | `1`                         |      No      | Strict concurrency guardrail to prevent GPU VRAM exhaustion.                     |
+| `WORKER_CONCURRENCY`         | Maximum concurrent jobs in Video Worker   | Optional            | Video Worker            | `1`                         |      No      | Controls concurrency for video rendering and AVS dubbing.                        |
+| `AUDIO_WORKER_CONCURRENCY`   | Concurrency for audio metadata & trim     | Optional            | Video Worker            | `1`                         |      No      | Lightweight CPU tasks; can scale to 2–4 on multi-core hosts.                    |
 
-| Variable Name                 | Purpose                                   | Required / Optional | Consuming Service | Default Value | Secret | Configuration Notes                                                      |
-| :---------------------------- | :---------------------------------------- | :------------------ | :---------------- | :------------ | :----: | :----------------------------------------------------------------------- |
-| `REFRAME_WORKER_CONCURRENCY`  | Maximum concurrent jobs in Reframe Worker | Optional            | Reframe Worker    | `1`           |   No   | Strict concurrency limit to prevent GPU VRAM exhaustion on Tesla T4.     |
-| `WORKER_CONCURRENCY`          | Concurrency for video-processing queue    | Optional            | Video Worker      | `1`           |   No   | Controls concurrent FFmpeg video encoding jobs.                          |
-| `SUBTITLE_WORKER_CONCURRENCY` | Concurrency for subtitle-processing queue | Optional            | Video Worker      | `1`           |   No   | Audio demuxing + Deepgram API calls. Scales safely to 2-4 on multi-core. |
-| `AUDIO_WORKER_CONCURRENCY`    | Concurrency for audio metadata & trim     | Optional            | Video Worker      | `1`           |   No   | Lightweight CPU tasks; can scale to 2–4 on multi-core hosts.             |
+### 4.4 AutoFlip & TalkNet Pipeline
 
-### 4.4 ML Gateway & Worker Execution
+| Variable Name             | Purpose                                      | Required / Optional | Consuming Service | Default Value                                            | Secret | Configuration Notes                                        |
+| :------------------------ | :------------------------------------------- | :------------------ | :---------------- | :------------------------------------------------------- | :----: | :--------------------------------------------------------- |
+| `AUTOFILP_SERVICE_URL`  | Downstream URL for AutoFlip microservice     | Optional            | ML Gateway        | `http://127.0.0.1:8002`                                |   No   | Gateway proxies `/reframe` calls to this address.        |
+| `TALKNET_SERVICE_URL`   | Downstream URL for TalkNet microservice      | Optional            | ML Gateway        | `http://127.0.0.1:8001`                                |   No   | Gateway proxies `/talknet` calls to this address.        |
+| `AUTOFILP_BINARY_PATH`  | Path to compiled AutoFlip C++ binary         | Optional            | AutoFlip Service  | `/usr/local/bin/run_autoflip_to_json`                  |   No   | Standard location on GPU deployment host.                  |
+| `AUTOFILP_GRAPH_PATH`   | Path to AutoFlip headless pbtxt graph        | Optional            | AutoFlip Service  | `/mediapipe/.../autoflip_headless_graph.pbtxt`         |   No   | Configures face detection & trajectory smoothing.          |
+| `AUTOFILP_TIMEOUT_SEC`  | AutoFlip sub-process timeout in seconds      | Optional            | AutoFlip Service  | `150`                                                  |   No   | Terminated via `SIGKILL` if execution exceeds threshold. |
+| `TALKNET_S3FD_WEIGHTS`  | Path to S3FD PyTorch face detector weights   | Optional            | TalkNet Service   | `/opt/marvedge/talknet/weights/sfd_face.pth`           |   No   | Checked during preflight gate.                             |
+| `TALKNET_MODEL_WEIGHTS` | Path to TalkNet active speaker model weights | Optional            | TalkNet Service   | `/opt/marvedge/talknet/weights/pretrain_TalkSet.model` |   No   | Checked during preflight gate.                             |
+| `TALKNET_TIMEOUT_SEC`   | TalkNet inference timeout in seconds         | Optional            | TalkNet Service   | `150`                                                  |   No   | Bounded execution for speaker track scoring.               |
 
-| Variable Name                     | Purpose                                   | Required / Optional | Consuming Service       | Default Value             | Secret  | Configuration Notes                                                              |
-| :-------------------------------- | :---------------------------------------- | :------------------ | :---------------------- | :------------------------ | :-----: | :------------------------------------------------------------------------------- |
-| `BACKEND_URL`                     | Application root for worker callbacks     | Required            | Reframe / Video Workers | `http://localhost:3000`   |   No    | Target URL where `/api/jobs/callback` is hosted.                                 |
-| `CALLBACK_SECRET`                 | HMAC bearer secret for worker callbacks   | Required            | API, Workers            | None                      | **Yes** | Shared secret verifying worker authenticity. Production fails closed if missing. |
-| `REFRAME_ML_SERVICE_URL`          | Endpoint of the ML Gateway                | Required            | Reframe Worker          | `http://localhost:8000`   |   No    | Worker connects to Gateway published host port 8000.                             |
-| `REFRAME_ML_TIMEOUT_MS`           | ML inference timeout in milliseconds      | Optional            | Reframe Worker          | `180000` ($3\text{ min}$) |   No    | Bounded request timeout preventing stalled jobs.                                 |
-| `ML_GATEWAY_TOKEN`                | Shared secret header for ML Gateway       | Optional (Prod Req) | Worker, ML Gateway      | None                      | **Yes** | Passed via `x-gateway-token`. Required in production to secure gateway.          |
-| `ML_GATEWAY_ALLOW_INSECURE`       | Allows unauthenticated gateway calls      | Optional            | ML Gateway              | `false`                   |   No    | Development only. Fails closed in production if token is absent.                 |
-| `GATEWAY_TIMEOUT_SEC`             | Downstream gateway timeout in seconds     | Optional            | ML Gateway              | `180.0`                   |   No    | Timeout for proxying requests to AutoFlip or TalkNet.                            |
-| `GATEWAY_HEALTH_TIMEOUT_SEC`      | Downstream health check timeout in sec    | Optional            | ML Gateway              | `5.0`                     |   No    | Fast timeout for checking downstream service health.                             |
-| `REFRAME_CALLBACK_MAX_RETRIES`    | Max retries for posting worker callback   | Optional            | Reframe Worker          | `5`                       |   No    | Exponential backoff retries when contacting `/api/jobs/callback`.                |
-| `REFRAME_CALLBACK_RETRY_DELAY_MS` | Base retry delay for worker callback (ms) | Optional            | Reframe Worker          | `1000`                    |   No    | Initial backoff delay between callback attempts.                                 |
+### 4.5 Captioning & Speech Transcription
 
-### 4.5 AutoFlip & TalkNet Pipeline
-
-| Variable Name              | Purpose                                      | Required / Optional | Consuming Service | Default Value                                  | Secret | Configuration Notes                                      |
-| :------------------------- | :------------------------------------------- | :------------------ | :---------------- | :--------------------------------------------- | :----: | :------------------------------------------------------- |
-| `AUTOFILP_SERVICE_URL`     | Downstream URL for AutoFlip microservice     | Optional            | ML Gateway        | `http://autoflip:8000`                         |   No   | Gateway proxies `/reframe` calls to this address.        |
-| `TALKNET_SERVICE_URL`      | Downstream URL for TalkNet microservice      | Optional            | ML Gateway        | `http://talknet:8000`                          |   No   | Gateway proxies `/talknet` calls to this address.        |
-| `AUTOFILP_BINARY_PATH`     | Path to compiled AutoFlip C++ binary         | Optional            | AutoFlip Service  | `/mediapipe/.../run_autoflip_to_json`          |   No   | Standard location in AutoFlip container.                 |
-| `AUTOFILP_GRAPH_PATH`      | Path to AutoFlip headless pbtxt graph        | Optional            | AutoFlip Service  | `/mediapipe/.../autoflip_headless_graph.pbtxt` |   No   | Configures face detection & trajectory smoothing.        |
-| `AUTOFILP_TIMEOUT_SEC`     | AutoFlip sub-process timeout in seconds      | Optional            | AutoFlip Service  | `150`                                          |   No   | Terminated via `SIGKILL` if execution exceeds threshold. |
-| `TALKNET_S3FD_WEIGHTS`     | Path to S3FD PyTorch face detector weights   | Optional            | TalkNet Service   | `/app/weights/sfd_face.pth`                    |   No   | Face detection model weights mounted in container.       |
-| `TALKNET_MODEL_WEIGHTS`    | Path to TalkNet active speaker model weights | Optional            | TalkNet Service   | `/app/weights/pretrain_TalkSet.model`          |   No   | Speaker audio-visual classification weights.             |
-| `TALKNET_HOST_WEIGHTS_DIR` | Host path for mounting model weights volume  | Optional            | Docker Compose    | `./talknet/weights`                            |   No   | Mounted to `/app/weights:ro` in TalkNet container.       |
-| `TALKNET_TIMEOUT_SEC`      | TalkNet inference timeout in seconds         | Optional            | TalkNet Service   | `150`                                          |   No   | Bounded execution for speaker track scoring.             |
-| `DOWNLOAD_TIMEOUT_SEC`     | Media download timeout in seconds            | Optional            | ML Services       | `60`                                           |   No   | Timeout for downloading input video files.               |
-
-### 4.6 Captioning & Speech Transcription
-
-| Variable Name                         | Purpose                                      | Required / Optional | Consuming Service       | Default Value | Secret  | Configuration Notes                                        |
-| :------------------------------------ | :------------------------------------------- | :------------------ | :---------------------- | :------------ | :-----: | :--------------------------------------------------------- |
+| Variable Name                           | Purpose                                      | Required / Optional | Consuming Service       | Default Value |    Secret    | Configuration Notes                                        |
+| :-------------------------------------- | :------------------------------------------- | :------------------ | :---------------------- | :------------ | :-----------: | :--------------------------------------------------------- |
 | `DEEPGRAM_API_KEY`                    | Deepgram Nova-2 speech-to-text API key       | Required            | Video Worker, Cloud Run | None          | **Yes** | Primary transcription engine for word-level subtitle cues. |
-| `AURA_CHAR_LIMIT`                     | Deepgram Aura TTS character ceiling          | Optional            | Cloud Run Worker        | `1800`        |   No    | Splits voiceover narration at sentence boundaries.         |
 | `GROQ_API_KEY`                        | Groq API key for Whisper transcription       | Optional            | Subtitle Module         | None          | **Yes** | Fallback Whisper STT and translation engine.               |
 | `OPENAI_API_KEY`                      | OpenAI API key for script rewriting          | Optional            | AVS Module              | None          | **Yes** | Used for tone adjustments and translation structuring.     |
-| `SUBTITLE_TRANSLATE_ENABLED`          | Feature flag enabling subtitle translation   | Optional            | Next.js API             | `false`       |   No    | Toggles `/api/subtitles/translate` route availability.     |
-| `NEXT_PUBLIC_SUBTITLE_EDITOR_ENABLED` | UI flag enabling interactive subtitle editor | Optional            | Web Client              | `false`       |   No    | Exposes subtitle editing canvas in browser sidebar.        |
+| `SUBTITLE_TRANSLATE_ENABLED`          | Feature flag enabling subtitle translation   | Optional            | Next.js API             | `false`     |      No      | Toggles `/api/subtitles/translate` route availability.   |
+| `NEXT_PUBLIC_SUBTITLE_EDITOR_ENABLED` | UI flag enabling interactive subtitle editor | Optional            | Web Client              | `false`     |      No      | Exposes subtitle editing canvas in browser sidebar.        |
 
-### 4.7 Dubbing Providers & VoiceStudio
+### 4.6 Dubbing Providers & VoiceStudio
 
-| Variable Name                  | Purpose                                         | Required / Optional | Consuming Service       | Default Value           | Secret  | Configuration Notes                                                                       |
-| :----------------------------- | :---------------------------------------------- | :------------------ | :---------------------- | :---------------------- | :-----: | :---------------------------------------------------------------------------------------- |
-| `DUBBING_PROVIDER`             | Active speech synthesis provider                | Optional            | Video Worker, Benchmark | `elevenlabs`            |   No    | Values: `elevenlabs` (default) or `voicestudio` (opt-in).                                 |
-| `ELEVENLABS_API_KEY`           | ElevenLabs commercial dubbing API key           | Required (if used)  | Video Worker, API       | None                    | **Yes** | Scale Tier account key. Never expose with `NEXT_PUBLIC_`.                                 |
-| `VOICESTUDIO_API_URL`          | Primary runtime API URL for VoiceStudio service | Optional            | VoiceStudio Adapter     | `http://127.0.0.1:3900` |   No    | Runtime service URL on host loopback consumed by `app/lib/voicestudio/client.ts`.         |
-| `VOICESTUDIO_URL`              | Benchmark harness VoiceStudio service URL       | Optional            | Benchmark Scripts       | `http://127.0.0.1:3900` |   No    | Benchmark-specific URL consumed by `scripts/benchmark/cloudCostBenchmark.ts`.             |
-| `VOICESTUDIO_API_KEY`          | Bearer token for VoiceStudio container          | Optional            | VoiceStudio Adapter     | None                    | **Yes** | Shared authentication token for container API (`OMNIVOICE_API_KEY`).                      |
-| `VOICESTUDIO_MODEL`            | Runtime TTS model checkpoint identifier         | Optional            | VoiceStudio Adapter     | `omnivoice`             |   No    | Default model checkpoint loaded in container and requested by adapter.                    |
-| `VOICESTUDIO_FALLBACK_TO_PAID` | Allows fallback to ElevenLabs on error          | Optional            | VoiceStudio Adapter     | `false`                 |   No    | **Must remain false** to prevent unexpected commercial billing surges on container error. |
-| `AVS_ENABLED`                  | Master feature flag for AVS Dubbing             | Optional            | Next.js API             | `true`                  |   No    | Enables `/api/avs/dub` endpoint.                                                          |
+| Variable Name                    | Purpose                                         | Required / Optional | Consuming Service       | Default Value             |    Secret    | Configuration Notes                                                                             |
+| :------------------------------- | :---------------------------------------------- | :------------------ | :---------------------- | :------------------------ | :-----------: | :---------------------------------------------------------------------------------------------- |
+| `DUBBING_PROVIDER`             | Active speech synthesis provider                | Optional            | Video Worker, Benchmark | `elevenlabs`            |      No      | Values: `elevenlabs` (default) or `voicestudio` (opt-in).                                   |
+| `ELEVENLABS_API_KEY`           | ElevenLabs commercial dubbing API key           | Required            | Video Worker, API       | None                      | **Yes** | Scale Tier account key. Never expose with `NEXT_PUBLIC_`.                                     |
+| `VOICESTUDIO_API_URL`          | Primary runtime API URL for VoiceStudio service | Optional            | VoiceStudio Adapter     | `http://127.0.0.1:3900` |      No      | Runtime service URL on host loopback consumed by `app/lib/voicestudio/client.ts`.             |
+| `VOICESTUDIO_URL`              | Benchmark harness VoiceStudio service URL       | Optional            | Benchmark Scripts       | `http://127.0.0.1:3900` |      No      | Benchmark-specific URL consumed by `scripts/benchmark/cloudCostBenchmark.ts`.                 |
+| `VOICESTUDIO_API_KEY`          | Bearer token for VoiceStudio container          | Optional            | VoiceStudio Adapter     | None                      | **Yes** | Shared authentication token for container API (`OMNIVOICE_API_KEY`).                          |
+| `VOICESTUDIO_MODEL`            | Runtime TTS model checkpoint identifier         | Optional            | VoiceStudio Adapter     | `omnivoice`             |      No      | Default model checkpoint loaded in container and requested by adapter.                          |
+| `VOICESTUDIO_FALLBACK_TO_PAID` | Allows fallback to ElevenLabs on error          | Optional            | VoiceStudio Adapter     | `false`                 |      No      | **Must remain false** to prevent unexpected commercial billing surges on container error. |
 
-### 4.8 Cloud Storage & CDN
+> [!NOTE]
+> Voice synthesis parameters such as speaker voice (e.g. `voice: "alloy"`), diffusion steps (`num_step: 16`), and request timeout duration ($120\text{ s}$) are configured via typed adapter options (`SpeechRequestOptions`) rather than direct host environment variables.
 
-| Variable Name                          | Purpose                                  | Required / Optional | Consuming Service    | Default Value            | Secret  | Configuration Notes                                            |
-| :------------------------------------- | :--------------------------------------- | :------------------ | :------------------- | :----------------------- | :-----: | :------------------------------------------------------------- |
-| `STORAGE_PROVIDER`                     | Active cloud storage driver              | Required            | Storage Module       | `aws`                    |   No    | Values: `aws` (primary S3) or `gcs` (cold-standby only).       |
-| `CLOUDINARY_CLOUD_NAME`                | Cloudinary tenant account name           | Required            | API, Workers         | None                     |   No    | Backend configuration for media asset uploads.                 |
-| `CLOUDINARY_API_KEY`                   | Cloudinary backend API key               | Required            | API, Workers         | None                     | **Yes** | Used to sign admin asset management calls.                     |
-| `CLOUDINARY_API_SECRET`                | Cloudinary backend API secret            | Required            | API, Workers         | None                     | **Yes** | Guarded secret; never expose to frontend.                      |
-| `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`    | Public Cloudinary cloud name             | Required            | Web Client           | None                     |   No    | Public browser client direct upload identifier.                |
-| `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` | Unsigned upload preset for source videos | Required            | Web Client           | None                     |   No    | Direct client-to-Cloudinary upload preset (`reframe_sources`). |
-| `RAW_BUCKET`                           | AWS S3 Bucket for raw ingested videos    | Required            | S3 Storage Module    | `marvedge-raw-ap2`       |   No    | Ingestion bucket in Sydney (`ap-southeast-2`).                 |
-| `PROCESSED_BUCKET`                     | AWS S3 Bucket for final rendered outputs | Required            | S3 Storage Module    | `marvedge-processed-ap2` |   No    | Export delivery bucket in Sydney (`ap-southeast-2`).           |
-| `RAW_PREFIX`                           | Key prefix for raw S3 assets             | Optional            | Storage Module       | `""`                     |   No    | Folder path prefix in S3 raw bucket.                           |
-| `PROCESSED_PREFIX`                     | Key prefix for processed S3 assets       | Optional            | Storage Module       | `""`                     |   No    | Folder path prefix in S3 processed bucket.                     |
-| `USE_GCP_WORKER`                       | Dispatches jobs to Cloud Run worker      | Optional            | Next.js API, Workers | `false`                  |   No    | Routes AVS sync/dub jobs to Cloud Run instead of BullMQ.       |
-| `AVS_DUB_SERVICE_URL`                  | Endpoint for Cloud Run AVS dub service   | Optional            | Video Worker         | None                     |   No    | Cloud Run URL ending in `/avs-dub`.                            |
-| `VIDEO_WORKER_URL`                     | Endpoint for Cloud Run AVS sync service  | Optional            | Video Worker         | None                     |   No    | Cloud Run URL ending in `/avs-sync`.                           |
-| `WORKER_SECRET`                        | Shared secret for Cloud Run worker calls | Optional (GCP Req)  | API, Cloud Run       | None                     | **Yes** | Sent via `X-Worker-Secret` header.                             |
-| `R2_ACCOUNT_ID`                        | Cloudflare account ID for R2 storage     | Optional            | HLS Packaging Module | None                     |   No    | S3-compatible storage for video chunk streaming.               |
-| `R2_ACCESS_KEY_ID`                     | Cloudflare R2 access key ID              | Optional            | HLS Packaging Module | None                     | **Yes** | Authenticates R2 object uploads.                               |
-| `R2_SECRET_ACCESS_KEY`                 | Cloudflare R2 secret access key          | Optional            | HLS Packaging Module | None                     | **Yes** | Authenticates R2 object uploads.                               |
+### 4.7 Cloud Storage & CDN
 
-### 4.9 AWS & GPU Infrastructure
+| Variable Name                            | Purpose                                  | Required / Optional | Consuming Service    | Default Value              |    Secret    | Configuration Notes                                              |
+| :--------------------------------------- | :--------------------------------------- | :------------------ | :------------------- | :------------------------- | :-----------: | :--------------------------------------------------------------- |
+| `STORAGE_PROVIDER`                     | Active cloud storage driver              | Required            | Storage Module       | `aws`                    |      No      | Values: `aws` (primary S3) or `gcs` (cold-standby only).     |
+| `CLOUDINARY_CLOUD_NAME`                | Cloudinary tenant account name           | Required            | API, Workers         | None                       |      No      | Backend configuration for media asset uploads.                   |
+| `CLOUDINARY_API_KEY`                   | Cloudinary backend API key               | Required            | API, Workers         | None                       | **Yes** | Used to sign admin asset management calls.                       |
+| `CLOUDINARY_API_SECRET`                | Cloudinary backend API secret            | Required            | API, Workers         | None                       | **Yes** | Guarded secret; never expose to frontend.                        |
+| `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`    | Public Cloudinary cloud name             | Required            | Web Client           | None                       |      No      | Public browser client direct upload identifier.                  |
+| `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` | Unsigned upload preset for source videos | Required            | Web Client           | None                       |      No      | Direct client-to-Cloudinary upload preset (`reframe_sources`). |
+| `RAW_BUCKET`                           | AWS S3 Bucket for raw ingested videos    | Required            | S3 Storage Module    | `marvedge-raw-ap2`       |      No      | Ingestion bucket in Sydney (`ap-southeast-2`).                 |
+| `PROCESSED_BUCKET`                     | AWS S3 Bucket for final rendered outputs | Required            | S3 Storage Module    | `marvedge-processed-ap2` |      No      | Export delivery bucket in Sydney (`ap-southeast-2`).           |
+| `R2_ACCOUNT_ID`                        | Cloudflare account ID for R2 storage     | Optional            | HLS Packaging Module | None                       |      No      | S3-compatible storage for video chunk streaming.                 |
+| `R2_ACCESS_KEY_ID`                     | Cloudflare R2 access key ID              | Optional            | HLS Packaging Module | None                       | **Yes** | Authenticates R2 object uploads.                                 |
+| `R2_SECRET_ACCESS_KEY`                 | Cloudflare R2 secret access key          | Optional            | HLS Packaging Module | None                       | **Yes** | Authenticates R2 object uploads.                                 |
 
-| Variable Name                | Purpose                              | Required / Optional | Consuming Service   | Default Value      | Secret  | Configuration Notes                                       |
-| :--------------------------- | :----------------------------------- | :------------------ | :------------------ | :----------------- | :-----: | :-------------------------------------------------------- |
-| `AWS_REGION`                 | Target AWS deployment region         | Required            | All AWS SDK callers | `ap-southeast-2`   |   No    | Sydney region for RDS, S3, DynamoDB, and EC2 workers.     |
-| `AWS_ACCESS_KEY_ID`          | AWS IAM Access Key                   | Optional (Prod/CI)  | AWS SDK             | None               | **Yes** | Left blank locally (uses `aws login --profile marvedge`). |
-| `AWS_SECRET_ACCESS_KEY`      | AWS IAM Secret Access Key            | Optional (Prod/CI)  | AWS SDK             | None               | **Yes** | Injected via AWS Secrets Manager or IAM instance profile. |
-| `AWS_SESSION_TOKEN`          | Temporary STS credentials token      | Optional            | AWS SDK             | None               | **Yes** | Required only when authenticating via temporary STS role. |
-| `DDB_TABLE`                  | DynamoDB render job state table      | Optional            | AWS Storage Module  | `marvedge-jobs`    |   No    | Primary job state store (replaces Firestore).             |
-| `RECIPES_COLLECTION`         | DynamoDB recipes collection          | Optional            | Cloud Run Worker    | `marvedge-recipes` |   No    | Recipe collection table name.                             |
-| `CHUNKS_COLLECTION`          | DynamoDB chunks collection           | Optional            | Cloud Run Worker    | `marvedge-chunks`  |   No    | Chunk collection table name.                              |
-| `USE_AWS_SPLITTER`           | Feature flag for AWS Lambda splitter | Optional            | Ingest Module       | `false`            |   No    | Kept `false` until serverless ffmpeg layer is cleared.    |
-| `AWS_SPLITTER_FUNCTION_NAME` | Function name for Lambda splitter    | Optional            | Ingest Module       | None               |   No    | AWS Lambda function name when splitter is enabled.        |
+### 4.8 AWS & GPU Infrastructure
 
-### 4.10 Monitoring & Alerting Infrastructure
+| Variable Name             | Purpose                              | Required / Optional | Consuming Service   | Default Value      |    Secret    | Configuration Notes                                         |
+| :------------------------ | :----------------------------------- | :------------------ | :------------------ | :----------------- | :-----------: | :---------------------------------------------------------- |
+| `AWS_REGION`            | Target AWS deployment region         | Required            | All AWS SDK callers | `ap-southeast-2` |      No      | Sydney region for RDS, S3, and EC2 workers.                 |
+| `AWS_ACCESS_KEY_ID`     | AWS IAM Access Key                   | Optional (Prod/CI)  | AWS SDK             | None               | **Yes** | Left blank locally (uses `aws login --profile marvedge`). |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM Secret Access Key            | Optional (Prod/CI)  | AWS SDK             | None               | **Yes** | Injected via AWS Secrets Manager or IAM instance profile.   |
+| `AWS_SESSION_TOKEN`     | Temporary STS credentials token      | Optional            | AWS SDK             | None               | **Yes** | Required only when authenticating via temporary STS role.   |
+| `USE_AWS_SPLITTER`      | Feature flag for AWS Lambda splitter | Optional            | Ingest Module       | `false`          |      No      | Kept `false` until serverless ffmpeg layer is cleared.    |
 
-| Variable Name                                        | Purpose                                     | Required / Optional | Consuming Service         | Default Value              | Secret  | Configuration Notes                                             |
-| :--------------------------------------------------- | :------------------------------------------ | :------------------ | :------------------------ | :------------------------- | :-----: | :-------------------------------------------------------------- |
-| `OVERLAYS_ROLLUP_SECRET`                             | Header secret for Prometheus metrics scrape | Required            | `/api/monitoring/metrics` | None                       | **Yes** | Sent in `x-marvedge-rollup-secret` header.                      |
-| `PROMETHEUS_BEARER_TOKEN`                            | Alternative Bearer token for metrics scrape | Optional            | `/api/monitoring/metrics` | None                       | **Yes** | Sent in `Authorization: Bearer <token>` header.                 |
-| `MONITORING_ALERT_EVALUATION_INTERVAL_SECONDS`       | Cadence of alert evaluation loop            | Optional            | Alert Evaluator           | `60` ($1\text{ min}$)      |   No    | Process loop interval for `scripts/monitoringAlerts.ts`.        |
-| `MONITORING_ALERT_COOLDOWN_SECONDS`                  | Cooldown period between firing alerts       | Optional            | Alert Evaluator           | `300` ($5\text{ min}$)     |   No    | Suppresses duplicate notifications during continuous breach.    |
-| `MONITORING_FAILURE_RATE_OBSERVATION_WINDOW_SECONDS` | Sliding window for job failure rates        | Optional            | Evaluator, Workers        | `300` ($5\text{ min}$)     |   No    | Must be configured as a whole-minute multiple.                  |
-| `MONITORING_FAILURE_RATE_MINIMUM_JOBS`               | Minimum job count before alerting on rate   | Optional            | Alert Evaluator           | `10`                       |   No    | Prevents single-job failures from spiking failure alarm.        |
-| `MONITORING_REFRAME_FAILURE_RATE_THRESHOLD`          | Failure ratio threshold for Reframe jobs    | Optional            | Alert Evaluator           | `0.2` ($20\%$)             |   No    | Breaches when failed / (completed + failed) exceeds ratio.      |
-| `MONITORING_DUBBING_FAILURE_RATE_THRESHOLD`          | Failure ratio threshold for Dubbing jobs    | Optional            | Alert Evaluator           | `0.2` ($20\%$)             |   No    | Breaches when failed / (completed + failed) exceeds ratio.      |
-| `MONITORING_REFRAME_STUCK_QUEUE_THRESHOLD_SECONDS`   | Age threshold for uncompleted reframe jobs  | Optional            | Alert Evaluator           | `300` ($5\text{ min}$)     |   No    | Ignores delayed retry backoffs; reports 0 when queue is empty.  |
-| `MONITORING_DUBBING_STUCK_QUEUE_THRESHOLD_SECONDS`   | Age threshold for uncompleted dubbing jobs  | Optional            | Alert Evaluator           | `600` ($10\text{ min}$)    |   No    | Accounts for longer turnaround of commercial dubbing APIs.      |
-| `MONITORING_REFRAME_QUEUE_DEPTH_THRESHOLD`           | Maximum waiting jobs in reframe queue       | Optional            | Alert Evaluator           | `100`                      |   No    | Queue backlog threshold.                                        |
-| `MONITORING_DUBBING_QUEUE_DEPTH_THRESHOLD`           | Maximum waiting jobs in dubbing queue       | Optional            | Alert Evaluator           | `50`                       |   No    | Queue backlog threshold.                                        |
-| `MONITORING_GPU_HOURLY_RATE_USD`                     | Hourly GPU compute rate for cost alerts     | Optional            | Alert Evaluator           | `0.7104`                   |   No    | AWS EC2 `g4dn.xlarge` Linux On-Demand rate in Sydney.           |
-| `MONITORING_GPU_SPEND_THRESHOLD_USD`                 | Cumulative GPU spend threshold in window    | Optional            | Alert Evaluator           | `25.0`                     |   No    | Operational estimate: $(runtime\_seconds / 3600) \times rate$.  |
-| `MONITORING_DUBBING_VENDOR_ESTIMATED_UNIT_COST_USD`  | Estimated unit cost per character for TTS   | Optional            | Alert Evaluator           | `0.0003`                   |   No    | Operational estimate rate for ElevenLabs character usage.       |
-| `MONITORING_DUBBING_VENDOR_SPEND_THRESHOLD_USD`      | Cumulative vendor spend threshold           | Optional            | Alert Evaluator           | `50.0`                     |   No    | Operational estimate: $characters \times unit\_cost$.           |
-| `MONITORING_ALERT_WEBHOOK_URL`                       | Outbound chat webhook endpoint              | Optional            | Alert Evaluator           | None                       | **Yes** | Slack, Discord, or Teams webhook URL. Masked in log output.     |
-| `MONITORING_ALERT_EMAIL_RECIPIENT`                   | Recipient email addresses for alerts        | Optional            | Alert Evaluator           | None                       |   No    | Comma-separated list (e.g. `oncall@marvedge.com`).              |
-| `MONITORING_ALERT_EMAIL_SENDER`                      | Verified sender email address               | Optional            | Alert Evaluator           | `alerts@marvedge.com`      |   No    | Must be a verified sender domain in Resend.                     |
-| `MONITORING_ALERT_DRY_RUN`                           | Disables network dispatch of alerts         | Optional            | Alert Evaluator           | `false`                    |   No    | When `true`, formats alerts and logs to stdout without sending. |
-| `MONITORING_ALERT_STATE_TTL_SECONDS`                 | Redis TTL for persisted alert state keys    | Optional            | Alert Evaluator           | `604800` ($7\text{ days}$) |   No    | Prevents unbounded Redis memory growth for state keys.          |
+### 4.9 Monitoring & Alerting Infrastructure
 
-### 4.11 Benchmark Configuration Variables
-
-| Variable Name              | Purpose                                    | Consuming Service | Default Value | Notes                                                   |
-| :------------------------- | :----------------------------------------- | :---------------- | :------------ | :------------------------------------------------------ |
-| `BENCHMARK_STAGES`         | Comma-separated stages list                | Benchmark CLI     | `all`         | Supported: `reframe`, `avs`, `captions`, `dubbing`      |
-| `BENCHMARK_CONCURRENCY`    | Number of parallel jobs                    | Benchmark CLI     | `1`           | Positive integer (e.g. `1`, `2`, `4`)                   |
-| `BENCHMARK_ITERATIONS`     | Timed measurement iterations per stage     | Benchmark CLI     | `1`           | Positive integer                                        |
-| `BENCHMARK_WARMUP`         | Untimed warmup iterations count            | Benchmark CLI     | `0`           | Non-negative integer                                    |
-| `BENCHMARK_GPU_TYPE`       | Target hardware pricing profile            | Benchmark CLI     | `L4`          | Values: `L4`, `T4`, `CPU`, `custom`                     |
-| `BENCHMARK_CLOUD_PROVIDER` | Target cloud provider                      | Benchmark CLI     | None          | Values: `aws`, `gcp`, `azure`, `local`                  |
-| `BENCHMARK_PRICING_TIER`   | Target pricing model tier                  | Benchmark CLI     | None          | Values: `ondemand`, `spot`, `standard`                  |
-| `BENCHMARK_HOURLY_RATE`    | Custom compute instance hourly rate ($/hr) | Benchmark CLI     | None          | Floating-point number (e.g. `0.7104` for AWS Sydney T4) |
+| Variable Name                                          | Purpose                                     | Required / Optional | Consuming Service           | Default Value                  |    Secret    | Configuration Notes                                               |
+| :----------------------------------------------------- | :------------------------------------------ | :------------------ | :-------------------------- | :----------------------------- | :-----------: | :---------------------------------------------------------------- |
+| `OVERLAYS_ROLLUP_SECRET`                             | Header secret for Prometheus metrics scrape | Required            | `/api/monitoring/metrics` | None                           | **Yes** | Sent in `x-marvedge-rollup-secret` header.                      |
+| `MONITORING_ALERT_EVALUATION_INTERVAL_SECONDS`       | Cadence of alert evaluation loop            | Optional            | Alert Evaluator             | `60` ($1\text{ min}$)      |      No      | Process loop interval for `scripts/monitoringAlerts.ts`.        |
+| `MONITORING_ALERT_COOLDOWN_SECONDS`                  | Cooldown period between firing alerts       | Optional            | Alert Evaluator             | `300` ($5\text{ min}$)     |      No      | Suppresses duplicate notifications during continuous breach.      |
+| `MONITORING_FAILURE_RATE_OBSERVATION_WINDOW_SECONDS` | Sliding window for job failure rates        | Optional            | Evaluator, Workers          | `300` ($5\text{ min}$)     |      No      | Must be configured as a whole-minute multiple.                    |
+| `MONITORING_FAILURE_RATE_MINIMUM_JOBS`               | Minimum job count before alerting on rate   | Optional            | Alert Evaluator             | `10`                         |      No      | Prevents single-job failures from spiking failure alarm.          |
+| `MONITORING_REFRAME_FAILURE_RATE_THRESHOLD`          | Failure ratio threshold for Reframe jobs    | Optional            | Alert Evaluator             | `0.2` ($20\%$)             |      No      | Breaches when failed / (completed + failed) exceeds ratio.        |
+| `MONITORING_DUBBING_FAILURE_RATE_THRESHOLD`          | Failure ratio threshold for Dubbing jobs    | Optional            | Alert Evaluator             | `0.2` ($20\%$)             |      No      | Breaches when failed / (completed + failed) exceeds ratio.        |
+| `MONITORING_REFRAME_STUCK_QUEUE_THRESHOLD_SECONDS`   | Age threshold for uncompleted reframe jobs  | Optional            | Alert Evaluator             | `300` ($5\text{ min}$)     |      No      | Ignores delayed retry backoffs; reports 0 when queue is empty.    |
+| `MONITORING_DUBBING_STUCK_QUEUE_THRESHOLD_SECONDS`   | Age threshold for uncompleted dubbing jobs  | Optional            | Alert Evaluator             | `600` ($10\text{ min}$)    |      No      | Accounts for longer turnaround of commercial dubbing APIs.        |
+| `MONITORING_REFRAME_QUEUE_DEPTH_THRESHOLD`           | Maximum waiting jobs in reframe queue       | Optional            | Alert Evaluator             | `100`                        |      No      | Queue backlog threshold.                                          |
+| `MONITORING_DUBBING_QUEUE_DEPTH_THRESHOLD`           | Maximum waiting jobs in dubbing queue       | Optional            | Alert Evaluator             | `50`                         |      No      | Queue backlog threshold.                                          |
+| `MONITORING_GPU_HOURLY_RATE_USD`                     | Hourly GPU compute rate for cost alerts     | Optional            | Alert Evaluator             | `0.7104`                     |      No      | AWS EC2 `g4dn.xlarge` Linux On-Demand rate in Sydney.           |
+| `MONITORING_GPU_SPEND_THRESHOLD_USD`                 | Cumulative GPU spend threshold in window    | Optional            | Alert Evaluator             | `25.0`                       |      No      | Operational estimate: $(runtime\_seconds / 3600) \times rate$.  |
+| `MONITORING_DUBBING_VENDOR_ESTIMATED_UNIT_COST_USD`  | Estimated unit cost per character for TTS   | Optional            | Alert Evaluator             | `0.0003`                     |      No      | Operational estimate rate for ElevenLabs character usage.         |
+| `MONITORING_DUBBING_VENDOR_SPEND_THRESHOLD_USD`      | Cumulative vendor spend threshold           | Optional            | Alert Evaluator             | `50.0`                       |      No      | Operational estimate: $characters \times unit\_cost$.           |
+| `MONITORING_ALERT_WEBHOOK_URL`                       | Outbound chat webhook endpoint              | Optional            | Alert Evaluator             | None                           | **Yes** | Slack, Discord, or Teams webhook URL. Masked in log output.       |
+| `MONITORING_ALERT_EMAIL_RECIPIENT`                   | Recipient email addresses for alerts        | Optional            | Alert Evaluator             | None                           |      No      | Comma-separated list (e.g. `oncall@marvedge.com`).              |
+| `MONITORING_ALERT_EMAIL_SENDER`                      | Verified sender email address               | Optional            | Alert Evaluator             | `alerts@marvedge.com`        |      No      | Must be a verified sender domain in Resend.                       |
+| `MONITORING_ALERT_DRY_RUN`                           | Disables network dispatch of alerts         | Optional            | Alert Evaluator             | `false`                      |      No      | When `true`, formats alerts and logs to stdout without sending. |
+| `MONITORING_ALERT_STATE_TTL_SECONDS`                 | Redis TTL for persisted alert state keys    | Optional            | Alert Evaluator             | `604800` ($7\text{ days}$) |      No      | Prevents unbounded Redis memory growth for state keys.            |
 
 ---
 
@@ -956,60 +742,42 @@ Executing benchmarks requires appropriate host tooling depending on whether offl
 
 The primary end-to-end benchmark harness measures throughput, latency percentiles, memory consumption, GPU metrics, and cost per minute across pipeline stages.
 
-#### Complete Benchmark CLI Options Reference
+#### Benchmark CLI Parameters Reference
 
-The benchmark runner is invoked via `npx tsx scripts/benchmark/cloudCostBenchmark.ts [options]`. Precedence is: **CLI Arguments > Environment Variables > Defaults**.
+The benchmark suites are configured via command-line arguments rather than host environment variables:
 
-| CLI Option                        |  Type   | Default                                    | Supported Values / Notes                                                            |
-| :-------------------------------- | :-----: | :----------------------------------------- | :---------------------------------------------------------------------------------- |
-| `--input <path>`                  | String  | Synthetic 5s clip                          | Path to source video file (if omitted, auto-generates a synthetic MP4 test clip).   |
-| `--stages <list>`                 | String  | `reframe,avs,captions,dubbing`             | Comma-separated stages: `reframe`, `avs`, `captions`, `dubbing` (or `"all"`).       |
-| `--concurrency <N>`               | Integer | `1`                                        | Number of simultaneous pipeline jobs executed (supports 1, 2, or 4).                |
-| `--iterations <N>`                | Integer | `1`                                        | Number of timed measurement iterations per stage.                                   |
-| `--warmup <N>`                    | Integer | `0`                                        | Number of untimed warmup iterations to initialize GPU/model weights.                |
-| `--gpu`, `--gpu-type <type>`      |  Enum   | `L4`                                       | Compute hardware pricing: `L4`, `T4`, `CPU`, or custom string.                      |
-| `--cloud`, `--cloud-provider <c>` |  Enum   | Auto-resolved                              | Cloud provider pricing model: `aws`, `gcp`, `azure`, `local`.                       |
-| `--pricing-tier <tier>`           |  Enum   | Auto-resolved                              | Target pricing tier: `ondemand`, `spot`, `standard`.                                |
-| `--hourly-rate <usd>`             |  Float  | Model default                              | Explicit compute instance hourly rate override in USD (e.g. `0.7104` for Sydney).   |
-| `--provider-reframe <mode>`       |  Enum   | `fixture`                                  | Reframing provider: `fixture` (synthetic double) or `autoflip` (live inference).    |
-| `--provider-avs <mode>`           |  Enum   | `fixture`                                  | AVS active speaker provider: `fixture` or `talknet` (live PyTorch).                 |
-| `--provider-transcription <mode>` |  Enum   | `fixture`                                  | Transcription provider: `fixture`, `whisper` (local/API), or `groq` (Groq API).     |
-| `--provider-dubbing <mode>`       |  Enum   | `fixture`                                  | Dubbing provider: `fixture`, `elevenlabs` (Scale API), or `voicestudio` (in-house). |
-| `--voicestudio-url <url>`         | String  | `http://127.0.0.1:3900`                    | Canonical endpoint for VoiceStudio container. Fallback to `VOICESTUDIO_API_URL`.    |
-| `--voicestudio-api-key <key>`     | String  | None                                       | Bearer authentication token for VoiceStudio container API.                          |
-| `--voicestudio-model <model>`     | String  | `omnivoice`                                | Model checkpoint identifier to request from VoiceStudio.                            |
-| `--voicestudio-fallback-to-paid`  |  Flag   | `false`                                    | Allows fallback to ElevenLabs on VoiceStudio error (**Must remain false** in prod). |
-| `--output-json <path>`            |  Path   | `benchmark_results/cloud_cost_report.json` | File destination for structured JSON telemetry (Schema 1.2.0).                      |
-| `--output-markdown <path>`        |  Path   | `benchmark_results/cloud_cost_report.md`   | File destination for human-readable Markdown summary report.                        |
-| `--verbose`                       |  Flag   | `false`                                    | Logs detailed per-iteration progress and telemetry timestamps to terminal.          |
-| `-h`, `--help`                    |  Flag   | —                                          | Displays CLI usage manual and exits.                                                |
+| CLI Option                   |  Type  |             Default             | Description                                                             |
+| :--------------------------- | :-----: | :------------------------------: | :---------------------------------------------------------------------- |
+| `--concurrency <int>`      | Integer |              `1`              | Number of simultaneous pipeline jobs executed (supports 1, 2, or 4).    |
+| `--iterations <int>`       | Integer |              `1`              | Number of timed measurement iterations per stage.                       |
+| `--warmup <int>`           | Integer |              `0`              | Number of untimed warmup iterations to initialize GPU/model weights.    |
+| `--stages <list>`          | String | `reframe,avs,captions,dubbing` | Comma-separated list of pipeline stages to benchmark.                   |
+| `--gpu-type <type>`        |  Enum  |              `L4`              | Target compute profile (`L4`, `T4`, `CPU`, `none`, `custom`). |
+| `--hourly-rate <usd>`      |  Float  |         Provider Default         | Hourly compute rate override in USD (e.g., `0.7104` for Sydney T4).   |
+| `--provider-reframe`       |  Enum  |           `fixture`           | Reframe provider: `fixture` (synthetic) or `autoflip` (live).       |
+| `--provider-dubbing`       |  Enum  |           `fixture`           | Dubbing provider: `fixture`, `elevenlabs`, or `voicestudio`.      |
+| `--output-json <path>`     |  Path  |  `...cloud_cost_report.json`  | File destination for structured JSON telemetry.                         |
+| `--output-markdown <path>` |  Path  |   `...cloud_cost_report.md`   | File destination for human-readable Markdown report.                    |
 
-### 5.3 Offline Fixture Benchmark (Zero Cloud Cost)
+#### 1. Zero-Cost Offline Fixture Run (Recommended for CI & Local Validation)
 
 Runs all four pipeline stages (`reframe`, `avs`, `captions`, `dubbing`) using deterministic synthetic fixtures without network calls or cloud spend:
 
 ```bash
-# Execute offline benchmark via npm script (or npx tsx scripts/benchmark/cloudCostBenchmark.ts)
+# Execute offline benchmark via npm script
 npm run benchmark:cloud-cost -- \
   --stages reframe,avs,captions,dubbing \
   --concurrency 1 \
   --iterations 3 \
   --warmup 1 \
-  --gpu-type CPU \
+  --gpu-type none \
   --output-json benchmark_results/offline_cost_report.json \
   --output-markdown benchmark_results/offline_cost_report.md
 ```
 
-- **Dependencies:** Node.js 20, `npx tsx`, FFmpeg (for synthetic media generation).
-- **Expected Outputs:**
-  - `benchmark_results/offline_cost_report.json` (Structured JSON conforming to Schema 1.2.0).
-  - `benchmark_results/offline_cost_report.md` (Human-readable Markdown table).
-- **What It Validates:** Benchmark harness execution, stage pipeline coordination, JSON/Markdown reporting, telemetry aggregation, cost calculation formulas, and error boundaries.
-- **What It Does NOT Validate:** Real GPU compute latency, real neural inference RTF, CUDA VRAM limits, or live network bandwidth.
+#### 2. Live Reframe & Speech Benchmark Execution (Requires Active GPU Host)
 
-### 5.4 Live Cloud-Cost Benchmark (AWS / GCP / Azure / CPU)
-
-Executes real AutoFlip inference and local VoiceStudio speech synthesis on an NVIDIA Tesla T4 or L4 GPU:
+Executes real AutoFlip inference and local VoiceStudio speech synthesis on an NVIDIA Tesla T4:
 
 ```bash
 # Run on GPU worker host inside /opt/marvedge
@@ -1018,8 +786,6 @@ npx tsx scripts/benchmark/cloudCostBenchmark.ts \
   --stages reframe,dubbing \
   --provider-reframe autoflip \
   --provider-dubbing voicestudio \
-  --cloud aws \
-  --pricing-tier ondemand \
   --gpu-type T4 \
   --hourly-rate 0.7104 \
   --concurrency 1 \
@@ -1028,13 +794,7 @@ npx tsx scripts/benchmark/cloudCostBenchmark.ts \
   --output-markdown benchmark_results/live_t4_benchmark.md
 ```
 
-- **Supported Cloud Pricing Models:**
-  - **AWS (`--cloud aws`):** `g4dn.xlarge` (Tesla T4 16GB). On-Demand ($0.7104/hr Sydney ap-southeast-2, ~$0.526/hr US-East), Spot ($0.2200/hr, ~70% discount).
-  - **GCP (`--cloud gcp`):** Cloud Run NVIDIA L4 24GB ($0.8000/hr), Cloud Run NVIDIA T4 16GB ($0.3500/hr).
-  - **Azure (`--cloud azure`):** Standard_NC4as_T4_v3 ($0.5260/hr).
-  - **CPU (`--cloud local --gpu CPU`):** Generic 4 vCPU / 16GB RAM ($0.0900/hr modeled baseline).
-
-### 5.5 Concurrent Load Testing Harness (`scripts/benchmark/concurrentLoadRunner.ts`)
+### 5.3 Concurrent Load Testing Harness (`scripts/benchmark/concurrentLoadRunner.ts`)
 
 Tests concurrency safety, queue drain behavior, and graceful degradation under load using in-memory test doubles:
 
@@ -1043,21 +803,17 @@ Tests concurrency safety, queue drain behavior, and graceful degradation under l
 npx tsx scripts/benchmark/concurrentLoadRunner.ts
 ```
 
-- **Concurrency Scenarios:** Automatically evaluates concurrency levels `1`, `2`, and `4` (matching `INITIAL_VALIDATION_CONCURRENCY=1` and `BENCHMARK_APPROVED_CONCURRENCY=4`).
-- **Failure Injection Modes:**
-  - Injects transient HTTP 504 gateway timeouts to verify BullMQ retry backoff loops.
-  - Injects empty/unusable crop targets to verify automatic center-crop graceful degradation (`fallback: true`, `fallbackStage: "ML_INFERENCE"`).
-- **Reports:** Emits structured latency percentiles (min, mean, P50, P90, P95, P99, max) and writes a markdown summary to `benchmark_results/concurrent_load_report.md`.
+- **What It Exercises:** Evaluates concurrency levels 1, 2, and 4; injects transient HTTP 504 gateway timeouts to verify BullMQ retry loops; injects malformed crop boxes to verify automatic center-crop fallback.
+- **Outputs:** The runner prints a human-readable Markdown summary with latency percentiles (P50, P90, P95, P99) directly to the terminal and saves machine-readable benchmark results to `benchmark_results/task_00095_local_concurrent_load_report.json`, relative to the directory the command is run from. The `benchmark_results` folder is created if it does not exist. It does not currently generate a separate Markdown report file.
 
-### 5.6 In-VPC GPU Load Testing (`infra/gpu-deployment/in_vpc_load_test.mjs`)
+### 5.4 In-VPC GPU Load Testing (`infra/gpu-deployment/in_vpc_load_test.mjs`)
 
 Executed directly on the AWS EC2 instance inside the private VPC to measure real hardware performance:
 
 ```bash
-# 1. SSH into EC2 worker host inside VPC
+# SSH into EC2 worker host inside VPC
 ssh -i /path/to/key.pem ec2-user@172.31.8.120
 
-# 2. Run bounded in-VPC load runner
 cd /opt/marvedge
 node infra/gpu-deployment/in_vpc_load_test.mjs \
   --concurrency 1 \
@@ -1066,59 +822,62 @@ node infra/gpu-deployment/in_vpc_load_test.mjs \
   --output-json /tmp/in_vpc_load_test_results.json
 ```
 
-- **Host Requirements:** AWS EC2 `g4dn.xlarge` instance running with active NVIDIA drivers and Redis connection.
-- **Safety Controls:** Bounded total jobs, strict 120-second execution watchdog, dedicated in-VPC loopback callback listener (port 3001), zero external API mutations.
-- **Cost Implications:** Requires active EC2 instance ($0.7104/hr). Must be shut down immediately following test completion.
-
-### 5.7 VoiceStudio-Specific Speech Benchmark
+### 5.5 VoiceStudio Benchmark Scripts
 
 To measure isolated VoiceStudio neural speech synthesis on Tesla T4 hardware:
 
 ```bash
-# 1. On GPU host: Ensure VoiceStudio container is healthy on port 3900
-python3 scripts/check_voicestudio_readiness.py
+# On GPU host: Ensure VoiceStudio container is healthy on port 3900
+python3 scripts/check_voicestudio_readiness.py --url http://127.0.0.1:3900 --timeout 60
 
-# 2. Execute isolated VoiceStudio speech benchmark runner
+# Execute isolated VoiceStudio speech benchmark runner
 bash scripts/benchmark/run_voicestudio_host.sh
 ```
 
-- **Readiness Check:** Verifies HTTP 200 on `http://127.0.0.1:3900/health`, confirms CUDA availability, and checks presence of `k2-fsa/OmniVoice` model weights.
-- **Paid Fallback Guardrails:** Automatically enforces `VOICESTUDIO_FALLBACK_TO_PAID="false"` to prevent commercial billing surges.
-- **Output Metrics:** Records synthesis latency, real-time factor (RTF), output audio duration, sample rate, and host VRAM consumption.
-
-### 5.8 Interpreting Performance Telemetry
+### 5.6 Interpreting Performance Telemetry
 
 Benchmark reports emit standardized metrics defined as follows:
 
 - **Real-Time Factor (RTF):**
-  $$\text{RTF} = \frac{\text{Processing Execution Duration (seconds)}}{\text{Input Media Duration (seconds)}}$$
+
+  $$
+  \text{RTF} = \frac{\text{Processing Execution Duration (seconds)}}{\text{Input Media Duration (seconds)}}
+  $$
+
   - $\text{RTF} < 1.0$: Faster than real-time (e.g., $0.08\text{x}$ means a 60-second video processes in $4.8$ seconds).
   - $\text{RTF} > 1.0$: Slower than real-time.
 - **Throughput Multiplier ($\text{Speedup}$):**
-  $$\text{Speedup} = \frac{1}{\text{RTF}}$$
+
+  $$
+  \text{Speedup} = \frac{1}{\text{RTF}}
+  $$
+
   (e.g., AutoFlip on T4 achieves $\sim 12.4\text{x}$ real-time speedup).
 - **Latency Percentiles ($P50$, $P95$, $P99$):** Measured in seconds. P95 represents the latency boundary that 95% of processed jobs fell beneath.
 - **VRAM Utilization (MiB):** Peak GPU memory allocated by CUDA processes during model execution (monitored via non-blocking `nvidia-smi` queries).
 - **Resident Set Size (RSS):** Peak host RAM allocated by the Node.js or Python worker processes.
 - **Estimated Cost per Media Minute:**
-  $$\text{Cost / min} = (\text{Worker RTF} \times \text{Hourly Compute Rate} / 60) + \text{Vendor Unit Rate}$$
 
-### 5.9 Measured Benchmarks vs. Modeled Economic Projections
+  $$
+  \text{Cost / min} = (\text{Worker RTF} \times \text{Hourly Compute Rate} / 60) + \text{Vendor Unit Rate}
+  $$
+
+### 5.7 Measured Benchmarks vs. Modeled Economic Projections
 
 Engineering documentation must rigorously distinguish empirical measurements from modeled assumptions:
 
-| Pipeline Stage               | Metric             | Empirical Measurement                               | Modeled Economic Projection   | Provenance & Validation                                                               |
-| :--------------------------- | :----------------- | :-------------------------------------------------- | :---------------------------- | :------------------------------------------------------------------------------------ |
-| **AutoFlip (Reframing)**     | Throughput / RTF   | **$12.4\text{x}$ real-time ($0.0806\text{x}$ RTF)** | —                             | Measured on Tesla T4 across 8 regression videos ($6.8\text{ hrs}$).                   |
-| **YuNet ONNX Face Detect**   | Peak GPU VRAM      | **$3\text{ MiB}$ VRAM**                             | —                             | Measured: YuNet runs CPU-side; leaves GPU VRAM for TalkNet.                           |
-| **VoiceStudio (TTS)**        | Speed / RTF        | **$0.3806\text{x}$ RTF ($2.63\text{x}$ real-time)** | —                             | Empirically measured: $380.3\text{ s}$ compute for $999.3\text{ s}$ speech on T4.     |
-| **VoiceStudio Unit Cost**    | Compute Cost / min | —                                                   | **`$0.0045 / min`**           | Modeled: $(0.3806 / 60) \times \$0.7104\text{/hr}$ at Sydney Linux On-Demand.         |
-| **Hybrid Dubbing (TTS)**     | TTS Cost / min     | —                                                   | **`$0.1620 / min`**           | Modeled: $900\text{ chars/min} \times \$0.00018\text{/char}$ (ElevenLabs Scale Tier). |
-| **Hybrid Dubbing (Non-TTS)** | Compute RTF        | —                                                   | **`0.25x RTF (Provisional)`** | **Provisional engineering assumption** pending live production traffic.               |
-| **Hybrid Dubbing (Non-TTS)** | Compute Cost / min | —                                                   | **`$0.0030 / min`**           | Modeled: $(0.25 / 60) \times \$0.7104\text{/hr}$ at Sydney Linux On-Demand.           |
-| **Total Hybrid Dubbing**     | All-in COGS / min  | —                                                   | **`~$0.1650 / min`**          | Sum of modeled ElevenLabs TTS + provisional GPU compute.                              |
-| **Turnkey Dubbing (v1)**     | SaaS Cost / min    | —                                                   | **`$0.33 to $0.50 / min`**    | Official ElevenLabs SaaS turnkey pricing documentation.                               |
-| **Turnkey Dubbing (v2)**     | SaaS Cost / min    | —                                                   | **`$2.20 / min`**             | Official ElevenLabs SaaS high-fidelity dubbing pricing.                               |
+| Pipeline Stage                     | Metric             | Empirical Measurement                                         | Modeled Economic Projection           | Provenance & Validation                                                                 |
+| :--------------------------------- | :----------------- | :------------------------------------------------------------ | :------------------------------------ | :-------------------------------------------------------------------------------------- |
+| **AutoFlip (Reframing)**     | Throughput / RTF   | **$12.4\text{x}$ real-time ($0.0806\text{x}$ RTF)** | —                                    | Measured on Tesla T4 across 8 regression videos ($6.8\text{ hrs}$).                   |
+| **YuNet ONNX Face Detect**   | Peak GPU VRAM      | **$3\text{ MiB}$ VRAM**                               | —                                    | Measured: YuNet runs CPU-side; leaves GPU VRAM for TalkNet.                             |
+| **VoiceStudio (TTS)**        | Speed / RTF        | **$0.3806\text{x}$ RTF ($2.63\text{x}$ real-time)** | —                                    | Empirically measured: $380.3\text{ s}$ compute for $999.3\text{ s}$ speech on T4.   |
+| **VoiceStudio Unit Cost**    | Compute Cost / min | —                                                            | **`$0.0045 / min`**           | Modeled: $(0.3806 / 60) \times \$0.7104\text{/hr}$ at Sydney Linux On-Demand.         |
+| **Hybrid Dubbing (TTS)**     | TTS Cost / min     | —                                                            | **`$0.1620 / min`**           | Modeled: $900\text{ chars/min} \times \$0.00018\text{/char}$ (ElevenLabs Scale Tier). |
+| **Hybrid Dubbing (Non-TTS)** | Compute RTF        | —                                                            | **`0.25x RTF (Provisional)`** | **Provisional engineering assumption** pending live production traffic.           |
+| **Hybrid Dubbing (Non-TTS)** | Compute Cost / min | —                                                            | **`$0.0030 / min`**           | Modeled: $(0.25 / 60) \times \$0.7104\text{/hr}$ at Sydney Linux On-Demand.           |
+| **Total Hybrid Dubbing**     | All-in COGS / min  | —                                                            | **`~$0.1650 / min`**          | Sum of modeled ElevenLabs TTS + provisional GPU compute.                                |
+| **Turnkey Dubbing (v1)**     | SaaS Cost / min    | —                                                            | **`$0.33 to $0.50 / min`**    | Official ElevenLabs SaaS turnkey pricing documentation.                                 |
+| **Turnkey Dubbing (v2)**     | SaaS Cost / min    | —                                                            | **`$2.20 / min`**             | Official ElevenLabs SaaS high-fidelity dubbing pricing.                                 |
 
 ---
 
@@ -1126,157 +885,251 @@ Engineering documentation must rigorously distinguish empirical measurements fro
 
 ### 6.1 Operational Principles & Safety Guardrails
 
-When diagnosing pipeline issues on production or staging environments:
+When diagnosing pipeline incidents, on-call operators must uphold strict operational guardrails:
 
-1. **Verify State Before Action:** Never terminate or restart a worker process without inspecting its active BullMQ lock and recent log output.
-2. **Never Force Flush Production Queues:** Do not invoke `flushall` or `flushdb` against production Redis.
-3. **Preserve Database Audit Trail:** Do not manually delete `VideoJob` records in PostgreSQL. Terminal state transitions must occur via application code or BullMQ failure hooks.
-4. **Graceful Worker Drain:** Before stopping or restarting systemd services, allow in-flight FFmpeg encoding operations to complete.
-5. **Never Commit or Log Credentials:** Redact all API keys, database passwords, and signed URLs from incident tickets and logs.
+> [!CAUTION]
+> **Strict Operational Recovery Safeguards**:
+>
+> 1. **Never Flush Redis:** Do not run `FLUSHALL` or `FLUSHDB`. Indiscriminately flushing Redis destroys active job locks, job outcome metrics, and active BullMQ state across all queues.
+> 2. **Never Delete Internal BullMQ Keys:** Do not manually delete keys matching `bull:reframe-processing:*` or `bull:dubbing-processing:*`.
+> 3. **Never Blindly Restart All Services:** Restarting healthy services interrupts in-flight encoding jobs and forces unneeded retry backoffs. Restart only the specific unhealthy service.
+> 4. **Never Start EC2 Without Authorization:** The GPU worker host (`i-02aa4578f3790bae1`) is intentionally stopped to control cloud costs ($0.7104/hr). Starting it requires explicit incident owner approval.
+> 5. **Never Commit or Log Credentials:** Redact all API keys, database passwords, and signed URLs from incident tickets and logs.
 
 ### 6.2 Step 1: Identify Affected Job, Queue & Pipeline
 
-Query PostgreSQL via Prisma or `psql` for the affected job record:
+Identify the failing job record before querying the database. For reframe jobs the BullMQ job ID is the same as the application job ID (`VideoJob.id`): the reframe API creates the database record first and then enqueues the job with that ID. Verify this in the creating route before assuming it for other pipelines.
 
-```sql
-SELECT id, "userId", status, progress, "createdAt", "updatedAt", error
+To obtain the job ID:
+
+1. **From the user.** The job ID is returned when the job is submitted, and the editor uses it to poll `GET /api/jobs/[id]`. Ask the reporter for it, or find it in the browser's network requests for the failed session.
+2. **From logs.** If the user cannot provide it, inspect the application and worker logs around the reported failure time and correlate the failed request using the job identifiers the logs print. Reframe worker log lines include the job ID.
+3. **From monitoring alerts.** Use alerts for queue and service context, such as which queue was affected and when. Do not assume an alert contains a job ID.
+4. **From the database (only if read-only access is approved).** If the ID is still unknown, ask for the account email, the approximate failure time, and the demo or video name, then list the account's recent jobs:
+
+   ```sql
+   -- Find recent jobs for a reported account
+   SELECT j.id, j."jobData"->>'kind' AS kind, j.status, j.progress,
+          j."createdAt", j."updatedAt", j.error
+   FROM "VideoJob" j
+   JOIN "User" u ON u.id = j."userId"
+   WHERE u.email = 'REPORTER_EMAIL'
+   ORDER BY j."createdAt" DESC
+   LIMIT 10;
+   ```
+
+   To search by demo instead of account, use `WHERE j."demoId" = 'DEMO_ID'`. Match the row to the report by creation time and `kind` (for example `REFRAME` or `AVS_DUB`). `status` is `PENDING` at creation and then `PROCESSING`, `COMPLETED`, `FAILED`, or `CANCELLED`; `error` holds the stored failure message, if any. Do not paste the reporter's email address into tickets or chat.
+5. **Inspect the record.** Once the job ID is known, use it in the PostgreSQL query below to inspect the `VideoJob` record:
+
+```bash
+# Query PostgreSQL via Prisma / psql for the job record
+SELECT id, "userId", status, progress, "createdAt", "updatedAt"
 FROM "VideoJob"
-WHERE id = 'cm3a1b2c3d4e5f6g7h8i9j0k';
+WHERE id = 'AFFECTED_JOB_ID';
 ```
 
-Determine the processing kind from `jobData`:
+This lookup covers jobs stored in `VideoJob`. Other pipelines may keep state in other tables; confirm the table with the service owner before relying on this query for them.
 
-- `kind: "REFRAME"` $\to$ Consumed by `reframe-processing` queue.
-- `kind: "DUBBING"` $\to$ Consumed by `dubbing-processing` queue (`name: "dubbing"`).
-- `kind: "AVS_DUB"` $\to$ Consumed by `dubbing-processing` queue (`name: "avs-dub"`).
-- `kind: "SUBTITLES"` $\to$ Consumed by `subtitle-processing` queue.
+Determine the corresponding BullMQ queue:
+
+- Reframing jobs $\to$ `reframe-processing`
+- Turnkey Dubbing / AVS Dubbing jobs $\to$ `dubbing-processing`
+- Subtitle generation jobs $\to$ `subtitle-processing`
+- Audio trim / metadata jobs $\to$ `audio-processing`
 
 ### 6.3 Step 2: Inspect Job State, Attempts & Stall Timers
 
-Verify job state via BullMQ CLI or Redis inspection:
+Inspect job state inside Redis without modifying data:
 
 ```bash
-# Connect to Redis via redis-cli using TLS
-redis-cli -u "$REDIS_URL" --tls
-
-# Inspect job state in BullMQ
-HGETALL bull:reframe-processing:cm3a1b2c3d4e5f6g7h8i9j0k
+# Verify job state via BullMQ CLI or Redis inspection
+redis-cli -u "$REDIS_URL" HGETALL "bull:reframe-processing:AFFECTED_JOB_ID"
 ```
 
-Key fields to examine:
+Check the following fields:
 
-- `attemptsMade`: Number of attempts already executed.
-- `failedReason`: Error message recorded from last failed attempt.
-- `lock`: Active Redis lock key (`bull:<queue>:<id>:lock`). If missing while in active state, the job has stalled.
+- `attemptsMade`: Number of executions attempted so far.
+- `failedReason`: Detailed exception message from the last execution failure.
+- `processedOn`: Timestamp when the active worker locked the job.
+- `timestamp`: Timestamp when the job was initially enqueued.
+
+Compare the elapsed active time against standard processing thresholds:
+
+- Reframe job normal duration: $15\text{ s} - 60\text{ s}$ (Stuck threshold: $>300\text{ s}$).
+- Dubbing job normal duration: $60\text{ s} - 180\text{ s}$ (Stuck threshold: $>600\text{ s}$).
 
 ### 6.4 Step 3: Analyze Worker Logs & Error Signatures
 
-Inspect systemd journal logs on the EC2 worker host:
+Inspect systemd logs on the worker host for unhandled exceptions or crash loops:
 
 ```bash
-# Stream Reframe Worker logs
-sudo journalctl -u marvedge-reframe-worker -n 100 -f
+# Inspect reframe worker logs over the last 30 minutes
+sudo journalctl -u marvedge-reframe-worker --since "30 minutes ago" --no-pager | tail -n 100
 
-# Stream Video Worker logs
-sudo journalctl -u marvedge-video-worker -n 100 -f
-
-# Filter by Job ID
-sudo journalctl -u marvedge-reframe-worker | grep 'cm3a1b2c3d4e5f6g7h8i9j0k'
+# Inspect video worker logs
+sudo journalctl -u marvedge-video-worker --since "30 minutes ago" --no-pager | tail -n 100
 ```
 
 Common error signatures:
 
-- `Cloud Run AVS alignment service timed out (504)` $\to$ Transient downstream timeout; BullMQ will retry up to max attempts.
-- `AVS alignment completed without returning a valid aligned video URL` $\to$ Non-retryable inference failure; worker persists `FAILED` in `VideoJob`.
-- `ECONNREFUSED 127.0.0.1:8000` $\to$ ML Gateway container is not running or crashed.
-- `CUDA out of memory` $\to$ GPU VRAM exceeded; requires worker restart or reducing input resolution.
+- `ML inference timed out after 180000ms`: ML Gateway or AutoFlip binary hung on corrupt media.
+- `ECONNREFUSED 127.0.0.1:8000`: ML Gateway daemon is stopped or crashed.
+- `Invalid CropTargetData`: AutoFlip generated out-of-bounds coordinates; worker safely rejected.
+- `QuotaExceeded / 429 Too Many Requests`: ElevenLabs or Deepgram API rate limit breached.
 
 ### 6.5 Step 4: Verify Redis Reachability & Network Saturation
 
-```bash
-# Verify Redis ping latency
-redis-cli -u "$REDIS_URL" --tls PING
+Confirm that workers can communicate with the Redis broker:
 
-# Check memory utilization
-redis-cli -u "$REDIS_URL" --tls INFO memory
+```bash
+# Test Redis round-trip latency and authentication
+redis-cli -u "$REDIS_URL" ping
+# Expected output: PONG
+
+# Inspect memory pressure and connected clients
+redis-cli -u "$REDIS_URL" info memory
+redis-cli -u "$REDIS_URL" info clients
 ```
+
+If connection times out or resets, verify security group ingress on port 6379 between the worker EC2 security group and the ElastiCache cluster.
 
 ### 6.6 Step 5: Verify Application & ML Service Health
 
-Execute local HTTP health checks on the worker host:
+On the EC2 worker host, execute local health checks:
 
 ```bash
-# Check ML Gateway
+# 1. Verify ML Gateway health
 curl -fsS http://127.0.0.1:8000/health
 
-# Check AutoFlip service (inside container or host)
-curl -fsS http://127.0.0.1:8002/health || docker exec marvedge-autoflip curl -fsS http://127.0.0.1:8000/health
+# 2. Verify TalkNet microservice health
+curl -fsS http://127.0.0.1:8001/health
 
-# Check TalkNet service
-curl -fsS http://127.0.0.1:8001/health || docker exec marvedge-talknet curl -fsS http://127.0.0.1:8000/health
+# 3. Verify AutoFlip microservice health
+curl -fsS http://127.0.0.1:8002/health
 
-# Check VoiceStudio (if enabled)
+# 4. Verify VoiceStudio container health (if opt-in enabled)
 curl -fsS http://127.0.0.1:3900/health
 ```
 
+If any service returns non-200 or connection refused, inspect that service's logs before taking restart action.
+
 ### 6.7 Step 6: Diagnose GPU Worker Host & Preflight Gates
 
-Verify GPU driver status and temperature:
+Check whether the AWS EC2 GPU instance is running:
 
 ```bash
-# Query GPU status and process memory allocation
-nvidia-smi
-
-# Check for CUDA kernel errors
-dmesg -T | grep -i nvrm
+# Query instance state from administrative workstation
+aws ec2 describe-instances \
+  --instance-ids i-02aa4578f3790bae1 \
+  --region ap-southeast-2 \
+  --profile marvedge \
+  --query 'Reservations[0].Instances[0].[State.Name,PrivateIpAddress]' \
+  --output table
 ```
 
-Run the automated host preflight gate script:
+If the instance is stopped and compute execution is authorized by the incident lead:
 
 ```bash
-bash infra/gpu-deployment/preflight-gate.sh
+# Start GPU instance (REQUIRES AUTHORIZATION)
+aws ec2 start-instances \
+  --instance-ids i-02aa4578f3790bae1 \
+  --region ap-southeast-2 \
+  --profile marvedge
 ```
+
+Once running, SSH into the host and execute the automated preflight gate:
+
+```bash
+cd /opt/marvedge
+sudo ./infra/gpu-deployment/preflight-gate.sh
+```
+
+The preflight script authoritatively validates:
+
+- Environment file `/etc/marvedge/worker.env` presence and permissions (0600).
+- TalkNet S3FD and model weight checkpoint integrity.
+- AutoFlip executable existence and execute permissions.
+- Shared Redis connectivity (rejecting unintended localhost targets).
+- NVIDIA driver presence and GPU device initialization.
 
 ### 6.8 Step 7: Isolate External Vendor & API Failures
 
-If dubbing or subtitle jobs fail across multiple users:
+If worker logs point to third-party APIs:
 
-- Deepgram: Check `https://status.deepgram.com/`
-- ElevenLabs: Check `https://status.elevenlabs.io/`
-- Verify API key balances and quota limits.
+- **ElevenLabs Issues:** Check [ElevenLabs Status](https://status.elevenlabs.io/). Verify character quotas and billing tier status in the management console.
+- **Deepgram Issues:** Check [Deepgram Status](https://status.deepgram.com/).
+- **Cloudinary Issues:** Verify upload preset configurations and administrative bandwidth caps.
 
 ### 6.9 Step 8: Evaluate Retry Safety & Idempotency Boundary
 
-- Reframe jobs: Safe to retry; intermediate state is written to temporary files and discarded on failure.
-- Subtitle jobs: Safe to retry; audio extraction is deterministic.
-- Turnkey Dubbing: Idempotent when passing existing `dubbingId`; creating a new dubbing job bills additional characters.
+Before retrying a stuck or failed job, determine whether re-execution is safe:
+
+| Pipeline                        | Idempotency Safe? | Billing Impact on Retry                                                | Safe Action                                                                                                          |
+| :------------------------------ | :---------------: | :--------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------- |
+| **Reframe**               |   **Yes**   | Zero external API cost (runs on existing EC2 compute).                 | **Safe to retry** once ML Gateway / AutoFlip health is verified.                                               |
+| **Subtitles**             |   **Yes**   | Re-incurs Deepgram transcription charges per minute.                   | Verify audio quality; safe to retry if transient network failure.                                                    |
+| **Dubbing (ElevenLabs)**  | **Caution** | **Re-incurs character billing charges ($0.18–$0.24/1k chars).** | **Check provider console first:** If ElevenLabs already finished, retrieve audio; do not resynthesize blindly. |
+| **Dubbing (VoiceStudio)** |   **Yes**   | Zero external billing cost (runs on in-house GPU).                     | **Safe to retry** once container port 3900 is ready.                                                           |
 
 ### 6.10 Step 9: Safe Job Recovery via BullMQ / Service Restarts
 
-If a worker daemon is unresponsive:
+If an individual worker service is hung or degraded, restart only that affected service:
 
 ```bash
-# 1. Restart worker safely
+# Authorized restart of reframe worker only
 sudo systemctl restart marvedge-reframe-worker
 
-# 2. Check service status
-sudo systemctl status marvedge-reframe-worker
-
-# 3. Retry stalled job in BullMQ (via Node CLI script)
-node -e "
-const { Queue } = require('bullmq');
-const queue = new Queue('reframe-processing', { connection: { url: process.env.REDIS_URL } });
-queue.getJob('cm3a1b2c3d4e5f6g7h8i9j0k').then(j => j && j.retry());
-"
+# Verify service status and recent journal logs
+sudo systemctl status marvedge-reframe-worker --no-pager
+sudo journalctl -u marvedge-reframe-worker --since "2 minutes ago" --no-pager
 ```
+
+To retry a specific failed **reframe** job without touching Redis keys directly, use the manual BullMQ retry command below. It is an operational command, not a standalone repository utility: no recovery script exists in the repository. It uses `Job.retry()` from BullMQ 5.x (the repository dependency is `bullmq ^5.70.2`); re-check it after any BullMQ upgrade. The command is only for failed reframe jobs: it checks for the BullMQ `failed` state and refuses any other state. It does not handle jobs that are stuck in `PROCESSING` (active or stalled); for those, follow a separate recovery procedure approved by the service owner. For any other queue, apply the idempotency table in section 6.9 and use the procedure approved by the service owner.
+
+Before retrying:
+
+1. Obtain authorization from the incident owner. Do not retry on your own judgement.
+2. Look up the job record (section 6.2) and verify its state. Retry only when the job's BullMQ state is `failed` (its database `status` is normally `FAILED`). Do not use this command for a job stuck in `PROCESSING`; follow the recovery procedure approved by the service owner instead. Do not retry a job whose status is `COMPLETED` or `CANCELLED`: the callback endpoint ignores further callbacks for those states.
+3. Confirm the underlying cause is fixed and the health checks in section 6.6 pass.
+4. Failed reframe jobs are retained only up to the queue's `removeOnFail` limit (500). If the job is no longer found, do not recreate Redis keys; escalate to the service owner. Resubmitting creates a new job ID.
+
+```bash
+# Manual BullMQ retry for ONE failed reframe job (operational command).
+# REDIS_URL must already be set in the environment; never print it.
+# 'timeout 30' stops the command if Redis is unreachable (see section 6.5).
+timeout 30 node -e '
+const { Queue } = require("bullmq");
+const Redis = require("ioredis");
+const jobId = process.argv[1];
+(async () => {
+  const redis = new Redis(process.env.REDIS_URL);
+  const queue = new Queue("reframe-processing", { connection: redis });
+  try {
+    const job = await queue.getJob(jobId);
+    if (!job) { console.log("Job not found"); process.exitCode = 1; return; }
+    const state = await job.getState();
+    console.log("State:", state);
+    if (state !== "failed") { console.log("Not failed; do not retry."); process.exitCode = 1; return; }
+    await job.retry("failed");
+    console.log("Re-queued");
+  } finally {
+    await queue.close();
+    await redis.quit();
+  }
+})().catch((err) => { console.error("Retry command failed:", err.message); process.exit(1); });
+' AFFECTED_JOB_ID
+```
+
+The command checks that the job exists and is in the `failed` state before it calls `job.retry()`, and it closes the queue and the Redis connection before it exits. If it prints repeated connection errors, stop it and follow section 6.5. After retrying, continue with section 6.11 to verify the callback and output. If the job fails again, do not retry repeatedly; escalate to the service owner.
 
 ### 6.11 Step 10: Verify Successful Callback & Metric Resolution
 
-Verify that the worker posted a valid callback and PostgreSQL status updated to `COMPLETED`:
+Confirm that the recovered job transitions to completion:
 
-```sql
-SELECT id, status, progress, "exportedUrl" FROM "VideoJob" WHERE id = 'cm3a1b2c3d4e5f6g7h8i9j0k';
-```
+1. Verify worker logs confirm successful rendering and Cloudinary/S3 upload.
+2. Verify `POST /api/jobs/callback` returned `HTTP 200 { "received": true }`.
+3. Check PostgreSQL: `SELECT status, progress, "exportedUrl" FROM "VideoJob" WHERE id = 'AFFECTED_JOB_ID';` verifies `COMPLETED`.
+4. Confirm Prometheus gauge `marvedge_queue_depth{state="active"}` decrements.
 
 ---
 
@@ -1284,67 +1137,109 @@ SELECT id, status, progress, "exportedUrl" FROM "VideoJob" WHERE id = 'cm3a1b2c3
 
 ### 7.1 Prometheus Metrics Endpoint (`GET /api/monitoring/metrics`)
 
-Marvedge exposes Prometheus metrics for scraping by Datadog, Prometheus, or Grafana:
+Marvedge exposes operational Prometheus metrics from the Next.js API server. The route is guarded by a shared secret comparison using `crypto.timingSafeEqual` to prevent timing attacks.
 
 - **Endpoint:** `GET /api/monitoring/metrics`
-- **Authentication:** `x-marvedge-rollup-secret: <OVERLAYS_ROLLUP_SECRET>` or `Authorization: Bearer <PROMETHEUS_BEARER_TOKEN>`.
-- **Exposed Metrics:**
-  - `marvedge_queue_waiting_jobs{queue="reframe-processing"}`
-  - `marvedge_queue_active_jobs{queue="reframe-processing"}`
-  - `marvedge_queue_completed_jobs_total{queue="reframe-processing"}`
-  - `marvedge_queue_failed_jobs_total{queue="reframe-processing"}`
-  - `marvedge_stuck_queue_oldest_job_seconds{queue="reframe-processing"}`
-  - `marvedge_job_latency_seconds_bucket{le="10",queue="reframe-processing"}`
-  - `marvedge_job_failure_rate_ratio{queue="reframe-processing"}`
-  - `marvedge_gpu_estimated_spend_usd{window="rolling_hour"}`
-  - `marvedge_dubbing_vendor_estimated_spend_usd{window="rolling_hour"}`
+- **Required Header:** `x-marvedge-rollup-secret: <OVERLAYS_ROLLUP_SECRET>`
+- **Response Format:** Standard Prometheus OpenMetrics plaintext format (`Content-Type: text/plain; version=0.0.4`).
+
+```bash
+# Scrape metrics securely using curl
+curl -fsS -H "x-marvedge-rollup-secret: $OVERLAYS_ROLLUP_SECRET" \
+  http://localhost:3000/api/monitoring/metrics
+```
+
+#### Core Metrics Catalog
+
+| Metric Identifier                               | Metric Type | Label Dimensions         | Description                                                                                                               |
+| :---------------------------------------------- | :---------: | :----------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| `marvedge_jobs_total`                         |   Counter   | `pipeline`, `status` | Total jobs processed, partitioned by pipeline (`reframe`, `dubbing`) and terminal status (`completed`, `failed`). |
+| `marvedge_queue_depth`                        |    Gauge    | `pipeline`, `state`  | Current BullMQ job count partitioned by pipeline and state (`waiting`, `active`, `delayed`, `failed`).            |
+| `marvedge_reframe_inference_duration_seconds` |  Histogram  | `status`               | Duration of AutoFlip ML inference calls (buckets: $0.1\text{ s}$ to $120\text{ s}$).                                  |
+| `marvedge_dubbing_duration_seconds`           |  Histogram  | `status`               | Duration of dubbing jobs from start to completion (buckets: $1\text{ s}$ to $600\text{ s}$).                          |
 
 ### 7.2 Queue Depth & Stuck-Queue Latency Alerts
 
-Evaluated by `scripts/monitoringAlerts.ts` every 60 seconds:
+Queue health evaluation ensures on-call engineers are notified of pipeline stalls without generating false alarms during off-peak inactivity:
 
-- **Queue Depth Alert:** Triggers when waiting jobs exceed threshold (`reframe > 100`, `dubbing > 50`).
-- **Stuck Queue Alert:** Triggers when the oldest active job exceeds threshold (`reframe > 300s`, `dubbing > 600s`).
+- **Zero False Alarms When Empty:** When a queue has zero waiting and zero active jobs, its latency is evaluated as exactly $0.0\text{ seconds}$. It will **never** trigger a stuck-queue alert when idle.
+- **Exclusion of Delayed Retries:** Jobs in `delayed` state (undergoing exponential backoff delays) are excluded from stuck queue calculations to prevent normal retry delays from appearing as stalls.
+- **Thresholds:**
+  - `reframe_stuck_queue`: Oldest uncompleted job age $>300\text{ seconds}$ (`MONITORING_REFRAME_STUCK_QUEUE_THRESHOLD_SECONDS`).
+  - `dubbing_stuck_queue`: Oldest uncompleted job age $>600\text{ seconds}$ (`MONITORING_DUBBING_STUCK_QUEUE_THRESHOLD_SECONDS`).
 
 ### 7.3 Terminal Failure Rate Accounting
 
-Calculates rolling failure ratio:
+Failure rate alarms monitor worker quality while preventing single-job glitches from spamming on-call engineers:
 
-$$\text{Failure Rate} = \frac{\text{Failed Jobs}}{\text{Completed Jobs} + \text{Failed Jobs}}$$
-
-- **Threshold:** Alert fires if failure rate $> 20\%$ (`0.20`) over the 5-minute observation window (`MONITORING_FAILURE_RATE_OBSERVATION_WINDOW_SECONDS=300`).
-- **Minimum Job Guardrail:** Requires at least 10 completed+failed jobs in the window (`MONITORING_FAILURE_RATE_MINIMUM_JOBS=10`) before firing.
+- **Formula:**
+  $$
+  \text{Failure Rate} = \frac{\text{Failed Terminal Jobs}}{\text{Completed Jobs} + \text{Failed Jobs}}
+  $$
+- **Observation Window:** Evaluated over a rolling 5-minute window (`MONITORING_FAILURE_RATE_OBSERVATION_WINDOW_SECONDS=300`) stored in Redis one-minute buckets.
+- **Minimum Volume Guardrail:** The alarm is suppressed unless total completed plus failed jobs in the window meets or exceeds `MONITORING_FAILURE_RATE_MINIMUM_JOBS=10`.
+- **Threshold:** Triggers when the terminal failure ratio breaches $0.20$ ($20\%$).
 
 ### 7.4 GPU Compute & Vendor Spend Anomaly Tracking
 
-Tracks rolling expenditure against budget caps:
+The monitoring engine calculates operational cost estimates to catch runaway processing loops before they escalate into massive cloud invoices:
 
-- **GPU Spend Anomaly:** Estimated from worker execution duration:
-  $$\text{Spend} = \frac{\text{Runtime Seconds}}{3600} \times \text{Hourly Rate}$$
-  Alerts if spend $> \$25.00$ within the observation window.
-- **Vendor Spend Anomaly:** Estimated from ElevenLabs characters processed:
-  $$\text{Vendor Spend} = \text{Characters} \times \$0.0003$$
-  Alerts if vendor spend $> \$50.00$ within the observation window.
+- **Measured Runtime vs. Estimated Spend:** Workers track real compute execution seconds in Redis minute buckets (`category: "gpu_worker"`, `provider: "reframe"`). This measures worker compute time, not EC2 instance uptime (EC2 instances incur costs while idle until stopped).
+- **GPU Spend Formula:**
+
+  $$
+  \text{Estimated GPU Spend} = \left(\frac{\text{Worker Runtime Seconds}}{3600}\right) \times \text{MONITORING\_GPU\_HOURLY\_RATE\_USD}
+  $$
+
+  (Baseline rate: $\$0.7104\text{/hr}$ for Sydney `g4dn.xlarge`).
+- **Vendor Spend Formula:**
+
+  $$
+  \text{Estimated Dubbing Spend} = \text{Characters Consumed} \times \text{MONITORING\_DUBBING\_VENDOR\_ESTIMATED\_UNIT\_COST\_USD}
+  $$
+
+  (Baseline rate: $\$0.0003\text{/char}$ conservative estimate).
+- **Notice:** These metrics are **operational estimates** for real-time anomaly detection. They are distinct from official monthly invoices issued by AWS Cost Explorer or ElevenLabs.
 
 ### 7.5 Notification Dispatch & Webhook Masking
 
-- **Email Dispatch:** Sent via Resend API to `MONITORING_ALERT_EMAIL_RECIPIENT` using verified sender `MONITORING_ALERT_EMAIL_SENDER`.
-- **Chat Webhooks:** Structured JSON cards dispatched via HTTP POST to Slack, Discord, or Teams (`MONITORING_ALERT_WEBHOOK_URL`). Webhook tokens and query secrets are automatically masked in log outputs.
-- **Dry-Run Mode:** Setting `MONITORING_ALERT_DRY_RUN="true"` formats and logs alerts without dispatching external network requests.
+Outbound notifications are dispatched across two independent channels:
+
+1. **Transactional Email via Resend:** Formats an HTML/text summary and sends to configured recipients (`MONITORING_ALERT_EMAIL_RECIPIENT`).
+2. **Chat Webhooks:** Formats structured Markdown cards dispatched via HTTP POST to Slack, Discord, or Microsoft Teams (`MONITORING_ALERT_WEBHOOK_URL`).
+
+- **Security & Fault Tolerance:**
+  - **URL Secret Masking:** If a webhook URL contains query parameters or embedded tokens, credentials are automatically masked in log outputs (`https://hooks.slack.com/services/T.../***`).
+  - **Bounded Execution:** Outbound dispatches enforce a strict 5-second timeout with bounded exponential retries. Notification delivery errors can **never** block background worker queues or crash monitoring loops.
+  - **Delivery Failure Cooldown Reset:** If dispatch fails on all configured channels (e.g., transient network drop), the evaluator resets the cooldown so the subsequent cycle immediately retries notification delivery.
 
 ### 7.6 Alert State Persistence & Atomic Redis Transitions
 
-Alert state is persisted in Redis keys (`marvedge:alert:state:...`) with atomic transitions powered by Lua scripts. Cooldown timers (`MONITORING_ALERT_COOLDOWN_SECONDS=300`) prevent duplicate alerts during continuous breach states.
+To coordinate multi-process deployments and survive process restarts without duplicate notification storms, alert states are tracked atomically in Redis:
+
+- **State Key Schema:** `marvedge:monitoring:alert:v1:state:${alertName}`
+- **Atomic Lua Transitions (`transitionLuaScript`):** Evaluators execute an atomic Lua script in Redis that evaluates thresholds, compares timestamps against `lastFiringAt`, and returns one of four deterministic actions:
+  - `EMIT_FIRING`: Condition breaches threshold and cooldown has elapsed.
+  - `EMIT_RESOLVED`: Condition returns below threshold; emits recovery notification **exactly once**.
+  - `SUPPRESSED`: Condition remains firing but within cooldown, or concurrent evaluation was already recorded.
+  - `NOOP`: Condition is healthy and was already resolved; no duplicate messages.
+- **In-Memory Fallback & Degraded Mode:** If Redis is temporarily unreachable, the evaluator logs a diagnostic warning and delegates to a process-local in-memory store. Evaluators never crash or unhandled-reject due to Redis disconnections.
+- **TTL Expiration:** All Redis alert keys use a 7-day TTL (`MONITORING_ALERT_STATE_TTL_SECONDS=604800`) to guarantee zero unbounded memory growth.
 
 ### 7.7 Systemd Supervision of Alert Evaluator
 
-The alert evaluator daemon is managed by systemd:
+The external monitoring alert evaluator runs as a supervised systemd service on the host:
+
+- **Service File:** `infra/gpu-deployment/marvedge-monitoring-alerts.service`
+- **Execution Command:** `node node_modules/tsx/dist/cli.mjs scripts/monitoringAlerts.ts`
+- **Restart Policy:** `Restart=always` with `RestartSec=10s`.
+- **Environment File:** `/etc/marvedge/monitoring.env` (permissions 0600).
 
 ```bash
-# Check service status
-sudo systemctl status marvedge-monitoring-alerts
+# Inspect monitoring service status
+sudo systemctl status marvedge-monitoring-alerts --no-pager
 
-# Tail live alert evaluator logs
+# Stream monitoring logs
 sudo journalctl -u marvedge-monitoring-alerts -f
 ```
 
@@ -1358,78 +1253,46 @@ sudo journalctl -u marvedge-monitoring-alerts -f
 
 ## 8. Known Limitations and Caveats
 
-This section classifies every operational limitation and architectural risk according to its verified implementation state.
-
 ### 8.1 AutoFlip I-Frame Decoding & Camera Motion
 
-- **Status:** **`[VERIFIED]`**
 - **Mechanism:** AutoFlip passes `-skip_frame nokey -flags2 fast` to FFmpeg during frame extraction. This decodes keyframes (I-frames) only, reducing decode workloads by $\sim 37\text{x}$.
 - **Limitation:** In videos with very long GOP (Group of Pictures) intervals ($>2\text{ seconds}$ between keyframes) or rapid, abrupt pan movements, keyframe-only trajectory tracking may introduce slight visual framing latency before the bounding box catches up to a moving subject.
 
-### 8.2 TalkNet Model and GPU Dependencies
+### 8.2 VoiceStudio Legal, Licensing & Model Checkpoints
 
-- **Status:** **`[VERIFIED]`**
-- **Mechanism:** TalkNet requires PyTorch, S3FD face detector weights (`sfd_face.pth`), and pre-trained TalkSet model weights (`pretrain_TalkSet.model`).
-- **Limitation:** Although CPU inference is functionally supported in the container, real-time performance requires a CUDA GPU. Attempting concurrent TalkNet executions on a single 16GB Tesla T4 GPU triggers CUDA out-of-memory errors; worker concurrency must strictly remain `1`.
+- **Application License (GNU AGPL-3.0):** VoiceStudio is licensed under GNU AGPL-3.0. Although Marvedge runs VoiceStudio in an isolated Docker container communicating strictly over HTTP loopback (`127.0.0.1:3900`), AGPL-3.0 includes network-copyleft provisions. Prior to offering VoiceStudio in a commercial SaaS offering, independent legal counsel review is required.
+- **Model Checkpoint License (CC-BY-NC 4.0):** The default `k2-fsa/OmniVoice` model checkpoint incorporates Boson AI Higgs Audio 2 and Meta Llama 3 tokenizer weights, licensed strictly under **CC-BY-NC 4.0 (Non-Commercial)**. It is authorized exclusively for internal evaluation, architectural validation, and benchmarking. **It must not be used for commercial production dubbing.** For commercial production, it must be replaced with an Apache-2.0 open model (such as `Kokoro-82M`).
 
-### 8.3 VoiceStudio Legal, Licensing & Model Checkpoints
+### 8.3 Commercial Fallback Prevention & Billing Bounds
 
-- **Status:** **`[BLOCKED]`** (Commercial SaaS Production) / **`[VERIFIED]`** (Internal Evaluation & Benchmarking)
-- **Source-Code License (GNU AGPL-3.0):** VoiceStudio application code is licensed under GNU AGPL-3.0. Marvedge deploys VoiceStudio in an isolated Docker container communicating strictly over HTTP loopback (`127.0.0.1:3900`). Commercial deployment approval requires appropriate review by qualified legal counsel to assess AGPL-3.0 copyleft obligations before any commercial SaaS distribution.
-- **Model Checkpoint License (CC-BY-NC 4.0):** The default `k2-fsa/OmniVoice` model checkpoint incorporates Boson AI Higgs Audio 2 and Meta Llama 3 tokenizer weights, licensed strictly under **CC-BY-NC 4.0 (Non-Commercial)**.
-- **Internal Evaluation Permission:** Use of the default `k2-fsa/OmniVoice` checkpoint is permitted exclusively for internal evaluation, architectural validation, and local benchmarking under non-commercial terms.
-- **Commercial Deployment Approval:** Commercial production deployment is **strictly blocked** under the default checkpoint. Commercial deployment requires replacing the model weights with a commercially permissive open model (such as `Kokoro-82M` under Apache-2.0) and obtaining formal sign-off from company legal counsel. Definitive legal conclusions regarding licensing compliance must be provided by legal counsel.
-
-### 8.4 Commercial Fallback Prevention & Billing Bounds
-
-- **Status:** **`[VERIFIED]`**
-- **Mechanism:** Automatic fallback from VoiceStudio to paid ElevenLabs requests is disabled by default:
+- Automatic fallback from VoiceStudio to paid ElevenLabs requests is disabled by default:
   `VOICESTUDIO_FALLBACK_TO_PAID="false"`.
-- **Limitation:** If VoiceStudio experiences a CUDA OOM, process hang, or model error, the job terminates with `VOICESTUDIO_UNAVAILABLE`. This fail-closed design is intentional to prevent unexpected commercial billing surges on ElevenLabs credit balances.
+- If VoiceStudio experiences a CUDA OOM or process hang, the job terminates with `VOICESTUDIO_UNAVAILABLE`. This fail-closed design prevents unexpected thousands-of-dollars billing spikes on ElevenLabs credit balances.
 
-### 8.5 Provisional Concurrency & Full-Pipeline Assumptions
+### 8.4 Provisional Concurrency & Full-Pipeline Assumptions
 
-- **Status:** **`[PROVISIONAL]`**
 - **Worker Concurrency Limit:** Workers enforce a strict concurrency ceiling of `1` (`REFRAME_WORKER_CONCURRENCY=1`, `WORKER_CONCURRENCY=1`). Increasing concurrency on a single Tesla T4 GPU risks CUDA out-of-memory errors during concurrent TalkNet runs.
 - **Provisional Dubbing Compute RTF:** The `0.25x RTF` non-TTS compute duration in the hybrid dubbing economic model is an explicit provisional assumption pending high-volume production telemetry.
 
-### 8.6 GPU EC2 Cold-Start & Standby State
+### 8.5 GPU EC2 Cold-Start & Standby State
 
-- **Status:** **`[VERIFIED]`**
-- **Mechanism:** To avoid idle cloud spend of $\$0.7104\text{/hr}$ ($\sim \$511\text{/month}$ per instance), the GPU worker EC2 instance is kept in the `stopped` state by default.
-- **Limitation:** Cold booting the instance via AWS CLI or SSM, initializing NVIDIA drivers, and mounting volumes requires $90 - 180\text{ seconds}$ before workers begin consuming Redis queue jobs.
+- To avoid idle cloud spend of $\$0.7104\text{/hr}$ ($\sim \$511\text{/month}$ per instance), the GPU worker EC2 instance is kept in the `stopped` state by default.
+- Cold booting the instance via AWS CLI or SSM, initializing NVIDIA drivers, and mounting volumes requires $90 - 180\text{ seconds}$ before workers begin consuming Redis queue jobs.
 
-### 8.7 AVS Alignment and Timing Requirements
+### 8.6 Cloud Run Subtitle Job Cancellation Semantics
 
-- **Status:** **`[VERIFIED]`** (Worker Guards on PR #578) / **`[BLOCKED]`** (AVS End-to-End Asset Validation)
-- **Worker Guards Status (Branch PR #578):** The dual-layer guards preventing false completion on audio-only WAV outputs (`alignedVideoUrl === audioUrl`) and unchanged source-video outputs (`alignedVideoUrl === sourceUrl`) are implemented on feature branch `task/task-00132-voicestudio-remediation` (PR #578, unmerged) and verified by automated unit tests in [`video-worker/dubbingWorker.test.ts`](../video-worker/dubbingWorker.test.ts).
-- **AVS End-to-End Execution Status:** **UNVERIFIED / BLOCKED**. Independent of the worker guards, full audiovisual lip-sync synchronization on real video remains unverified due to a reference asset semantic mismatch discovered during forensic audit: existing reference video clips (`clip1.mp4`, `clip2.mp4`) contain dialogue from an innuendo bingo challenge and the single word "so", whereas existing dubbed WAV files describe automated video reframing. Full AVS dubbing sign-off remains blocked until matched source video and audio assets are reconciled and rendered end-to-end.
+- The `/subtitles` endpoint invokes an HTTP request to Cloud Run. Because standard HTTP requests cannot be cancelled in flight, cancelling a subtitle job in the web client does not abort downstream Cloud Run execution.
+- Cancellation marks the PostgreSQL `VideoJob` record as `CANCELLED`. When the Cloud Run worker finishes and returns cues, the application discards the result rather than attaching it to the demo project.
 
-### 8.8 Cloud Run Subtitle Job Cancellation Semantics
+### 8.7 Cross-Cloud Egress & Multi-Region Topology
 
-- **Status:** **`[VERIFIED]`**
-- **Mechanism:** The `/subtitles` endpoint invokes an HTTP request to Cloud Run. Because standard HTTP requests cannot be cancelled in flight, cancelling a subtitle job in the web client does not abort downstream Cloud Run execution.
-- **Limitation:** Cancellation marks the PostgreSQL `VideoJob` record as `CANCELLED`. When the Cloud Run worker finishes and returns cues, the application discards the result rather than attaching it to the demo project.
+- Ingestion originates on Cloudinary CDN, application logic runs on Vercel (AWS us-east-1), primary compute runs on AWS Sydney (`ap-southeast-2`), and optional legacy workers run on Google Cloud Run.
+- Transporting full-resolution 1080p video files across cloud boundaries introduces network transfer latency ($2\text{ s} - 8\text{ s}$) that must be accounted for in job timeout configurations.
 
-### 8.9 Cross-Cloud Egress & Multi-Region Topology
+### 8.8 Development vs. Production Operational Parity
 
-- **Status:** **`[VERIFIED]`**
-- **Mechanism:** Ingestion originates on Cloudinary CDN, application logic runs on Vercel (`iad1`), primary compute runs on AWS Sydney (`ap-southeast-2`), and optional legacy workers run on Google Cloud Run.
-- **Limitation:** Transporting full-resolution 1080p video files across cloud boundaries introduces network transfer latency ($2\text{ s} - 8\text{ s}$) that must be accounted for in job timeout configurations.
-
-### 8.10 Benchmark Fixture Limitations vs. Real GPU Measurements
-
-- **Status:** **`[PROVISIONAL]`**
-- **Mechanism:** The offline benchmark (`scripts/benchmark/cloudCostBenchmark.ts`) uses synthetic video generators and deterministic fixture providers.
-- **Limitation:** Fixture mode validates harness orchestration, CLI parsing, telemetry aggregation, and cost equations, but does **not** evaluate GPU hardware acceleration, real CUDA VRAM constraints, or neural inference RTF. Simulated benchmarks must never be presented as verified GPU performance.
-
-### 8.11 Development vs. Production Database & Operational Parity
-
-- **Status:** **`[VERIFIED]`** (Neon Dual-URL Standard) / **`[UNVERIFIED]`** (AWS RDS Existence & Live State)
-- **Mechanism:** Both development and production environments standardise on Neon Serverless PostgreSQL with dual-URL connection pooling:
-  - `DATABASE_URL`: Transaction-pooled PgBouncer endpoint (`-pooler`).
-  - `DIRECT_URL`: Direct compute endpoint (non-pooler) required for Prisma schema migrations and DDL locks.
-- **Unresolved Inconsistency:** `.env.example` contains a connection string reference to an AWS RDS PostgreSQL 16 instance (`marvedge-db.cfggeg20sv42.ap-southeast-2.rds.amazonaws.com`). However, an environment template reference alone does not prove that an AWS resource currently exists or is provisioned. Active application code, Prisma schema (`prisma/schema.prisma`), and runbooks operate exclusively against Neon. The live existence and state of the referenced RDS resource remain strictly `[UNVERIFIED]`, and it is completely unmigrated in codebase schema.
+- Local development uses Neon PostgreSQL poolers or local Docker Postgres, and local Redis.
+- Production configurations strictly require AWS RDS PostgreSQL with SSL and shared Redis clusters. The reframe worker and alert evaluator actively reject accidental `localhost` Redis configurations in production unless overridden by explicit development flags.
 
 ---
 
@@ -1443,7 +1306,7 @@ To run the core application and workers locally for development:
 # 1. Install root dependencies
 npm install
 
-# 2. Synchronize Prisma database schema (uses DIRECT_URL)
+# 2. Synchronize Prisma database schema
 npx prisma db push
 
 # 3. Start Next.js development server
@@ -1472,9 +1335,6 @@ docker compose up -d ml-gateway autoflip talknet
 docker compose logs -f ml-gateway
 ```
 
-- ML Gateway binds to host port `8000:8000`.
-- AutoFlip and TalkNet listen on container internal port `8000` (accessible within `marvedge-ml-net` as `http://autoflip:8000` and `http://talknet:8000`).
-
 #### 2. VoiceStudio Neural Speech Container (`docker-compose.voicestudio.yml`)
 
 Brings up isolated VoiceStudio on host loopback port 3900:
@@ -1491,8 +1351,8 @@ docker compose -f docker-compose.voicestudio.yml ps
 
 On the production AWS EC2 worker host (`i-02aa4578f3790bae1`), services are managed by `systemd`:
 
-| Service Unit File                    | Managed Process                   | Syslog Identifier            |
-| :----------------------------------- | :-------------------------------- | :--------------------------- |
+| Service Unit File                      | Managed Process                     | Syslog Identifier              |
+| :------------------------------------- | :---------------------------------- | :----------------------------- |
 | `marvedge-ml-gateway.service`        | `uvicorn server:app --port 8000`  | `marvedge-ml-gateway`        |
 | `marvedge-autoflip.service`          | `uvicorn server:app --port 8002`  | `marvedge-autoflip`          |
 | `marvedge-talknet.service`           | `uvicorn server:app --port 8001`  | `marvedge-talknet`           |
@@ -1526,8 +1386,11 @@ echo "=== Verifying Marvedge V3 Service Endpoints ==="
 echo -n "Checking ML Gateway (8000)... "
 curl -fsS http://127.0.0.1:8000/health > /dev/null && echo "OK" || echo "FAILED"
 
-echo -n "Checking AutoFlip Service (8000 in Docker / 8002 on host)... "
-curl -fsS http://127.0.0.1:8000/health > /dev/null && echo "OK (via Gateway)" || echo "FAILED"
+echo -n "Checking AutoFlip Service (8002)... "
+curl -fsS http://127.0.0.1:8002/health > /dev/null && echo "OK" || echo "FAILED"
+
+echo -n "Checking TalkNet Service (8001)... "
+curl -fsS http://127.0.0.1:8001/health > /dev/null && echo "OK" || echo "FAILED"
 
 echo -n "Checking Next.js Metrics Endpoint (3000)... "
 curl -fsS -H "x-marvedge-rollup-secret: ${OVERLAYS_ROLLUP_SECRET:-}" \
@@ -1573,21 +1436,21 @@ sudo systemctl start marvedge-monitoring-alerts
 ### 9.6 Production Security Architecture
 
 - **Private Subnet Isolation:** EC2 worker instances reside in private subnets with zero direct public internet ingress. Ingress is restricted to VPC-internal traffic.
-- **Loopback Microservice Binds:** ML Gateway (`8000`), TalkNet (`8000` / `8001`), AutoFlip (`8000` / `8002`), and VoiceStudio (`3900`) bind strictly to `127.0.0.1` or the internal Docker network. They are inaccessible from outside the EC2 instance host.
+- **Loopback Microservice Binds:** ML Gateway (`8000`), TalkNet (`8001`), AutoFlip (`8002`), and VoiceStudio (`3900`) bind strictly to `127.0.0.1`. They are inaccessible from outside the EC2 instance host.
 - **Authentication Handshakes:**
   - Worker to Application: Bearer token HMAC authentication via `CALLBACK_SECRET`.
   - Worker to ML Gateway: Header authentication via `ML_GATEWAY_TOKEN`.
-  - Application to Prometheus: Header authentication via `OVERLAYS_ROLLUP_SECRET` or `PROMETHEUS_BEARER_TOKEN`.
+  - Application to Prometheus: Header authentication via `OVERLAYS_ROLLUP_SECRET`.
   - Client to Application: Encrypted NextAuth session JWTs.
 
 ---
 
 ## 10. Source-of-Truth References
 
-This index maps every documented architecture layer, queue, API route, and configuration item to its concrete repository source file. All paths are repository-relative.
+This index maps every documented architecture layer, queue, API route, and configuration item to its concrete repository source file for ongoing maintenance.
 
-| Architecture Layer   | Component / Feature                | Repository Implementation Path                                                                                          |
-| :------------------- | :--------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| Architecture Layer         | Component / Feature                | Repository Implementation Path                                                                                           |
+| :------------------------- | :--------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
 | **API Ingestion**    | Reframe Ingest Route               | [`app/api/reframe/route.ts`](../app/api/reframe/route.ts)                                                               |
 | **API Ingestion**    | Turnkey Dubbing Route              | [`app/api/dubbing/create/route.ts`](../app/api/dubbing/create/route.ts)                                                 |
 | **API Ingestion**    | AVS Dub-Sync Route                 | [`app/api/avs/dub/route.ts`](../app/api/avs/dub/route.ts)                                                               |
