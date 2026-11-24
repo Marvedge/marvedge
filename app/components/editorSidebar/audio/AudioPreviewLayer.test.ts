@@ -18,6 +18,26 @@ const clip: AudioClipDto = {
   updatedAt: "2026-11-24T00:00:00Z",
 };
 
+describe("audio preview window boundaries", () => {
+  it.each([
+    [9.995, false],
+    [10, true],
+    [11.999, true],
+    [12, false],
+    [12.001, false],
+  ] as const)("reports timeline time %s as inside: %s", (time, inside) => {
+    expect(clipWindow(clip, {}).contains(time)).toBe(inside);
+  });
+
+  it("uses the start and end of a manual placement", () => {
+    const window = clipWindow(clip, { [clip.id]: { start: 20, len: 6 } });
+    expect(window.contains(19.995)).toBe(false);
+    expect(window.contains(20)).toBe(true);
+    expect(window.contains(25.999)).toBe(true);
+    expect(window.contains(26)).toBe(false);
+  });
+});
+
 describe("audio preview seeking", () => {
   it("seeks relative to the start of the trimmed file", () => {
     const window = clipWindow(clip, {});

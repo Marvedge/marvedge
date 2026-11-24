@@ -15,9 +15,10 @@ export function clipWindow(
   // A trimmed asset already starts at the selected trim point.
   const sourceStart = clip.trimmedUrl ? 0 : clip.trimStartSec;
 
+  const end = placement.start + placement.len;
+
   return {
-    start: placement.start,
-    end: placement.start + placement.len,
+    contains: (videoTime: number) => videoTime >= placement.start && videoTime < end,
     sourcePosFor: (videoTime: number) =>
       sourceStart + (Math.max(0, videoTime - placement.start) % srcLen),
   };
