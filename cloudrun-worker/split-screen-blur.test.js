@@ -185,6 +185,29 @@ describe("Task 36: Split-Screen & Blur Helpers", () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    it("rejects a speaker-track path outside the temp directory", () => {
+      const outsidePath = path.resolve(process.cwd(), "package.json");
+
+      const result = loadSpeakerTracks(outsidePath, 1280);
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe("path_outside_tmpdir");
+      expect(result.speakers).toEqual([]);
+    });
+
+    it("rejects inline speaker-track JSON larger than 1 MiB", () => {
+      const inline = JSON.stringify({
+        speakers: [{ x: 100 }, { x: 900 }],
+        padding: "a".repeat(1024 * 1024),
+      });
+
+      const result = loadSpeakerTracks(inline, 1280);
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe("speaker_tracks_too_large");
+      expect(result.speakers).toEqual([]);
+    });
   });
 
   describe("Task-107: Canonical Versioned Speaker-Tracks Contract", () => {

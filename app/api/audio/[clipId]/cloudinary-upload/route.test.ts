@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   resolveOwnedClip: vi.fn(),
   cloudinaryUploadBuffer: vi.fn(),
   audioClipUpdate: vi.fn(),
+  deleteAudioObjects: vi.fn(),
 }));
 
 vi.mock("next-auth", () => ({
@@ -18,6 +19,10 @@ vi.mock("@/app/lib/auth/options", () => ({
 
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {},
+}));
+
+vi.mock("@/app/lib/audio/storage", () => ({
+  deleteAudioObjects: mocks.deleteAudioObjects,
 }));
 
 vi.mock("@/app/lib/audio/db", () => ({
@@ -285,5 +290,85 @@ describe("audio Cloudinary upload error privacy", () => {
     expect(mocks.resolveOwnedClip).not.toHaveBeenCalled();
     expect(arrayBuffer).not.toHaveBeenCalled();
     expect(mocks.cloudinaryUploadBuffer).not.toHaveBeenCalled();
+  });
+  it("removes uploaded audio when the clip was deleted before the URL could be saved", async () => {
+    const uploadedUrl = "https://res.cloudinary.com/test/video/upload/new-audio.mp3";
+    mocks.cloudinaryUploadBuffer.mockResolvedValueOnce(uploadedUrl);
+    mocks.audioClipUpdate.mockRejectedValueOnce(
+      Object.assign(new Error("Clip no longer exists"), { code: "P2025" })
+    );
+    mocks.deleteAudioObjects.mockResolvedValueOnce(undefined);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await PUT(
+        new NextRequest("http://localhost/api/audio/clip-1/cloudinary-upload", {
+          method: "PUT",
+          body: "audio-bytes",
+        }),
+        { params: Promise.resolve({ clipId: "clip-1" }) }
+      );
+
+      expect(response.status).toBe(500);
+      expect(mocks.cloudinaryUploadBuffer).toHaveBeenCalledOnce();
+      expect(mocks.deleteAudioObjects).toHaveBeenCalledExactlyOnceWith([uploadedUrl]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it("keeps uploaded audio when the database save outcome is uncertain", async () => {
+    mocks.cloudinaryUploadBuffer.mockResolvedValueOnce(
+      "https://res.cloudinary.com/test/video/upload/uncertain-audio.mp3"
+    );
+    mocks.audioClipUpdate.mockRejectedValueOnce(
+      Object.assign(new Error("Database timed out"), { code: "P1008" })
+    );
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await PUT(
+        new NextRequest("http://localhost/api/audio/clip-1/cloudinary-upload", {
+          method: "PUT",
+          body: "audio-bytes",
+        }),
+        { params: Promise.resolve({ clipId: "clip-1" }) }
+      );
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "Failed to store audio" });
+      expect(mocks.deleteAudioObjects).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("keeps the error response when cleanup itself fails", async () => {
+    const uploadedUrl = "https://res.cloudinary.com/test/video/upload/orphan-audio.mp3";
+    mocks.cloudinaryUploadBuffer.mockResolvedValueOnce(uploadedUrl);
+    mocks.audioClipUpdate.mockRejectedValueOnce(
+      Object.assign(new Error("Clip no longer exists"), { code: "P2025" })
+    );
+    mocks.deleteAudioObjects.mockRejectedValueOnce(new Error("Storage unavailable"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await PUT(
+        new NextRequest("http://localhost/api/audio/clip-1/cloudinary-upload", {
+          method: "PUT",
+          body: "audio-bytes",
+        }),
+        { params: Promise.resolve({ clipId: "clip-1" }) }
+      );
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "Failed to store audio" });
+      expect(mocks.deleteAudioObjects).toHaveBeenCalledExactlyOnceWith([uploadedUrl]);
+      expect(log).toHaveBeenCalledWith(
+        "Failed to clean up audio uploaded for a deleted clip:",
+        expect.any(Error)
+      );
+    } finally {
+      log.mockRestore();
+    }
   });
 });

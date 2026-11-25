@@ -1,5 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { isLoginRateLimited, type LoginRequestHeaders } from "@/app/lib/auth/loginProtection";
+import { getSafeCallbackUrl } from "@/app/lib/auth/redirect";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -196,10 +197,8 @@ export const authOptions: NextAuthOptions = {
         if (url === baseUrl || url === "/") {
           return "/dashboard";
         }
-        if (url.includes("/dashboard")) {
-          return "/dashboard";
-        }
-        return baseUrl;
+        const safe = getSafeCallbackUrl(url, baseUrl);
+        return safe === "/" ? "/dashboard" : safe;
       } catch (error) {
         console.error("Redirect callback error:", error);
         return baseUrl;

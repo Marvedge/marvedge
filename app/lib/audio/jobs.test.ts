@@ -59,7 +59,28 @@ function createFakeDb(initial: AudioClipRecord[] = []) {
         return next;
       }
     ),
-    updateMany: vi.fn(async () => ({ count: 0 })),
+    updateMany: vi.fn(
+      async ({
+        where,
+        data,
+      }: {
+        where: { id?: string; status?: string | { in: string[] } };
+        data: Partial<AudioClipRecord>;
+      }) => {
+        const current = where.id ? map.get(where.id) : undefined;
+        if (!current) {
+          return { count: 0 };
+        }
+        if (
+          (typeof where.status === "string" && current.status !== where.status) ||
+          (typeof where.status === "object" && !where.status.in.includes(current.status))
+        ) {
+          return { count: 0 };
+        }
+        map.set(current.id, { ...current, ...data, updatedAt: new Date() });
+        return { count: 1 };
+      }
+    ),
     deleteMany: vi.fn(async () => ({ count: 0 })),
     aggregate: vi.fn(async () => ({ _max: { order: null } })),
   };
@@ -89,6 +110,85 @@ afterEach(() => {
 });
 
 describe("runMetadataJob", () => {
+  it("skips metadata when a trim wins before the database claim", async () => {
+    const { db, get } = createFakeDb([makeRecord({ status: "TRIM_PROCESSING", durationSec: 60 })]);
+    vi.mocked(db.audioClip.findUnique).mockResolvedValueOnce(makeRecord());
+
+    await runMetadataJob(
+      { clipId: "clip-1", sourceUrl: "https://signed.example.test/original" },
+      db
+    );
+
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(media.downloadAudioToFile).not.toHaveBeenCalled();
+    expect(db.audioClip.update).not.toHaveBeenCalled();
+  });
+
+  it("preserves a trim started during metadata download", async () => {
+    const { db, get } = createFakeDb([makeRecord()]);
+
+    vi.mocked(media.downloadAudioToFile).mockImplementationOnce(async (_url, destinationPath) => {
+      await db.audioClip.update({
+        where: { id: "clip-1" },
+        data: { status: "TRIM_PROCESSING", durationSec: 60 },
+      });
+      fs.writeFileSync(destinationPath, WAV_HEADER);
+    });
+
+    await runMetadataJob(
+      { clipId: "clip-1", sourceUrl: "https://signed.example.test/original" },
+      db
+    );
+
+    expect(media.probeAudioDuration).toHaveBeenCalledOnce();
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(get("clip-1").error).toBeNull();
+  });
+
+  it("preserves an active trim when metadata processing fails", async () => {
+    const { db, get } = createFakeDb([makeRecord()]);
+    const failure = new Error("Metadata download failed");
+
+    vi.mocked(media.downloadAudioToFile).mockImplementationOnce(async () => {
+      await db.audioClip.update({
+        where: { id: "clip-1" },
+        data: { status: "TRIM_PROCESSING", durationSec: 60 },
+      });
+      throw failure;
+    });
+
+    await expect(
+      runMetadataJob({ clipId: "clip-1", sourceUrl: "https://signed.example.test/original" }, db)
+    ).rejects.toBe(failure);
+
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(get("clip-1").error).toBeNull();
+  });
+
+  it("does not overwrite an active trim when metadata arrives late", async () => {
+    const { db, get } = createFakeDb([
+      makeRecord({
+        status: "TRIM_PROCESSING",
+        durationSec: 60,
+        trimmedKey: "audio/demo-1/user-1/previous.mp3",
+      }),
+    ]);
+
+    await runMetadataJob(
+      { clipId: "clip-1", sourceUrl: "https://signed.example.test/original" },
+      db
+    );
+
+    expect(get("clip-1").status).toBe("TRIM_PROCESSING");
+    expect(get("clip-1").durationSec).toBe(60);
+    expect(db.audioClip.update).not.toHaveBeenCalled();
+    expect(media.downloadAudioToFile).not.toHaveBeenCalled();
+    expect(media.probeAudioDuration).not.toHaveBeenCalled();
+  });
+
   it("runs UPLOADING → PROCESSING → READY with duration + detected MIME", async () => {
     const { db, get } = createFakeDb([makeRecord()]);
 
@@ -160,6 +260,57 @@ describe("runTrimJob", () => {
     trimEndSec: 20,
   };
 
+  it("preserves a completed trim when another trim fails concurrently", async () => {
+    const { db, get } = createFakeDb([makeRecord({ status: "READY", durationSec: 123.4 })]);
+    const failure = new Error("Earlier trim failed");
+    const completedKey = "audio/demo-1/user-1/completed.mp3";
+
+    const update = vi.mocked(db.audioClip.update);
+    const updateMany = vi.mocked(db.audioClip.updateMany);
+    const applyUpdate = update.getMockImplementation()!;
+    const applyUpdateMany = updateMany.getMockImplementation()!;
+
+    const completeOtherTrim = () =>
+      applyUpdate({
+        where: { id: "clip-1" },
+        data: {
+          status: "READY",
+          trimmedKey: completedKey,
+          trimStartSec: 10,
+          trimEndSec: 15,
+          error: null,
+        },
+      });
+
+    // Another trim commits immediately before the failure write.
+    // Exercise either write method so the test also checks an atomic fix.
+    update.mockImplementation(async (args) => {
+      if (args.data.status === "FAILED") {
+        await completeOtherTrim();
+      }
+      return applyUpdate(args);
+    });
+
+    updateMany.mockImplementation(async (args) => {
+      if (args.data.status === "FAILED") {
+        await completeOtherTrim();
+      }
+      return applyUpdateMany(args);
+    });
+
+    vi.mocked(media.trimAudioFile).mockRejectedValueOnce(failure);
+
+    await expect(runTrimJob(trimPayload, db)).rejects.toBe(failure);
+
+    const clip = get("clip-1");
+    expect(clip.status).toBe("READY");
+    expect(clip.error).toBeNull();
+    expect(clip.trimmedKey).toBe(completedKey);
+    expect(clip.trimStartSec).toBe(10);
+    expect(clip.trimEndSec).toBe(15);
+    expect(media.uploadAudioViaSignedUrl).not.toHaveBeenCalled();
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+  });
   it("re-trims from the ORIGINAL and stores a new trimmedKey", async () => {
     const { db, get } = createFakeDb([makeRecord({ status: "READY", durationSec: 123.4 })]);
 
