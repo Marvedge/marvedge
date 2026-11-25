@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: data:; media-src 'self' blob: data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none';" />
+  <title>Marvedge — Offline Investor Demonstration Player</title>
+  <style>
+    :root {
+      --bg-primary: #070a12;
+      --bg-surface: #0f1626;
+      --bg-card: #151e32;
+      --bg-card-active: #1e2946;
+      --border-subtle: #26334d;
+      --border-focus: #818cf8;
+      --brand-primary: #6366f1;
+      --brand-secondary: #8b5cf6;
+      --brand-emerald: #10b981;
+      --brand-amber: #f59e0b;
+      --text-main: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Arial, sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+    }
+
+    /* Top Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 1.75rem;
+      background: rgba(15, 22, 38, 0.95);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .pill-emerald {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.12);
+      color: #6ee7b7;
+    }
+
+    .pill-indigo {
+      border-color: rgba(99, 102, 241, 0.45);
+      background: rgba(99, 102, 241, 0.15);
+      color: #c7d2fe;
+    }
+
+    .pill-amber {
+      border-color: rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.15);
+      color: #fcd34d;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      color: var(--text-main);
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.5rem 0.95rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .btn:hover {
+      background: var(--bg-card-active);
+      border-color: #475569;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+      border-color: transparent;
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      border-color: transparent;
+    }
+
+    .btn-active {
+      border-color: var(--brand-emerald);
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+
+    /* Main Workspace Layout */
+    .workspace {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 1.25rem;
+      padding: 1.25rem 1.75rem;
+      flex: 1;
+      max-width: 1760px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 1120px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Left Column: Demo Selection Cards */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .section-heading {
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.15rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .demo-card {
+      width: 100%;
+      text-align: left;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+      color: var(--text-main);
+    }
+
+    .demo-card:hover {
+      background: var(--bg-card);
+      border-color: #3b4d71;
+    }
+
+    .demo-card.active {
+      background: var(--bg-card-active);
+      border-color: var(--brand-primary);
+      box-shadow: 0 0 0 1px var(--brand-primary), 0 8px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .card-step {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+
+    .card-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.15rem 0.45rem;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .badge-verified {
+      background: rgba(16, 185, 129, 0.15);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .badge-preview {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: var(--text-main);
+    }
+
+    .card-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .card-meta {
+      margin-top: 0.55rem;
+      padding-top: 0.45rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.71rem;
+      color: var(--text-secondary);
+    }
+
+    /* Voiceover & Keyboard Panel in Sidebar */
+    .utility-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      margin-top: 0.25rem;
+    }
+
+    .utility-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .utility-text {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .kbd-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.35rem 0.6rem;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+    }
+
+    kbd {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 0.1rem 0.35rem;
+      font-family: monospace;
+      font-size: 0.7rem;
+      color: var(--text-main);
+    }
+
+    /* Right Column: Stage & Teleprompter */
+    .stage-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .stage-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 1.15rem 1.35rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .stage-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .stage-title-group h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.2rem;
+    }
+
+    .stage-title-group p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      max-width: 820px;
+    }
+
+    .stage-specs {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* Video Viewport Container */
+    .viewport-wrapper {
+      background: #04060b;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1rem;
+      min-height: 460px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .single-player-view {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .single-player-view video {
+      max-height: 490px;
+      max-width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      background: #000;
+    }
+
+    /* Dual Comparison View */
+    .compare-player-view {
+      display: none;
+      grid-template-columns: 1.25fr 0.9fr;
+      gap: 1.25rem;
+      width: 100%;
+      align-items: center;
+    }
+
+    .compare-player-view.active {
+      display: grid;
+    }
+
+    .compare-pane {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: rgba(15, 22, 38, 0.7);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0.75rem;
+    }
+
+    .compare-pane-label {
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+
+    .compare-pane video {
+      max-height: 410px;
+      max-width: 100%;
+      border-radius: 6px;
+      background: #000;
+    }
+
+    /* Fallback Error Panel */
+    .fallback-panel {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      max-width: 620px;
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 12px;
+    }
+
+    .fallback-panel.active {
+      display: flex;
+    }
+
+    .fallback-panel h3 {
+      color: #fca5a5;
+      margin-bottom: 0.5rem;
+      font-size: 1.05rem;
+    }
+
+    .fallback-panel p {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    /* Transport Controls Bar */
+    .transport-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding-top: 0.25rem;
+      flex-wrap: wrap;
+    }
+
+    .progress-slider {
+      flex: 1;
+      min-width: 180px;
+      accent-color: var(--brand-primary);
+      cursor: pointer;
+      height: 6px;
+    }
+
+    .time-readout {
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      min-width: 98px;
+      text-align: right;
+    }
+
+    /* Live Narration Teleprompter & Cue Panel */
+    .teleprompter-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 960px) {
+      .teleprompter-grid {
+        grid-template-columns: 1fr;
+      }
+      .compare-player-view.active {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .cue-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+    }
+
+    .cue-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.55rem;
+    }
+
+    .cue-card-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .karaoke-words-box {
+      font-size: 1.05rem;
+      font-weight: 600;
+      line-height: 1.6;
+      padding: 0.65rem 0.85rem;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      min-height: 76px;
+    }
+
+    .k-word {
+      display: inline-block;
+      margin-right: 0.28rem;
+      padding: 0.05rem 0.2rem;
+      border-radius: 4px;
+      color: var(--text-secondary);
+      transition: all 0.1s ease;
+    }
+
+    .k-word.spoken {
+      color: #fde047;
+    }
+
+    .k-word.active {
+      background: rgba(250, 204, 21, 0.22);
+      color: #fef08a;
+      font-weight: 700;
+      transform: scale(1.05);
+    }
+
+    .pitch-script-box {
+      font-size: 0.88rem;
+      color: var(--text-main);
+      line-height: 1.55;
+      padding: 0.65rem 0.85rem;
+      background: var(--bg-primary);
+      border-left: 3px solid var(--brand-primary);
+      border-radius: 6px;
+      min-height: 76px;
+    }
+
+    .research-banner {
+      display: none;
+      padding: 0.6rem 0.95rem;
+      border-radius: 8px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fde68a;
+      font-size: 0.8rem;
+    }
+
+    .research-banner.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">Marvedge Investor Showcase</div>
+        <div class="brand-subtitle">Offline Deterministic Demonstration Player • Task-00135</div>
+      </div>
+    </div>
+
+    <div class="header-badges">
+      <span class="pill pill-emerald">100% Offline Playable</span>
+      <span class="pill pill-indigo">Owned Marvedge Media Assets</span>
+      <span class="pill" id="sequenceStatusPill">Mode: Single Showcase</span>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary" id="btnPlaySequence" title="Play all 4 showcase videos in sequence (Shortcut: S)">
+        <span>▶ Play Full Demo Sequence (All 4)</span>
+      </button>
+      <button type="button" class="btn" id="btnToggleCompare" title="Toggle synchronized Before/After 16:9 vs 9:16 view (Shortcut: C)">
+        <span>⇄ Before / After Split View</span>
+      </button>
+      <button type="button" class="btn" id="btnPlayNarratedMaster" title="Play 100-second paced narrative master workflow (Shortcut: N)">
+        <span>◎ Paced Master Workflow (100s • Pre-VO)</span>
+      </button>
+      <button type="button" class="btn" id="btnPlayMasterBackup" title="Play standalone 64-second emergency visual fallback (Shortcut: M)">
+        <span>★ Emergency Visual Backup (64s)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Left Sidebar: 4 Showcase Cards + Controls -->
+    <aside class="sidebar" aria-label="Demonstration Selection">
+      <div class="section-heading">
+        <span>Showcase Stages (1–4)</span>
+        <span>16.0s Each</span>
+      </div>
+
+      <button type="button" class="demo-card active" data-index="0" id="card-0">
+        <div class="card-top">
+          <span class="card-step">DEMO 1 • KEY [1]</span>
+          <span class="card-badge badge-verified">Verified Local</span>
+        </div>
+        <div class="card-title">1. Intelligent 16:9 → 9:16 Reframing</div>
+        <div class="card-desc">
+          Converts 1280×720 desktop recordings into 720×1280 portrait using AutoFlip saliency crop (0–8s) and deterministic blur-pad context fit (8–16s).
+        </div>
+        <div class="card-meta">
+          <span>720×1280 (9:16) • 24 fps</span>
+          <span>AutoFlip + FFmpeg Fit</span>
+        </div>
+      </button>
+
+      <button type="button" class="demo-card" data-index="1" id="card-1">
+        <div class="card-top">
+          <span class="card-step">DEMO 2 • KEY [2]</span>
+          <span class="card-badge badge-verified" id="card2Badge">Timed Callouts</span>
+        </div>
+        <div class="card-title">2. Kinetic Product Callouts &amp; Timed Cues</div>
+        <div class="card-desc">
+          Renders word-level ASS <code>\k</code> highlight callouts with 0.8s pause segmentation over ambient audio. Ready for 1:1 human voiceover sync once recorded.
+        </div>
+        <div class="card-meta">
+          <span>720×1280 (9:16) • 24 Words</span>
+          <span>ASS libass Renderer</span>
+        </div>
+      </button>
+
+      <button type="button" class="demo-card" data-index="2" id="card-2">
+        <div class="card-top">
+          <span class="card-step">DEMO 3 • KEY [3]</span>
+          <span class="card-badge badge-preview">Concept / Research Preview</span>
+        </div>
+        <div class="card-title">3. Multilingual Caption Windows [Preview]</div>
+        <div class="card-desc">
+          Concept &amp; research preview of time-windowed EN/ES/FR caption tracks and AVS validation guards. Contains ambient audio only (no synthesized speech).
+        </div>
+        <div class="card-meta">
+          <span>EN → ES → FR Windows</span>
+          <span>Ambient Audio Only</span>
+        </div>
+      </button>
+
+      <button type="button" class="demo-card" data-index="3" id="card-3">
+        <div class="card-top">
+          <span class="card-step">DEMO 4 • KEY [4]</span>
+          <span class="card-badge badge-verified">Verified Local</span>
+        </div>
+        <div class="card-title">4. Side-by-Side Transformation</div>
+        <div class="card-desc">
+          Synchronized 1920×1080 widescreen comparison showing raw 16:9 desktop source alongside the finished 9:16 reframed and captioned output.
+        </div>
+        <div class="card-meta">
+          <span>1920×1080 (16:9) • 24 fps</span>
+          <span>Frame-Accurate Split</span>
+        </div>
+      </button>
+
+      <!-- Human Voiceover Loader Panel -->
+      <div class="utility-box">
+        <div class="utility-title">
+          <span>Human Voiceover Audio Track</span>
+          <span class="pill" id="voStatusBadge" style="font-size:0.68rem;padding:0.1rem 0.45rem;">Cue Mode</span>
+        </div>
+        <p class="utility-text">
+          Per approved policy, no neural TTS is generated. Use the live word cues on the right for live speaking, or load your recorded human voiceover WAV/MP3 to play in lockstep.
+        </p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <label class="btn" for="voiceoverFileInput" style="cursor:pointer;font-size:0.75rem;padding:0.38rem 0.7rem;">
+            <span>+ Load Human Voiceover (.wav/.mp3)</span>
+          </label>
+          <input type="file" id="voiceoverFileInput" accept="audio/*" style="display:none;" />
+          <button type="button" class="btn" id="btnClearVo" style="font-size:0.75rem;padding:0.38rem 0.65rem;display:none;">
+            Reset
+          </button>
+        </div>
+        <audio id="customVoiceoverAudio" preload="auto" style="display:none;"></audio>
+      </div>
+
+      <!-- Keyboard Shortcuts Reference -->
+      <div class="utility-box">
+        <div class="utility-title">Keyboard Shortcuts</div>
+        <div class="kbd-grid">
+          <div><kbd>1</kbd>–<kbd>4</kbd> Select Demo</div>
+          <div><kbd>Space</kbd> Play / Pause</div>
+          <div><kbd>S</kbd> Full Sequence</div>
+          <div><kbd>C</kbd> Before/After View</div>
+          <div><kbd>M</kbd> Master Backup</div>
+          <div><kbd>R</kbd> Restart Clip</div>
+          <div><kbd>←</kbd> <kbd>→</kbd> Seek ±2s</div>
+          <div><kbd>L</kbd> Loop Toggle</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Stage Column -->
+    <section class="stage-column" aria-label="Video Stage and Presentation Cues">
+      <div class="stage-card">
+        <div class="stage-header">
+          <div class="stage-title-group">
+            <h2 id="activeStageTitle">1. Intelligent Landscape-to-Portrait Reframing (16:9 → 9:16)</h2>
+            <p id="activeStageDescription">
+              Demonstrates automated conversion of a 1280×720 desktop animation into a 720×1280 mobile portrait video using MediaPipe AutoFlip saliency cropping (0–8s) and FFmpeg blur-pad context fit (8–16s).
+            </p>
+          </div>
+          <div class="stage-specs">
+            <span class="pill" id="specResolution">720×1280 (9:16)</span>
+            <span class="pill" id="specPipeline">AutoFlip + build9x16FitFilter</span>
+            <span class="pill pill-emerald" id="specLicense">Marvedge Owned Asset</span>
+          </div>
+        </div>
+
+        <div class="research-banner" id="researchPreviewBanner">
+          <strong>CONCEPT / RESEARCH PREVIEW DISCLOSURE:</strong> This stage is a visual concept &amp; architecture preview of time-windowed multilingual caption tracks (English → Spanish → French) over ambient animation audio. It is <strong>not</strong> a verified dubbing demonstration and contains <strong>no synthesized multilingual speech</strong> (non-commercial OmniVoice CC-BY-NC 4.0 WAVs are excluded pending commercial voice licensing).
+        </div>
+
+        <!-- Video Viewport -->
+        <div class="viewport-wrapper">
+          <!-- Single Video View -->
+          <div class="single-player-view" id="singlePlayerContainer">
+            <video id="mainVideo" playsinline preload="auto" controls>
+              <source src="demo-assets/demo1_intelligent_reframe_9x16.mp4" type="video/mp4" />
+            </video>
+          </div>
+
+          <!-- Synchronized Before/After Split View -->
+          <div class="compare-player-view" id="comparePlayerContainer">
+            <div class="compare-pane">
+              <div class="compare-pane-label">BEFORE: Raw 16:9 Desktop Source (1280×720)</div>
+              <video id="compareBeforeVideo" playsinline preload="auto" muted>
+                <source src="demo-assets/source_landscape_16x9.mp4" type="video/mp4" />
+              </video>
+            </div>
+            <div class="compare-pane">
+              <div class="compare-pane-label" id="compareAfterLabel">AFTER: Selected 9:16 Marvedge Output</div>
+              <video id="compareAfterVideo" playsinline preload="auto" muted>
+                <source src="demo-assets/demo1_intelligent_reframe_9x16.mp4" type="video/mp4" />
+              </video>
+            </div>
+          </div>
+
+          <!-- Graceful Error Fallback -->
+          <div class="fallback-panel" id="fallbackPanel" role="alert">
+            <h3>Video Playback Fallback Activated</h3>
+            <p id="fallbackErrorText">
+              The selected video asset could not be decoded or was not found at the expected local path.
+            </p>
+            <div style="display:flex;gap:0.65rem;flex-wrap:wrap;justify-content:center;">
+              <button type="button" class="btn btn-primary" id="btnFallbackTryMaster">
+                Play Master Walkthrough Backup
+              </button>
+              <label class="btn" for="fallbackManualVideoInput" style="cursor:pointer;">
+                Select Local MP4 File Manually
+              </label>
+              <input type="file" id="fallbackManualVideoInput" accept="video/mp4,video/*" style="display:none;" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Transport Controls -->
+        <div class="transport-bar">
+          <button type="button" class="btn btn-primary" id="btnPlayPause" style="min-width:96px;justify-content:center;">
+            ▶ Play
+          </button>
+          <button type="button" class="btn" id="btnRestart" title="Restart clip from 00:00 (Shortcut: R)">
+            ↺ Restart
+          </button>
+          <button type="button" class="btn" id="btnLoopToggle" title="Toggle clip looping (Shortcut: L)">
+            ⟳ Loop: Off
+          </button>
+          <input type="range" class="progress-slider" id="seekSlider" min="0" max="16" step="0.05" value="0" aria-label="Video timeline seek slider" />
+          <div class="time-readout" id="timeReadout">00:00.0 / 00:16.0</div>
+        </div>
+      </div>
+
+      <!-- Synchronized Narration & Investor Pitch Cues -->
+      <div class="teleprompter-grid">
+        <div class="cue-card">
+          <div class="cue-card-header">
+            <span class="cue-card-title">In-Video Verbatim Narration Cues (Word-Level Sync)</span>
+            <span class="pill" id="activeCueSegmentPill">Cue 1 / 4</span>
+          </div>
+          <div class="karaoke-words-box" id="karaokeWordsContainer" aria-live="polite"></div>
+        </div>
+
+        <div class="cue-card">
+          <div class="cue-card-header">
+            <span class="cue-card-title">2-Minute Investor Talk-Track Prompt</span>
+            <span class="pill pill-indigo" id="talkTrackWindowPill">00:24 – 00:48</span>
+          </div>
+          <div class="pitch-script-box" id="pitchScriptPrompt"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const DEMOS = [
+        {
+          id: "demo1",
+          title: "1. Intelligent Landscape-to-Portrait Reframing (16:9 → 9:16)",
+          description:
+            "Demonstrates automated conversion of a 1280×720 desktop animation into a 720×1280 mobile portrait video using MediaPipe AutoFlip saliency cropping (0–8s) and FFmpeg blur-pad context fit (8–16s).",
+          src: "demo-assets/demo1_intelligent_reframe_9x16.mp4",
+          backupSrc: "final-mp4-backup/demo1_intelligent_reframe_9x16.mp4",
+          resolution: "720×1280 (9:16)",
+          pipeline: "AutoFlip + build9x16FitFilter",
+          license: "Marvedge Owned Asset",
+          isResearchPreview: false,
+          talkTrackWindow: "00:24 – 00:48",
+          talkTrackPrompts: [
+            {
+              start: 0,
+              end: 8,
+              text: "“In Demo 1, we start with a 1280×720 landscape source. During the first 8 seconds, Marvedge applies MediaPipe AutoFlip saliency tracking to keep the primary subject centered in a 9:16 portrait crop.”"
+            },
+            {
+              start: 8,
+              end: 16.5,
+              text: "“At the 8-second mark, you see our deterministic blur-pad context fit mode, which preserves 100% of the horizontal desktop frame over a luminance-balanced 9:16 blur canvas.”"
+            }
+          ]
+        },
+        {
+          id: "demo2",
+          title: "2. Kinetic Product Callouts & Timed Cues (.ASS \\k)",
+          description:
+            "Renders timed word-level product callout captions (\\k ASS highlight tags) with automated 0.8s pause segmentation over ambient animation audio. Designed to synchronize 1:1 with the 24-word human narration script once a human voiceover WAV is loaded or remuxed.",
+          src: "demo-assets/demo2_kinetic_karaoke_9x16.mp4",
+          backupSrc: "final-mp4-backup/demo2_kinetic_karaoke_9x16.mp4",
+          resolution: "720×1280 (9:16)",
+          pipeline: "normalizeWhisperResponse + writeAssFile",
+          license: "Timed Callouts (Ambient Audio Default)",
+          isResearchPreview: false,
+          talkTrackWindow: "00:48 – 01:12",
+          talkTrackPrompts: [
+            {
+              start: 0,
+              end: 8,
+              text: "“In Demo 2, Marvedge generates word-level ASS highlight callouts from timestamp cues. In this default offline build, the captions serve as timed visual product callouts over ambient animation audio, ready for our 16-second human voiceover recording.”"
+            },
+            {
+              start: 8,
+              end: 16.5,
+              text: "“Our segmentation logic automatically splits cues on pauses of 0.8 seconds or longer and enforces portrait-safe margins so lines never clip on mobile viewports.”"
+            }
+          ]
+        },
+        {
+          id: "demo3",
+          title: "3. Multilingual Caption Windows [Concept / Research Preview]",
+          description:
+            "Concept and research preview of time-windowed English, Spanish, and French caption formatting alongside BullMQ AVS output validation guards. Contains ambient audio only (no synthesized multilingual speech) and is not presented as a verified dubbing demo.",
+          src: "demo-assets/demo3_multilingual_research_preview_9x16.mp4",
+          backupSrc: "final-mp4-backup/demo3_multilingual_research_preview_9x16.mp4",
+          resolution: "720×1280 (9:16)",
+          pipeline: "Concept Preview + AVS Output Guards",
+          license: "Concept Preview (Ambient Audio Only)",
+          isResearchPreview: true,
+          talkTrackWindow: "01:12 – 01:26",
+          talkTrackPrompts: [
+            {
+              start: 0,
+              end: 8,
+              text: "“In Demo 3, we show a Concept and Research Preview of time-windowed multilingual caption tracks across English, Spanish, and French, backed by dual-layer output validation guards in our BullMQ worker.”"
+            },
+            {
+              start: 8,
+              end: 16.5,
+              text: "“Note that this preview plays ambient audio only—not synthesized speech—while commercial voice licensing and end-to-end lip-sync validation are completed.”"
+            }
+          ]
+        },
+        {
+          id: "demo4",
+          title: "4. Side-by-Side Before & After Transformation (16:9 vs. 9:16)",
+          description:
+            "Synchronized 1920×1080 widescreen comparison pairing the unedited 16:9 desktop source on the left against the reframed, blur-padded, and captioned 9:16 portrait output on the right.",
+          src: "demo-assets/demo4_side_by_side_transformation_16x9.mp4",
+          backupSrc: "final-mp4-backup/demo4_side_by_side_transformation_16x9.mp4",
+          resolution: "1920×1080 (16:9)",
+          pipeline: "End-to-End Composite Pipeline",
+          license: "Marvedge Owned Asset",
+          isResearchPreview: false,
+          talkTrackWindow: "01:26 – 02:00",
+          talkTrackPrompts: [
+            {
+              start: 0,
+              end: 8,
+              text: "“In Demo 4, you see the synchronized before-and-after transformation: raw 16:9 desktop footage on the left compared frame-for-frame with the 9:16 reframed and captioned output on the right.”"
+            },
+            {
+              start: 8,
+              end: 16.5,
+              text: "“By unifying browser capture, MediaPipe reframing, and word-level ASS captioning in one architecture, Marvedge removes fragmented multi-tool handoffs for content teams.”"
+            }
+          ]
+        }
+      ];
+
+      const NARRATED_MASTER = {
+        id: "narrated_master",
+        title: "◎ Paced Narrative Master Workflow (100.0s • Pre-Narration Visual Master)",
+        description:
+          "100.0-second paced presentation workflow containing an opening Creator-Problem slate (0–10s), four 16s demonstration chapters with 4s transition buffers, and a closing Product Architecture summary slate (90–100s). Status: Pre-narration visual master awaiting approved human voiceover recording.",
+        src: "demo-assets/marvedge_investor_demo_narrated.mp4",
+        backupSrc: "final-mp4-backup/marvedge_investor_demo_narrated.mp4",
+        resolution: "1920×1080 (16:9)",
+        pipeline: "100s Paced Master (Pre-VO State)",
+        license: "Pre-VO Visual Master (Owned Media)",
+        isResearchPreview: false,
+        talkTrackWindow: "00:00 – 01:40",
+        talkTrackPrompts: [
+          {
+            start: 0,
+            end: 14,
+            text: "Opening Slate & Transition 1 (00:00–00:14): Introduce the creator workflow problem (16:9 desktop recordings vs. 9:16 mobile feeds) and transition to Demo 1."
+          },
+          {
+            start: 14,
+            end: 34,
+            text: "Chapter 1 & Transition 2 (00:14–00:34): Intelligent 16:9 to 9:16 Reframing (AutoFlip saliency crop 0–8s, FFmpeg blur-pad fit 8–16s), then transition to Demo 2."
+          },
+          {
+            start: 34,
+            end: 54,
+            text: "Chapter 2 & Transition 3 (00:34–00:54): 16.0s Human Voiceover Target Window (00:34–00:50) for word-level ASS \\k callouts, then transition to Demo 3 Concept Preview."
+          },
+          {
+            start: 54,
+            end: 74,
+            text: "Chapter 3 & Transition 4 (00:54–01:14): Multilingual Caption Windows [Concept / Research Preview — ambient audio only, no synthesized speech], then transition to Demo 4."
+          },
+          {
+            start: 74,
+            end: 101,
+            text: "Chapter 4 & Closing Summary Slate (01:14–01:40): Synchronized side-by-side 16:9 vs. 9:16 transformation followed by the closing Product Architecture & Differentiation summary."
+          }
+        ]
+      };
+
+      const MASTER_WALKTHROUGH = {
+        id: "master",
+        title: "★ Emergency Visual Walkthrough Backup (All 4 Chapters • 64.0s)",
+        description:
+          "Unchanged 64.0-second emergency visual fallback combining all 4 showcase stages back-to-back into a single standalone MP4 file.",
+        src: "demo-assets/marvedge_investor_walkthrough_master_backup.mp4",
+        backupSrc: "final-mp4-backup/marvedge_investor_walkthrough_master_backup.mp4",
+        resolution: "1920×1080 (16:9)",
+        pipeline: "Standalone 64s Emergency Backup",
+        license: "100% Marvedge Owned",
+        isResearchPreview: false,
+        talkTrackWindow: "00:00 – 01:04",
+        talkTrackPrompts: [
+          {
+            start: 0,
+            end: 16,
+            text: "Chapter 1 (00:00–00:16): Intelligent 16:9 to 9:16 Reframing — AutoFlip saliency tracking (0–8s) and deterministic FFmpeg blur-pad fit (8–16s)."
+          },
+          {
+            start: 16,
+            end: 32,
+            text: "Chapter 2 (00:16–00:32): Kinetic Product Callouts — Word-level ASS \\k highlight tags with 0.8s pause segmentation."
+          },
+          {
+            start: 32,
+            end: 48,
+            text: "Chapter 3 (00:32–00:48): Multilingual Caption Windows [Concept / Research Preview] — Time-windowed EN/ES/FR captions (ambient audio only)."
+          },
+          {
+            start: 48,
+            end: 65,
+            text: "Chapter 4 (00:48–01:04): Side-by-Side Before & After Comparison — Unified browser-to-worker architecture eliminating multi-tool handoffs."
+          }
+        ]
+      };
+
+      const NARRATION_WORDS = [
+        { word: "Marvedge", start: 0.25, end: 0.80, cue: 1 },
+        { word: "turns", start: 0.86, end: 1.30, cue: 1 },
+        { word: "wide", start: 1.36, end: 1.76, cue: 1 },
+        { word: "clips", start: 1.82, end: 2.26, cue: 1 },
+        { word: "into", start: 2.32, end: 2.68, cue: 1 },
+        { word: "shorts.", start: 2.74, end: 3.30, cue: 1 },
+        { word: "Auto-framing", start: 4.25, end: 4.85, cue: 2 },
+        { word: "tracks", start: 4.91, end: 5.32, cue: 2 },
+        { word: "the", start: 5.38, end: 5.66, cue: 2 },
+        { word: "main", start: 5.72, end: 6.14, cue: 2 },
+        { word: "visual", start: 6.20, end: 6.68, cue: 2 },
+        { word: "action.", start: 6.74, end: 7.35, cue: 2 },
+        { word: "Blur-pad", start: 8.30, end: 8.75, cue: 3 },
+        { word: "fit", start: 8.81, end: 9.38, cue: 3 },
+        { word: "preserves", start: 9.44, end: 10.02, cue: 3 },
+        { word: "full", start: 10.08, end: 10.42, cue: 3 },
+        { word: "widescreen", start: 10.48, end: 10.92, cue: 3 },
+        { word: "context.", start: 10.98, end: 11.40, cue: 3 },
+        { word: "Export", start: 12.35, end: 12.85, cue: 4 },
+        { word: "vertical", start: 12.91, end: 13.45, cue: 4 },
+        { word: "videos", start: 13.51, end: 14.00, cue: 4 },
+        { word: "in", start: 14.06, end: 14.32, cue: 4 },
+        { word: "one", start: 14.38, end: 14.75, cue: 4 },
+        { word: "workflow.", start: 14.81, end: 15.55, cue: 4 }
+      ];
+
+      let currentIndex = 0;
+      let isMasterMode = false;
+      let isNarratedMasterMode = false;
+      let isSequenceMode = false;
+      let isCompareMode = false;
+      let isLooping = false;
+      let hasCustomVo = false;
+      let triedBackupPath = false;
+
+      const mainVideo = document.getElementById("mainVideo");
+      const compareBeforeVideo = document.getElementById("compareBeforeVideo");
+      const compareAfterVideo = document.getElementById("compareAfterVideo");
+      const singlePlayerContainer = document.getElementById("singlePlayerContainer");
+      const comparePlayerContainer = document.getElementById("comparePlayerContainer");
+      const fallbackPanel = document.getElementById("fallbackPanel");
+      const fallbackErrorText = document.getElementById("fallbackErrorText");
+
+      const activeStageTitle = document.getElementById("activeStageTitle");
+      const activeStageDescription = document.getElementById("activeStageDescription");
+      const specResolution = document.getElementById("specResolution");
+      const specPipeline = document.getElementById("specPipeline");
+      const specLicense = document.getElementById("specLicense");
+      const researchPreviewBanner = document.getElementById("researchPreviewBanner");
+      const sequenceStatusPill = document.getElementById("sequenceStatusPill");
+
+      const btnPlayPause = document.getElementById("btnPlayPause");
+      const btnRestart = document.getElementById("btnRestart");
+      const btnLoopToggle = document.getElementById("btnLoopToggle");
+      const btnPlaySequence = document.getElementById("btnPlaySequence");
+      const btnToggleCompare = document.getElementById("btnToggleCompare");
+      const btnPlayNarratedMaster = document.getElementById("btnPlayNarratedMaster");
+      const btnPlayMasterBackup = document.getElementById("btnPlayMasterBackup");
+      const seekSlider = document.getElementById("seekSlider");
+      const timeReadout = document.getElementById("timeReadout");
+
+      const karaokeWordsContainer = document.getElementById("karaokeWordsContainer");
+      const activeCueSegmentPill = document.getElementById("activeCueSegmentPill");
+      const talkTrackWindowPill = document.getElementById("talkTrackWindowPill");
+      const pitchScriptPrompt = document.getElementById("pitchScriptPrompt");
+
+      const voiceoverFileInput = document.getElementById("voiceoverFileInput");
+      const customVoiceoverAudio = document.getElementById("customVoiceoverAudio");
+      const voStatusBadge = document.getElementById("voStatusBadge");
+      const btnClearVo = document.getElementById("btnClearVo");
+
+      // Render word spans
+      function initKaraokeDom() {
+        karaokeWordsContainer.innerHTML = "";
+        NARRATION_WORDS.forEach((item, idx) => {
+          const span = document.createElement("span");
+          span.className = "k-word";
+          span.id = "k-word-" + idx;
+          span.textContent = item.word;
+          karaokeWordsContainer.appendChild(span);
+        });
+      }
+
+      function formatTime(sec) {
+        if (!Number.isFinite(sec) || sec < 0) sec = 0;
+        const mins = Math.floor(sec / 60);
+        const rem = (sec % 60).toFixed(1);
+        return String(mins).padStart(2, "0") + ":" + String(rem).padStart(4, "0");
+      }
+
+      function getCurrentConfig() {
+        if (isNarratedMasterMode) return NARRATED_MASTER;
+        if (isMasterMode) return MASTER_WALKTHROUGH;
+        return DEMOS[currentIndex];
+      }
+
+      function updateTeleprompter(currentTime) {
+        const cfg = getCurrentConfig();
+        let clipTime = currentTime;
+        if (isNarratedMasterMode) {
+          clipTime = currentTime >= 34 && currentTime <= 50 ? currentTime - 34 : 0;
+        } else if (isMasterMode) {
+          clipTime = currentTime % 16.0;
+        }
+
+        let activeCue = 1;
+        NARRATION_WORDS.forEach((w, idx) => {
+          const el = document.getElementById("k-word-" + idx);
+          if (!el) return;
+          el.classList.remove("active", "spoken");
+          if (clipTime >= w.start && clipTime <= w.end) {
+            el.classList.add("active");
+            activeCue = w.cue;
+          } else if (clipTime > w.end) {
+            el.classList.add("spoken");
+            activeCue = w.cue;
+          }
+        });
+        activeCueSegmentPill.textContent = "Cue " + activeCue + " / 4";
+
+        // Update Investor Talk-Track prompt
+        const prompts = cfg.talkTrackPrompts || [];
+        let chosen = prompts[0] ? prompts[0].text : "";
+        for (let i = 0; i < prompts.length; i++) {
+          if (currentTime >= prompts[i].start && currentTime <= prompts[i].end) {
+            chosen = prompts[i].text;
+            break;
+          }
+        }
+        pitchScriptPrompt.textContent = chosen;
+      }
+
+      function loadStage(index, autoPlay) {
+        isMasterMode = false;
+        isNarratedMasterMode = false;
+        currentIndex = index;
+        triedBackupPath = false;
+        const cfg = DEMOS[index];
+
+        document.querySelectorAll(".demo-card").forEach((card, i) => {
+          card.classList.toggle("active", i === index);
+        });
+        btnPlayMasterBackup.classList.remove("btn-active");
+        btnPlayNarratedMaster.classList.remove("btn-active");
+
+        applyConfigToStage(cfg, autoPlay);
+      }
+
+      function loadNarratedMaster(autoPlay) {
+        isNarratedMasterMode = true;
+        isMasterMode = false;
+        isSequenceMode = false;
+        triedBackupPath = false;
+        updateModePills();
+        document.querySelectorAll(".demo-card").forEach((card) => card.classList.remove("active"));
+        btnPlayNarratedMaster.classList.add("btn-active");
+        btnPlayMasterBackup.classList.remove("btn-active");
+
+        if (isCompareMode) {
+          toggleCompareMode(false);
+        }
+        applyConfigToStage(NARRATED_MASTER, autoPlay);
+      }
+
+      function loadMasterWalkthrough(autoPlay) {
+        isMasterMode = true;
+        isNarratedMasterMode = false;
+        isSequenceMode = false;
+        triedBackupPath = false;
+        updateModePills();
+        document.querySelectorAll(".demo-card").forEach((card) => card.classList.remove("active"));
+        btnPlayMasterBackup.classList.add("btn-active");
+        btnPlayNarratedMaster.classList.remove("btn-active");
+
+        if (isCompareMode) {
+          toggleCompareMode(false);
+        }
+        applyConfigToStage(MASTER_WALKTHROUGH, autoPlay);
+      }
+
+      function applyConfigToStage(cfg, autoPlay) {
+        fallbackPanel.classList.remove("active");
+        activeStageTitle.textContent = cfg.title;
+        activeStageDescription.textContent = cfg.description;
+        specResolution.textContent = cfg.resolution;
+        specPipeline.textContent = cfg.pipeline;
+        specLicense.textContent = cfg.license;
+        talkTrackWindowPill.textContent = cfg.talkTrackWindow;
+        researchPreviewBanner.classList.toggle("visible", Boolean(cfg.isResearchPreview));
+
+        mainVideo.src = cfg.src;
+        mainVideo.load();
+
+        compareAfterVideo.src = cfg.src;
+        compareAfterVideo.load();
+        compareBeforeVideo.currentTime = 0;
+
+        updateTeleprompter(0);
+
+        if (autoPlay) {
+          playActiveVideo();
+        } else {
+          btnPlayPause.textContent = "▶ Play";
+        }
+      }
+
+      function playActiveVideo() {
+        const p = mainVideo.play();
+        if (p && typeof p.catch === "function") {
+          p.catch(() => {});
+        }
+        if (isCompareMode) {
+          compareBeforeVideo.currentTime = mainVideo.currentTime % 16.0;
+          compareAfterVideo.currentTime = mainVideo.currentTime;
+          compareBeforeVideo.play().catch(() => {});
+          compareAfterVideo.play().catch(() => {});
+        }
+        if (hasCustomVo) {
+          customVoiceoverAudio.currentTime = mainVideo.currentTime % 16.0;
+          customVoiceoverAudio.play().catch(() => {});
+        }
+      }
+
+      function pauseActiveVideo() {
+        mainVideo.pause();
+        compareBeforeVideo.pause();
+        compareAfterVideo.pause();
+        if (hasCustomVo) {
+          customVoiceoverAudio.pause();
+        }
+      }
+
+      function toggleCompareMode(forceState) {
+        isCompareMode = typeof forceState === "boolean" ? forceState : !isCompareMode;
+        btnToggleCompare.classList.toggle("btn-active", isCompareMode);
+        singlePlayerContainer.style.display = isCompareMode ? "none" : "flex";
+        comparePlayerContainer.classList.toggle("active", isCompareMode);
+
+        if (isCompareMode) {
+          compareBeforeVideo.currentTime = mainVideo.currentTime % 16.0;
+          compareAfterVideo.currentTime = mainVideo.currentTime;
+          if (!mainVideo.paused) {
+            compareBeforeVideo.play().catch(() => {});
+            compareAfterVideo.play().catch(() => {});
+          }
+        } else {
+          compareBeforeVideo.pause();
+          compareAfterVideo.pause();
+        }
+      }
+
+      function updateModePills() {
+        if (isSequenceMode) {
+          sequenceStatusPill.textContent = "Mode: Full Sequence (1→4)";
+          btnPlaySequence.classList.add("btn-active");
+        } else if (isNarratedMasterMode) {
+          sequenceStatusPill.textContent = "Mode: Paced Master (100s • Pre-VO)";
+          btnPlaySequence.classList.remove("btn-active");
+        } else if (isMasterMode) {
+          sequenceStatusPill.textContent = "Mode: Emergency Backup (64s)";
+          btnPlaySequence.classList.remove("btn-active");
+        } else {
+          sequenceStatusPill.textContent = "Mode: Single Showcase";
+          btnPlaySequence.classList.remove("btn-active");
+        }
+      }
+
+      // Event Listeners for Cards
+      document.querySelectorAll(".demo-card").forEach((card) => {
+        card.addEventListener("click", () => {
+          isSequenceMode = false;
+          updateModePills();
+          const idx = Number(card.getAttribute("data-index"));
+          loadStage(idx, true);
+        });
+      });
+
+      // Video Events
+      mainVideo.addEventListener("loadedmetadata", () => {
+        seekSlider.max = String(mainVideo.duration || 16);
+        timeReadout.textContent =
+          formatTime(mainVideo.currentTime) + " / " + formatTime(mainVideo.duration || 16);
+      });
+
+      mainVideo.addEventListener("timeupdate", () => {
+        const t = mainVideo.currentTime;
+        const d = mainVideo.duration || 16;
+        seekSlider.value = String(t);
+        timeReadout.textContent = formatTime(t) + " / " + formatTime(d);
+        updateTeleprompter(t);
+
+        if (isCompareMode && Math.abs(compareBeforeVideo.currentTime - (t % 16.0)) > 0.25) {
+          compareBeforeVideo.currentTime = t % 16.0;
+        }
+        if (isCompareMode && Math.abs(compareAfterVideo.currentTime - t) > 0.25) {
+          compareAfterVideo.currentTime = t;
+        }
+      });
+
+      mainVideo.addEventListener("play", () => {
+        btnPlayPause.textContent = "⏸ Pause";
+        if (isCompareMode) {
+          compareBeforeVideo.play().catch(() => {});
+          compareAfterVideo.play().catch(() => {});
+        }
+        if (hasCustomVo) {
+          customVoiceoverAudio.currentTime = mainVideo.currentTime % 16.0;
+          customVoiceoverAudio.play().catch(() => {});
+        }
+      });
+
+      mainVideo.addEventListener("pause", () => {
+        btnPlayPause.textContent = "▶ Play";
+        compareBeforeVideo.pause();
+        compareAfterVideo.pause();
+        if (hasCustomVo) {
+          customVoiceoverAudio.pause();
+        }
+      });
+
+      mainVideo.addEventListener("ended", () => {
+        if (isSequenceMode && !isMasterMode) {
+          if (currentIndex < DEMOS.length - 1) {
+            loadStage(currentIndex + 1, true);
+            return;
+          } else {
+            isSequenceMode = false;
+            updateModePills();
+          }
+        }
+        if (isLooping) {
+          mainVideo.currentTime = 0;
+          playActiveVideo();
+        }
+      });
+
+      // Graceful Fallback on Video Error
+      mainVideo.addEventListener("error", () => {
+        const cfg = getCurrentConfig();
+        if (!triedBackupPath && cfg.backupSrc) {
+          triedBackupPath = true;
+          mainVideo.src = cfg.backupSrc;
+          mainVideo.load();
+          return;
+        }
+        singlePlayerContainer.style.display = "none";
+        comparePlayerContainer.classList.remove("active");
+        fallbackPanel.classList.add("active");
+        fallbackErrorText.textContent =
+          "Unable to load video from '" +
+          cfg.src +
+          "' or backup '" +
+          cfg.backupSrc +
+          "'. Use the buttons below to launch the Master Walkthrough Backup or select a local MP4 file.";
+      });
+
+      // Transport Controls
+      btnPlayPause.addEventListener("click", () => {
+        if (mainVideo.paused) {
+          playActiveVideo();
+        } else {
+          pauseActiveVideo();
+        }
+      });
+
+      btnRestart.addEventListener("click", () => {
+        mainVideo.currentTime = 0;
+        compareBeforeVideo.currentTime = 0;
+        compareAfterVideo.currentTime = 0;
+        if (hasCustomVo) customVoiceoverAudio.currentTime = 0;
+        playActiveVideo();
+      });
+
+      btnLoopToggle.addEventListener("click", () => {
+        isLooping = !isLooping;
+        btnLoopToggle.textContent = isLooping ? "⟳ Loop: On" : "⟳ Loop: Off";
+        btnLoopToggle.classList.toggle("btn-active", isLooping);
+      });
+
+      seekSlider.addEventListener("input", () => {
+        const val = Number(seekSlider.value);
+        mainVideo.currentTime = val;
+        compareBeforeVideo.currentTime = val % 16.0;
+        compareAfterVideo.currentTime = val;
+        if (hasCustomVo) customVoiceoverAudio.currentTime = val % 16.0;
+        updateTeleprompter(val);
+      });
+
+      btnPlaySequence.addEventListener("click", () => {
+        isSequenceMode = true;
+        isMasterMode = false;
+        updateModePills();
+        loadStage(0, true);
+      });
+
+      btnToggleCompare.addEventListener("click", () => {
+        toggleCompareMode();
+      });
+
+      btnPlayNarratedMaster.addEventListener("click", () => {
+        loadNarratedMaster(true);
+      });
+
+      btnPlayMasterBackup.addEventListener("click", () => {
+        loadMasterWalkthrough(true);
+      });
+
+      document.getElementById("btnFallbackTryMaster").addEventListener("click", () => {
+        singlePlayerContainer.style.display = "flex";
+        loadMasterWalkthrough(true);
+      });
+
+      document.getElementById("fallbackManualVideoInput").addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        fallbackPanel.classList.remove("active");
+        singlePlayerContainer.style.display = "flex";
+        mainVideo.src = url;
+        mainVideo.load();
+        playActiveVideo();
+      });
+
+      // Custom Human Voiceover Loader
+      voiceoverFileInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        customVoiceoverAudio.src = url;
+        hasCustomVo = true;
+        mainVideo.muted = true;
+        voStatusBadge.textContent = "Human VO Loaded";
+        voStatusBadge.className = "pill pill-emerald";
+        btnClearVo.style.display = "inline-flex";
+        mainVideo.currentTime = 0;
+        playActiveVideo();
+      });
+
+      btnClearVo.addEventListener("click", () => {
+        hasCustomVo = false;
+        customVoiceoverAudio.pause();
+        customVoiceoverAudio.removeAttribute("src");
+        mainVideo.muted = false;
+        voStatusBadge.textContent = "Cue Mode";
+        voStatusBadge.className = "pill";
+        btnClearVo.style.display = "none";
+      });
+
+      // Keyboard Shortcuts
+      window.addEventListener("keydown", (e) => {
+        if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+        const key = e.key.toLowerCase();
+        if (key === "1" || key === "2" || key === "3" || key === "4") {
+          e.preventDefault();
+          isSequenceMode = false;
+          updateModePills();
+          loadStage(Number(key) - 1, true);
+        } else if (key === " ") {
+          e.preventDefault();
+          if (mainVideo.paused) playActiveVideo();
+          else pauseActiveVideo();
+        } else if (key === "c") {
+          e.preventDefault();
+          toggleCompareMode();
+        } else if (key === "s") {
+          e.preventDefault();
+          isSequenceMode = true;
+          isMasterMode = false;
+          updateModePills();
+          loadStage(0, true);
+        } else if (key === "n") {
+          e.preventDefault();
+          loadNarratedMaster(true);
+        } else if (key === "m") {
+          e.preventDefault();
+          loadMasterWalkthrough(true);
+        } else if (key === "r") {
+          e.preventDefault();
+          mainVideo.currentTime = 0;
+          playActiveVideo();
+        } else if (key === "l") {
+          e.preventDefault();
+          btnLoopToggle.click();
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          mainVideo.currentTime = Math.min(mainVideo.duration || 16, mainVideo.currentTime + 2);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          mainVideo.currentTime = Math.max(0, mainVideo.currentTime - 2);
+        }
+      });
+
+      // Initialize
+      initKaraokeDom();
+      loadStage(0, false);
+    })();
+  </script>
+</body>
+</html>

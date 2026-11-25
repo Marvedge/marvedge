@@ -1,0 +1,151 @@
+{
+  "task": "transcribe",
+  "language": "multilingual",
+  "duration": 16,
+  "text": "[EN] Marvedge turns wide clips into shorts. [ES] El encuadre centra cada sujeto clave. [FR] Exportez vos videos en un clic.",
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.3,
+      "end": 4.5,
+      "text": "[EN] Marvedge turns wide clips into shorts.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    },
+    {
+      "id": 1,
+      "seek": 450,
+      "start": 5.5,
+      "end": 10,
+      "text": "[ES] El encuadre centra cada sujeto clave.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    },
+    {
+      "id": 2,
+      "seek": 1000,
+      "start": 11,
+      "end": 15.5,
+      "text": "[FR] Exportez vos videos en un clic.",
+      "tokens": [],
+      "temperature": 0,
+      "avg_logprob": -0.1,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.001
+    }
+  ],
+  "words": [
+    {
+      "word": "[EN]",
+      "start": 0.3,
+      "end": 0.7
+    },
+    {
+      "word": "Marvedge",
+      "start": 0.76,
+      "end": 1.34
+    },
+    {
+      "word": "turns",
+      "start": 1.4,
+      "end": 1.9
+    },
+    {
+      "word": "wide",
+      "start": 1.96,
+      "end": 2.45
+    },
+    {
+      "word": "clips",
+      "start": 2.51,
+      "end": 3.05
+    },
+    {
+      "word": "into",
+      "start": 3.11,
+      "end": 3.6
+    },
+    {
+      "word": "shorts.",
+      "start": 3.66,
+      "end": 4.5
+    },
+    {
+      "word": "[ES]",
+      "start": 5.5,
+      "end": 5.9
+    },
+    {
+      "word": "El",
+      "start": 5.96,
+      "end": 6.3
+    },
+    {
+      "word": "encuadre",
+      "start": 6.36,
+      "end": 7.05
+    },
+    {
+      "word": "centra",
+      "start": 7.11,
+      "end": 7.75
+    },
+    {
+      "word": "cada",
+      "start": 7.81,
+      "end": 8.35
+    },
+    {
+      "word": "sujeto",
+      "start": 8.41,
+      "end": 9.1
+    },
+    {
+      "word": "clave.",
+      "start": 9.16,
+      "end": 10
+    },
+    {
+      "word": "[FR]",
+      "start": 11,
+      "end": 11.4
+    },
+    {
+      "word": "Exportez",
+      "start": 11.46,
+      "end": 12.15
+    },
+    {
+      "word": "vos",
+      "start": 12.21,
+      "end": 12.68
+    },
+    {
+      "word": "videos",
+      "start": 12.74,
+      "end": 13.45
+    },
+    {
+      "word": "en",
+      "start": 13.51,
+      "end": 13.92
+    },
+    {
+      "word": "un",
+      "start": 13.98,
+      "end": 14.45
+    },
+    {
+      "word": "clic.",
+      "start": 14.51,
+      "end": 15.5
+    }
+  ]
+}
