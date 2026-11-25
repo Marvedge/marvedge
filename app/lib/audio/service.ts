@@ -137,7 +137,13 @@ export async function createAudioUpload(args: {
     where: { demoId: args.demoId },
     _max: { order: true },
   });
-  const order = (max._max.order ?? -1) + 1;
+  const order = Math.min((max._max.order ?? -1) + 1, 2_147_483_647);
+
+  // Signing can fail independently of the database. Do it before creating
+  // a clip so a failed request does not leave an unusable UPLOADING row.
+  const signedUploadUrl = isR2Configured()
+    ? await signClipUploadUrl({ objectKey, mimeType: validated.mimeType })
+    : null;
 
   const clip = await args.db.audioClip.create({
     data: {
@@ -153,9 +159,7 @@ export async function createAudioUpload(args: {
   // Testing mode: without R2 credentials the browser uploads through our own
   // Cloudinary-backed endpoint instead of a pre-signed PUT. The URL is relative
   // so axios posts to it exactly like an R2 presigned PUT.
-  const uploadUrl = isR2Configured()
-    ? await signClipUploadUrl({ objectKey, mimeType: validated.mimeType })
-    : `/api/audio/${clip.id}/cloudinary-upload`;
+  const uploadUrl = signedUploadUrl ?? `/api/audio/${clip.id}/cloudinary-upload`;
 
   return { clipId: clip.id, uploadUrl };
 }
@@ -194,17 +198,22 @@ export async function confirmAudioUpload(args: {
     return buildClipDto(updated);
   }
 
+  const dto = await buildClipDto(clip);
+  if (!dto.originalUrl) {
+    throw new ApiError(503, "Audio source URL is temporarily unavailable");
+  }
+
   const queue = args.queue ?? audioJobQueue;
   await queue.add(
     "extract-metadata",
     {
       clipId: args.clipId,
-      sourceUrl: await audioPlayableUrl(clip.originalKey),
+      sourceUrl: dto.originalUrl,
     },
     { jobId: args.clipId }
   );
 
-  return buildClipDto(clip);
+  return dto;
 }
 
 /**

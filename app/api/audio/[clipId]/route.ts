@@ -92,9 +92,7 @@ export async function DELETE(
 
   // Drop the R2 objects after the response is sent — the row is already gone,
   // so a slow storage delete must never delay the user.
-  after(() => {
-    void deleteAudioObjects(objectKeys);
-  });
+  after(() => deleteAudioObjects(objectKeys));
 
   return NextResponse.json({ success: true });
 }

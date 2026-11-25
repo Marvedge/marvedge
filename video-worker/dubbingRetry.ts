@@ -34,7 +34,10 @@ export function isRetryableDubbingError(error: unknown): boolean {
   if (
     error.message === "Missing ELEVENLABS_API_KEY" ||
     error.message === "ElevenLabs did not return a dubbing ID" ||
-    error.message.startsWith("ElevenLabs dubbing failed with status:")
+    error.message.startsWith("ElevenLabs dubbing failed with status:") ||
+    error.message === "Missing required videoUrl" ||
+    error.message.startsWith("Invalid payload") ||
+    error.message.startsWith("Invalid AVS dub job:")
   ) {
     return false;
   }

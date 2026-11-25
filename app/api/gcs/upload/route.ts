@@ -17,34 +17,13 @@ import {
   deleteObject,
   toPublicUri,
 } from "@/app/lib/storage";
+import { mediaExtensionFor, normalizedMediaType } from "@/app/lib/uploads/mediaTypes";
 
 /**
  * Ceiling for non-video uploads (watermark logo, background image, generic).
  * Video kinds use MAX_UPLOAD_BYTES (2 GB). This only stops bucket-filling.
  */
 const MAX_GENERIC_UPLOAD_BYTES = 50 * 1024 * 1024;
-
-function sanitizeFilename(name: string) {
-  return name
-    .replace(/[^\w.\-]+/g, "_")
-    .replace(/_+/g, "_")
-    .slice(0, 120);
-}
-
-function extFromFilename(name: string) {
-  const idx = name.lastIndexOf(".");
-  if (idx === -1) return "";
-  return name.slice(idx + 1).toLowerCase();
-}
-
-function extFromContentType(contentType: string) {
-  const normalized = contentType.toLowerCase();
-  if (normalized.includes("video/webm")) return "webm";
-  if (normalized.includes("video/mp4")) return "mp4";
-  if (normalized.includes("image/png")) return "png";
-  if (normalized.includes("image/jpeg")) return "jpg";
-  return "";
-}
 
 function toSafeKind(kind: unknown) {
   if (typeof kind !== "string") return "generic";
@@ -190,39 +169,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Container and size limits — enforced here, not just client-side.
+    // A strict MIME allowlist replaces the old `image/*` check. image/svg+xml
+    // can carry script and must never be minted as an image upload.
+    const mediaType = normalizedMediaType(contentType);
+    if (!mediaType) {
+      return NextResponse.json(
+        { ok: false, error: "That file type is not supported for uploads." },
+        { status: 400 }
+      );
+    }
+
     if (videoKind) {
       const check = validateVideoUpload({
         filename: body.filename,
-        contentType,
+        contentType: mediaType,
         size: declaredSize,
       });
       if (!check.ok) {
         return NextResponse.json({ ok: false, error: check.error }, { status: 400 });
       }
-    } else {
-      // Non-video kinds (watermark logo, background image, generic) still mint
-      // bucket writes, so only media types are allowed — never executables,
-      // HTML, or bare octet-streams.
-      const baseType = contentType.split(";")[0].trim().toLowerCase();
-      const isMediaType =
-        baseType.startsWith("video/") ||
-        baseType.startsWith("image/") ||
-        baseType.startsWith("audio/");
-      if (!isMediaType) {
-        return NextResponse.json(
-          { ok: false, error: "That file type is not supported for uploads." },
-          { status: 400 }
-        );
-      }
-      // The size was validated before the branch, so this only checks the
-      // media type now. The /verify step still re-checks the stored bytes.
     }
 
-    const fallbackName = contentType.startsWith("video/") ? "upload.webm" : "upload.bin";
-    const safeOriginal = sanitizeFilename(body.filename || fallbackName);
-    const ext = extFromFilename(safeOriginal) || extFromContentType(contentType);
-    const suffix = ext ? `.${ext}` : "";
+    // The suffix comes only from the allowlisted MIME type. A client filename
+    // can no longer make an image object look like an SVG or an HTML file.
+    const suffix = `.${mediaExtensionFor(mediaType)}`;
     const objectKey = `uploads/${kind}/${userId}/${Date.now()}-${randomUUID()}${suffix}`;
 
     // Presigned PUT URL for the browser to upload directly to S3 (or GCS).
@@ -232,7 +202,7 @@ export async function POST(req: NextRequest) {
     const uploadUrl = await getSignedUploadUrl(
       bucketName,
       objectKey,
-      contentType,
+      mediaType,
       15 * 60 * 1000,
       uploadCapBytes
     );

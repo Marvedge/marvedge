@@ -1,5 +1,10 @@
 import { Queue } from "bullmq";
 import connection from "./redis";
+import { resolveDubbingQueueName, resolveReframeQueueName } from "./config/dubbingQueue";
+
+// Validate staging queue isolation before creating any BullMQ Queue.
+const reframeQueueName = resolveReframeQueueName();
+const dubbingQueueName = resolveDubbingQueueName();
 
 // Shared retry policy for all queues so failed jobs retry with backoff.
 const defaultJobOptions = {
@@ -27,21 +32,18 @@ export const audioQueue = new Queue("audio-processing", {
   defaultJobOptions,
 });
 
-export const reframeQueue = new Queue(
-  process.env.REFRAME_QUEUE_NAME?.trim() || "reframe-processing",
-  {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    connection: connection as any,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: 100,
-      removeOnFail: 500,
-    },
-  }
-);
+export const reframeQueue = new Queue(reframeQueueName, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  connection: connection as any,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  },
+});
 
-export const dubbingQueue = new Queue("dubbing-processing", {
+export const dubbingQueue = new Queue(dubbingQueueName, {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   connection: connection as any,
   defaultJobOptions: {

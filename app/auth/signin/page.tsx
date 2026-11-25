@@ -2,7 +2,7 @@
 import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { useSignIn } from "./useSignIn";
-import { getSafeCallbackUrl } from "./useSignIn";
+import { getSafeCallbackUrl } from "@/app/lib/auth/redirect";
 import SignInMobileNav from "./SignInMobileNav";
 import SignInIllustration from "./SignInIllustration";
 

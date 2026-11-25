@@ -1,9 +1,14 @@
 "use strict";
 
 const fs = require("node:fs");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const os = require("node:os");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const path = require("node:path");
 
 const CANONICAL_SCHEMA = "marvedge.speaker-tracks";
 const CANONICAL_SCHEMA_VERSION = 1;
+const MAX_SPEAKER_TRACKS_BYTES = 1024 * 1024;
 
 function validateConfig({ width, height, blurStrength = 20 }) {
   if (!Number.isInteger(width) || width <= 0) {
@@ -527,6 +532,16 @@ function parseSpeakerTracks(rawContent, defaultFrameWidth) {
   return { speakers, frameWidth, valid: true };
 }
 
+function isPathInside(parent, child) {
+  const relative = path.relative(parent, child);
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
 /**
  * Loads speaker tracks from local file path if given a string path, or returns parsed object.
  */
@@ -538,14 +553,46 @@ function loadSpeakerTracks(speakerTracksUri, defaultFrameWidth) {
   const trimmed = speakerTracksUri.trim();
   // Check if it's raw JSON string
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    if (Buffer.byteLength(trimmed, "utf8") > MAX_SPEAKER_TRACKS_BYTES) {
+      return {
+        speakers: [],
+        frameWidth: defaultFrameWidth,
+        valid: false,
+        reason: "speaker_tracks_too_large",
+      };
+    }
     return parseSpeakerTracks(trimmed, defaultFrameWidth);
   }
 
+  let resolvedPath;
+  let tempRoot;
   try {
-    if (!fs.existsSync(trimmed)) {
-      return { speakers: [], frameWidth: defaultFrameWidth, fileNotFound: true };
+    resolvedPath = fs.realpathSync(trimmed);
+    tempRoot = fs.realpathSync(os.tmpdir());
+  } catch {
+    return { speakers: [], frameWidth: defaultFrameWidth, fileNotFound: true };
+  }
+
+  if (!isPathInside(tempRoot, resolvedPath)) {
+    return {
+      speakers: [],
+      frameWidth: defaultFrameWidth,
+      valid: false,
+      reason: "path_outside_tmpdir",
+    };
+  }
+
+  try {
+    const stats = fs.statSync(resolvedPath);
+    if (stats.size > MAX_SPEAKER_TRACKS_BYTES) {
+      return {
+        speakers: [],
+        frameWidth: defaultFrameWidth,
+        valid: false,
+        reason: "speaker_tracks_too_large",
+      };
     }
-    const content = fs.readFileSync(trimmed, "utf8");
+    const content = fs.readFileSync(resolvedPath, "utf8");
     if (!content || !content.trim()) {
       return { speakers: [], frameWidth: defaultFrameWidth, emptyFile: true };
     }

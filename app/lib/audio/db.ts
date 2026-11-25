@@ -46,7 +46,11 @@ export interface AudioClipDb {
     }): Promise<AudioClipRecord>;
     update(args: { where: { id: string }; data: AudioClipUpdate }): Promise<AudioClipRecord>;
     updateMany(args: {
-      where: { id?: string; demo?: { userId?: string } };
+      where: {
+        id?: string;
+        demo?: { userId?: string };
+        status?: string | { in: string[] };
+      };
       data: AudioClipUpdate;
     }): Promise<{ count: number }>;
     deleteMany(args: {

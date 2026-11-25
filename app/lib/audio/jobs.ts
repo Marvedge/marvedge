@@ -60,19 +60,11 @@ function errorMessage(error: unknown): string {
  *  exists). */
 async function failClip(db: AudioClipDb, clipId: string, error: string): Promise<void> {
   try {
-    // Terminal guard: do not overwrite a clip that already finished.
-    const current = await withDbRetry(() => db.audioClip.findUnique({ where: { id: clipId } }));
-    const currentStatus = current?.status as string | undefined;
-    if (
-      currentStatus === "READY" ||
-      currentStatus === "COMPLETED" ||
-      currentStatus === "CANCELLED"
-    ) {
-      return;
-    }
+    // Check the active trim state in the same write that records failure.
+    // A competing trim may have completed since this job failed.
     await withDbRetry(() =>
-      db.audioClip.update({
-        where: { id: clipId },
+      db.audioClip.updateMany({
+        where: { id: clipId, status: "TRIM_PROCESSING" },
         data: { status: "FAILED" satisfies AudioClipStatus, error },
       })
     );
@@ -101,16 +93,22 @@ export async function runMetadataJob(payload: MetadataJobPayload, db: AudioClipD
     if (!clip) {
       throw new Error("Audio clip not found");
     }
-    if (clip.status === "READY") {
+    if (clip.status === "READY" || clip.status === "TRIM_PROCESSING") {
       return; // already processed — retry-safe no-op
     }
 
-    await withDbRetry(() =>
-      db.audioClip.update({
-        where: { id: clip.id },
+    const metadataClaim = await withDbRetry(() =>
+      db.audioClip.updateMany({
+        where: {
+          id: clip.id,
+          status: { in: ["UPLOADING", "PROCESSING", "FAILED"] },
+        },
         data: { status: "PROCESSING" satisfies AudioClipStatus, error: null },
       })
     );
+    if (metadataClaim.count === 0) {
+      return;
+    }
 
     await downloadAudioToFile(payload.sourceUrl, filePath);
 
@@ -132,8 +130,8 @@ export async function runMetadataJob(payload: MetadataJobPayload, db: AudioClipD
     }
 
     await withDbRetry(() =>
-      db.audioClip.update({
-        where: { id: clip.id },
+      db.audioClip.updateMany({
+        where: { id: clip.id, status: "PROCESSING" },
         data: {
           status: "READY" satisfies AudioClipStatus,
           durationSec,
@@ -143,7 +141,14 @@ export async function runMetadataJob(payload: MetadataJobPayload, db: AudioClipD
       })
     );
   } catch (error) {
-    await failClip(db, payload.clipId, errorMessage(error));
+    await withDbRetry(() =>
+      db.audioClip.updateMany({
+        where: { id: payload.clipId, status: "PROCESSING" },
+        data: { status: "FAILED" satisfies AudioClipStatus, error: errorMessage(error) },
+      })
+    ).catch(() => {
+      // Preserve the original processing error.
+    });
     throw error;
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -176,6 +181,7 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
   const inputPath = path.join(tempDir, "input");
   const ext = path.extname(payload.trimmedKey);
   const outputPath = path.join(tempDir, `trimmed${ext}`);
+  let uploadedTrim = false;
   try {
     const clip = await withDbRetry(() =>
       db.audioClip.findUnique({ where: { id: payload.clipId } })
@@ -208,6 +214,7 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
 
     await trimAudioFile(inputPath, outputPath, payload.trimStartSec, payload.trimEndSec);
     await uploadAudioViaSignedUrl(payload.uploadUrl, outputPath, payload.mimeType);
+    uploadedTrim = true;
 
     await withDbRetry(() =>
       db.audioClip.update({
@@ -224,17 +231,24 @@ export async function runTrimJob(payload: TrimJobPayload, db: AudioClipDb): Prom
 
     // The previous trimmed asset (from an earlier successful trim) is now
     // orphaned — drop it best-effort. Never fails the job.
-    if (payload.previousTrimmedKey && payload.previousTrimmedKey !== payload.trimmedKey) {
+    if (clip.trimmedKey && clip.trimmedKey !== payload.trimmedKey) {
       try {
-        await deleteObject({ bucket: getR2RawBucket(), object: payload.previousTrimmedKey });
+        await deleteObject({ bucket: getR2RawBucket(), object: clip.trimmedKey });
       } catch (error) {
-        console.error(
-          `[audio] failed to clean up previous trim ${payload.previousTrimmedKey}:`,
-          error
-        );
+        console.error(`[audio] failed to clean up previous trim ${clip.trimmedKey}:`, error);
       }
     }
   } catch (error) {
+    // Only remove the new object when the final write confirms the clip is gone.
+    // For an ambiguous database error, the update may already have committed.
+    if (uploadedTrim && error instanceof Error && "code" in error && error.code === "P2025") {
+      try {
+        await deleteObject({ bucket: getR2RawBucket(), object: payload.trimmedKey });
+      } catch (cleanupError) {
+        console.error("[audio] failed to clean up trim for deleted clip:", cleanupError);
+      }
+    }
+
     // Keep the previous trimmedKey (if any) intact — the clip stays playable.
     await failClip(db, payload.clipId, errorMessage(error));
     throw error;
