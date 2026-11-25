@@ -18,6 +18,13 @@ export function isRetryableDubbingError(error: unknown): boolean {
   const errorWithMeta = error as { code?: string; isRetryable?: boolean };
 
   if (
+    error.message.includes("VOICE_CLONING_CONSENT_REQUIRED") ||
+    errorWithMeta.code === "VOICE_CLONING_CONSENT_REQUIRED"
+  ) {
+    return false;
+  }
+
+  if (
     error instanceof VoiceStudioError ||
     (typeof errorWithMeta.isRetryable === "boolean" && typeof errorWithMeta.code === "string")
   ) {

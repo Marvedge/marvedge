@@ -10,28 +10,29 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(cuid())
-  name           String?
-  email          String?         @unique
-  emailVerified  DateTime?
-  image          String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  password       String?
-  bio            String?
-  location       String?
-  website        String?
-  plan           String          @default("FREE")
-  sessionVersion Int             @default(0)
-  accounts       Account[]
-  Demo           Demo[]
-  exportedVideos ExportedVideo[]
-  reviews        Review[]
-  sessions       Session[]
-  tutorials      Tutorial[]      @relation("UserTutorials")
-  videoJobs      VideoJob[]
-  hubSettings    HubSettings?
-  crmConnections CrmConnection[]
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  password         String?
+  bio              String?
+  location         String?
+  website          String?
+  plan             String            @default("FREE")
+  sessionVersion   Int               @default(0)
+  accounts         Account[]
+  Demo             Demo[]
+  exportedVideos   ExportedVideo[]
+  reviews          Review[]
+  sessions         Session[]
+  tutorials        Tutorial[]        @relation("UserTutorials")
+  videoJobs        VideoJob[]
+  hubSettings      HubSettings?
+  crmConnections   CrmConnection[]
+  workspaceConsent WorkspaceConsent?
 }
 
 model Account {
@@ -195,7 +196,7 @@ model VideoJob {
   scoreJson   Json?
   demo        Demo?    @relation(fields: [demoId], references: [id])
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Added fields for idempotency and retry safety
   idempotencyKey String?
@@ -497,4 +498,16 @@ model LeadDelivery {
   @@unique([leadId, connectionId])
   @@index([status, createdAt])
   @@index([leadId])
+}
+
+model WorkspaceConsent {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  voiceCloningConsent   Boolean   @default(false)
+  faceTrackingConsent   Boolean   @default(false)
+  voiceCloningConsentAt DateTime?
+  faceTrackingConsentAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -1709,7 +1709,6 @@ export interface DubbingWorkerJob {
   updateProgress: (progress: number | object) => Promise<void>;
 }
 
-
 export async function executeDubbingJob(
   job: Job | DubbingWorkerJob,
   deps: { prisma?: PrismaClient } = {}
@@ -1807,6 +1806,42 @@ export async function executeDubbingJob(
       return claimed.count > 0;
     },
     process: async () => {
+      // ── Task-00133: Worker-Level Voice Cloning Consent Check ─────────
+      // Read the latest persisted consent at execution time before calling ElevenLabs or VoiceStudio.
+      // Fails closed if consent is absent, revoked, or cannot be verified.
+      const targetJob = await db.videoJob.findUnique({
+        where: { id: jobId },
+        select: { userId: true },
+      });
+
+      const ownerUserId =
+        targetJob?.userId || (typeof job.data?.userId === "string" ? job.data.userId : null);
+      if (!ownerUserId) {
+        throw new Error(
+          "VOICE_CLONING_CONSENT_REQUIRED: Missing user ID for dubbing consent verification"
+        );
+      }
+
+      let userConsent: { voiceCloningConsent: boolean } | null = null;
+      try {
+        userConsent = await db.workspaceConsent.findUnique({
+          where: { userId: ownerUserId },
+          select: { voiceCloningConsent: true },
+        });
+      } catch (consentErr) {
+        throw new Error(
+          `VOICE_CLONING_CONSENT_REQUIRED: Consent verification failed: ${
+            consentErr instanceof Error ? consentErr.message : String(consentErr)
+          }`
+        );
+      }
+
+      if (!userConsent || !userConsent.voiceCloningConsent) {
+        throw new Error(
+          "VOICE_CLONING_CONSENT_REQUIRED: Explicit voice cloning consent has not been granted by this workspace."
+        );
+      }
+
       if (provider === "voicestudio") {
         // 1. Validate VoiceStudio health before synthesis
         const adapter = new VoiceStudioDubbingAdapter();

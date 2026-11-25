@@ -22,6 +22,9 @@ vi.mock("@/app/lib/prisma", () => ({
   prisma: {
     user: { findFirst: mocks.findUser },
     videoJob: { create: mocks.create },
+    workspaceConsent: {
+      findUnique: vi.fn().mockResolvedValue({ voiceCloningConsent: true }),
+    },
   },
 }));
 vi.mock("@/app/lib/queue", () => ({

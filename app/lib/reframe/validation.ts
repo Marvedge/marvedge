@@ -36,6 +36,7 @@ export interface ReframeJobPayload {
   userId?: string;
   demoId?: string | null;
   source?: ReframeSourceMetadata | null;
+  enableFaceTracking?: boolean;
 }
 
 export function validateSourceMetadata(
@@ -63,7 +64,9 @@ export function validateSourceMetadata(
   }
   if (
     src.durationSec !== undefined &&
-    (typeof src.durationSec !== "number" || !Number.isFinite(src.durationSec) || src.durationSec < 0)
+    (typeof src.durationSec !== "number" ||
+      !Number.isFinite(src.durationSec) ||
+      src.durationSec < 0)
   ) {
     throw createError("source.durationSec must be a non-negative number if provided");
   }
@@ -146,7 +149,9 @@ export function validateReframeJobPayload(data: unknown): ReframeJobPayload {
 
   // 3. targetAspectRatio (required non-empty string)
   if (typeof record.targetAspectRatio !== "string" || !record.targetAspectRatio.trim()) {
-    throw new ReframePayloadValidationError("targetAspectRatio is required and must be a non-empty string");
+    throw new ReframePayloadValidationError(
+      "targetAspectRatio is required and must be a non-empty string"
+    );
   }
 
   // 4. userId (optional non-empty string)
@@ -173,6 +178,15 @@ export function validateReframeJobPayload(data: unknown): ReframeJobPayload {
     (msg) => new ReframePayloadValidationError(msg)
   );
 
+  // 7. enableFaceTracking (optional boolean)
+  let enableFaceTracking: boolean | undefined = undefined;
+  if (record.enableFaceTracking !== undefined) {
+    if (typeof record.enableFaceTracking !== "boolean") {
+      throw new ReframePayloadValidationError("enableFaceTracking must be a boolean if provided");
+    }
+    enableFaceTracking = record.enableFaceTracking;
+  }
+
   return {
     jobId: record.jobId.trim(),
     videoUrl: trimmedUrl,
@@ -180,5 +194,6 @@ export function validateReframeJobPayload(data: unknown): ReframeJobPayload {
     ...(userId !== undefined ? { userId } : {}),
     ...(demoId !== undefined ? { demoId } : {}),
     ...(source !== undefined ? { source } : {}),
+    ...(enableFaceTracking !== undefined ? { enableFaceTracking } : {}),
   };
 }

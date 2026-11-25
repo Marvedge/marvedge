@@ -293,10 +293,15 @@ describe("Video Worker - dubbing-processing worker integration", () => {
         videoJob: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           update: vi.fn().mockResolvedValue({}),
-          findUnique: vi.fn().mockResolvedValue({ jobData: null, demoId: null }),
+          findUnique: vi
+            .fn()
+            .mockResolvedValue({ userId: "user-test-1", jobData: null, demoId: null }),
         },
         demo: {
           findUnique: vi.fn().mockResolvedValue(null),
+        },
+        workspaceConsent: {
+          findUnique: vi.fn().mockResolvedValue({ voiceCloningConsent: true }),
         },
       };
 
@@ -370,10 +375,15 @@ describe("Video Worker - dubbing-processing worker integration", () => {
         videoJob: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           update: vi.fn().mockResolvedValue({}),
-          findUnique: vi.fn().mockResolvedValue({ jobData: null, demoId: null }),
+          findUnique: vi
+            .fn()
+            .mockResolvedValue({ userId: "user-test-1", jobData: null, demoId: null }),
         },
         demo: {
           findUnique: vi.fn().mockResolvedValue(null),
+        },
+        workspaceConsent: {
+          findUnique: vi.fn().mockResolvedValue({ voiceCloningConsent: true }),
         },
       };
 
@@ -559,10 +569,15 @@ describe("Video Worker - dubbing-processing worker integration", () => {
         videoJob: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           update: vi.fn().mockResolvedValue({}),
-          findUnique: vi.fn().mockResolvedValue({ jobData: null, demoId: null }),
+          findUnique: vi
+            .fn()
+            .mockResolvedValue({ userId: "user-test-1", jobData: null, demoId: null }),
         },
         demo: {
           findUnique: vi.fn().mockResolvedValue(null),
+        },
+        workspaceConsent: {
+          findUnique: vi.fn().mockResolvedValue({ voiceCloningConsent: true }),
         },
       };
 
@@ -592,12 +607,16 @@ describe("Video Worker - dubbing-processing worker integration", () => {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         update: vi.fn().mockResolvedValue({}),
         findUnique: vi.fn().mockResolvedValue({
+          userId: "user-test-1",
           jobData: null,
           demoId: null,
         }),
       },
       demo: {
         findUnique: vi.fn().mockResolvedValue(null),
+      },
+      workspaceConsent: {
+        findUnique: vi.fn().mockResolvedValue({ voiceCloningConsent: true }),
       },
     });
 
@@ -979,6 +998,150 @@ describe("Video Worker - dubbing-processing worker integration", () => {
           fallbackReason: "Fatal GCP Cloud Run service error",
         })
       );
+    });
+  });
+
+  describe("D. Worker-Level Voice Cloning Consent Gate (Task-00133)", () => {
+    const createConsentTestJob = (userId?: string) => ({
+      name: "dubbing" as const,
+      id: "bullmq-consent-job-1",
+      data: {
+        jobId: "video-job-consent-1",
+        ...(userId ? { userId } : {}),
+        sourceUrl: "https://example.com/demo.mp4",
+        targetLanguage: "es",
+        steps: [{ stepId: "step-1", text: "Hola mundo", startTime: 0, endTime: 10.0 }],
+      },
+      opts: { attempts: 3 },
+      attemptsMade: 0,
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+    });
+
+    it("1. fails closed without retrying when user identity is missing", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn().mockResolvedValue({ userId: null, jobData: null, demoId: null }),
+        },
+        demo: { findUnique: vi.fn().mockResolvedValue(null) },
+        workspaceConsent: { findUnique: vi.fn() },
+      };
+
+      await expect(
+        executeDubbingJob(createConsentTestJob(), { prisma: mockPrisma as any })
+      ).rejects.toThrow("VOICE_CLONING_CONSENT_REQUIRED: Missing user ID");
+
+      expect(mockPrisma.workspaceConsent.findUnique).not.toHaveBeenCalled();
+      expect(VoiceStudioDubbingAdapter).not.toHaveBeenCalled();
+      expect(createDubbingJob).not.toHaveBeenCalled();
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-consent-1" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("VOICE_CLONING_CONSENT_REQUIRED: Missing user ID"),
+        }),
+      });
+    });
+
+    it("2. fails closed without calling VoiceStudio or ElevenLabs when consent record is absent", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi
+            .fn()
+            .mockResolvedValue({ userId: "user-no-record", jobData: null, demoId: null }),
+        },
+        demo: { findUnique: vi.fn().mockResolvedValue(null) },
+        workspaceConsent: { findUnique: vi.fn().mockResolvedValue(null) },
+      };
+
+      await expect(
+        executeDubbingJob(createConsentTestJob(), { prisma: mockPrisma as any })
+      ).rejects.toThrow(
+        "VOICE_CLONING_CONSENT_REQUIRED: Explicit voice cloning consent has not been granted"
+      );
+
+      expect(VoiceStudioDubbingAdapter).not.toHaveBeenCalled();
+      expect(createDubbingJob).not.toHaveBeenCalled();
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-consent-1" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("VOICE_CLONING_CONSENT_REQUIRED"),
+        }),
+      });
+    });
+
+    it("3. fails closed without calling ElevenLabs or VoiceStudio when consent was revoked", async () => {
+      process.env.DUBBING_PROVIDER = "elevenlabs";
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi
+            .fn()
+            .mockResolvedValue({ userId: "user-revoked", jobData: null, demoId: null }),
+        },
+        demo: { findUnique: vi.fn().mockResolvedValue(null) },
+        workspaceConsent: {
+          findUnique: vi.fn().mockResolvedValue({ voiceCloningConsent: false }),
+        },
+      };
+
+      await expect(
+        executeDubbingJob(createConsentTestJob(), { prisma: mockPrisma as any })
+      ).rejects.toThrow(
+        "VOICE_CLONING_CONSENT_REQUIRED: Explicit voice cloning consent has not been granted"
+      );
+
+      expect(VoiceStudioDubbingAdapter).not.toHaveBeenCalled();
+      expect(createDubbingJob).not.toHaveBeenCalled();
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-consent-1" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("VOICE_CLONING_CONSENT_REQUIRED"),
+        }),
+      });
+    });
+
+    it("4. fails closed when the consent database lookup throws an error", async () => {
+      process.env.DUBBING_PROVIDER = "voicestudio";
+      const mockPrisma = {
+        videoJob: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi
+            .fn()
+            .mockResolvedValue({ userId: "user-db-error", jobData: null, demoId: null }),
+        },
+        demo: { findUnique: vi.fn().mockResolvedValue(null) },
+        workspaceConsent: {
+          findUnique: vi.fn().mockRejectedValue(new Error("DB connection timeout")),
+        },
+      };
+
+      await expect(
+        executeDubbingJob(createConsentTestJob(), { prisma: mockPrisma as any })
+      ).rejects.toThrow(
+        "VOICE_CLONING_CONSENT_REQUIRED: Consent verification failed: DB connection timeout"
+      );
+
+      expect(VoiceStudioDubbingAdapter).not.toHaveBeenCalled();
+      expect(createDubbingJob).not.toHaveBeenCalled();
+      expect(mockPrisma.videoJob.update).toHaveBeenCalledWith({
+        where: { id: "video-job-consent-1" },
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining(
+            "VOICE_CLONING_CONSENT_REQUIRED: Consent verification failed"
+          ),
+        }),
+      });
     });
   });
 });

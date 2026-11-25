@@ -70,12 +70,10 @@ export interface ReframeOrchestratorDeps {
     jobId: string;
     demoId?: string | null;
   }) => Promise<{ captionUrl?: string; captionPath?: string }>;
-  scoreVideo?: (
-    videoPath: string,
-    captionPath?: string
-  ) => Promise<ClipScore> | ClipScore;
+  scoreVideo?: (videoPath: string, captionPath?: string) => Promise<ClipScore> | ClipScore;
   sendCallback?: (payload: JobCallbackPayload) => Promise<{ success: boolean }>;
   resultCache?: Map<string, CropTargetData>;
+  checkConsent?: (userId: string) => Promise<{ faceTrackingConsent: boolean }>;
 }
 
 export type ErrorCategory = "TRANSIENT" | "DETERMINISTIC" | "TERMINAL";
@@ -208,9 +206,7 @@ async function defaultGenerateCaptions(
   }
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const rawCaptionUrl =
-    typeof json.captionUrl === "string"
-      ? json.captionUrl
-      : `/api/subtitles/file/${params.jobId}`;
+    typeof json.captionUrl === "string" ? json.captionUrl : `/api/subtitles/file/${params.jobId}`;
   const captionUrl = rawCaptionUrl.startsWith("http")
     ? rawCaptionUrl
     : `${base}${rawCaptionUrl.startsWith("/") ? "" : "/"}${rawCaptionUrl}`;
@@ -285,15 +281,28 @@ export async function processReframeJob(
     deps.generateCaptions ??
     (process.env.NODE_ENV === "test" && !deps.generateCaptions
       ? undefined
-      : ((params: { videoUrl: string; jobId: string; demoId?: string }) =>
-          defaultGenerateCaptions(config.backendUrl, config.callbackSecret, params)));
+      : (params: { videoUrl: string; jobId: string; demoId?: string }) =>
+          defaultGenerateCaptions(config.backendUrl, config.callbackSecret, params));
 
   const scoreVideo =
     deps.scoreVideo ??
     (process.env.NODE_ENV === "test" && !deps.scoreVideo
       ? undefined
-      : ((videoPath: string, captionPath?: string) =>
-          scoreClip(videoPath, captionPath)));
+      : (videoPath: string, captionPath?: string) => scoreClip(videoPath, captionPath));
+
+  const checkConsent =
+    deps.checkConsent ??
+    (async (userId: string) => {
+      if (!userId) {
+        return { faceTrackingConsent: false };
+      }
+      const { prisma } = await import("../app/lib/prisma");
+      const record = await prisma.workspaceConsent.findUnique({
+        where: { userId },
+        select: { faceTrackingConsent: true },
+      });
+      return { faceTrackingConsent: Boolean(record?.faceTrackingConsent) };
+    });
 
   // ── Step 0: Validate Input (Fast-Fail Deterministic Errors) ───────────────
   if (!payload.videoUrl || typeof payload.videoUrl !== "string") {
@@ -367,14 +376,41 @@ export async function processReframeJob(
     cropTargets = cache.get(payload.jobId)!;
     validateCropTargetData(cropTargets);
   } else {
+    // ── Task-00133 Hardening: Execution-Time Face Tracking Consent Check ──
+    // Do NOT trust payload.enableFaceTracking as the sole authorization source.
+    // Query latest persisted WorkspaceConsent immediately before invoking ML inference.
+    let effectiveFaceTracking = false;
+
+    if (payload.enableFaceTracking && payload.userId) {
+      try {
+        const consent = await checkConsent(payload.userId);
+        effectiveFaceTracking = Boolean(consent?.faceTrackingConsent);
+        if (!effectiveFaceTracking) {
+          console.warn(
+            `[reframe-worker] Face tracking consent revoked or absent at execution time for user ${payload.userId}. Falling back to AutoFlip-only saliency reframing.`
+          );
+        }
+      } catch (consentErr) {
+        console.warn(
+          `[reframe-worker] Failed to verify face tracking consent for user ${payload.userId} at execution time: ${
+            consentErr instanceof Error ? consentErr.message : String(consentErr)
+          }. Falling back to AutoFlip-only saliency reframing.`
+        );
+        effectiveFaceTracking = false;
+      }
+    }
+
     try {
       console.log(
-        `[reframe-worker] Requesting ML inference for job ${payload.jobId} (attempt ${context.attemptsMade + 1}/${context.maxAttempts})`
+        `[reframe-worker] Requesting ML inference for job ${payload.jobId} (attempt ${context.attemptsMade + 1}/${context.maxAttempts}, faceTracking=${effectiveFaceTracking})`
       );
       cropTargets = await executeMl({
         videoUrl: payload.videoUrl,
         targetAspectRatio: payload.targetAspectRatio,
         source: payload.source,
+        ...(payload.enableFaceTracking !== undefined
+          ? { enableFaceTracking: effectiveFaceTracking }
+          : {}),
       });
 
       // Check if returned crop targets are empty or unusable
@@ -443,10 +479,7 @@ export async function processReframeJob(
         console.warn(
           `[reframe-worker] ML inference retry exhausted for job ${payload.jobId}; falling back to center crop. Error: ${errMsg}`
         );
-        cropTargets = createCenterCropFallback(
-          payload.source,
-          "AUTOFLIP_RETRY_EXHAUSTED"
-        );
+        cropTargets = createCenterCropFallback(payload.source, "AUTOFLIP_RETRY_EXHAUSTED");
         cache.set(payload.jobId, cropTargets);
       } else if (category === "TRANSIENT" && finalAttempt) {
         // Final transient failure but no source dimensions available: cannot compute
@@ -558,9 +591,7 @@ export async function processReframeJob(
       }
     } catch (captionOrScoreErr) {
       const errMsg =
-        captionOrScoreErr instanceof Error
-          ? captionOrScoreErr.message
-          : String(captionOrScoreErr);
+        captionOrScoreErr instanceof Error ? captionOrScoreErr.message : String(captionOrScoreErr);
       console.error(
         `[reframe-worker] Caption/score step failed for job ${payload.jobId}: ${errMsg}`
       );
