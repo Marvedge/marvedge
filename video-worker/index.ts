@@ -1700,16 +1700,6 @@ if (dubbingMetricsMaxDataPoints === undefined) {
   );
 }
 
-
-export const dubbingWorker = new Worker(
-  dubbingQueueName,
-  withDubbingJobMetrics(
-  async (job: Job) => {
-    if (job.name === "avs-dub") {
-      const jobId: unknown = job.data?.jobId;
-      if (typeof jobId !== "string" || !jobId.trim()) {
-        throw new Error("Invalid AVS dub job: missing jobId");
-      }
 export interface DubbingWorkerJob {
   name: string;
   id?: string;
@@ -2150,7 +2140,7 @@ export async function executeDubbingJob(
 }
 
 export const dubbingWorker = new Worker(
-  "dubbing-processing",
+  dubbingQueueName,
   withDubbingJobMetrics(
     async (job: Job) => {
       await executeDubbingJob(job);
