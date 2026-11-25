@@ -1,6 +1,7 @@
 import { resolveCallbackBaseUrl } from "../app/lib/jobs/callbackClient";
 import { resolveRedisUrl } from "../app/lib/redisConfig";
 import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
+import { resolveReframeQueueName } from "../app/lib/config/dubbingQueue";
 // Configuration loader for the lightweight Reframe Worker (Task-00023 / Task-00029).
 //
 // Reads and validates environment variables for BullMQ Redis, backend callback,
@@ -64,8 +65,9 @@ export function getReframeWorkerConfig(): ReframeWorkerConfig {
     allowLocalhostInProduction,
   });
 
-  // Queue name configuration: defaults to production "reframe-processing"
-  const queueName = process.env.REFRAME_QUEUE_NAME?.trim() || "reframe-processing";
+  // Queue name configuration: defaults to production "reframe-processing" in non-staging,
+  // and requires an explicit isolated queue name when APP_ENV=staging.
+  const queueName = resolveReframeQueueName();
 
   const backendUrl = resolveCallbackBaseUrl();
 

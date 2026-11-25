@@ -12,11 +12,25 @@ describe("Reframe Worker Config", () => {
   const envMap = process.env as Record<string, string | undefined>;
   const originalCallbackSecret = envMap.CALLBACK_SECRET;
   const originalNodeEnv = envMap.NODE_ENV;
+  const originalAppEnv = envMap.APP_ENV;
+  const originalReframeQueueName = envMap.REFRAME_QUEUE_NAME;
   const originalRedisUrl = envMap.REDIS_URL;
   const originalBackendUrl = envMap.BACKEND_URL;
   const originalConcurrency = envMap.REFRAME_WORKER_CONCURRENCY;
 
   afterEach(() => {
+    if (originalAppEnv === undefined) {
+      delete envMap.APP_ENV;
+    } else {
+      envMap.APP_ENV = originalAppEnv;
+    }
+
+    if (originalReframeQueueName === undefined) {
+      delete envMap.REFRAME_QUEUE_NAME;
+    } else {
+      envMap.REFRAME_QUEUE_NAME = originalReframeQueueName;
+    }
+
     if (originalCallbackSecret === undefined) {
       delete envMap.CALLBACK_SECRET;
     } else {
@@ -174,6 +188,35 @@ describe("Reframe Worker Config", () => {
       envMap.REFRAME_QUEUE_NAME = "  isolated-test-queue  ";
       const config2 = getReframeWorkerConfig();
       expect(config2.queueName).toBe("isolated-test-queue");
+    });
+
+    it("fails closed in staging when REFRAME_QUEUE_NAME is missing, blank, or production default", () => {
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.APP_ENV = "staging";
+      delete envMap.REFRAME_QUEUE_NAME;
+
+      expect(() => getReframeWorkerConfig()).toThrow(
+        "REFRAME_QUEUE_NAME must be set to a non-empty isolated queue name when APP_ENV=staging"
+      );
+
+      envMap.REFRAME_QUEUE_NAME = "   ";
+      expect(() => getReframeWorkerConfig()).toThrow(
+        "REFRAME_QUEUE_NAME must be set to a non-empty isolated queue name when APP_ENV=staging"
+      );
+
+      envMap.REFRAME_QUEUE_NAME = "reframe-processing";
+      expect(() => getReframeWorkerConfig()).toThrow(
+        'REFRAME_QUEUE_NAME must not use production default "reframe-processing"'
+      );
+    });
+
+    it("accepts isolated REFRAME_QUEUE_NAME in staging", () => {
+      envMap.CALLBACK_SECRET = "test-secret";
+      envMap.APP_ENV = "staging";
+      envMap.REFRAME_QUEUE_NAME = "  reframe-task115  ";
+
+      const config = getReframeWorkerConfig();
+      expect(config.queueName).toBe("reframe-task115");
     });
   });
 });

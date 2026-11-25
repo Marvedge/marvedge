@@ -1,5 +1,6 @@
 import { runClaimedAvsDubJob } from "./avsDubClaim";
 import { validateWorkerConcurrency } from "../app/lib/config/concurrency";
+import { resolveDubbingQueueName } from "../app/lib/config/dubbingQueue";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Worker, Job } from "bullmq";
 import { PrismaClient } from "@prisma/client";
@@ -70,6 +71,7 @@ if (!ffmpegStatic) {
 }
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
+const dubbingQueueName = resolveDubbingQueueName();
 const redisUrl = resolveRedisUrl();
 const connection = new Redis(redisUrl, getStandardRedisOptions());
 const workerConcurrency = validateWorkerConcurrency(
@@ -1699,7 +1701,7 @@ if (dubbingMetricsMaxDataPoints === undefined) {
 }
 
 export const dubbingWorker = new Worker(
-  "dubbing-processing",
+  dubbingQueueName,
   withDubbingJobMetrics(
   async (job: Job) => {
     if (job.name === "avs-dub") {
