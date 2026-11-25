@@ -1,5 +1,10 @@
 import { Redis } from "ioredis";
+import { resolveDubbingQueueName, resolveReframeQueueName } from "./config/dubbingQueue";
 import { resolveRedisConfig } from "./redisConfig";
+
+// Fail closed in staging before opening a Redis connection if isolated queue names are missing/invalid.
+resolveReframeQueueName();
+resolveDubbingQueueName();
 
 const redisConfig = resolveRedisConfig();
 
