@@ -63,10 +63,10 @@ function mockReceiver(
 let lookupSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  // deliveryHostIsPublic performs a real DNS lookup; keep the suite hermetic.
-  lookupSpy = vi.spyOn(dns, "lookup").mockResolvedValue([
-    { address: "93.184.216.34", family: 4 },
-  ] as never);
+  // assertFetchTargetIsPublic performs a real DNS lookup; keep the suite hermetic.
+  lookupSpy = vi
+    .spyOn(dns, "lookup")
+    .mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
 });
 
 afterEach(() => {
@@ -193,6 +193,22 @@ describe("deliverToWebhook", () => {
         CONTACT
       );
       expect(outcome).toMatchObject({ ok: false, retryable: false });
+      expect(receiver.captured).toHaveLength(0);
+    } finally {
+      receiver.restore();
+    }
+  });
+
+  it("refuses to send when the host resolves to a private address", async () => {
+    lookupSpy.mockResolvedValue([{ address: "10.0.0.5", family: 4 }] as never);
+    const receiver = mockReceiver(200);
+    try {
+      const outcome = await deliverToWebhook(CREDENTIALS, "lead_1", CONTACT);
+      expect(outcome).toMatchObject({
+        ok: false,
+        retryable: false,
+        error: "Webhook host failed safety check",
+      });
       expect(receiver.captured).toHaveLength(0);
     } finally {
       receiver.restore();

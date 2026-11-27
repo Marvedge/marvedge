@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { promises as dns } from "node:dns";
 
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
@@ -45,9 +46,16 @@ function makeRequest(
   return { req, context };
 }
 
+let lookupSpy: ReturnType<typeof vi.spyOn>;
+
 describe("GET /api/jobs/[id]/download", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // The pre-fetch DNS check must not reach the network in this suite.
+    lookupSpy = vi
+      .spyOn(dns, "lookup")
+      .mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
 
     vi.mocked(getServerSession).mockResolvedValue({
       user: {
@@ -55,6 +63,10 @@ describe("GET /api/jobs/[id]/download", () => {
         email: "test@example.com",
       },
     } as never);
+  });
+
+  afterEach(() => {
+    lookupSpy.mockRestore();
   });
 
   it("returns 401 when not authenticated", async () => {
@@ -242,6 +254,24 @@ describe("GET /api/jobs/[id]/download", () => {
     expect(await res.json()).toEqual({
       error: "Exported file URL is not allowed",
     });
+  });
+
+  it("returns 400 when the exported URL resolves to a private address", async () => {
+    lookupSpy.mockResolvedValue([{ address: "10.0.0.5", family: 4 }] as never);
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      userId: "user-123",
+      status: "COMPLETED",
+      exportedUrl: "https://example.com/exported.mp4",
+      jobData: { kind: "RENDER" },
+    } as never);
+    const fetchSpy = vi.spyOn(global, "fetch");
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Exported file URL is not allowed" });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("proxies exported video URL for safe URLs", async () => {

@@ -68,6 +68,10 @@ function isPrivateV4(octets: number[]): boolean {
   if (a === 172 && b >= 16 && b <= 31) {
     return true;
   }
+  // CGNAT / shared address space (RFC 6598). Never a public fetch target.
+  if (a === 100 && b >= 64 && b <= 127) {
+    return true;
+  }
   if (a === 192 && b === 168) {
     return true;
   }
@@ -81,6 +85,51 @@ function isPrivateV4(octets: number[]): boolean {
     return true;
   }
   return false;
+}
+
+// Expand a textual IPv6 address into eight 16-bit groups. A trailing
+// dotted-quad is folded into its two hex groups so mapped/compatible forms
+// can be checked the same way. Null means the text is not parseable.
+function expandV6Groups(bare: string): number[] | null {
+  let text = bare;
+  const embedded = text.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (embedded) {
+    const nums = parseIpv4Numbers(embedded[1]);
+    const octets = nums ? expandIpv4(nums) : null;
+    if (!octets) {
+      return null;
+    }
+    const high = ((octets[0] << 8) | octets[1]).toString(16);
+    const low = ((octets[2] << 8) | octets[3]).toString(16);
+    text = `${text.slice(0, -embedded[1].length)}${high}:${low}`;
+  }
+
+  const marker = text.indexOf("::");
+  let groups: string[];
+  if (marker === -1) {
+    groups = text.split(":");
+  } else {
+    if (text.indexOf("::", marker + 1) !== -1) {
+      return null;
+    }
+    const left = text.slice(0, marker).split(":").filter(Boolean);
+    const right = text
+      .slice(marker + 2)
+      .split(":")
+      .filter(Boolean);
+    const zeros = 8 - left.length - right.length;
+    if (zeros < 0) {
+      return null;
+    }
+    groups = [...left, ...Array(zeros).fill("0"), ...right];
+  }
+  if (groups.length !== 8) {
+    return null;
+  }
+  const values = groups.map((group) =>
+    /^[0-9a-f]{1,4}$/i.test(group) ? parseInt(group, 16) : Number.NaN
+  );
+  return values.some((value) => !Number.isFinite(value)) ? null : values;
 }
 
 function isPrivateV6(bare: string): boolean {
@@ -105,6 +154,28 @@ function isPrivateV6(bare: string): boolean {
     if (!octets || isPrivateV4(octets)) {
       return true;
     }
+  }
+
+  // Expansion catches the literal forms above misses: the unspecified
+  // address (::) and IPv4 addresses written as hex groups, for example
+  // ::ffff:7f00:1 == 127.0.0.1.
+  const groups = expandV6Groups(bare);
+  if (!groups) {
+    return false;
+  }
+  if (groups.every((group) => group === 0)) {
+    return true;
+  }
+  const mapped = groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff;
+  const compatible = groups.slice(0, 6).every((group) => group === 0);
+  if (mapped || compatible) {
+    const octets = [
+      (groups[6] >>> 8) & 255,
+      groups[6] & 255,
+      (groups[7] >>> 8) & 255,
+      groups[7] & 255,
+    ];
+    return isPrivateV4(octets);
   }
   return false;
 }

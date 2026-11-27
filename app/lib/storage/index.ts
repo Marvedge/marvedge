@@ -17,6 +17,7 @@
  *   objectExists(bucket, key)                                → boolean
  *   deleteObject(bucket, key)                                → void
  *   getObjectSize(bucket, key)                               → number | null
+ *   readObjectHead(bucket, key, maxBytes?)                   → Buffer | null
  *   toPublicUri(bucket, key)                                 → string  (s3:// or gs://)
  */
 
@@ -198,6 +199,55 @@ export async function getObjectSize(bucket: string, key: string): Promise<number
   const [metadata] = await gcs.bucket(bucket).file(key).getMetadata();
   const size = Number(metadata.size);
   return Number.isFinite(size) ? size : null;
+}
+
+/**
+ * Read the first `maxBytes` of an object (default 512) for content sniffing.
+ * Returns null on any read failure so callers can fail closed.
+ */
+export async function readObjectHead(
+  bucket: string,
+  key: string,
+  maxBytes = 512
+): Promise<Buffer | null> {
+  const boundedMaxBytes =
+    typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes > 0
+      ? Math.floor(maxBytes)
+      : 512;
+  const end = boundedMaxBytes - 1;
+
+  if (activeProvider() === "aws") {
+    try {
+      const resp = await getS3Client().send(
+        new GetObjectCommand({ Bucket: bucket, Key: key, Range: `bytes=0-${end}` })
+      );
+      if (!resp.Body) {
+        return null;
+      }
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of resp.Body as AsyncIterable<Uint8Array>) {
+        const bytes = Buffer.from(chunk);
+        chunks.push(bytes);
+        total += bytes.length;
+        if (total >= boundedMaxBytes) {
+          break;
+        }
+      }
+      return Buffer.concat(chunks).subarray(0, boundedMaxBytes);
+    } catch {
+      return null;
+    }
+  }
+
+  // GCS fallback
+  try {
+    const gcs = await getGcsClient();
+    const [bytes] = await gcs.bucket(bucket).file(key).download({ start: 0, end });
+    return bytes ? Buffer.from(bytes).subarray(0, boundedMaxBytes) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -29,6 +29,14 @@ vi.mock("@/app/lib/redis", () => ({
   },
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
+vi.mock("@/app/lib/storage/access", () => ({
+  mayResolveObject: vi.fn(),
+}));
+
 vi.mock("@/app/lib/queue", () => ({
   dubbingQueue: {
     add: vi.fn().mockResolvedValue({ id: "bullmq-job-1" }),
@@ -37,6 +45,8 @@ vi.mock("@/app/lib/queue", () => ({
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { mayResolveObject } from "@/app/lib/storage/access";
 import { dubbingQueue } from "@/app/lib/queue";
 import { POST } from "./route";
 
@@ -54,6 +64,8 @@ describe("POST /api/avs/dub", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.AVS_ENABLED = "true";
+    vi.mocked(isRateLimited).mockResolvedValue(false);
+    vi.mocked(mayResolveObject).mockResolvedValue(true);
 
     vi.mocked(getServerSession).mockResolvedValue({
       user: { id: mockUserId, email: "pro@example.com" },

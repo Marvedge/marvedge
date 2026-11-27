@@ -34,6 +34,14 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpDubSync: vi.fn(),
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
+vi.mock("@/app/lib/storage/access", () => ({
+  mayResolveObject: vi.fn(),
+}));
+
 vi.mock("@/app/lib/queue", () => ({
   dubbingQueue: {
     add: vi.fn().mockResolvedValue({ id: "bullmq-job-1" }),
@@ -44,6 +52,8 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { mayResolveObject } from "@/app/lib/storage/access";
 import { dubbingQueue } from "@/app/lib/queue";
 import { POST, runDubAlignment } from "./route";
 
@@ -59,6 +69,8 @@ describe("POST /api/avs/dub & runDubAlignment (Task-00083)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(isAvsEnabled).mockReturnValue(true);
+    vi.mocked(isRateLimited).mockResolvedValue(false);
+    vi.mocked(mayResolveObject).mockResolvedValue(true);
     vi.mocked(prisma.videoJob.updateMany).mockResolvedValue({ count: 1 });
   });
 

@@ -27,8 +27,13 @@ vi.mock("@/app/lib/elevenlabs/dubbing", () => ({
   }),
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { getDubbedAudio } from "@/app/lib/elevenlabs/dubbing";
 import { GET } from "./route";
 
@@ -55,6 +60,7 @@ describe("GET /api/dubbing/[id]/audio", () => {
         email: "test@example.com",
       },
     } as never);
+    vi.mocked(isRateLimited).mockResolvedValue(false);
   });
 
   it("returns 401 if unauthenticated", async () => {
@@ -291,5 +297,39 @@ describe("GET /api/dubbing/[id]/audio", () => {
     expect(res.status).toBe(200);
     const disposition = res.headers.get("content-disposition") ?? "";
     expect(disposition).toBe('attachment; filename="dubbed_job-safe_es_rm_-rf_.mp3"');
+  });
+
+  it("returns 429 before any vendor call when the user is rate limited", async () => {
+    vi.mocked(isRateLimited).mockResolvedValue(true);
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(res.status).toBe(429);
+    expect(getDubbedAudio).not.toHaveBeenCalled();
+    expect(prisma.videoJob.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("refuses to stream an oversized vendor response", async () => {
+    vi.mocked(prisma.videoJob.findUnique).mockResolvedValue({
+      id: "job-1",
+      userId: "user-123",
+      status: "COMPLETED",
+      jobData: {
+        kind: "DUBBING",
+        dubbingId: "dub-123",
+        targetLanguage: "es",
+      },
+    } as never);
+    vi.mocked(getDubbedAudio).mockResolvedValue({
+      audio: Buffer.alloc(50 * 1024 * 1024 + 1),
+      contentType: "audio/mpeg",
+    });
+
+    const { req, context } = makeRequest("job-1");
+    const res = await GET(req, context);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Dubbed audio is too large" });
   });
 });

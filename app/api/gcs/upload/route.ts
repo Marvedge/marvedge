@@ -14,16 +14,34 @@ import {
   getSignedUploadUrl,
   getSignedDownloadUrl,
   getObjectSize,
+  readObjectHead,
   deleteObject,
   toPublicUri,
 } from "@/app/lib/storage";
-import { mediaExtensionFor, normalizedMediaType } from "@/app/lib/uploads/mediaTypes";
+import {
+  detectMediaMime,
+  mediaExtensionFor,
+  normalizedMediaType,
+} from "@/app/lib/uploads/mediaTypes";
 
 /**
  * Ceiling for non-video uploads (watermark logo, background image, generic).
  * Video kinds use MAX_UPLOAD_BYTES (2 GB). This only stops bucket-filling.
  */
 const MAX_GENERIC_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Suffixes we mint for inline images, mapped to the MIME their bytes must
+ * actually carry. Video and audio are deliberately absent: their verification
+ * stays size-only so large uploads do not pay for a head read.
+ */
+const IMAGE_MIME_BY_SUFFIX: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+};
 
 function toSafeKind(kind: unknown) {
   if (typeof kind !== "string") return "generic";
@@ -49,7 +67,8 @@ async function getCurrentUserId(sessionUser: { id?: string; email?: string | nul
  * Storage backend is controlled by STORAGE_PROVIDER env var ("aws" | "gcs").
  *
  * Also handles ?action=verify after the browser finishes uploading:
- *   checks the real stored size and deletes oversized objects.
+ *   checks the real stored size, checks image bytes against the minted
+ *   suffix, and deletes rejected objects.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -120,6 +139,34 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           );
         }
+
+        // A client can PUT SVG/HTML bytes under an approved Content-Type. The
+        // suffix is derived from that MIME at mint time, so verify the stored
+        // bytes for inline images before accepting the upload.
+        const suffixMatch = object.toLowerCase().match(/\.([a-z0-9]+)$/);
+        const expectedImageMime =
+          suffixMatch && Object.prototype.hasOwnProperty.call(IMAGE_MIME_BY_SUFFIX, suffixMatch[1])
+            ? IMAGE_MIME_BY_SUFFIX[suffixMatch[1]]
+            : null;
+        if (expectedImageMime) {
+          let head: Buffer | null = null;
+          try {
+            head = await readObjectHead(bucketName, object);
+          } catch (error) {
+            console.error("[storage] upload head read error:", error);
+          }
+          if ((head ? detectMediaMime(head) : null) !== expectedImageMime) {
+            await deleteObject(bucketName, object).catch(() => undefined);
+            return NextResponse.json(
+              {
+                ok: false,
+                error: "Uploaded file content does not match its type and was removed.",
+              },
+              { status: 400 }
+            );
+          }
+        }
+
         return NextResponse.json({ ok: true, size });
       } catch (error) {
         console.error("[storage] upload verify error:", error);

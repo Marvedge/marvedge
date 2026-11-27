@@ -21,6 +21,10 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpComposite: vi.fn(),
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
 vi.mock("@/app/lib/wtm/flags", () => ({
   isWtmEnabled: vi.fn(() => true),
 }));
@@ -32,6 +36,7 @@ vi.mock("@/app/lib/wtm/access", () => ({
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpComposite } from "@/app/lib/gcpWorker";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { POST } from "./route";
 
 const WORKER_HOST = "video-worker-abc123-uc.a.run.app";
@@ -47,6 +52,7 @@ function makeRequest(body: unknown): NextRequest {
 describe("POST /api/wtm/composite 500 sanitization (#446)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isRateLimited).mockResolvedValue(false);
     vi.mocked(getServerSession).mockResolvedValue({
       user: { id: "user-1", email: "pro@example.com" },
     } as never);

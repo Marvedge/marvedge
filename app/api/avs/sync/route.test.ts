@@ -32,6 +32,14 @@ vi.mock("@/app/lib/gcpWorker", () => ({
   invokeGcpSync: vi.fn(),
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
+vi.mock("@/app/lib/storage/access", () => ({
+  mayResolveObject: vi.fn(),
+}));
+
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
   return {
@@ -44,6 +52,8 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { invokeGcpSync } from "@/app/lib/gcpWorker";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { mayResolveObject } from "@/app/lib/storage/access";
 import { after } from "next/server";
 import { POST } from "./route";
 
@@ -59,6 +69,8 @@ describe("POST /api/avs/sync URL security", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(isAvsEnabled).mockReturnValue(true);
+    vi.mocked(isRateLimited).mockResolvedValue(false);
+    vi.mocked(mayResolveObject).mockResolvedValue(true);
     vi.mocked(getServerSession).mockResolvedValue({
       user: { id: "user-1", email: "qa@example.test" },
     } as never);
@@ -72,9 +84,7 @@ describe("POST /api/avs/sync URL security", () => {
   it("returns 401 when unauthenticated", async () => {
     vi.mocked(getServerSession).mockResolvedValue(null);
 
-    const res = await POST(
-      makeSyncRequest({ videoUrl: "https://example.com/v.mp4" })
-    );
+    const res = await POST(makeSyncRequest({ videoUrl: "https://example.com/v.mp4" }));
     expect(res.status).toBe(401);
     expect(prisma.videoJob.create).not.toHaveBeenCalled();
   });

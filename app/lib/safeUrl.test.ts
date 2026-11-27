@@ -29,6 +29,22 @@ describe("isSafeUrl", () => {
     expect(isSafeUrl("http://[fe80::1]/x.mp4")).toBe(false);
   });
 
+  it("blocks the unspecified ipv6 address and hex-form mapped ipv4", () => {
+    expect(isSafeUrl("http://[::]/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://[::ffff:7f00:1]/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://[::ffff:a9fe:a9fe]/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://[0:0:0:0:0:ffff:7f00:1]/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://[::ffff:127.0.0.1]/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://[::7f00:1]/x.mp4")).toBe(false);
+  });
+
+  it("blocks CGNAT/shared ipv4 space", () => {
+    expect(isSafeUrl("http://100.64.0.1/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://100.100.100.100/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://100.127.255.254/x.mp4")).toBe(false);
+    expect(isSafeUrl("http://[::ffff:100.64.0.1]/x.mp4")).toBe(false);
+  });
+
   it("blocks non-http schemes", () => {
     expect(isSafeUrl("ftp://example.com/x.mp4")).toBe(false);
     expect(isSafeUrl("file:///etc/passwd")).toBe(false);
@@ -56,6 +72,10 @@ describe("isSafeUrl", () => {
     expect(isSafeUrl("https://8.8.8.8/x.mp4")).toBe(true);
     expect(isSafeUrl("https://172.15.0.1/x.mp4")).toBe(true);
     expect(isSafeUrl("https://172.32.0.1/x.mp4")).toBe(true);
+    expect(isSafeUrl("https://100.63.255.254/x.mp4")).toBe(true);
+    expect(isSafeUrl("https://100.128.0.1/x.mp4")).toBe(true);
+    expect(isSafeUrl("https://[2606:4700:4700::1111]/x.mp4")).toBe(true);
+    expect(isSafeUrl("https://[::ffff:808:808]/x.mp4")).toBe(true);
   });
 });
 

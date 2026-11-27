@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/lib/auth/options";
 import { prisma } from "@/app/lib/prisma";
 import { isSafeUrl } from "@/app/lib/safeUrl";
+import { assertFetchTargetIsPublic } from "@/app/lib/http/safeFetch";
 import { getAudioExtension, getDubbedAudio } from "@/app/lib/elevenlabs/dubbing";
 
 function sanitizeFilename(input: string) {
@@ -88,6 +89,14 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     // recheck the stored url: poisoned rows fail closed here
     if (!isSafeUrl(job.exportedUrl)) {
+      return NextResponse.json({ error: "Exported file URL is not allowed" }, { status: 400 });
+    }
+
+    // The literal check cannot catch a host that was public when the URL was
+    // stored but now resolves internally. Resolve again right before fetching.
+    try {
+      await assertFetchTargetIsPublic(job.exportedUrl);
+    } catch {
       return NextResponse.json({ error: "Exported file URL is not allowed" }, { status: 400 });
     }
 

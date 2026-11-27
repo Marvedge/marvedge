@@ -34,6 +34,12 @@ vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
 }));
 
+// The dubbing route now rate limits before dispatch. Keep this flow test
+// hermetic instead of depending on a live Redis instance.
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(async () => false),
+}));
+
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
