@@ -20,6 +20,10 @@ it("retries confirmation after a 503 without re-uploading or deleting the clip",
       set src(_url: string) {
         this.onloadedmetadata?.();
       }
+
+      removeAttribute() {}
+
+      load() {}
     }
   );
 
