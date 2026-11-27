@@ -85,24 +85,44 @@ const initialState = {
 };
 
 const controllers = new Map<string, AbortController>();
+let clipListRevision = 0;
 
 /**
  * Read the media duration client-side via an <audio> element. Sent along with
  * /confirm so testing mode (no server-side ffprobe) can finalize clips inline.
  */
-function readAudioDuration(file: File): Promise<number | null> {
-  return new Promise((resolve) => {
+function readAudioDuration(file: File, signal: AbortSignal): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new axios.CanceledError("Audio upload cancelled"));
+      return;
+    }
+
     const url = URL.createObjectURL(file);
     const audio = new Audio();
+
+    const releaseAudio = () => {
+      signal.removeEventListener("abort", cancel);
+      audio.onloadedmetadata = null;
+      audio.onerror = null;
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(url);
+    };
+    const cancel = () => {
+      releaseAudio();
+      reject(new axios.CanceledError("Audio upload cancelled"));
+    };
+    const finish = (duration: number | null) => {
+      releaseAudio();
+      resolve(duration);
+    };
+
+    signal.addEventListener("abort", cancel);
     audio.preload = "metadata";
-    audio.onloadedmetadata = () => {
-      URL.revokeObjectURL(url);
-      resolve(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null);
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(null);
-    };
+    audio.onloadedmetadata = () =>
+      finish(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null);
+    audio.onerror = () => finish(null);
     audio.src = url;
   });
 }
@@ -134,7 +154,7 @@ async function performUpload(
     maxBodyLength: Infinity,
   });
 
-  const durationSec = await readAudioDuration(file);
+  const durationSec = await readAudioDuration(file, signal);
   const confirmUrl = `/api/audio/${clipId}/confirm`;
   try {
     await axios.post(confirmUrl, { durationSec }, { signal });
@@ -165,6 +185,7 @@ export const useAudioClipStore = create<AudioClipStore>((set, get) => ({
     set({ loading: true });
     try {
       const response = await axios.get(`/api/demos/${demoId}/audio`);
+      clipListRevision += 1;
       set({ clips: response.data.clips || [], error: null });
     } catch (err: unknown) {
       console.error("Error fetching audio clips:", err);
@@ -267,7 +288,8 @@ export const useAudioClipStore = create<AudioClipStore>((set, get) => ({
   },
 
   deleteClip: async (clipId) => {
-    const previous = get().clips;
+    const removed = get().clips.find((clip) => clip.id === clipId);
+    const revision = clipListRevision;
     set((state) => ({
       clips: state.clips.filter((c) => c.id !== clipId),
       selectedTimelineClipId:
@@ -276,7 +298,18 @@ export const useAudioClipStore = create<AudioClipStore>((set, get) => ({
     try {
       await axios.delete(`/api/audio/${clipId}`);
     } catch (err: unknown) {
-      set({ clips: previous });
+      if (removed && revision === clipListRevision) {
+        set((state) => {
+          if (state.clips.some((clip) => clip.id === clipId)) {
+            return state;
+          }
+          return {
+            clips: [...state.clips, removed].sort(
+              (a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt)
+            ),
+          };
+        });
+      }
       console.error("Error deleting audio clip:", err);
       set({ error: "Failed to delete clip" });
       throw err;
@@ -313,5 +346,8 @@ export const useAudioClipStore = create<AudioClipStore>((set, get) => ({
   selectTimelineClip: (clipId) => set({ selectedTimelineClipId: clipId }),
 
   clearUploads: () => set({ uploads: [] }),
-  reset: () => set({ ...initialState }),
+  reset: () => {
+    clipListRevision += 1;
+    set({ ...initialState });
+  },
 }));
