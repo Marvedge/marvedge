@@ -90,3 +90,23 @@ it("restores only the clip whose delete failed", async () => {
     { ...third, fileName: "updated.mp3" },
   ]);
 });
+
+it.each(["old-demo", "new-demo"])(
+  "ignores a stale %s audio list response when the latest request has completed",
+  async (firstDemoId) => {
+    const first = Promise.withResolvers<{ data: { clips: AudioClipDto[] } }>();
+    const oldClip = clip("old-demo-clip", 0);
+    const newClip = clip("new-demo-clip", 0);
+    vi.spyOn(axios, "get")
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ data: { clips: [newClip] } });
+
+    const { fetchClips } = useAudioClipStore.getState();
+    const firstFetch = fetchClips(firstDemoId);
+    await fetchClips("new-demo");
+    first.resolve({ data: { clips: [oldClip] } });
+    await firstFetch;
+
+    expect(useAudioClipStore.getState().clips).toEqual([newClip]);
+  }
+);
