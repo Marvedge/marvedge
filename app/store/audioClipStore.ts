@@ -86,6 +86,7 @@ const initialState = {
 
 const controllers = new Map<string, AbortController>();
 let clipListRevision = 0;
+let clipListScope: { demoId: string; requested: number; applied: number } | undefined;
 
 /**
  * Read the media duration client-side via an <audio> element. Sent along with
@@ -182,16 +183,30 @@ export const useAudioClipStore = create<AudioClipStore>((set, get) => ({
   ...initialState,
 
   fetchClips: async (demoId) => {
+    const scope =
+      clipListScope?.demoId === demoId ? clipListScope : { demoId, requested: 0, applied: 0 };
+    clipListScope = scope;
+    const request = ++scope.requested;
+
     set({ loading: true });
     try {
       const response = await axios.get(`/api/demos/${demoId}/audio`);
+      if (clipListScope !== scope || request < scope.applied) {
+        return;
+      }
+      scope.applied = request;
       clipListRevision += 1;
       set({ clips: response.data.clips || [], error: null });
     } catch (err: unknown) {
-      console.error("Error fetching audio clips:", err);
-      set({ error: "Failed to load audio clips" });
+      if (clipListScope === scope && request === scope.requested) {
+        scope.applied = request;
+        console.error("Error fetching audio clips:", err);
+        set({ error: "Failed to load audio clips" });
+      }
     } finally {
-      set({ loading: false });
+      if (clipListScope === scope && request === scope.requested) {
+        set({ loading: false });
+      }
     }
   },
 
@@ -347,6 +362,7 @@ export const useAudioClipStore = create<AudioClipStore>((set, get) => ({
 
   clearUploads: () => set({ uploads: [] }),
   reset: () => {
+    clipListScope = undefined;
     clipListRevision += 1;
     set({ ...initialState });
   },
