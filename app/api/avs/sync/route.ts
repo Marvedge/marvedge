@@ -2,11 +2,14 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpSync } from "@/app/lib/gcpWorker";
 import { isSafeUrl } from "@/app/lib/safeUrl";
+import { mayResolveObject } from "@/app/lib/storage/access";
+import { parseStorageUri } from "@/app/lib/storage/index";
 import type { Step, StepTiming } from "@/app/types/avs";
 
 // The worker downloads, re-encodes per step, concats and muxes with ffmpeg, so
@@ -14,13 +17,21 @@ import type { Step, StepTiming } from "@/app/types/avs";
 // /api/jobs/[id]), but keep the function budget generous.
 export const maxDuration = 300;
 
+// The worker re-encodes every entry, so an unbounded array is an unbounded
+// ffmpeg job. Truncate rather than reject: a genuinely long video still works.
+const MAX_STEPS = 500;
+const MAX_STEP_TIMINGS = 2000;
+
 /** Read + sanitize the `steps` body field into {id,startTime,endTime} entries. */
 function parseSteps(value: unknown): Step[] {
   if (!Array.isArray(value)) {
     return [];
   }
+  if (value.length > MAX_STEPS) {
+    console.warn(`[avs/sync] steps truncated from ${value.length} to ${MAX_STEPS}`);
+  }
   const steps: Step[] = [];
-  for (const entry of value) {
+  for (const entry of value.slice(0, MAX_STEPS)) {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
@@ -41,8 +52,11 @@ function parseStepTimings(value: unknown): StepTiming[] {
   if (!Array.isArray(value)) {
     return [];
   }
+  if (value.length > MAX_STEP_TIMINGS) {
+    console.warn(`[avs/sync] stepTimings truncated from ${value.length} to ${MAX_STEP_TIMINGS}`);
+  }
   const timings: StepTiming[] = [];
-  for (const entry of value) {
+  for (const entry of value.slice(0, MAX_STEP_TIMINGS)) {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
@@ -60,6 +74,20 @@ function parseStepTimings(value: unknown): StepTiming[] {
 /** Normalize a gs:// URL to a public https URL, mirroring the export path. */
 function toHttpUrl(url: string): string {
   return url.startsWith("gs://") ? url.replace("gs://", "https://storage.googleapis.com/") : url;
+}
+
+/**
+ * A native storage URI is a capability: only sign it into a public URL when the
+ * caller owns it. Plain HTTPS URLs are passed through untouched.
+ */
+async function resolveInputUrl(raw: string, userId: string): Promise<string | null> {
+  const parsed = parseStorageUri(raw);
+
+  if (parsed && !(await mayResolveObject(raw, parsed.bucket, parsed.key, userId))) {
+    return null;
+  }
+
+  return toHttpUrl(raw);
 }
 
 /**
@@ -160,6 +188,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Each alignment dispatches a Cloud Run worker, so cap dispatches per user
+  // before reading the body or creating a job. Closed mode: fail blocked.
+  if (await isRateLimited(`avs-sync:${user.id}`, 10, 60 * 60, true)) {
+    return NextResponse.json(
+      { error: "Too many alignment requests. Please try again shortly." },
+      { status: 429 }
+    );
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -171,14 +208,21 @@ export async function POST(req: NextRequest) {
   if (!rawVideoUrl) {
     return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
   }
-  const videoUrl = toHttpUrl(rawVideoUrl);
+  const videoUrl = await resolveInputUrl(rawVideoUrl, user.id);
+
+  if (videoUrl === null) {
+    return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+  }
 
   if (!isSafeUrl(videoUrl)) {
     return NextResponse.json({ error: "Unsafe videoUrl" }, { status: 400 });
   }
 
   const rawAudioUrl = typeof body.audioUrl === "string" ? body.audioUrl : "";
-  const audioUrl = rawAudioUrl ? toHttpUrl(rawAudioUrl) : "";
+  const audioUrl = rawAudioUrl ? await resolveInputUrl(rawAudioUrl, user.id) : "";
+  if (audioUrl === null) {
+    return NextResponse.json({ error: "Audio URL is not allowed" }, { status: 400 });
+  }
   if (audioUrl && !isSafeUrl(audioUrl)) {
     return NextResponse.json({ error: "Unsafe audioUrl" }, { status: 400 });
   }

@@ -16,6 +16,7 @@ vi.mock("@/app/lib/prisma", () => ({
     },
     demo: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -28,7 +29,7 @@ vi.mock("next/cache", () => ({
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
-import { PATCH, POST } from "./route";
+import { GET, PATCH, POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/demo", {
@@ -41,6 +42,7 @@ function makeRequest(body: unknown): NextRequest {
 describe("/api/demo validation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.demo.findMany).mockResolvedValue([]);
     vi.mocked(getServerSession).mockResolvedValue({
       user: { id: "user-1", email: "user@example.com" },
     } as never);
@@ -48,6 +50,13 @@ describe("/api/demo validation", () => {
     vi.mocked(prisma.demo.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.demo.create).mockResolvedValue({ id: "demo-1" } as never);
     vi.mocked(prisma.demo.updateMany).mockResolvedValue({ count: 1 } as never);
+  });
+
+  it("GET caps the demo list query", async () => {
+    const res = await GET(new NextRequest("http://localhost:3000/api/demo", { method: "GET" }));
+
+    expect(res.status).toBe(200);
+    expect(prisma.demo.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 200 }));
   });
 
   it("POST creates a demo for a valid request", async () => {

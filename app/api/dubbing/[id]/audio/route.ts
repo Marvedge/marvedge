@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
 import { getAudioExtension, getDubbedAudio } from "@/app/lib/elevenlabs/dubbing";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { prisma } from "@/app/lib/prisma";
 
 // Strip characters that are unsafe in quoted Content-Disposition filenames.
@@ -11,12 +12,20 @@ function sanitizeFilenamePart(raw: string): string {
   return raw.replace(/[^\w.-]/g, "_").replace(/_{2,}/g, "_") || "audio";
 }
 
+// Each GET calls a paid vendor endpoint, so bound both the request rate and
+// the size of the body we are willing to hand back to the client.
+const MAX_DUBBED_AUDIO_BYTES = 50 * 1024 * 1024;
+
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (await isRateLimited(`dubbing-audio:${session.user.id}`, 30, 60 * 60, true)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
     const { id } = await context.params;
@@ -64,6 +73,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         jobData.dubbingId,
         jobData.targetLanguage
       );
+
+      if (audio.byteLength > MAX_DUBBED_AUDIO_BYTES) {
+        console.error(`[dubbing-audio] Upstream audio too large for job ${id}`);
+        return NextResponse.json({ error: "Dubbed audio is too large" }, { status: 502 });
+      }
 
       const isDownload = req.nextUrl.searchParams.get("download") === "true";
       let disposition = "inline";

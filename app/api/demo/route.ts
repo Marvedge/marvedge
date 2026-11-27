@@ -13,6 +13,10 @@ const MAX_DESCRIPTION_LENGTH = 2000;
 // so one oversized save can't fill the row or the downstream payload.
 const MAX_EDITING_BYTES = 512 * 1024;
 
+// A single account with thousands of demos must not force an unbounded scan
+// and response. Clients can narrow the list with ?id= when they need one row.
+const MAX_LIST_SIZE = 200;
+
 function editingPayloadSize(editing: unknown): number {
   if (editing === undefined || editing === null) {
     return 0;
@@ -53,6 +57,7 @@ export async function GET(req: NextRequest) {
     const demos = await prisma.demo.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      take: MAX_LIST_SIZE,
     });
     return NextResponse.json({ success: true, demos });
   } catch (error) {

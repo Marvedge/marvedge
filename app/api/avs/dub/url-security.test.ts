@@ -23,6 +23,14 @@ vi.mock("@/app/lib/queue", () => ({
   },
 }));
 
+vi.mock("@/app/lib/audio/rateLimit", () => ({
+  isRateLimited: vi.fn(),
+}));
+
+vi.mock("@/app/lib/storage/access", () => ({
+  mayResolveObject: vi.fn(),
+}));
+
 vi.mock("@/app/lib/prisma", () => ({
   prisma: {
     user: {
@@ -41,6 +49,8 @@ vi.mock("@/app/lib/prisma", () => ({
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
+import { mayResolveObject } from "@/app/lib/storage/access";
 import { dubbingQueue } from "@/app/lib/queue";
 import { POST } from "./route";
 
@@ -57,6 +67,9 @@ function makeRequest(body: Record<string, unknown>): NextRequest {
 describe("POST /api/avs/dub URL security", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    vi.mocked(isRateLimited).mockResolvedValue(false);
+    vi.mocked(mayResolveObject).mockResolvedValue(true);
 
     vi.mocked(getServerSession).mockResolvedValue({
       user: {

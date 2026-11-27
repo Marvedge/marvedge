@@ -15,6 +15,9 @@ import { isSafeUrl } from "@/app/lib/safeUrl";
 // worker's idempotency marker rather than starting over.
 export const maxDuration = 300;
 
+// Keep owner lists bounded so one account cannot force an unbounded query.
+const MAX_LIST_SIZE = 200;
+
 type SessionUser = {
   id?: string;
   email?: string | null;
@@ -60,6 +63,7 @@ export async function GET() {
     const exportedVideos = await prisma.exportedVideo.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
+      take: MAX_LIST_SIZE,
     });
 
     return NextResponse.json({ success: true, exportedVideos });

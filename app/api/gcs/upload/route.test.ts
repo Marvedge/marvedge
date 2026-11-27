@@ -25,6 +25,7 @@ vi.mock("@/app/lib/storage", () => ({
   getSignedUploadUrl: vi.fn(),
   getSignedDownloadUrl: vi.fn(),
   getObjectSize: vi.fn(),
+  readObjectHead: vi.fn(),
   deleteObject: vi.fn(),
   toPublicUri: vi.fn(),
 }));
@@ -33,12 +34,18 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import {
+  deleteObject,
+  getObjectSize,
   getSignedDownloadUrl,
   getSignedUploadUrl,
+  readObjectHead,
   toPublicUri,
 } from "@/app/lib/storage";
 import { MAX_UPLOAD_BYTES } from "@/app/lib/subtitles/limits";
 import { POST } from "./route";
+
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const SVG_BYTES = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script></svg>');
 
 function makeRequest(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/gcs/upload", {
@@ -68,6 +75,9 @@ describe("POST /api/gcs/upload", () => {
     vi.mocked(getSignedUploadUrl).mockResolvedValue("https://signed.upload/url");
     vi.mocked(getSignedDownloadUrl).mockResolvedValue("https://signed.read/url");
     vi.mocked(toPublicUri).mockReturnValue("s3://test-raw-bucket/uploads/generic/user-1/x");
+    vi.mocked(getObjectSize).mockResolvedValue(1024);
+    vi.mocked(readObjectHead).mockResolvedValue(PNG_BYTES);
+    vi.mocked(deleteObject).mockResolvedValue(undefined);
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -288,5 +298,64 @@ describe("POST /api/gcs/upload", () => {
     const call = vi.mocked(getSignedUploadUrl).mock.calls[0];
     expect(call[1]).toMatch(/\.png$/);
     expect(call[2]).toBe("image/png");
+  });
+
+  it("verifies a .png object whose stored bytes are PNG", async () => {
+    const object = "uploads/generic/user-1/logo.png";
+    const res = await POST(makeRequest({ action: "verify", object }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, size: 1024 });
+    expect(readObjectHead).toHaveBeenCalledWith("test-raw-bucket", object);
+    expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it("rejects and deletes SVG bytes stored under a .png object", async () => {
+    vi.mocked(readObjectHead).mockResolvedValue(SVG_BYTES);
+    const object = "uploads/generic/user-1/evil.png";
+    const res = await POST(makeRequest({ action: "verify", object }));
+
+    expect(res.status).toBe(400);
+    expect(deleteObject).toHaveBeenCalledWith("test-raw-bucket", object);
+  });
+
+  it("fails closed for an image object when the head read fails", async () => {
+    vi.mocked(readObjectHead).mockResolvedValue(null);
+    const object = "uploads/generic/user-1/no-head.png";
+    const res = await POST(makeRequest({ action: "verify", object }));
+
+    expect(res.status).toBe(400);
+    expect(deleteObject).toHaveBeenCalledWith("test-raw-bucket", object);
+  });
+
+  it("keeps video verification size-only and skips the head read", async () => {
+    vi.mocked(readObjectHead).mockResolvedValue(null);
+    const res = await POST(
+      makeRequest({ action: "verify", object: "uploads/demo-source/user-1/clip.mp4" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(readObjectHead).not.toHaveBeenCalled();
+    expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it("still deletes an oversized video object at verify", async () => {
+    vi.mocked(getObjectSize).mockResolvedValue(MAX_UPLOAD_BYTES + 1);
+    const object = "uploads/demo-source/user-1/large.mp4";
+    const res = await POST(makeRequest({ action: "verify", object }));
+
+    expect(res.status).toBe(400);
+    expect(deleteObject).toHaveBeenCalledWith("test-raw-bucket", object);
+    expect(readObjectHead).not.toHaveBeenCalled();
+  });
+
+  it("keeps the ownership check on verify before any head read", async () => {
+    const res = await POST(
+      makeRequest({ action: "verify", object: "uploads/generic/user-2/other.png" })
+    );
+
+    expect(res.status).toBe(404);
+    expect(getObjectSize).not.toHaveBeenCalled();
+    expect(readObjectHead).not.toHaveBeenCalled();
   });
 });

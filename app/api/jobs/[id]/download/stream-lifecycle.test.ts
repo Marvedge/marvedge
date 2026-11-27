@@ -1,4 +1,5 @@
 import { setImmediate } from "node:timers/promises";
+import { promises as dns } from "node:dns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -32,6 +33,8 @@ function download() {
 describe("export download stream lifecycle", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // The pre-fetch DNS check must not reach the network in this suite.
+    vi.spyOn(dns, "lookup").mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
     mocks.findJob.mockResolvedValue({
       userId: "user-1",
@@ -119,6 +122,8 @@ describe("export download stream lifecycle", () => {
 describe("download byte integrity and error cleanup", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // The pre-fetch DNS check must not reach the network in this suite.
+    vi.spyOn(dns, "lookup").mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
     mocks.findJob.mockResolvedValue({
       userId: "user-1",

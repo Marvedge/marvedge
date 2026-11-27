@@ -2,16 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { prisma } from "@/app/lib/prisma";
 import { isAvsEnabled } from "@/app/lib/avs/flags";
 import { isAvsAllowed } from "@/app/lib/avs/access";
 import { invokeGcpDubSync } from "@/app/lib/gcpWorker";
 import { dubbingQueue } from "@/app/lib/queue";
 import { isSafeUrl } from "@/app/lib/safeUrl";
+import { mayResolveObject } from "@/app/lib/storage/access";
+import { parseStorageUri } from "@/app/lib/storage/index";
 import type { Step, DubTiming } from "@/app/types/avs";
 
 // Per-step encode + concat is comparable to /avs-sync; same generous budget.
 export const maxDuration = 300;
+
+// The worker re-encodes every entry, so an unbounded array is an unbounded
+// ffmpeg job. Truncate rather than reject: a genuinely long video still works.
+const MAX_STEPS = 500;
+const MAX_DUB_TIMINGS = 2000;
 
 /** Read + sanitize the `steps` body field into {id,startTime,endTime} entries. */
 function parseSteps(value: unknown): Step[] {
@@ -19,9 +27,13 @@ function parseSteps(value: unknown): Step[] {
     return [];
   }
 
+  if (value.length > MAX_STEPS) {
+    console.warn(`[avs/dub] steps truncated from ${value.length} to ${MAX_STEPS}`);
+  }
+
   const steps: Step[] = [];
 
-  for (const entry of value) {
+  for (const entry of value.slice(0, MAX_STEPS)) {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
@@ -46,9 +58,13 @@ function parseDubTimings(value: unknown): DubTiming[] {
     return [];
   }
 
+  if (value.length > MAX_DUB_TIMINGS) {
+    console.warn(`[avs/dub] dubTimings truncated from ${value.length} to ${MAX_DUB_TIMINGS}`);
+  }
+
   const timings: DubTiming[] = [];
 
-  for (const entry of value) {
+  for (const entry of value.slice(0, MAX_DUB_TIMINGS)) {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
@@ -69,6 +85,20 @@ function parseDubTimings(value: unknown): DubTiming[] {
 /** Normalize a gs:// URL to a public HTTPS URL. */
 function toHttpUrl(url: string): string {
   return url.startsWith("gs://") ? url.replace("gs://", "https://storage.googleapis.com/") : url;
+}
+
+/**
+ * A native storage URI is a capability: only sign it into a public URL when the
+ * caller owns it. Plain HTTPS URLs are passed through untouched.
+ */
+async function resolveInputUrl(raw: string, userId: string): Promise<string | null> {
+  const parsed = parseStorageUri(raw);
+
+  if (parsed && !(await mayResolveObject(raw, parsed.bucket, parsed.key, userId))) {
+    return null;
+  }
+
+  return toHttpUrl(raw);
 }
 
 /**
@@ -223,6 +253,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Each job dispatches a Cloud Run alignment, so cap dispatches per user before
+  // reading the body or creating a job. Closed mode: a failed limiter blocks.
+  if (await isRateLimited(`avs-dub:${user.id}`, 10, 60 * 60, true)) {
+    return NextResponse.json(
+      { error: "Too many dubbing requests. Please try again shortly." },
+      { status: 429 }
+    );
+  }
+
   let body: Record<string, unknown>;
 
   try {
@@ -243,7 +282,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing videoUrl" }, { status: 400 });
   }
 
-  const videoUrl = toHttpUrl(rawVideoUrl);
+  const videoUrl = await resolveInputUrl(rawVideoUrl, user.id);
+
+  if (videoUrl === null) {
+    return NextResponse.json({ error: "Video URL is not allowed" }, { status: 400 });
+  }
 
   if (!isSafeUrl(videoUrl)) {
     return NextResponse.json({ error: "Unsafe videoUrl" }, { status: 400 });
@@ -251,7 +294,11 @@ export async function POST(req: NextRequest) {
 
   const rawDubUrl = typeof body.dubUrl === "string" ? body.dubUrl.trim() : "";
 
-  const dubUrl = rawDubUrl ? toHttpUrl(rawDubUrl) : "";
+  const dubUrl = rawDubUrl ? await resolveInputUrl(rawDubUrl, user.id) : "";
+
+  if (dubUrl === null) {
+    return NextResponse.json({ error: "Dub URL is not allowed" }, { status: 400 });
+  }
 
   if (dubUrl && !isSafeUrl(dubUrl)) {
     return NextResponse.json({ error: "Unsafe dubUrl" }, { status: 400 });

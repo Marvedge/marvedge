@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/app/lib/auth/options";
+import { isRateLimited } from "@/app/lib/audio/rateLimit";
 import { prisma } from "@/app/lib/prisma";
 import { invokeGcpComposite } from "@/app/lib/gcpWorker";
 import { isSafeUrl } from "@/app/lib/safeUrl";
@@ -88,6 +89,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "The camera bubble is available on PRO and ENTERPRISE plans." },
       { status: 403 }
+    );
+  }
+
+  // Compositing re-encodes the source on a Cloud Run worker. Closed mode: a
+  // failed limiter blocks rather than letting an unbounded bill through.
+  if (await isRateLimited(`wtm-composite:${user.id}`, 10, 60 * 60, true)) {
+    return NextResponse.json(
+      { error: "Too many compositing requests. Please try again shortly." },
+      { status: 429 }
     );
   }
 
